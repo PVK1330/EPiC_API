@@ -15,9 +15,10 @@ db.sequelize = sequelize;
 
 // Import models
 db.User = require("./user.model")(sequelize, Sequelize.DataTypes);
+db.UnverifiedUser = require("./unverifiedUser.model")(sequelize, Sequelize.DataTypes);
 db.Role = require("./role.model")(sequelize, Sequelize.DataTypes);
 
-// 🔥 Associations
+// Associations
 db.Role.hasMany(db.User, { foreignKey: "role_id" });
 db.User.belongsTo(db.Role, { foreignKey: "role_id" });
 

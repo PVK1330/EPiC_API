@@ -110,7 +110,7 @@ const generateOTPTemplate = (otp) => {
         <div class="container">
             <div class="header">
                 <div class="logo">
-                    <img src="public/images/logo.png" alt="Elite Pic Logo" />
+                    <img src="${process.env.BASE_URL || 'http://localhost:3000'}/images/logo.png" alt="Elite Pic Logo" />
                 </div>
             </div>
             
@@ -292,7 +292,7 @@ const generateCredentialsTemplate = (email, password, loginUrl) => {
         <div class="container">
             <div class="header">
                 <div class="logo">
-                    <img src="public/images/logo.png" alt="Elite Pic Logo" />
+                    <img src="${process.env.BASE_URL || 'http://localhost:5000'}/images/logo.png" alt="Elite Pic Logo" />
                 </div>
             </div>
             

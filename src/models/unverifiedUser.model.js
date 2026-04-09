@@ -1,6 +1,6 @@
 module.exports = (sequelize, DataTypes) => {
-    const User = sequelize.define(
-        "User",
+    const UnverifiedUser = sequelize.define(
+        "UnverifiedUser",
         {
             id: {
                 type: DataTypes.INTEGER,
@@ -19,7 +19,6 @@ module.exports = (sequelize, DataTypes) => {
             email: {
                 type: DataTypes.STRING(255),
                 allowNull: false,
-                unique: true,
                 validate: {
                     isEmail: true,
                 },
@@ -51,11 +50,6 @@ module.exports = (sequelize, DataTypes) => {
 
             otp_expiry: {
                 type: DataTypes.DATE,
-                allowNull: true,
-            },
-            is_otp_verified: {
-                type: DataTypes.BOOLEAN,
-                defaultValue: false,
             },
             temp_password: {
                 type: DataTypes.TEXT,
@@ -73,10 +67,10 @@ module.exports = (sequelize, DataTypes) => {
             },
         },
         {
-            tableName: "users",
+            tableName: "unverified_users",
             timestamps: true,
 
-            // 🔥 Composite Unique (mobile + country_code)
+            // Composite Unique (mobile + country_code)
             indexes: [
                 {
                     unique: true,
@@ -86,5 +80,5 @@ module.exports = (sequelize, DataTypes) => {
         }
     );
 
-    return User;
+    return UnverifiedUser;
 };
