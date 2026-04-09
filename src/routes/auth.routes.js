@@ -3,12 +3,8 @@ const router = express.Router();
 
 const auth = require("../controllers/auth.controller");
 
-const ROLES = {
-  ADMIN: 1,
-  CASEWORKER: 2,
-  CANDIDATE: 3,
-  BUSINESS: 4,
-};
+
+
 
 router.post("/register", auth.register);
 router.post("/verify-otp", auth.verifyOTP); // unverified user
