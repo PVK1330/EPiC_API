@@ -7,6 +7,7 @@ const userRoutes = require("./routes/user.routes");
 const caseworkerRoutes = require("./routes/caseworker.routes");
 const adminRoutes = require("./routes/admin.routes");
 const sponsorsRoutes = require("./routes/sponsors.routes");
+const candidateRoutes = require("./routes/candidate.routes");
 
 app.use(express.json());
 
@@ -15,6 +16,7 @@ app.use("/api/stripe", stripeRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/caseworker", caseworkerRoutes);
 app.use("/api/admin", adminRoutes);
-app.use("/api/sponsors", sponsorsRoutes);    
+app.use("/api/sponsors", sponsorsRoutes);
+app.use("/api/candidate", candidateRoutes);    
 
 module.exports = app;
