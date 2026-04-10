@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 
-const caseworkerController = require("../controllers/AdminControllers/candidate.controller");
+const caseworkerController = require("../controllers/AdminControllers/caseworker.controller");
 const { verifyToken } = require("../middlewares/auth.middleware");
 const { checkRole } = require("../middlewares/role.middleware");
 

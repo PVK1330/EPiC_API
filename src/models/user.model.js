@@ -71,6 +71,20 @@ module.exports = (sequelize, DataTypes) => {
                 onUpdate: "CASCADE",
                 onDelete: "CASCADE",
             },
+            is_email_verified: {
+                type: DataTypes.BOOLEAN,
+                defaultValue: false,
+            },
+            is_active: {
+                type: DataTypes.BOOLEAN,
+                defaultValue: true,
+            },
+            password_reset_otp: {
+                type: DataTypes.STRING(10),
+            },
+            password_reset_otp_expiry: {
+                type: DataTypes.DATE,
+            },
         },
         {
             tableName: "users",
