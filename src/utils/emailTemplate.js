@@ -7,148 +7,203 @@ const generateOTPTemplate = (otp) => {
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Elite Pic - OTP Verification</title>
         <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
+            * { margin: 0; padding: 0; box-sizing: border-box; }
             body {
                 font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                background-color: #f4f4f4;
-                padding: 20px;
+                background-color: #eef2f7;
+                padding: 30px 16px;
             }
-            .container {
-                max-width: 600px;
+            .wrapper {
+                max-width: 580px;
                 margin: 0 auto;
+            }
+            /* ── HEADER / LOGO BAND ── */
+            .header {
+                background-color: #004ca5;
+                border-radius: 12px 12px 0 0;
+                padding: 28px 32px;
+                display: flex;
+                align-items: center;
+                gap: 14px;
+            }
+            .logo-mark {
+                width: 48px; height: 48px;
                 background-color: #ffffff;
                 border-radius: 10px;
-                overflow: hidden;
-                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+                display: flex; align-items: center; justify-content: center;
             }
-            .header {
-                background: linear-gradient(135deg, #004ca5 0%, #003d82 100%);
-                padding: 30px;
-                text-align: center;
+            .logo-mark svg { width: 32px; height: 32px; }
+            .brand-name {
+                font-size: 22px;
+                font-weight: 700;
+                color: #ffffff;
+                letter-spacing: -0.4px;
             }
-            .logo {
-                text-align: center;
-                margin-bottom: 20px;
+            .brand-name span { color: #f5a623; }
+            .brand-sub {
+                font-size: 10px;
+                color: rgba(255,255,255,0.65);
+                letter-spacing: 2px;
+                text-transform: uppercase;
+                margin-top: 2px;
             }
-            .logo img {
-                max-width: 200px;
-                height: auto;
-                border-radius: 8px;
+            /* ── GOLD ACCENT STRIPE ── */
+            .accent-stripe {
+                height: 4px;
+                background: linear-gradient(90deg, #c8102e 0%, #f5a623 50%, #004ca5 100%);
             }
-            .content {
-                padding: 40px 30px;
-                text-align: center;
+            /* ── BODY CARD ── */
+            .card {
+                background: #ffffff;
+                padding: 40px 36px;
+                border-left: 1px solid #dde4ef;
+                border-right: 1px solid #dde4ef;
             }
+            .icon-circle {
+                width: 60px; height: 60px;
+                border-radius: 50%;
+                background-color: #eef2f7;
+                border: 2px solid #004ca5;
+                display: flex; align-items: center; justify-content: center;
+                margin: 0 auto 20px;
+            }
+            .icon-circle svg { width: 28px; height: 28px; }
             .title {
-                font-size: 24px;
-                color: #333;
-                margin-bottom: 20px;
-                font-weight: 600;
+                font-size: 22px;
+                font-weight: 700;
+                color: #004ca5;
+                text-align: center;
+                margin-bottom: 12px;
             }
             .message {
-                font-size: 16px;
-                color: #666;
-                margin-bottom: 30px;
-                line-height: 1.6;
+                font-size: 15px;
+                color: #556070;
+                text-align: center;
+                line-height: 1.7;
+                margin-bottom: 32px;
             }
-            .otp-container {
-                background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            /* ── OTP BOX ── */
+            .otp-box {
                 border: 2px solid #004ca5;
-                border-radius: 10px;
-                padding: 20px;
-                margin: 30px 0;
-                display: inline-block;
+                border-radius: 12px;
+                padding: 24px 20px;
+                text-align: center;
+                margin: 0 auto 28px;
+                background: #f5f8ff;
+                max-width: 320px;
             }
             .otp-label {
-                font-size: 14px;
+                font-size: 11px;
+                font-weight: 700;
                 color: #004ca5;
-                font-weight: 600;
-                margin-bottom: 10px;
+                letter-spacing: 2px;
                 text-transform: uppercase;
-                letter-spacing: 1px;
+                margin-bottom: 12px;
             }
             .otp-code {
-                font-size: 36px;
-                font-weight: bold;
+                font-size: 40px;
+                font-weight: 700;
                 color: #c8102e;
-                letter-spacing: 8px;
+                letter-spacing: 10px;
                 font-family: 'Courier New', monospace;
             }
+            .otp-divider {
+                width: 40px; height: 2px;
+                background-color: #f5a623;
+                margin: 14px auto 0;
+                border-radius: 2px;
+            }
             .expiry {
-                font-size: 14px;
-                color: #666;
-                margin-top: 20px;
-                font-style: italic;
-            }
-            .footer {
-                background-color: #f8f9fa;
-                padding: 20px;
+                font-size: 13px;
+                color: #778090;
                 text-align: center;
-                border-top: 1px solid #e9ecef;
+                margin-bottom: 24px;
             }
-            .footer-text {
+            .expiry strong { color: #c8102e; }
+            .note-box {
+                background: #fff8f0;
+                border-left: 3px solid #f5a623;
+                border-radius: 0 6px 6px 0;
+                padding: 12px 16px;
+                font-size: 13px;
+                color: #7a5c20;
+                line-height: 1.6;
+            }
+            /* ── FOOTER ── */
+            .footer {
+                background-color: #004ca5;
+                border-radius: 0 0 12px 12px;
+                padding: 20px 32px;
+                text-align: center;
+            }
+            .footer p {
                 font-size: 12px;
-                color: #999;
-                margin-bottom: 10px;
+                color: rgba(255,255,255,0.6);
+                line-height: 1.6;
             }
-            .security-note {
-                font-size: 12px;
-                color: #666;
-                font-style: italic;
-            }
-            .highlight {
-                color: #c8102e;
-                font-weight: 600;
-            }
+            .footer .highlight { color: #f5a623; font-weight: 600; }
         </style>
     </head>
     <body>
-        <div class="container">
+        <div class="wrapper">
+            <!-- Header -->
             <div class="header">
-                <div class="logo">
-                    <img src="${process.env.BASE_URL || 'http://localhost:3000'}/images/logo.png" alt="Elite Pic Logo" />
+                <div class="logo-mark">
+                    <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <ellipse cx="13" cy="16" rx="7" ry="7" fill="none" stroke="#004ca5" stroke-width="2.2"/>
+                        <circle cx="10.5" cy="16" r="2.2" fill="#c8102e"/>
+                        <path d="M18 16 Q22 10 27 14 Q32 18 27 22 Q22 26 18 20" fill="#f5a623" opacity="0.85"/>
+                        <circle cx="25" cy="16" r="2" fill="#004ca5"/>
+                    </svg>
+                </div>
+                <div>
+                    <div class="brand-name">elite<span>pic</span></div>
+                    <div class="brand-sub">Customer Relationship Management</div>
                 </div>
             </div>
-            
-            <div class="content">
+
+            <!-- Accent stripe -->
+            <div class="accent-stripe"></div>
+
+            <!-- Body -->
+            <div class="card">
+                <div class="icon-circle">
+                    <svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect x="3" y="6" width="22" height="16" rx="3" stroke="#004ca5" stroke-width="2"/>
+                        <path d="M3 9l11 8 11-8" stroke="#004ca5" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                </div>
+
                 <h1 class="title">Verify Your Email Address</h1>
                 <p class="message">
-                    Thank you for choosing Elite Pic! To complete your registration, 
-                    please use the One-Time Password (OTP) below to verify your email address.
+                    Thank you for choosing Elite Pic! To complete your registration,
+                    please use the One-Time Password below to verify your email address.
                 </p>
-                
-                <div class="otp-container">
+
+                <div class="otp-box">
                     <div class="otp-label">Your OTP Code</div>
                     <div class="otp-code">${otp}</div>
+                    <div class="otp-divider"></div>
                 </div>
-                
-                <p class="expiry">
-                    <strong>Note:</strong> This OTP will expire in <span class="highlight">10 minutes</span> for security reasons.
-                </p>
-                
-                <p class="message">
-                    If you didn't request this verification, please ignore this email or 
-                    contact our support team immediately.
-                </p>
+
+                <p class="expiry">This OTP will expire in <strong>10 minutes</strong> for security reasons.</p>
+
+                <div class="note-box">
+                    If you didn't request this verification, please ignore this email or contact our support team immediately.
+                </div>
             </div>
-            
+
+            <!-- Footer -->
             <div class="footer">
-                <p class="footer-text">
-                    © 2024 Elite Pic. All rights reserved.
-                </p>
-                <p class="security-note">
-                    This is an automated message. Please do not reply to this email.
-                </p>
+                <p>© 2024 <span class="highlight">Elite Pic</span>. All rights reserved.</p>
+                <p>This is an automated message. Please do not reply to this email.</p>
             </div>
         </div>
     </body>
     </html>
   `;
 };
+
 
 const generateCredentialsTemplate = (email, password, loginUrl) => {
   return `
@@ -159,190 +214,167 @@ const generateCredentialsTemplate = (email, password, loginUrl) => {
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Elite Pic - Account Credentials</title>
         <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
+            * { margin: 0; padding: 0; box-sizing: border-box; }
             body {
                 font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                background-color: #f4f4f4;
-                padding: 20px;
+                background-color: #eef2f7;
+                padding: 30px 16px;
             }
-            .container {
-                max-width: 600px;
-                margin: 0 auto;
+            .wrapper { max-width: 580px; margin: 0 auto; }
+            .header {
+                background-color: #004ca5;
+                border-radius: 12px 12px 0 0;
+                padding: 28px 32px;
+                display: flex; align-items: center; gap: 14px;
+            }
+            .logo-mark {
+                width: 48px; height: 48px;
                 background-color: #ffffff;
                 border-radius: 10px;
+                display: flex; align-items: center; justify-content: center;
+            }
+            .logo-mark svg { width: 32px; height: 32px; }
+            .brand-name { font-size: 22px; font-weight: 700; color: #ffffff; letter-spacing: -0.4px; }
+            .brand-name span { color: #f5a623; }
+            .brand-sub { font-size: 10px; color: rgba(255,255,255,0.65); letter-spacing: 2px; text-transform: uppercase; margin-top: 2px; }
+            .accent-stripe { height: 4px; background: linear-gradient(90deg, #c8102e 0%, #f5a623 50%, #004ca5 100%); }
+            .card { background: #ffffff; padding: 40px 36px; border-left: 1px solid #dde4ef; border-right: 1px solid #dde4ef; }
+            .welcome-badge {
+                display: inline-block;
+                background-color: #eef2f7;
+                color: #004ca5;
+                font-size: 11px;
+                font-weight: 700;
+                letter-spacing: 2px;
+                text-transform: uppercase;
+                padding: 5px 14px;
+                border-radius: 20px;
+                border: 1px solid #c2d0e8;
+                margin-bottom: 16px;
+            }
+            .title { font-size: 22px; font-weight: 700; color: #004ca5; margin-bottom: 10px; }
+            .message { font-size: 15px; color: #556070; line-height: 1.7; margin-bottom: 28px; }
+            /* credentials box */
+            .cred-box {
+                border: 1.5px solid #dde4ef;
+                border-radius: 12px;
                 overflow: hidden;
-                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+                margin-bottom: 28px;
             }
-            .header {
-                background: linear-gradient(135deg, #004ca5 0%, #003d82 100%);
-                padding: 30px;
-                text-align: center;
+            .cred-box-header {
+                background: #004ca5;
+                padding: 12px 20px;
+                font-size: 11px;
+                font-weight: 700;
+                color: rgba(255,255,255,0.85);
+                letter-spacing: 2px;
+                text-transform: uppercase;
             }
-            .logo {
-                text-align: center;
-                margin-bottom: 20px;
+            .cred-item {
+                padding: 16px 20px;
+                border-bottom: 1px solid #eef2f7;
+                display: flex; align-items: flex-start; gap: 14px;
             }
-            .logo img {
-                max-width: 200px;
-                height: auto;
-                border-radius: 8px;
+            .cred-item:last-child { border-bottom: none; }
+            .cred-dot {
+                width: 8px; height: 8px; border-radius: 50%;
+                background-color: #c8102e;
+                margin-top: 6px; flex-shrink: 0;
             }
-            .content {
-                padding: 40px 30px;
-                text-align: center;
-            }
-            .title {
-                font-size: 24px;
-                color: #333;
-                margin-bottom: 20px;
+            .cred-label { font-size: 11px; font-weight: 700; color: #8a9ab0; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px; }
+            .cred-value { font-size: 15px; color: #1a2a3a; font-family: 'Courier New', monospace; word-break: break-all; }
+            /* CTA button */
+            .btn-wrap { text-align: center; margin-bottom: 28px; }
+            .login-btn {
+                display: inline-block;
+                background-color: #c8102e;
+                color: #ffffff;
+                text-decoration: none;
+                font-size: 15px;
                 font-weight: 600;
+                padding: 14px 36px;
+                border-radius: 8px;
+                letter-spacing: 0.3px;
             }
-            .message {
-                font-size: 16px;
-                color: #666;
-                margin-bottom: 30px;
+            /* security note */
+            .security-box {
+                background: #fff8f0;
+                border-left: 3px solid #f5a623;
+                border-radius: 0 6px 6px 0;
+                padding: 14px 16px;
+                font-size: 13px;
+                color: #7a5c20;
                 line-height: 1.6;
             }
-            .credentials-container {
-                background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-                border: 2px solid #004ca5;
-                border-radius: 10px;
-                padding: 30px;
-                margin: 30px 0;
-                text-align: left;
-            }
-            .credentials-title {
-                font-size: 18px;
-                color: #004ca5;
-                font-weight: 600;
-                margin-bottom: 20px;
-                text-align: center;
-                text-transform: uppercase;
-                letter-spacing: 1px;
-            }
-            .credential-item {
-                margin-bottom: 15px;
-                padding: 15px;
-                background-color: #fff;
-                border-radius: 5px;
-                border-left: 4px solid #c8102e;
-            }
-            .credential-label {
-                font-size: 14px;
-                color: #004ca5;
-                font-weight: 600;
-                margin-bottom: 5px;
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
-            }
-            .credential-value {
-                font-size: 16px;
-                color: #333;
-                font-family: 'Courier New', monospace;
-                word-break: break-all;
-            }
-            .login-button {
-                display: inline-block;
-                background: linear-gradient(135deg, #004ca5 0%, #003d82 100%);
-                color: #ffffff;
-                padding: 15px 30px;
-                text-decoration: none;
-                border-radius: 5px;
-                font-weight: 600;
-                font-size: 16px;
-                margin: 20px 0;
-                transition: all 0.3s ease;
-            }
-            .login-button:hover {
-                background: linear-gradient(135deg, #003d82 0%, #002a5c 100%);
-                transform: translateY(-2px);
-            }
-            .security-note {
-                font-size: 14px;
-                color: #666;
-                margin-top: 20px;
-                font-style: italic;
-                padding: 15px;
-                background-color: #fff3cd;
-                border-radius: 5px;
-                border-left: 4px solid #ffc107;
-            }
-            .footer {
-                background-color: #f8f9fa;
-                padding: 20px;
-                text-align: center;
-                border-top: 1px solid #e9ecef;
-            }
-            .footer-text {
-                font-size: 12px;
-                color: #999;
-                margin-bottom: 10px;
-            }
-            .highlight {
-                color: #c8102e;
-                font-weight: 600;
-            }
+            .footer { background-color: #004ca5; border-radius: 0 0 12px 12px; padding: 20px 32px; text-align: center; }
+            .footer p { font-size: 12px; color: rgba(255,255,255,0.6); line-height: 1.8; }
+            .footer .highlight { color: #f5a623; font-weight: 600; }
         </style>
     </head>
     <body>
-        <div class="container">
+        <div class="wrapper">
             <div class="header">
-                <div class="logo">
-                    <img src="${process.env.BASE_URL || 'http://localhost:5000'}/images/logo.png" alt="Elite Pic Logo" />
+                <div class="logo-mark">
+                    <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <ellipse cx="13" cy="16" rx="7" ry="7" fill="none" stroke="#004ca5" stroke-width="2.2"/>
+                        <circle cx="10.5" cy="16" r="2.2" fill="#c8102e"/>
+                        <path d="M18 16 Q22 10 27 14 Q32 18 27 22 Q22 26 18 20" fill="#f5a623" opacity="0.85"/>
+                        <circle cx="25" cy="16" r="2" fill="#004ca5"/>
+                    </svg>
+                </div>
+                <div>
+                    <div class="brand-name">elite<span>pic</span></div>
+                    <div class="brand-sub">Customer Relationship Management</div>
                 </div>
             </div>
-            
-            <div class="content">
+            <div class="accent-stripe"></div>
+
+            <div class="card">
+                <div class="welcome-badge">Account Ready</div>
                 <h1 class="title">Welcome to Elite Pic!</h1>
                 <p class="message">
-                    Your email has been successfully verified. Below are your account credentials 
+                    Your email has been successfully verified. Below are your login credentials
                     and a direct link to access your dashboard.
                 </p>
-                
-                <div class="credentials-container">
-                    <div class="credentials-title">Your Login Credentials</div>
-                    
-                    <div class="credential-item">
-                        <div class="credential-label">Email Address</div>
-                        <div class="credential-value">${email}</div>
+
+                <div class="cred-box">
+                    <div class="cred-box-header">Your Login Credentials</div>
+                    <div class="cred-item">
+                        <div class="cred-dot"></div>
+                        <div>
+                            <div class="cred-label">Email Address</div>
+                            <div class="cred-value">${email}</div>
+                        </div>
                     </div>
-                    
-                    <div class="credential-item">
-                        <div class="credential-label">Password</div>
-                        <div class="credential-value">${password}</div>
+                    <div class="cred-item">
+                        <div class="cred-dot"></div>
+                        <div>
+                            <div class="cred-label">Password</div>
+                            <div class="cred-value">${password}</div>
+                        </div>
                     </div>
                 </div>
-                
-                <a href="${loginUrl}" class="login-button">Access Your Dashboard</a>
-                
-                <div class="security-note">
-                    <strong>Security Notice:</strong> Please keep your credentials safe and do not 
-                    share them with anyone. If you didn't request this email, please contact our 
-                    support team immediately.
+
+                <div class="btn-wrap">
+                    <a href="${loginUrl}" class="login-btn">Access Your Dashboard</a>
                 </div>
-                
-                <p class="message">
-                    You can now log in and start using all the features of Elite Pic!
-                </p>
+
+                <div class="security-box">
+                    <strong>Security Notice:</strong> Please keep your credentials safe and do not
+                    share them with anyone. If you didn't request this email, contact our support team immediately.
+                </div>
             </div>
-            
+
             <div class="footer">
-                <p class="footer-text">
-                    © 2024 Elite Pic. All rights reserved.
-                </p>
-                <p class="footer-text">
-                    This is an automated message. Please do not reply to this email.
-                </p>
+                <p>© 2024 <span class="highlight">Elite Pic</span>. All rights reserved.</p>
+                <p>This is an automated message. Please do not reply to this email.</p>
             </div>
         </div>
     </body>
     </html>
   `;
 };
+
 
 const generateAdminCredentialsTemplate = (email, password, loginUrl) => {
   return `
@@ -353,241 +385,188 @@ const generateAdminCredentialsTemplate = (email, password, loginUrl) => {
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Elite Pic - Admin Account Created</title>
         <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
+            * { margin: 0; padding: 0; box-sizing: border-box; }
             body {
                 font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                background-color: #f4f4f4;
-                padding: 20px;
+                background-color: #eef2f7;
+                padding: 30px 16px;
             }
-            .container {
-                max-width: 600px;
-                margin: 0 auto;
+            .wrapper { max-width: 580px; margin: 0 auto; }
+            /* header — deeper shade for admin */
+            .header {
+                background-color: #002f6c;
+                border-radius: 12px 12px 0 0;
+                padding: 28px 32px;
+                display: flex; align-items: center; justify-content: space-between;
+            }
+            .header-left { display: flex; align-items: center; gap: 14px; }
+            .logo-mark {
+                width: 48px; height: 48px;
                 background-color: #ffffff;
                 border-radius: 10px;
-                overflow: hidden;
-                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+                display: flex; align-items: center; justify-content: center;
             }
-            .header {
-                background: linear-gradient(135deg, #004ca5 0%, #003d82 100%);
-                padding: 30px;
-                text-align: center;
-            }
+            .logo-mark svg { width: 32px; height: 32px; }
+            .brand-name { font-size: 22px; font-weight: 700; color: #ffffff; letter-spacing: -0.4px; }
+            .brand-name span { color: #f5a623; }
+            .brand-sub { font-size: 10px; color: rgba(255,255,255,0.65); letter-spacing: 2px; text-transform: uppercase; margin-top: 2px; }
             .admin-badge {
-                display: inline-block;
                 background-color: #c8102e;
                 color: #ffffff;
-                padding: 8px 16px;
+                font-size: 11px;
+                font-weight: 700;
+                letter-spacing: 1.5px;
+                text-transform: uppercase;
+                padding: 6px 14px;
                 border-radius: 20px;
-                font-size: 14px;
-                font-weight: 600;
-                margin-bottom: 20px;
-                text-transform: uppercase;
-                letter-spacing: 1px;
             }
-            .logo {
-                text-align: center;
-                margin-bottom: 20px;
-            }
-            .logo img {
-                max-width: 200px;
-                height: auto;
-                border-radius: 8px;
-            }
-            .content {
-                padding: 40px 30px;
-                text-align: center;
-            }
-            .title {
-                font-size: 28px;
-                color: #004ca5;
-                margin-bottom: 20px;
-                font-weight: 700;
-            }
-            .subtitle {
-                font-size: 18px;
-                color: #c8102e;
-                margin-bottom: 30px;
-                font-weight: 600;
-            }
-            .message {
-                font-size: 16px;
-                color: #666;
-                margin-bottom: 30px;
-                line-height: 1.6;
-            }
-            .credentials-container {
-                background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-                border: 2px solid #004ca5;
+            /* tri-color stripe — thicker for admin */
+            .accent-stripe { height: 5px; background: linear-gradient(90deg, #c8102e 0%, #f5a623 50%, #002f6c 100%); }
+            .card { background: #ffffff; padding: 40px 36px; border-left: 1px solid #dde4ef; border-right: 1px solid #dde4ef; }
+            /* shield icon row */
+            .admin-hero {
+                display: flex; align-items: center; gap: 16px;
+                background: #f5f8ff;
+                border: 1.5px solid #c2d0e8;
                 border-radius: 10px;
-                padding: 30px;
-                margin: 30px 0;
-                text-align: left;
+                padding: 18px 20px;
+                margin-bottom: 28px;
             }
-            .credentials-title {
-                font-size: 18px;
-                color: #004ca5;
-                font-weight: 600;
-                margin-bottom: 20px;
-                text-align: center;
-                text-transform: uppercase;
-                letter-spacing: 1px;
+            .shield-icon {
+                width: 44px; height: 44px; flex-shrink: 0;
+                background: #004ca5;
+                border-radius: 50%;
+                display: flex; align-items: center; justify-content: center;
             }
-            .credential-item {
-                margin-bottom: 15px;
-                padding: 15px;
-                background-color: #fff;
-                border-radius: 5px;
-                border-left: 4px solid #c8102e;
+            .shield-icon svg { width: 22px; height: 22px; }
+            .admin-hero-text h2 { font-size: 16px; font-weight: 700; color: #004ca5; margin-bottom: 4px; }
+            .admin-hero-text p { font-size: 13px; color: #556070; line-height: 1.5; }
+            .title { font-size: 22px; font-weight: 700; color: #002f6c; margin-bottom: 10px; }
+            .message { font-size: 15px; color: #556070; line-height: 1.7; margin-bottom: 28px; }
+            /* credentials */
+            .cred-box { border: 1.5px solid #dde4ef; border-radius: 12px; overflow: hidden; margin-bottom: 28px; }
+            .cred-box-header {
+                background: #002f6c;
+                padding: 12px 20px;
+                font-size: 11px; font-weight: 700;
+                color: rgba(255,255,255,0.85);
+                letter-spacing: 2px; text-transform: uppercase;
             }
-            .credential-label {
-                font-size: 14px;
-                color: #004ca5;
-                font-weight: 600;
-                margin-bottom: 5px;
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
-            }
-            .credential-value {
-                font-size: 16px;
-                color: #333;
-                font-family: 'Courier New', monospace;
-                word-break: break-all;
-                font-weight: 600;
-            }
-            .admin-notice {
-                background-color: #fff3cd;
-                border-left: 4px solid #ffc107;
-                padding: 20px;
-                margin: 30px 0;
-                border-radius: 5px;
-            }
-            .admin-notice-title {
-                color: #c8102e;
-                font-weight: 700;
-                margin-bottom: 10px;
-                font-size: 16px;
-            }
-            .admin-notice-text {
-                color: #856404;
-                font-size: 14px;
-                line-height: 1.5;
-            }
-            .login-button {
+            .cred-item { padding: 16px 20px; border-bottom: 1px solid #eef2f7; display: flex; align-items: flex-start; gap: 14px; }
+            .cred-item:last-child { border-bottom: none; }
+            .cred-dot { width: 8px; height: 8px; border-radius: 50%; background-color: #c8102e; margin-top: 6px; flex-shrink: 0; }
+            .cred-label { font-size: 11px; font-weight: 700; color: #8a9ab0; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px; }
+            .cred-value { font-size: 15px; color: #1a2a3a; font-family: 'Courier New', monospace; word-break: break-all; font-weight: 700; }
+            /* CTA */
+            .btn-wrap { text-align: center; margin-bottom: 28px; }
+            .login-btn {
                 display: inline-block;
-                background: linear-gradient(135deg, #004ca5 0%, #003d82 100%);
+                background-color: #004ca5;
                 color: #ffffff;
-                padding: 15px 30px;
                 text-decoration: none;
-                border-radius: 5px;
-                font-weight: 600;
-                font-size: 16px;
-                margin: 20px 0;
-                transition: all 0.3s ease;
-                border: 2px solid #004ca5;
+                font-size: 15px; font-weight: 600;
+                padding: 14px 36px;
+                border-radius: 8px;
+                letter-spacing: 0.3px;
             }
-            .login-button:hover {
-                background: linear-gradient(135deg, #003d82 0%, #002a5c 100%);
-                transform: translateY(-2px);
-                box-shadow: 0 4px 8px rgba(0, 76, 165, 0.3);
+            /* warning */
+            .warning-box {
+                background: #fff8f0;
+                border-left: 3px solid #f5a623;
+                border-radius: 0 6px 6px 0;
+                padding: 14px 16px;
+                font-size: 13px; color: #7a5c20; line-height: 1.6;
+                margin-bottom: 16px;
             }
-            .security-note {
-                font-size: 14px;
-                color: #666;
-                margin-top: 20px;
-                font-style: italic;
-                padding: 15px;
-                background-color: #f8f9fa;
-                border-radius: 5px;
-                border-left: 4px solid #004ca5;
+            .danger-box {
+                background: #fff5f5;
+                border-left: 3px solid #c8102e;
+                border-radius: 0 6px 6px 0;
+                padding: 14px 16px;
+                font-size: 13px; color: #7a1a1a; line-height: 1.6;
             }
-            .footer {
-                background-color: #f8f9fa;
-                padding: 20px;
-                text-align: center;
-                border-top: 1px solid #e9ecef;
-            }
-            .footer-text {
-                font-size: 12px;
-                color: #999;
-                margin-bottom: 10px;
-            }
-            .highlight {
-                color: #c8102e;
-                font-weight: 600;
-            }
-            .admin-icon {
-                color: #c8102e;
-                font-size: 24px;
-                margin-right: 8px;
-            }
+            .footer { background-color: #002f6c; border-radius: 0 0 12px 12px; padding: 20px 32px; text-align: center; }
+            .footer p { font-size: 12px; color: rgba(255,255,255,0.6); line-height: 1.8; }
+            .footer .highlight { color: #f5a623; font-weight: 600; }
         </style>
     </head>
     <body>
-        <div class="container">
+        <div class="wrapper">
             <div class="header">
-                <div class="admin-badge">
-                    <span class="admin-icon"> Shield</span> Admin Account
+                <div class="header-left">
+                    <div class="logo-mark">
+                        <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <ellipse cx="13" cy="16" rx="7" ry="7" fill="none" stroke="#004ca5" stroke-width="2.2"/>
+                            <circle cx="10.5" cy="16" r="2.2" fill="#c8102e"/>
+                            <path d="M18 16 Q22 10 27 14 Q32 18 27 22 Q22 26 18 20" fill="#f5a623" opacity="0.85"/>
+                            <circle cx="25" cy="16" r="2" fill="#004ca5"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <div class="brand-name">elite<span>pic</span></div>
+                        <div class="brand-sub">Customer Relationship Management</div>
+                    </div>
                 </div>
-                <div class="logo">
-                    <img src="${process.env.BASE_URL || 'http://localhost:5000'}/images/logo.png" alt="Elite Pic Logo" />
+                <div class="admin-badge">Admin</div>
+            </div>
+            <div class="accent-stripe"></div>
+
+            <div class="card">
+                <div class="admin-hero">
+                    <div class="shield-icon">
+                        <svg viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M11 2L3 5.5v6c0 4.5 3.4 8.7 8 9.5 4.6-.8 8-5 8-9.5v-6L11 2z" fill="#ffffff" opacity="0.2" stroke="#ffffff" stroke-width="1.5" stroke-linejoin="round"/>
+                            <path d="M7.5 11l2.5 2.5 5-5" stroke="#f5a623" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </div>
+                    <div class="admin-hero-text">
+                        <h2>Admin Account Created</h2>
+                        <p>This account has elevated privileges to manage users, reports, and system settings.</p>
+                    </div>
+                </div>
+
+                <h1 class="title">Welcome to the Admin Panel</h1>
+                <p class="message">
+                    Your admin account has been successfully set up. Below are your login credentials
+                    for accessing the Elite Pic administration panel.
+                </p>
+
+                <div class="cred-box">
+                    <div class="cred-box-header">Admin Login Credentials</div>
+                    <div class="cred-item">
+                        <div class="cred-dot"></div>
+                        <div>
+                            <div class="cred-label">Admin Email</div>
+                            <div class="cred-value">${email}</div>
+                        </div>
+                    </div>
+                    <div class="cred-item">
+                        <div class="cred-dot"></div>
+                        <div>
+                            <div class="cred-label">Admin Password</div>
+                            <div class="cred-value">${password}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="btn-wrap">
+                    <a href="${loginUrl}" class="login-btn">Access Admin Dashboard</a>
+                </div>
+
+                <div class="warning-box">
+                    <strong>Admin Privileges Notice:</strong> Keep these credentials strictly confidential.
+                    Do not share them with unauthorized personnel. This account can manage all platform data.
+                </div>
+                <br/>
+                <div class="danger-box">
+                    <strong>Security Tip:</strong> We strongly recommend changing your password immediately after your first login.
+                    If you did not request this account, contact your system administrator at once.
                 </div>
             </div>
-            
-            <div class="content">
-                <h1 class="title">Admin Account Created</h1>
-                <p class="subtitle">Welcome to Elite Pic Administration Panel</p>
-                <p class="message">
-                    Your admin account has been successfully created. Below are your login credentials 
-                    for accessing the administration panel.
-                </p>
-                
-                <div class="credentials-container">
-                    <div class="credentials-title">Admin Login Credentials</div>
-                    
-                    <div class="credential-item">
-                        <div class="credential-label">Admin Email</div>
-                        <div class="credential-value">${email}</div>
-                    </div>
-                    
-                    <div class="credential-item">
-                        <div class="credential-label">Admin Password</div>
-                        <div class="credential-value">${password}</div>
-                    </div>
-                </div>
-                
-                <a href="${loginUrl}" class="login-button">Access Admin Dashboard</a>
-                
-                <div class="admin-notice">
-                    <div class="admin-notice-title"> Admin Privileges Notice</div>
-                    <div class="admin-notice-text">
-                        This account has administrative privileges and can manage users, 
-                        view reports, and configure system settings. Please keep these 
-                        credentials secure and do not share them with unauthorized personnel.
-                    </div>
-                </div>
-                
-                <div class="security-note">
-                    <strong>Security Notice:</strong> For security reasons, we recommend 
-                    changing your password after your first login. If you didn't request 
-                    this admin account, please contact your system administrator immediately.
-                </div>
-                
-                <p class="message">
-                    You can now access the admin panel and manage the Elite Pic system!
-                </p>
-            </div>
-            
+
             <div class="footer">
-                <p class="footer-text">
-                    © 2024 Elite Pic. All rights reserved.
-                </p>
-                <p class="footer-text">
-                    This is an automated message. Please do not reply to this email.
-                </p>
+                <p>© 2024 <span class="highlight">Elite Pic</span>. All rights reserved.</p>
+                <p>This is an automated message. Please do not reply to this email.</p>
             </div>
         </div>
     </body>
@@ -600,7 +579,3 @@ module.exports = {
   generateCredentialsTemplate,
   generateAdminCredentialsTemplate,
 };
-
-
-
-
