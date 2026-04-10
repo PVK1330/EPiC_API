@@ -19,4 +19,5 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/sponsors", sponsorsRoutes);
 app.use("/api/candidate", candidateRoutes);    
 
+
 module.exports = app;
