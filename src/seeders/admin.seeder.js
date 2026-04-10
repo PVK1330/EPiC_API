@@ -19,7 +19,7 @@ const seedAdmin = async () => {
         role_id: 1,
         is_otp_verified: true,
         is_email_verified: true,
-        is_active: true
+        status: 'active'
       }
     });
 

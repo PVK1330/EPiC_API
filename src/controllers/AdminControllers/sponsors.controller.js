@@ -14,7 +14,7 @@ exports.createSponsor = async (req, res) => {
       email,
       country_code,
       mobile,
-      role_id = 3, // Default to Sponsor role
+      role_id = 4, // Default to Sponsor role
       password,
       confirm_password
     } = req.body;
@@ -96,7 +96,8 @@ exports.createSponsor = async (req, res) => {
       role_id,
       password: hashedPassword,
       is_email_verified: true, // Auto-verify for admin-created accounts
-      is_active: true
+      is_otp_verified: true, // Auto-verify for sponsor login
+      status: 'active'
     });
 
     // Remove password from response
@@ -142,10 +143,8 @@ exports.getAllSponsors = async (req, res) => {
       ];
     }
 
-    if (status === 'active') {
-      whereClause.is_active = true;
-    } else if (status === 'inactive') {
-      whereClause.is_active = false;
+    if (status) {
+      whereClause.status = status;
     }
 
     const { count, rows: sponsors } = await User.findAndCountAll({
@@ -239,7 +238,7 @@ exports.updateSponsor = async (req, res) => {
       country_code,
       mobile,
       role_id,
-      is_active
+      status
     } = req.body;
 
     // Find sponsor
@@ -309,7 +308,7 @@ exports.updateSponsor = async (req, res) => {
       country_code: country_code || sponsor.country_code,
       mobile: mobile || sponsor.mobile,
       role_id: role_id || sponsor.role_id,
-      is_active: is_active !== undefined ? is_active : sponsor.is_active
+      status: status || sponsor.status
     };
 
     await sponsor.update(updateData);
@@ -357,8 +356,8 @@ exports.deleteSponsor = async (req, res) => {
       });
     }
 
-    // Soft delete by setting is_active to false
-    await sponsor.update({ is_active: false });
+    // Soft delete by setting status to 'inactive'
+    await sponsor.update({ status: 'inactive' });
 
     res.status(200).json({
       status: "success",
@@ -458,16 +457,16 @@ exports.toggleSponsorStatus = async (req, res) => {
       });
     }
 
-    // Toggle status
-    const newStatus = !sponsor.is_active;
-    await sponsor.update({ is_active: newStatus });
+    // Toggle status between active and inactive
+    const newStatus = sponsor.status === 'active' ? 'inactive' : 'active';
+    await sponsor.update({ status: newStatus });
 
     res.status(200).json({
       status: "success",
-      message: `Sponsor ${newStatus ? 'activated' : 'deactivated'} successfully`,
+      message: `Sponsor ${newStatus === 'active' ? 'activated' : 'deactivated'} successfully`,
       data: {
         sponsor_id: sponsor.id,
-        is_active: newStatus
+        status: newStatus
       }
     });
 

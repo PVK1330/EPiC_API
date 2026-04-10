@@ -5,7 +5,7 @@ const seedRoles = async () => {
     { id: 1, name: "admin" },
     { id: 2, name: "caseworker" },
     { id: 3, name: "candidate" },
-    { id: 4, name: "business" },
+    { id: 4, name: "business" },// Sponsor
   ];
 
   for (let role of roles) {

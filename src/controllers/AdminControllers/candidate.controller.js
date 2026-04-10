@@ -5,8 +5,8 @@ const bcrypt = require("bcryptjs");
 const User = db.User;
 const Role = db.Role;
 
-// Create Caseworker
-exports.createCaseworker = async (req, res) => {
+// Create Candidate
+exports.createCandidate = async (req, res) => {
   try {
     const {
       first_name,
@@ -14,7 +14,7 @@ exports.createCaseworker = async (req, res) => {
       email,
       country_code,
       mobile,
-      role_id = 2, // Default to Caseworker role
+      role_id = 3, // Default to Candidate role
       password,
       confirm_password
     } = req.body;
@@ -86,33 +86,34 @@ exports.createCaseworker = async (req, res) => {
     // Hash password
     const hashedPassword = await bcrypt.hash(generatedPassword, 12);
 
-    // Create caseworker
-    const caseworker = await User.create({
+    // Create candidate
+    const candidate = await User.create({
       first_name,
       last_name,
       email,
       country_code,
       mobile,
-      role_id,
+      role_id: 3, // Always set to Candidate role
       password: hashedPassword,
       is_email_verified: true, // Auto-verify for admin-created accounts
-      is_active: true
+      is_otp_verified: true, // Auto-verify for candidate login
+      status: 'active'
     });
 
     // Remove password from response
-    const { password: _, ...caseworkerData } = caseworker.toJSON();
+    const { password: _, ...candidateData } = candidate.toJSON();
 
     res.status(201).json({
       status: "success",
-      message: "Caseworker created successfully",
+      message: "Candidate created successfully",
       data: {
-        caseworker: caseworkerData,
+        candidate: candidateData,
         temporary_password: !password ? generatedPassword : null
       }
     });
 
   } catch (error) {
-    console.error("Create Caseworker Error:", error);
+    console.error("Create Candidate Error:", error);
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -122,15 +123,15 @@ exports.createCaseworker = async (req, res) => {
   }
 };
 
-// Get All Caseworkers
-exports.getAllCaseworkers = async (req, res) => {
+// Get All Candidates
+exports.getAllCandidates = async (req, res) => {
   try {
     const { page = 1, limit = 10, search, status } = req.query;
     const offset = (page - 1) * limit;
 
     // Build where clause
     const whereClause = {
-      role_id: 2 // Caseworker role
+      role_id: 3 // Candidate role
     };
 
     if (search) {
@@ -142,20 +143,18 @@ exports.getAllCaseworkers = async (req, res) => {
       ];
     }
 
-    if (status === 'active') {
-      whereClause.is_active = true;
-    } else if (status === 'inactive') {
-      whereClause.is_active = false;
+    if (status) {
+      whereClause.status = status;
     }
 
-    const { count, rows: caseworkers } = await User.findAndCountAll({
+    const { count, rows: candidates } = await User.findAndCountAll({
       where: whereClause,
       attributes: { 
         exclude: ['password', 'otp_code', 'otp_expiry', 'password_reset_otp', 'password_reset_otp_expiry', 'temp_password'] 
       },
       include: [{
         model: Role,
-        attributes: ['id', 'role_name']
+        attributes: ['id', 'name']
       }],
       order: [['created_at', 'DESC']],
       limit: parseInt(limit),
@@ -164,9 +163,9 @@ exports.getAllCaseworkers = async (req, res) => {
 
     res.status(200).json({
       status: "success",
-      message: "Caseworkers retrieved successfully",
+      message: "Candidates retrieved successfully",
       data: {
-        caseworkers,
+        candidates,
         pagination: {
           total: count,
           page: parseInt(page),
@@ -177,7 +176,7 @@ exports.getAllCaseworkers = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Get All Caseworkers Error:", error);
+    console.error("Get All Candidates Error:", error);
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -187,38 +186,38 @@ exports.getAllCaseworkers = async (req, res) => {
   }
 };
 
-// Get Caseworker by ID
-exports.getCaseworkerById = async (req, res) => {
+// Get Candidate by ID
+exports.getCandidateById = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const caseworker = await User.findOne({
-      where: { id, role_id: 2 },
+    const candidate = await User.findOne({
+      where: { id, role_id: 3 },
       attributes: { 
         exclude: ['password', 'otp_code', 'otp_expiry', 'password_reset_otp', 'password_reset_otp_expiry', 'temp_password'] 
       },
       include: [{
         model: Role,
-        attributes: ['id', 'role_name']
+        attributes: ['id', 'name']
       }]
     });
 
-    if (!caseworker) {
+    if (!candidate) {
       return res.status(404).json({
         status: "error",
-        message: "Caseworker not found",
+        message: "Candidate not found",
         data: null
       });
     }
 
     res.status(200).json({
       status: "success",
-      message: "Caseworker retrieved successfully",
-      data: { caseworker }
+      message: "Candidate retrieved successfully",
+      data: { candidate }
     });
 
   } catch (error) {
-    console.error("Get Caseworker by ID Error:", error);
+    console.error("Get Candidate by ID Error:", error);
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -228,8 +227,8 @@ exports.getCaseworkerById = async (req, res) => {
   }
 };
 
-// Update Caseworker
-exports.updateCaseworker = async (req, res) => {
+// Update Candidate
+exports.updateCandidate = async (req, res) => {
   try {
     const { id } = req.params;
     const {
@@ -239,15 +238,15 @@ exports.updateCaseworker = async (req, res) => {
       country_code,
       mobile,
       role_id,
-      is_active
+      status
     } = req.body;
 
-    // Find caseworker
-    const caseworker = await User.findOne({ where: { id, role_id: 2 } });
-    if (!caseworker) {
+    // Find candidate
+    const candidate = await User.findOne({ where: { id, role_id: 3 } });
+    if (!candidate) {
       return res.status(404).json({
         status: "error",
-        message: "Caseworker not found",
+        message: "Candidate not found",
         data: null
       });
     }
@@ -262,7 +261,7 @@ exports.updateCaseworker = async (req, res) => {
     }
 
     // Check if email is being changed and if it already exists
-    if (email !== caseworker.email) {
+    if (email !== candidate.email) {
       const existingEmail = await User.findOne({ 
         where: { email, id: { [Op.ne]: id } }
       });
@@ -276,7 +275,7 @@ exports.updateCaseworker = async (req, res) => {
     }
 
     // Check if mobile is being changed and if it already exists
-    if (country_code !== caseworker.country_code || mobile !== caseworker.mobile) {
+    if (country_code !== candidate.country_code || mobile !== candidate.mobile) {
       const existingMobile = await User.findOne({ 
         where: { country_code, mobile, id: { [Op.ne]: id } }
       });
@@ -301,39 +300,39 @@ exports.updateCaseworker = async (req, res) => {
       }
     }
 
-    // Update caseworker
+    // Update candidate
     const updateData = {
-      first_name: first_name || caseworker.first_name,
-      last_name: last_name || caseworker.last_name,
-      email: email || caseworker.email,
-      country_code: country_code || caseworker.country_code,
-      mobile: mobile || caseworker.mobile,
-      role_id: role_id || caseworker.role_id,
-      is_active: is_active !== undefined ? is_active : caseworker.is_active
+      first_name: first_name || candidate.first_name,
+      last_name: last_name || candidate.last_name,
+      email: email || candidate.email,
+      country_code: country_code || candidate.country_code,
+      mobile: mobile || candidate.mobile,
+      role_id: role_id || candidate.role_id,
+      status: status || candidate.status
     };
 
-    await caseworker.update(updateData);
+    await candidate.update(updateData);
 
-    // Get updated caseworker with role
-    const updatedCaseworker = await User.findOne({
+    // Get updated candidate with role
+    const updatedCandidate = await User.findOne({
       where: { id },
       attributes: { 
         exclude: ['password', 'otp_code', 'otp_expiry', 'password_reset_otp', 'password_reset_otp_expiry', 'temp_password'] 
       },
       include: [{
         model: Role,
-        attributes: ['id', 'role_name']
+        attributes: ['id', 'name']
       }]
     });
 
     res.status(200).json({
       status: "success",
-      message: "Caseworker updated successfully",
-      data: { caseworker: updatedCaseworker }
+      message: "Candidate updated successfully",
+      data: { candidate: updatedCandidate }
     });
 
   } catch (error) {
-    console.error("Update Caseworker Error:", error);
+    console.error("Update Candidate Error:", error);
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -343,31 +342,31 @@ exports.updateCaseworker = async (req, res) => {
   }
 };
 
-// Delete Caseworker (Soft Delete)
-exports.deleteCaseworker = async (req, res) => {
+// Delete Candidate (Soft Delete)
+exports.deleteCandidate = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const caseworker = await User.findOne({ where: { id, role_id: 2 } });
-    if (!caseworker) {
+    const candidate = await User.findOne({ where: { id, role_id: 3 } });
+    if (!candidate) {
       return res.status(404).json({
         status: "error",
-        message: "Caseworker not found",
+        message: "Candidate not found",
         data: null
       });
     }
 
-    // Soft delete by setting is_active to false
-    await caseworker.update({ is_active: false });
+    // Soft delete by setting status to 'inactive'
+    await candidate.update({ status: 'inactive' });
 
     res.status(200).json({
       status: "success",
-      message: "Caseworker deleted successfully",
+      message: "Candidate deleted successfully",
       data: null
     });
 
   } catch (error) {
-    console.error("Delete Caseworker Error:", error);
+    console.error("Delete Candidate Error:", error);
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -377,8 +376,8 @@ exports.deleteCaseworker = async (req, res) => {
   }
 };
 
-// Reset Caseworker Password
-exports.resetCaseworkerPassword = async (req, res) => {
+// Reset Candidate Password
+exports.resetCandidatePassword = async (req, res) => {
   try {
     const { id } = req.params;
     const { new_password, confirm_password } = req.body;
@@ -407,11 +406,11 @@ exports.resetCaseworkerPassword = async (req, res) => {
       });
     }
 
-    const caseworker = await User.findOne({ where: { id, role_id: 2 } });
-    if (!caseworker) {
+    const candidate = await User.findOne({ where: { id, role_id: 3 } });
+    if (!candidate) {
       return res.status(404).json({
         status: "error",
-        message: "Caseworker not found",
+        message: "Candidate not found",
         data: null
       });
     }
@@ -420,7 +419,7 @@ exports.resetCaseworkerPassword = async (req, res) => {
     const hashedPassword = await bcrypt.hash(new_password, 12);
 
     // Update password
-    await caseworker.update({ 
+    await candidate.update({ 
       password: hashedPassword,
       temp_password: null,
       password_reset_otp: null,
@@ -434,7 +433,7 @@ exports.resetCaseworkerPassword = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Reset Caseworker Password Error:", error);
+    console.error("Reset Candidate Password Error:", error);
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -444,35 +443,35 @@ exports.resetCaseworkerPassword = async (req, res) => {
   }
 };
 
-// Toggle Caseworker Status (Active/Inactive)
-exports.toggleCaseworkerStatus = async (req, res) => {
+// Toggle Candidate Status (Active/Inactive)
+exports.toggleCandidateStatus = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const caseworker = await User.findOne({ where: { id, role_id: 2 } });
-    if (!caseworker) {
+    const candidate = await User.findOne({ where: { id, role_id: 3 } });
+    if (!candidate) {
       return res.status(404).json({
         status: "error",
-        message: "Caseworker not found",
+        message: "Candidate not found",
         data: null
       });
     }
 
-    // Toggle status
-    const newStatus = !caseworker.is_active;
-    await caseworker.update({ is_active: newStatus });
+    // Toggle status between active and inactive
+    const newStatus = candidate.status === 'active' ? 'inactive' : 'active';
+    await candidate.update({ status: newStatus });
 
     res.status(200).json({
       status: "success",
-      message: `Caseworker ${newStatus ? 'activated' : 'deactivated'} successfully`,
+      message: `Candidate ${newStatus === 'active' ? 'activated' : 'deactivated'} successfully`,
       data: {
-        caseworker_id: caseworker.id,
-        is_active: newStatus
+        candidate_id: candidate.id,
+        status: newStatus
       }
     });
 
   } catch (error) {
-    console.error("Toggle Caseworker Status Error:", error);
+    console.error("Toggle Candidate Status Error:", error);
     res.status(500).json({
       status: "error",
       message: "Internal server error",

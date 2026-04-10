@@ -96,7 +96,8 @@ exports.createCaseworker = async (req, res) => {
       role_id,
       password: hashedPassword,
       is_email_verified: true, // Auto-verify for admin-created accounts
-      is_active: true
+      is_otp_verified: true, // Auto-verify for caseworker login
+      status: 'active'
     });
 
     // Remove password from response
@@ -142,10 +143,8 @@ exports.getAllCaseworkers = async (req, res) => {
       ];
     }
 
-    if (status === 'active') {
-      whereClause.is_active = true;
-    } else if (status === 'inactive') {
-      whereClause.is_active = false;
+    if (status) {
+      whereClause.status = status;
     }
 
     const { count, rows: caseworkers } = await User.findAndCountAll({
@@ -239,7 +238,7 @@ exports.updateCaseworker = async (req, res) => {
       country_code,
       mobile,
       role_id,
-      is_active
+      status
     } = req.body;
 
     // Find caseworker
@@ -309,7 +308,7 @@ exports.updateCaseworker = async (req, res) => {
       country_code: country_code || caseworker.country_code,
       mobile: mobile || caseworker.mobile,
       role_id: role_id || caseworker.role_id,
-      is_active: is_active !== undefined ? is_active : caseworker.is_active
+      status: status || caseworker.status
     };
 
     await caseworker.update(updateData);
@@ -357,8 +356,8 @@ exports.deleteCaseworker = async (req, res) => {
       });
     }
 
-    // Soft delete by setting is_active to false
-    await caseworker.update({ is_active: false });
+    // Soft delete by setting status to 'inactive'
+    await caseworker.update({ status: 'inactive' });
 
     res.status(200).json({
       status: "success",
@@ -458,16 +457,16 @@ exports.toggleCaseworkerStatus = async (req, res) => {
       });
     }
 
-    // Toggle status
-    const newStatus = !caseworker.is_active;
-    await caseworker.update({ is_active: newStatus });
+    // Toggle status between active and inactive
+    const newStatus = caseworker.status === 'active' ? 'inactive' : 'active';
+    await caseworker.update({ status: newStatus });
 
     res.status(200).json({
       status: "success",
-      message: `Caseworker ${newStatus ? 'activated' : 'deactivated'} successfully`,
+      message: `Caseworker ${newStatus === 'active' ? 'activated' : 'deactivated'} successfully`,
       data: {
         caseworker_id: caseworker.id,
-        is_active: newStatus
+        status: newStatus
       }
     });
 

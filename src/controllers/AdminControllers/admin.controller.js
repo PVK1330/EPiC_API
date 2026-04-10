@@ -99,7 +99,7 @@ exports.createAdmin = async (req, res) => {
       password: hashedPassword,
       is_email_verified: true, // Auto-verify for admin-created accounts
       is_otp_verified: true, // Auto-verify for admin login
-      is_active: true
+      status: 'active'
     });
 
     // Send admin credentials email
@@ -160,10 +160,8 @@ exports.getAllAdmins = async (req, res) => {
       ];
     }
 
-    if (status === 'active') {
-      whereClause.is_active = true;
-    } else if (status === 'inactive') {
-      whereClause.is_active = false;
+    if (status) {
+      whereClause.status = status;
     }
 
     const { count, rows: admins } = await User.findAndCountAll({
@@ -175,7 +173,7 @@ exports.getAllAdmins = async (req, res) => {
         model: Role,
         attributes: ['id', 'name']
       }],
-      order: [['createdAt', 'DESC']],
+      order: [['created_at', 'DESC']],
       limit: parseInt(limit),
       offset: parseInt(offset)
     });
@@ -257,7 +255,7 @@ exports.updateAdmin = async (req, res) => {
       country_code,
       mobile,
       role_id,
-      is_active
+      status
     } = req.body;
 
     // Find admin
@@ -327,7 +325,7 @@ exports.updateAdmin = async (req, res) => {
       country_code: country_code || admin.country_code,
       mobile: mobile || admin.mobile,
       role_id: role_id || admin.role_id,
-      is_active: is_active !== undefined ? is_active : admin.is_active
+      status: status || admin.status
     };
 
     await admin.update(updateData);
@@ -375,8 +373,8 @@ exports.deleteAdmin = async (req, res) => {
       });
     }
 
-    // Soft delete by setting is_active to false
-    await admin.update({ is_active: false });
+    // Soft delete by setting status to 'inactive'
+    await admin.update({ status: 'inactive' });
 
     res.status(200).json({
       status: "success",
@@ -476,16 +474,16 @@ exports.toggleAdminStatus = async (req, res) => {
       });
     }
 
-    // Toggle status
-    const newStatus = !admin.is_active;
-    await admin.update({ is_active: newStatus });
+    // Toggle status between active and inactive
+    const newStatus = admin.status === 'active' ? 'inactive' : 'active';
+    await admin.update({ status: newStatus });
 
     res.status(200).json({
       status: "success",
-      message: `Admin ${newStatus ? 'activated' : 'deactivated'} successfully`,
+      message: `Admin ${newStatus === 'active' ? 'activated' : 'deactivated'} successfully`,
       data: {
         admin_id: admin.id,
-        is_active: newStatus
+        status: newStatus
       }
     });
 

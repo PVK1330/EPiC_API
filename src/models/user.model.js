@@ -75,9 +75,10 @@ module.exports = (sequelize, DataTypes) => {
                 type: DataTypes.BOOLEAN,
                 defaultValue: false,
             },
-            is_active: {
-                type: DataTypes.BOOLEAN,
-                defaultValue: true,
+            status: {
+                type: DataTypes.ENUM('active', 'inactive', 'suspended'),
+                defaultValue: 'active',
+                allowNull: false,
             },
             password_reset_otp: {
                 type: DataTypes.STRING(10),
