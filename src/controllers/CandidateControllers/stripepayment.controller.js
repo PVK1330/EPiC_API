@@ -1,8 +1,35 @@
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const Stripe = require('stripe');
+
+let stripeInstance = null;
+
+function getStripe() {
+  const key = process.env.STRIPE_SECRET_KEY;
+  if (!key) return null;
+  if (!stripeInstance) {
+    stripeInstance = new Stripe(key);
+  }
+  return stripeInstance;
+}
+
+function stripeReady(res) {
+  const stripe = getStripe();
+  if (!stripe) {
+    res.status(503).json({
+      status: 'error',
+      message: 'Stripe is not configured. Set STRIPE_SECRET_KEY in your environment.',
+      data: null
+    });
+    return null;
+  }
+  return stripe;
+}
 
 // Create Payment Intent
 exports.createPaymentIntent = async (req, res) => {
   try {
+    const stripe = stripeReady(res);
+    if (!stripe) return;
+
     const { amount, currency = 'usd', payment_method_id, metadata = {} } = req.body;
 
     // Validate required fields
@@ -64,6 +91,9 @@ exports.createPaymentIntent = async (req, res) => {
 // Confirm Payment
 exports.confirmPayment = async (req, res) => {
   try {
+    const stripe = stripeReady(res);
+    if (!stripe) return;
+
     const { payment_intent_id, payment_method_id } = req.body;
 
     if (!payment_intent_id) {
@@ -119,6 +149,9 @@ exports.confirmPayment = async (req, res) => {
 // Get Payment Status
 exports.getPaymentStatus = async (req, res) => {
   try {
+    const stripe = stripeReady(res);
+    if (!stripe) return;
+
     const { payment_intent_id } = req.params;
 
     if (!payment_intent_id) {
@@ -158,6 +191,9 @@ exports.getPaymentStatus = async (req, res) => {
 // Cancel Payment
 exports.cancelPayment = async (req, res) => {
   try {
+    const stripe = stripeReady(res);
+    if (!stripe) return;
+
     const { payment_intent_id } = req.body;
 
     if (!payment_intent_id) {
@@ -193,6 +229,9 @@ exports.cancelPayment = async (req, res) => {
 // Create Setup Intent for saving payment methods
 exports.createSetupIntent = async (req, res) => {
   try {
+    const stripe = stripeReady(res);
+    if (!stripe) return;
+
     const { customer_id } = req.body;
 
     const setupIntent = await stripe.setupIntents.create({
@@ -222,6 +261,9 @@ exports.createSetupIntent = async (req, res) => {
 
 // Stripe Webhook Handler
 exports.handleWebhook = async (req, res) => {
+  const stripe = stripeReady(res);
+  if (!stripe) return;
+
   const sig = req.headers['stripe-signature'];
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
@@ -347,6 +389,9 @@ exports.handleWebhook = async (req, res) => {
 // Refund Payment
 exports.createRefund = async (req, res) => {
   try {
+    const stripe = stripeReady(res);
+    if (!stripe) return;
+
     const { payment_intent_id, amount, reason } = req.body;
 
     if (!payment_intent_id) {
@@ -388,6 +433,9 @@ exports.createRefund = async (req, res) => {
 // Create Subscription
 exports.createSubscription = async (req, res) => {
   try {
+    const stripe = stripeReady(res);
+    if (!stripe) return;
+
     const { customer_id, price_id, payment_method_id, metadata = {} } = req.body;
 
     if (!customer_id || !price_id) {
@@ -454,6 +502,9 @@ exports.createSubscription = async (req, res) => {
 // Renew Subscription
 exports.renewSubscription = async (req, res) => {
   try {
+    const stripe = stripeReady(res);
+    if (!stripe) return;
+
     const { subscription_id, payment_method_id } = req.body;
 
     if (!subscription_id) {
@@ -524,6 +575,9 @@ exports.renewSubscription = async (req, res) => {
 // Cancel Subscription
 exports.cancelSubscription = async (req, res) => {
   try {
+    const stripe = stripeReady(res);
+    if (!stripe) return;
+
     const { subscription_id, cancel_at_period_end = true } = req.body;
 
     if (!subscription_id) {
@@ -565,6 +619,9 @@ exports.cancelSubscription = async (req, res) => {
 // Get Subscription Status
 exports.getSubscriptionStatus = async (req, res) => {
   try {
+    const stripe = stripeReady(res);
+    if (!stripe) return;
+
     const { subscription_id } = req.params;
 
     if (!subscription_id) {
@@ -612,6 +669,9 @@ exports.getSubscriptionStatus = async (req, res) => {
 // Update Subscription (change plan, quantity, etc.)
 exports.updateSubscription = async (req, res) => {
   try {
+    const stripe = stripeReady(res);
+    if (!stripe) return;
+
     const { subscription_id, price_id, quantity = 1, metadata = {} } = req.body;
 
     if (!subscription_id || !price_id) {
