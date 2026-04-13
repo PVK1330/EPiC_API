@@ -1,8 +1,8 @@
-const express = require("express");
-const router = express.Router();
+import express, { Router } from 'express';
+import * as stripeController from '../controllers/CandidateControllers/stripepayment.controller.js';
+import { verifyToken } from '../middlewares/auth.middleware.js';
 
-const stripeController = require("../controllers/CandidateControllers/stripepayment.controller");
-const { verifyToken } = require("../middlewares/auth.middleware");
+const router = Router();
 
 // Apply authentication middleware to all routes except webhooks
 router.use((req, res, next) => {
@@ -34,4 +34,4 @@ router.post("/update-subscription", stripeController.updateSubscription);
 // Webhook Route (no authentication required for webhooks)
 router.post("/webhook", express.raw({ type: 'application/json' }), stripeController.handleWebhook);
 
-module.exports = router;
+export default router;

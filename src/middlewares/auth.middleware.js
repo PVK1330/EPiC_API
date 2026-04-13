@@ -1,24 +1,34 @@
-const jwt = require("jsonwebtoken");
+import jwt from 'jsonwebtoken';
 
-exports.verifyToken = (req, res, next) => {
+export const verifyToken = (req, res, next) => {
   try {
-    const token = req.headers["authorization"];
+    // Primary: read from HttpOnly cookie
+    let token = req.cookies?.token;
 
-    if (!token) {
-      return res.status(401).json({ message: "No token provided" });
+    // Fallback: Authorization: Bearer <token>
+    if (!token && req.headers['authorization']) {
+      const parts = req.headers['authorization'].split(' ');
+      if (parts.length === 2 && parts[0] === 'Bearer') {
+        token = parts[1];
+      }
     }
 
-    // Bearer token format
-    const actualToken = token.split(" ")[1];
+    if (!token) {
+      return res.status(401).json({
+        status: 'error',
+        message: 'Authentication required. No token provided.',
+        data: null,
+      });
+    }
 
-    const decoded = jwt.verify(
-      actualToken,
-      process.env.JWT_SECRET
-    );
-
-    req.user = decoded; 
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = decoded;   // { userId, email, role_id, role_name }
     next();
   } catch (err) {
-    return res.status(401).json({ message: "Invalid token" });
+    return res.status(401).json({
+      status: 'error',
+      message: 'Invalid or expired token.',
+      data: null,
+    });
   }
 };

@@ -1,12 +1,12 @@
-const db = require("../../models");
-const { Op } = require("sequelize");
-const bcrypt = require("bcryptjs");
+import db from "../../models/index.js";
+import { Op } from "sequelize";
+import bcrypt from "bcryptjs";
 
 const User = db.User;
 const Role = db.Role;
 
 // Create Sponsor
-exports.createSponsor = async (req, res) => {
+export const createSponsor = async (req, res) => {
   try {
     const {
       first_name,
@@ -124,14 +124,14 @@ exports.createSponsor = async (req, res) => {
 };
 
 // Get All Sponsors
-exports.getAllSponsors = async (req, res) => {
+export const getAllSponsors = async (req, res) => {
   try {
     const { page = 1, limit = 10, search, status } = req.query;
     const offset = (page - 1) * limit;
 
     // Build where clause
     const whereClause = {
-      role_id: 3 // Sponsor role
+      role_id: 4 // Sponsor/Business role (User said 4 is business)
     };
 
     if (search) {
@@ -187,12 +187,12 @@ exports.getAllSponsors = async (req, res) => {
 };
 
 // Get Sponsor by ID
-exports.getSponsorById = async (req, res) => {
+export const getSponsorById = async (req, res) => {
   try {
     const { id } = req.params;
 
     const sponsor = await User.findOne({
-      where: { id, role_id: 3 },
+      where: { id, role_id: 4 },
       attributes: { 
         exclude: ['password', 'otp_code', 'otp_expiry', 'password_reset_otp', 'password_reset_otp_expiry', 'temp_password'] 
       },
@@ -228,7 +228,7 @@ exports.getSponsorById = async (req, res) => {
 };
 
 // Update Sponsor
-exports.updateSponsor = async (req, res) => {
+export const updateSponsor = async (req, res) => {
   try {
     const { id } = req.params;
     const {
@@ -242,7 +242,7 @@ exports.updateSponsor = async (req, res) => {
     } = req.body;
 
     // Find sponsor
-    const sponsor = await User.findOne({ where: { id, role_id: 3 } });
+    const sponsor = await User.findOne({ where: { id, role_id: 4 } });
     if (!sponsor) {
       return res.status(404).json({
         status: "error",
@@ -343,11 +343,11 @@ exports.updateSponsor = async (req, res) => {
 };
 
 // Delete Sponsor (Soft Delete)
-exports.deleteSponsor = async (req, res) => {
+export const deleteSponsor = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const sponsor = await User.findOne({ where: { id, role_id: 3 } });
+    const sponsor = await User.findOne({ where: { id, role_id: 4 } });
     if (!sponsor) {
       return res.status(404).json({
         status: "error",
@@ -377,7 +377,7 @@ exports.deleteSponsor = async (req, res) => {
 };
 
 // Reset Sponsor Password
-exports.resetSponsorPassword = async (req, res) => {
+export const resetSponsorPassword = async (req, res) => {
   try {
     const { id } = req.params;
     const { new_password, confirm_password } = req.body;
@@ -406,7 +406,7 @@ exports.resetSponsorPassword = async (req, res) => {
       });
     }
 
-    const sponsor = await User.findOne({ where: { id, role_id: 3 } });
+    const sponsor = await User.findOne({ where: { id, role_id: 4 } });
     if (!sponsor) {
       return res.status(404).json({
         status: "error",
@@ -444,11 +444,11 @@ exports.resetSponsorPassword = async (req, res) => {
 };
 
 // Toggle Sponsor Status (Active/Inactive)
-exports.toggleSponsorStatus = async (req, res) => {
+export const toggleSponsorStatus = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const sponsor = await User.findOne({ where: { id, role_id: 3 } });
+    const sponsor = await User.findOne({ where: { id, role_id: 4 } });
     if (!sponsor) {
       return res.status(404).json({
         status: "error",

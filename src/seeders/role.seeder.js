@@ -1,21 +1,22 @@
-const db = require("../models");
+import db from "../models/index.js";
 
-const seedRoles = async () => {
-  const roles = [
-    { id: 1, name: "admin" },
-    { id: 2, name: "caseworker" },
-    { id: 3, name: "candidate" },
-    { id: 4, name: "business" },
-  ];
+const ROLES = [
+  { id: 1, name: "admin" },
+  { id: 2, name: "caseworker" },
+  { id: 3, name: "candidate" },
+  { id: 4, name: "business" },
+];
 
-  for (let role of roles) {
-    await db.Role.findOrCreate({
-      where: { id: role.id },
-      defaults: role,
-    });
+export default async function seedRoles() {
+  try {
+    for (const role of ROLES) {
+      await db.Role.findOrCreate({
+        where: { id: role.id },
+        defaults: role,
+      });
+    }
+    console.log("✔ Roles seeded");
+  } catch (err) {
+    console.error("Role seeder failed:", err.message);
   }
-
-  console.log("Roles seeded");
-};
-
-module.exports = seedRoles;
+}
