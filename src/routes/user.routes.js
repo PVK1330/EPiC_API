@@ -1,16 +1,9 @@
-const express = require("express");
-const router = express.Router();
+import { Router } from 'express';
+import * as userController from '../controllers/user.controller.js';
+import { verifyToken } from '../middlewares/auth.middleware.js';
+import { ROLES } from '../middlewares/role.middleware.js';
 
-const userController = require("../controllers/user.controller");
-const { verifyToken } = require("../middlewares/auth.middleware");
-
-const ROLES = {
-  ADMIN: 1,
-  CASEWORKER: 2,
-  CANDIDATE: 3, 
-  BUSINESS: 4,
-};
-
+const router = Router();
 
 // Get user profile - accessible for all authenticated users
 router.get("/profile", verifyToken, userController.profile);
@@ -18,5 +11,4 @@ router.get("/profile", verifyToken, userController.profile);
 // Edit user profile - accessible for all authenticated users
 router.put("/profile", verifyToken, userController.editProfile);
 
-
-module.exports = router;
+export default router;

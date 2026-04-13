@@ -1,14 +1,13 @@
-const bcrypt = require("bcryptjs");
-const jwt = require("jsonwebtoken");
-const db = require("../models");
-const transporter = require("../config/mail");
-const { generateOTPTemplate, generateCredentialsTemplate } = require("../utils/emailTemplate");
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import db from '../models/index.js';
+import transporter from '../config/mail.js';
+import { generateOTPTemplate, generateCredentialsTemplate } from '../utils/emailTemplate.js';
 
 const User = db.User;
 const UnverifiedUser = db.UnverifiedUser;
 
-
-exports.register = async (req, res) => {
+export const register = async (req, res) => {
   try {
     const {
       first_name,
@@ -20,7 +19,6 @@ exports.register = async (req, res) => {
       role_id,
     } = req.body;
 
-    // ✅ Required fields validation
     if (!first_name || !last_name) {
       return res.status(400).json({
         status: "error",
@@ -29,7 +27,6 @@ exports.register = async (req, res) => {
       });
     }
 
-    // ✅ password validation
     if (!password || password.length < 8) {
       return res.status(400).json({
         status: "error",
@@ -38,7 +35,6 @@ exports.register = async (req, res) => {
       });
     }
 
-    // ✅ email unique
     const emailExists = await User.findOne({ where: { email } });
     if (emailExists) {
       return res.status(400).json({
@@ -48,7 +44,6 @@ exports.register = async (req, res) => {
       });
     }
 
-    // ✅ mobile + country_code unique
     const mobileExists = await User.findOne({
       where: { country_code, mobile },
     });
@@ -61,7 +56,6 @@ exports.register = async (req, res) => {
       });
     }
 
-    // ✅ role validation (only allow 1–4)
     const validRoles = [1, 2, 3, 4];
     if (!validRoles.includes(role_id)) {
       return res.status(400).json({
@@ -71,15 +65,11 @@ exports.register = async (req, res) => {
       });
     }
 
-    // 🔐 hash password
     const hashedPassword = await bcrypt.hash(password, 10);
-
-    // generate OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
 
-    // create unverified user
-    const unverifiedUser = await UnverifiedUser.create({
+    await UnverifiedUser.create({
       first_name,
       last_name,
       email,
@@ -89,10 +79,9 @@ exports.register = async (req, res) => {
       role_id,
       otp_code: otp,
       otp_expiry: otpExpiry,
-      temp_password: password, // Store original password temporarily
+      temp_password: password,
     });
 
-    // send mail
     await transporter.sendMail({
       from: process.env.EMAIL_USER,
       to: email,
@@ -118,11 +107,9 @@ exports.register = async (req, res) => {
   }
 };
 
-exports.verifyOTP = async (req, res) => {
+export const verifyOTP = async (req, res) => {
   try {
     const { email, otp } = req.body;
-
-    // Find user in unverified users table
     const unverifiedUser = await UnverifiedUser.findOne({ where: { email } });
 
     if (!unverifiedUser) {
@@ -149,9 +136,8 @@ exports.verifyOTP = async (req, res) => {
       });
     }
 
-    // Send welcome email with credentials
     const loginUrl = `${process.env.FRONTEND_URL}`;
-    const originalPassword = unverifiedUser.temp_password; // Get stored original password
+    const originalPassword = unverifiedUser.temp_password;
     
     await transporter.sendMail({
       from: process.env.EMAIL_USER,
@@ -160,7 +146,6 @@ exports.verifyOTP = async (req, res) => {
       html: generateCredentialsTemplate(email, originalPassword, loginUrl),
     });
 
-    // Move user to verified users table
     const verifiedUser = await User.create({
       first_name: unverifiedUser.first_name,
       last_name: unverifiedUser.last_name,
@@ -172,21 +157,22 @@ exports.verifyOTP = async (req, res) => {
       is_otp_verified: true,
     });
 
-    // Remove user from unverified users table
     await unverifiedUser.destroy();
 
-    // Generate JWT token for automatic login
-    const token = jwt.sign(
-      {
-        userId: verifiedUser.id,
-        email: verifiedUser.email,
-        role_id: verifiedUser.role_id,
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: "24h" }
-    );
+    const payload = {
+      userId: verifiedUser.id,
+      email: verifiedUser.email,
+      role_id: verifiedUser.role_id,
+    };
+    const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "7d" });
 
-    // Remove sensitive fields from response
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
     const userResponse = {
       id: verifiedUser.id,
       first_name: verifiedUser.first_name,
@@ -220,12 +206,9 @@ exports.verifyOTP = async (req, res) => {
   }
 };
 
-// Resend OTP API
-exports.resendOTP = async (req, res) => {
+export const resendOTP = async (req, res) => {
   try {
     const { email } = req.body;
-
-    // Check if user is already verified
     const verifiedUser = await User.findOne({ where: { email } });
     if (verifiedUser) {
       return res.status(400).json({ 
@@ -235,9 +218,7 @@ exports.resendOTP = async (req, res) => {
       });
     }
 
-    // Find user in unverified users table
     const unverifiedUser = await UnverifiedUser.findOne({ where: { email } });
-
     if (!unverifiedUser) {
       return res.status(404).json({ 
         status: "error",
@@ -251,7 +232,6 @@ exports.resendOTP = async (req, res) => {
 
     unverifiedUser.otp_code = otp;
     unverifiedUser.otp_expiry = otpExpiry;
-
     await unverifiedUser.save();
 
     await transporter.sendMail({
@@ -279,97 +259,106 @@ exports.resendOTP = async (req, res) => {
   }
 };
 
-// Login API
-exports.login = async (req, res) => {
+export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Find user by email
-    const user = await User.findOne({ where: { email } });
+    if (!email || !password) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Email and password are required.',
+        data: null,
+      });
+    }
+
+    const user = await db.User.findOne({
+      where: { email },
+      include: [{ model: db.Role, attributes: ['id', 'name'] }],
+    });
 
     if (!user) {
-      return res.status(404).json({ 
-        status: "error",
-        message: "User not found",
-        data: null 
+      return res.status(401).json({
+        status: 'error',
+        message: 'Invalid credentials.',
+        data: null,
       });
     }
 
-    // Check if email is verified
-    if (!user.is_otp_verified) {
-      return res.status(400).json({ 
-        status: "error",
-        message: "Please verify your email first",
-        data: null 
+    if (user.status !== 'active') {
+      return res.status(403).json({
+        status: 'error',
+        message: 'Account is inactive or suspended.',
+        data: null,
       });
     }
 
-    // Check password
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-
-    if (!isPasswordValid) {
-      return res.status(401).json({ 
-        status: "error",
-        message: "Invalid credentials",
-        data: null 
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(401).json({
+        status: 'error',
+        message: 'Invalid credentials.',
+        data: null,
       });
     }
 
-    // Generate JWT token
-    const token = jwt.sign(
-      {
-        userId: user.id,
-        email: user.email,
-        role_id: user.role_id,
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: "24h" }
-    );
-
-    // Remove sensitive fields from response
-    const userResponse = {
-      id: user.id,
-      first_name: user.first_name,
-      last_name: user.last_name,
+    const payload = {
+      userId: user.id,
       email: user.email,
-      country_code: user.country_code,
-      mobile: user.mobile,
       role_id: user.role_id,
-      is_otp_verified: user.is_otp_verified,
-      createdAt: user.createdAt,
+      role_name: user.Role?.name || null,
     };
 
-    res.status(200).json({
-      status: "success",
-      message: "Login successful",
+    const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '7d' });
+
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+    return res.status(200).json({
+      status: 'success',
+      message: 'Login successful.',
       data: {
-        token: token,
-        user: userResponse
-      }
+        user: {
+          id: user.id,
+          first_name: user.first_name,
+          last_name: user.last_name,
+          email: user.email,
+          role_id: user.role_id,
+          role_name: user.Role?.name,
+          status: user.status,
+        },
+        token,
+      },
     });
   } catch (err) {
-    res.status(500).json({ 
-      status: "error",
-      message: "Internal server error",
+    console.error('Login error:', err);
+    return res.status(500).json({
+      status: 'error',
+      message: 'Login failed. Please try again.',
       data: null,
-      error: err.message 
     });
   }
 };
 
+export const logout = (req, res) => {
+  res.clearCookie('token', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+  });
+  return res.status(200).json({
+    status: 'success',
+    message: 'Logged out successfully.',
+    data: null,
+  });
+};
 
-
-
-
-
-
-
-
-// Forgot Password API - Send OTP for password reset
-exports.forgotPassword = async (req, res) => {
+export const forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
-
     const user = await User.findOne({ where: { email } });
 
     if (!user) {
@@ -380,16 +369,13 @@ exports.forgotPassword = async (req, res) => {
       });
     }
 
-    // Generate OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
 
-    // Save OTP to user for password reset
     user.password_reset_otp = otp;
     user.password_reset_otp_expiry = otpExpiry;
     await user.save();
 
-    // Send OTP email
     await transporter.sendMail({
       from: process.env.EMAIL_USER,
       to: email,
@@ -416,11 +402,9 @@ exports.forgotPassword = async (req, res) => {
   }
 };
 
-// Verify Password Reset OTP
-exports.verifyResetOTP = async (req, res) => {
+export const verifyResetOTP = async (req, res) => {
   try {
     const { email, otp } = req.body;
-
     const user = await User.findOne({ where: { email } });
 
     if (!user) {
@@ -431,7 +415,6 @@ exports.verifyResetOTP = async (req, res) => {
       });
     }
 
-    // Verify OTP
     if (user.password_reset_otp !== otp) {
       return res.status(400).json({
         status: "error",
@@ -457,7 +440,6 @@ exports.verifyResetOTP = async (req, res) => {
         next_step: "set_password"
       }
     });
-
   } catch (err) {
     res.status(500).json({
       status: "error",
@@ -468,12 +450,9 @@ exports.verifyResetOTP = async (req, res) => {
   }
 };
 
-// Set New Password after OTP verification
-exports.setPassword = async (req, res) => {
+export const setPassword = async (req, res) => {
   try {
     const { email, password, confirmPassword } = req.body;
-
-    // Find user
     const user = await User.findOne({ where: { email } });
 
     if (!user) {
@@ -484,7 +463,6 @@ exports.setPassword = async (req, res) => {
       });
     }
 
-    // Verify OTP was already verified (check if reset OTP exists and is valid)
     if (!user.password_reset_otp || new Date() > user.password_reset_otp_expiry) {
       return res.status(400).json({
         status: "error",
@@ -493,7 +471,6 @@ exports.setPassword = async (req, res) => {
       });
     }
 
-    // Validate passwords
     if (!password || !confirmPassword) {
       return res.status(400).json({
         status: "error",
@@ -518,18 +495,13 @@ exports.setPassword = async (req, res) => {
       });
     }
 
-    // Hash new password
     const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Update password and clear OTP
     user.password = hashedPassword;
     user.password_reset_otp = null;
     user.password_reset_otp_expiry = null;
     await user.save();
 
-    // Send email with new credentials
     const loginUrl = `${process.env.FRONTEND_URL}`;
-    
     await transporter.sendMail({
       from: process.env.EMAIL_USER,
       to: email,
@@ -546,7 +518,6 @@ exports.setPassword = async (req, res) => {
         credentials_sent: true
       }
     });
-
   } catch (err) {
     res.status(500).json({
       status: "error",
@@ -557,12 +528,9 @@ exports.setPassword = async (req, res) => {
   }
 };
 
-
-// Resend otp API - user table
-exports.resendOtpUser = async (req, res) => {
+export const resendOtpUser = async (req, res) => {
   try {
     const { email } = req.body;
-
     const user = await User.findOne({ where: { email } });
 
     if (!user) {
@@ -573,7 +541,6 @@ exports.resendOtpUser = async (req, res) => {
       });
     }
 
-    // Generate OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
 
@@ -593,7 +560,6 @@ exports.resendOtpUser = async (req, res) => {
       message: "OTP sent successfully",
       data: { email }
     });
-
   } catch (err) {
     res.status(500).json({
       status: "error",
@@ -604,11 +570,9 @@ exports.resendOtpUser = async (req, res) => {
   }
 };
 
-//Verify OTP API - user table
-exports.verifyOtpUser = async (req, res) => {
+export const verifyOtpUser = async (req, res) => {
   try {
     const { email, otp } = req.body;
-
     const user = await User.findOne({ where: { email } });
 
     if (!user) {
@@ -619,7 +583,6 @@ exports.verifyOtpUser = async (req, res) => {
       });
     }
 
-    // Verify OTP
     if (user.otp_code !== otp) {
       return res.status(400).json({
         status: "error",
@@ -636,7 +599,6 @@ exports.verifyOtpUser = async (req, res) => {
       });
     }
 
-    // Mark OTP as verified
     user.is_otp_verified = true;
     user.otp_code = null;
     user.otp_expiry = null;
@@ -650,7 +612,6 @@ exports.verifyOtpUser = async (req, res) => {
         is_verified: true
       }
     });
-
   } catch (err) {
     res.status(500).json({
       status: "error",
@@ -660,52 +621,3 @@ exports.verifyOtpUser = async (req, res) => {
     });
   }
 };
-
-// Logout API
-exports.logout = async (req, res) => {
-  try {
-    // For JWT tokens, logout is typically handled client-side by removing the token
-    // This endpoint can be used for logging purposes or future session management
-    
-    const token = req.headers.authorization?.split(' ')[1];
-    
-    if (!token) {
-      return res.status(400).json({
-        status: "error",
-        message: "No token provided",
-        data: null
-      });
-    }
-
-    // Verify the token is valid before logout
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    
-    // You could add token blacklisting logic here if needed
-    // For now, we'll just confirm successful logout
-    
-    res.status(200).json({
-      status: "success",
-      message: "Logout successful",
-      data: {
-        logged_out: true,
-        timestamp: new Date().toISOString()
-      }
-    });
-  } catch (err) {
-    if (err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError') {
-      return res.status(401).json({
-        status: "error",
-        message: "Invalid or expired token",
-        data: null
-      });
-    }
-    
-    res.status(500).json({
-      status: "error",
-      message: "Internal server error",
-      data: null,
-      error: err.message
-    });
-  }
-};
-

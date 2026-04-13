@@ -1,4 +1,4 @@
-const generateOTPTemplate = (otp) => {
+export const generateOTPTemplate = (otp) => {
   return `
     <!DOCTYPE html>
     <html lang="en">
@@ -205,7 +205,7 @@ const generateOTPTemplate = (otp) => {
 };
 
 
-const generateCredentialsTemplate = (email, password, loginUrl) => {
+export const generateCredentialsTemplate = (email, password, loginUrl) => {
   return `
     <!DOCTYPE html>
     <html lang="en">
@@ -376,7 +376,7 @@ const generateCredentialsTemplate = (email, password, loginUrl) => {
 };
 
 
-const generateAdminCredentialsTemplate = (email, password, loginUrl) => {
+export const generateAdminCredentialsTemplate = (email, password, loginUrl) => {
   return `
     <!DOCTYPE html>
     <html lang="en">
@@ -572,10 +572,4 @@ const generateAdminCredentialsTemplate = (email, password, loginUrl) => {
     </body>
     </html>
   `;
-};
-
-module.exports = {
-  generateOTPTemplate,
-  generateCredentialsTemplate,
-  generateAdminCredentialsTemplate,
 };

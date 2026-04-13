@@ -1,17 +1,9 @@
-const express = require("express");
-const router = express.Router();
+import { Router } from 'express';
+import * as sponsorsController from '../controllers/AdminControllers/sponsors.controller.js';
+import { verifyToken } from '../middlewares/auth.middleware.js';
+import { checkRole, ROLES } from '../middlewares/role.middleware.js';
 
-const sponsorsController = require("../controllers/AdminControllers/sponsors.controller");
-const { verifyToken } = require("../middlewares/auth.middleware");
-const { checkRole } = require("../middlewares/role.middleware");
-
-// Define ROLES constants
-const ROLES = {
-  ADMIN: 1,
-  CASEWORKER: 2,
-  CANDIDATE: 3,
-  BUSINESS: 4,
-};
+const router = Router();
 
 // Apply authentication middleware to all routes
 router.use(verifyToken);
@@ -34,4 +26,4 @@ router.patch("/:id/reset-password", sponsorsController.resetSponsorPassword);
 // DELETE Operations
 router.delete("/:id", sponsorsController.deleteSponsor);
 
-module.exports = router;
+export default router;

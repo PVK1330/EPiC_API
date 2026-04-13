@@ -1,12 +1,12 @@
-const db = require("../../models");
-const { Op } = require("sequelize");
-const bcrypt = require("bcryptjs");
+import db from "../../models/index.js";
+import { Op } from "sequelize";
+import bcrypt from "bcryptjs";
 
 const User = db.User;
 const Role = db.Role;
 
 // Create Caseworker
-exports.createCaseworker = async (req, res) => {
+export const createCaseworker = async (req, res) => {
   try {
     const {
       first_name,
@@ -124,7 +124,7 @@ exports.createCaseworker = async (req, res) => {
 };
 
 // Get All Caseworkers
-exports.getAllCaseworkers = async (req, res) => {
+export const getAllCaseworkers = async (req, res) => {
   try {
     const { page = 1, limit = 10, search, status } = req.query;
     const offset = (page - 1) * limit;
@@ -187,7 +187,7 @@ exports.getAllCaseworkers = async (req, res) => {
 };
 
 // Get Caseworker by ID
-exports.getCaseworkerById = async (req, res) => {
+export const getCaseworkerById = async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -228,7 +228,7 @@ exports.getCaseworkerById = async (req, res) => {
 };
 
 // Update Caseworker
-exports.updateCaseworker = async (req, res) => {
+export const updateCaseworker = async (req, res) => {
   try {
     const { id } = req.params;
     const {
@@ -343,7 +343,7 @@ exports.updateCaseworker = async (req, res) => {
 };
 
 // Delete Caseworker (Soft Delete)
-exports.deleteCaseworker = async (req, res) => {
+export const deleteCaseworker = async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -377,7 +377,7 @@ exports.deleteCaseworker = async (req, res) => {
 };
 
 // Reset Caseworker Password
-exports.resetCaseworkerPassword = async (req, res) => {
+export const resetCaseworkerPassword = async (req, res) => {
   try {
     const { id } = req.params;
     const { new_password, confirm_password } = req.body;
@@ -444,7 +444,7 @@ exports.resetCaseworkerPassword = async (req, res) => {
 };
 
 // Toggle Caseworker Status (Active/Inactive)
-exports.toggleCaseworkerStatus = async (req, res) => {
+export const toggleCaseworkerStatus = async (req, res) => {
   try {
     const { id } = req.params;
 

@@ -1,8 +1,18 @@
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+import Stripe from 'stripe';
+
+let stripeInstance = null;
+
+const getStripe = () => {
+  if (!stripeInstance) {
+    stripeInstance = new Stripe(process.env.STRIPE_SECRET_KEY);
+  }
+  return stripeInstance;
+};
 
 // Create Payment Intent
-exports.createPaymentIntent = async (req, res) => {
+export const createPaymentIntent = async (req, res) => {
   try {
+    const stripe = getStripe();
     const { amount, currency = 'usd', payment_method_id, metadata = {} } = req.body;
 
     // Validate required fields
@@ -62,8 +72,9 @@ exports.createPaymentIntent = async (req, res) => {
 };
 
 // Confirm Payment
-exports.confirmPayment = async (req, res) => {
+export const confirmPayment = async (req, res) => {
   try {
+    const stripe = getStripe();
     const { payment_intent_id, payment_method_id } = req.body;
 
     if (!payment_intent_id) {
@@ -117,8 +128,9 @@ exports.confirmPayment = async (req, res) => {
 };
 
 // Get Payment Status
-exports.getPaymentStatus = async (req, res) => {
+export const getPaymentStatus = async (req, res) => {
   try {
+    const stripe = getStripe();
     const { payment_intent_id } = req.params;
 
     if (!payment_intent_id) {
@@ -156,8 +168,9 @@ exports.getPaymentStatus = async (req, res) => {
 };
 
 // Cancel Payment
-exports.cancelPayment = async (req, res) => {
+export const cancelPayment = async (req, res) => {
   try {
+    const stripe = getStripe();
     const { payment_intent_id } = req.body;
 
     if (!payment_intent_id) {
@@ -191,8 +204,9 @@ exports.cancelPayment = async (req, res) => {
 };
 
 // Create Setup Intent for saving payment methods
-exports.createSetupIntent = async (req, res) => {
+export const createSetupIntent = async (req, res) => {
   try {
+    const stripe = getStripe();
     const { customer_id } = req.body;
 
     const setupIntent = await stripe.setupIntents.create({
@@ -221,7 +235,8 @@ exports.createSetupIntent = async (req, res) => {
 };
 
 // Stripe Webhook Handler
-exports.handleWebhook = async (req, res) => {
+export const handleWebhook = async (req, res) => {
+  const stripe = getStripe();
   const sig = req.headers['stripe-signature'];
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
@@ -345,8 +360,9 @@ exports.handleWebhook = async (req, res) => {
 };
 
 // Refund Payment
-exports.createRefund = async (req, res) => {
+export const createRefund = async (req, res) => {
   try {
+    const stripe = getStripe();
     const { payment_intent_id, amount, reason } = req.body;
 
     if (!payment_intent_id) {
@@ -386,8 +402,9 @@ exports.createRefund = async (req, res) => {
 };
 
 // Create Subscription
-exports.createSubscription = async (req, res) => {
+export const createSubscription = async (req, res) => {
   try {
+    const stripe = getStripe();
     const { customer_id, price_id, payment_method_id, metadata = {} } = req.body;
 
     if (!customer_id || !price_id) {
@@ -452,8 +469,9 @@ exports.createSubscription = async (req, res) => {
 };
 
 // Renew Subscription
-exports.renewSubscription = async (req, res) => {
+export const renewSubscription = async (req, res) => {
   try {
+    const stripe = getStripe();
     const { subscription_id, payment_method_id } = req.body;
 
     if (!subscription_id) {
@@ -522,8 +540,9 @@ exports.renewSubscription = async (req, res) => {
 };
 
 // Cancel Subscription
-exports.cancelSubscription = async (req, res) => {
+export const cancelSubscription = async (req, res) => {
   try {
+    const stripe = getStripe();
     const { subscription_id, cancel_at_period_end = true } = req.body;
 
     if (!subscription_id) {
@@ -563,8 +582,9 @@ exports.cancelSubscription = async (req, res) => {
 };
 
 // Get Subscription Status
-exports.getSubscriptionStatus = async (req, res) => {
+export const getSubscriptionStatus = async (req, res) => {
   try {
+    const stripe = getStripe();
     const { subscription_id } = req.params;
 
     if (!subscription_id) {
@@ -610,8 +630,9 @@ exports.getSubscriptionStatus = async (req, res) => {
 };
 
 // Update Subscription (change plan, quantity, etc.)
-exports.updateSubscription = async (req, res) => {
+export const updateSubscription = async (req, res) => {
   try {
+    const stripe = getStripe();
     const { subscription_id, price_id, quantity = 1, metadata = {} } = req.body;
 
     if (!subscription_id || !price_id) {

@@ -1,10 +1,10 @@
-const db = require("../models");
-const { Op } = require("sequelize");
+import db from '../models/index.js';
+import { Op } from 'sequelize';
 
 const User = db.User;
 
 // Get user profile
-exports.profile = async (req, res) => {
+export const profile = async (req, res) => {
   try {
     // Get user ID from decoded JWT token (added by auth middleware)
     const userId = req.user.userId;
@@ -44,7 +44,7 @@ exports.profile = async (req, res) => {
 };
 
 // Edit user profile
-exports.editProfile = async (req, res) => {
+export const editProfile = async (req, res) => {
   try {
     // Get user ID from decoded JWT token
     const userId = req.user.userId;
