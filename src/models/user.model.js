@@ -1,4 +1,4 @@
-module.exports = (sequelize, DataTypes) => {
+export default (sequelize, DataTypes) => {
     const User = sequelize.define(
         "User",
         {
@@ -90,8 +90,7 @@ module.exports = (sequelize, DataTypes) => {
         {
             tableName: "users",
             timestamps: true,
-
-            // 🔥 Composite Unique (mobile + country_code)
+ 
             indexes: [
                 {
                     unique: true,

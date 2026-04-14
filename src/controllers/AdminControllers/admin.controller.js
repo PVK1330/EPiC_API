@@ -1,14 +1,14 @@
-const db = require("../../models");
-const { Op } = require("sequelize");
-const bcrypt = require("bcryptjs");
-const transporter = require("../../config/mail");
-const { generateAdminCredentialsTemplate } = require("../../utils/emailTemplate");
+import db from "../../models/index.js";
+import { Op } from "sequelize";
+import bcrypt from "bcryptjs";
+import transporter from "../../config/mail.js";
+import { generateAdminCredentialsTemplate } from "../../utils/emailTemplate.js";
 
 const User = db.User;
 const Role = db.Role;
 
 // Create Admin
-exports.createAdmin = async (req, res) => {
+export const createAdmin = async (req, res) => {
   try {
     const {
       first_name,
@@ -141,7 +141,7 @@ exports.createAdmin = async (req, res) => {
 };
 
 // Get All Admins
-exports.getAllAdmins = async (req, res) => {
+export const getAllAdmins = async (req, res) => {
   try {
     const { page = 1, limit = 10, search, status } = req.query;
     const offset = (page - 1) * limit;
@@ -204,7 +204,7 @@ exports.getAllAdmins = async (req, res) => {
 };
 
 // Get Admin by ID
-exports.getAdminById = async (req, res) => {
+export const getAdminById = async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -245,7 +245,7 @@ exports.getAdminById = async (req, res) => {
 };
 
 // Update Admin
-exports.updateAdmin = async (req, res) => {
+export const updateAdmin = async (req, res) => {
   try {
     const { id } = req.params;
     const {
@@ -360,7 +360,7 @@ exports.updateAdmin = async (req, res) => {
 };
 
 // Delete Admin (Soft Delete)
-exports.deleteAdmin = async (req, res) => {
+export const deleteAdmin = async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -394,7 +394,7 @@ exports.deleteAdmin = async (req, res) => {
 };
 
 // Reset Admin Password
-exports.resetAdminPassword = async (req, res) => {
+export const resetAdminPassword = async (req, res) => {
   try {
     const { id } = req.params;
     const { new_password, confirm_password } = req.body;
@@ -461,7 +461,7 @@ exports.resetAdminPassword = async (req, res) => {
 };
 
 // Toggle Admin Status (Active/Inactive)
-exports.toggleAdminStatus = async (req, res) => {
+export const toggleAdminStatus = async (req, res) => {
   try {
     const { id } = req.params;
 

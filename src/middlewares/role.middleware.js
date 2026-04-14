@@ -1,54 +1,31 @@
-exports.checkRole = (roles) => {
+export const checkRole = (allowedRoleIds) => {
   return (req, res, next) => {
     try {
-      const userRole = req.user.role_id;
+      const userRoleId = req.user?.role_id;
 
-      if (!roles.includes(userRole)) {
+      if (!allowedRoleIds.includes(userRoleId)) {
         return res.status(403).json({
-          status: "error",
-          message: "Access denied - insufficient permissions",
-          data: {
-            required_roles: roles,
-            user_role: userRole
-          }
+          status: 'error',
+          message: 'Access denied — insufficient permissions.',
+          data: null,
         });
       }
 
       next();
     } catch (err) {
-      return res.status(500).json({ 
-        status: "error",
-        message: "Role check failed",
-        error: err.message 
+      return res.status(500).json({
+        status: 'error',
+        message: 'Role check failed.',
+        data: null,
       });
     }
   };
 };
 
-// Helper function to check if user has specific role
-exports.hasRole = (role) => {
-  return (req, res, next) => {
-    try {
-      const userRole = req.user.role_id;
-
-      if (userRole !== role) {
-        return res.status(403).json({
-          status: "error",
-          message: "Access denied - insufficient permissions",
-          data: {
-            required_role: role,
-            user_role: userRole
-          }
-        });
-      }
-
-      next();
-    } catch (err) {
-      return res.status(500).json({ 
-        status: "error",
-        message: "Role check failed",
-        error: err.message 
-      });
-    }
-  };
+// Role ID constants — import these in routes instead of hardcoding numbers
+export const ROLES = {
+  ADMIN: 1,
+  CASEWORKER: 2,
+  CANDIDATE: 3,
+  BUSINESS: 4,
 };

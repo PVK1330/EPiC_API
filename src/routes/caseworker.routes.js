@@ -1,17 +1,9 @@
-const express = require("express");
-const router = express.Router();
+import { Router } from 'express';
+import * as caseworkerController from '../controllers/AdminControllers/caseworker.controller.js';
+import { verifyToken } from '../middlewares/auth.middleware.js';
+import { checkRole, ROLES } from '../middlewares/role.middleware.js';
 
-const caseworkerController = require("../controllers/AdminControllers/caseworker.controller");
-const { verifyToken } = require("../middlewares/auth.middleware");
-const { checkRole } = require("../middlewares/role.middleware");
-
-// Define ROLES constants
-const ROLES = {
-  ADMIN: 1,
-  CASEWORKER: 2,
-  CANDIDATE: 3,
-  BUSINESS: 4,
-};
+const router = Router();
 
 // Apply authentication middleware to all routes
 router.use(verifyToken);
@@ -34,4 +26,4 @@ router.patch("/:id/reset-password", caseworkerController.resetCaseworkerPassword
 // DELETE Operations
 router.delete("/:id", caseworkerController.deleteCaseworker);
 
-module.exports = router;
+export default router;

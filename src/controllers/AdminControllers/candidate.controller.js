@@ -1,12 +1,12 @@
-const db = require("../../models");
-const { Op } = require("sequelize");
-const bcrypt = require("bcryptjs");
+import db from "../../models/index.js";
+import { Op } from "sequelize";
+import bcrypt from "bcryptjs";
 
 const User = db.User;
 const Role = db.Role;
 
 // Create Candidate
-exports.createCandidate = async (req, res) => {
+export const createCandidate = async (req, res) => {
   try {
     const {
       first_name,
@@ -124,7 +124,7 @@ exports.createCandidate = async (req, res) => {
 };
 
 // Get All Candidates
-exports.getAllCandidates = async (req, res) => {
+export const getAllCandidates = async (req, res) => {
   try {
     const { page = 1, limit = 10, search, status } = req.query;
     const offset = (page - 1) * limit;
@@ -187,7 +187,7 @@ exports.getAllCandidates = async (req, res) => {
 };
 
 // Get Candidate by ID
-exports.getCandidateById = async (req, res) => {
+export const getCandidateById = async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -228,7 +228,7 @@ exports.getCandidateById = async (req, res) => {
 };
 
 // Update Candidate
-exports.updateCandidate = async (req, res) => {
+export const updateCandidate = async (req, res) => {
   try {
     const { id } = req.params;
     const {
@@ -343,7 +343,7 @@ exports.updateCandidate = async (req, res) => {
 };
 
 // Delete Candidate (Soft Delete)
-exports.deleteCandidate = async (req, res) => {
+export const deleteCandidate = async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -377,7 +377,7 @@ exports.deleteCandidate = async (req, res) => {
 };
 
 // Reset Candidate Password
-exports.resetCandidatePassword = async (req, res) => {
+export const resetCandidatePassword = async (req, res) => {
   try {
     const { id } = req.params;
     const { new_password, confirm_password } = req.body;
@@ -444,7 +444,7 @@ exports.resetCandidatePassword = async (req, res) => {
 };
 
 // Toggle Candidate Status (Active/Inactive)
-exports.toggleCandidateStatus = async (req, res) => {
+export const toggleCandidateStatus = async (req, res) => {
   try {
     const { id } = req.params;
 

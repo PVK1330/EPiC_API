@@ -1,10 +1,7 @@
-const express = require("express");
-const router = express.Router();
+import { Router } from 'express';
+import * as auth from '../controllers/auth.controller.js';
 
-const auth = require("../controllers/auth.controller");
-
-
-
+const router = Router();
 
 router.post("/register", auth.register);
 router.post("/verify-otp", auth.verifyOTP); // unverified user
@@ -17,4 +14,4 @@ router.post("/set-password", auth.setPassword);
 router.post("/resendOtpUser", auth.resendOtpUser); // user table
 router.post("/verifyOtpUser", auth.verifyOtpUser); // user table
 
-module.exports = router;
+export default router;
