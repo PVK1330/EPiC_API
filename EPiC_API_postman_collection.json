@@ -494,6 +494,115 @@
       ]
     },
     {
+      "name": "Cases",
+      "item": [
+        {
+          "name": "Get Pipeline Cases",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/cases/pipeline"
+          }
+        },
+        {
+          "name": "Get Team Capacity",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/cases/capacity"
+          }
+        },
+        {
+          "name": "Assign Case",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/cases/#CAS-001/assign",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assignTo\": \"CW-102\",\n  \"assignToName\": \"Marcus Green\",\n  \"reason\": \"Capacity reassignment\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Update Pipeline Stage",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/cases/#CAS-001/stage",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"Docs Pending\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Create Case",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/cases/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"candidate\": \"John Doe\",\n  \"candidateId\": \"CAND-001\",\n  \"business\": \"Tech Solutions Pvt Ltd\",\n  \"businessId\": \"BUS-001\",\n  \"visaType\": \"H1B\",\n  \"petitionType\": \"Initial\",\n  \"priority\": \"high\",\n  \"targetSubmissionDate\": \"2026-05-01\",\n  \"lcaNumber\": \"LCA123456\",\n  \"receiptNumber\": \"RCPT789456\",\n  \"nationality\": \"Indian\",\n  \"jobTitle\": \"Software Engineer\",\n  \"department\": \"IT\",\n  \"caseworker\": \"Alice Smith\",\n  \"caseworkerId\": \"EMP-001\",\n  \"salaryOffered\": 85000.00,\n  \"totalAmount\": 5000.00,\n  \"paidAmount\": 2000.00,\n  \"notes\": \"Urgent processing required\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Get All Cases",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/cases?page=1&limit=10&search=&status=&priority=&visaType=",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "cases"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" },
+                { "key": "search", "value": "" },
+                { "key": "status", "value": "" },
+                { "key": "priority", "value": "" },
+                { "key": "visaType", "value": "" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Case By ID",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/cases/#CAS-001"
+          }
+        },
+        {
+          "name": "Update Case",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/cases/#CAS-001",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"Approved\",\n  \"notes\": \"Case was approved successfully\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Delete Case",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/cases/#CAS-001"
+          }
+        }
+      ]
+    },
+    {
       "name": "Stripe",
       "item": [
         {

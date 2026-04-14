@@ -12,6 +12,12 @@ router.use(verifyToken);
 // Adjust as per business logic, allowing Admin and Caseworker. Let's allow ADMIN initially, or both.
 router.use(checkRole([ROLES.ADMIN, ROLES.CASEWORKER]));
 
+// Custom Pipeline & Metrics routes MUST come before /:id routes
+router.get("/pipeline", caseController.getPipelineCases);
+router.get("/capacity", caseController.getTeamCapacity);
+router.patch("/:id/assign", caseController.assignCase);
+router.patch("/:id/stage", caseController.updatePipelineStage);
+
 // CRUD Operations
 router.post("/", caseController.createCase);
 router.get("/", caseController.getAllCases);

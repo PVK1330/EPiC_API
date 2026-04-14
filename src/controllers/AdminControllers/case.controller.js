@@ -302,3 +302,125 @@ export const deleteCase = async (req, res) => {
     });
   }
 };
+
+// Get Pipeline Cases
+export const getPipelineCases = async (req, res) => {
+  try {
+    const cases = await Case.findAll({
+      order: [["created_at", "DESC"]],
+    });
+
+    const pipeline = {
+      lead: [],
+      docs: [],
+      drafting: [],
+      submitted: [],
+      decision: [],
+      closed: [],
+    };
+
+    cases.forEach(c => {
+      const stat = (c.status || "Lead").toLowerCase();
+      if (stat === "docs pending" || stat === "docs") pipeline.docs.push(c);
+      else if (stat === "drafting") pipeline.drafting.push(c);
+      else if (stat === "submitted") pipeline.submitted.push(c);
+      else if (stat === "decision") pipeline.decision.push(c);
+      else if (stat === "closed" || stat === "approved" || stat === "rejected") pipeline.closed.push(c);
+      else pipeline.lead.push(c);
+    });
+
+    res.status(200).json({
+      status: "success",
+      message: "Pipeline cases retrieved successfully",
+      data: pipeline
+    });
+  } catch (error) {
+    res.status(500).json({ status: "error", message: "Internal server error", error: error.message });
+  }
+};
+
+// Update Pipeline Stage (Drag and Drop)
+export const updatePipelineStage = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body; 
+
+    const caseData = await Case.findOne({ where: { caseId: id } }) || await Case.findByPk(id);
+
+    if (!caseData) return res.status(404).json({ status: "error", message: "Case not found" });
+
+    await caseData.update({ status: status || caseData.status });
+
+    res.status(200).json({
+      status: "success",
+      message: "Pipeline stage updated",
+      data: { case: caseData }
+    });
+  } catch (error) {
+    res.status(500).json({ status: "error", message: "Internal server error", error: error.message });
+  }
+};
+
+// Get Team Capacity
+export const getTeamCapacity = async (req, res) => {
+  try {
+    const cases = await Case.findAll({
+      attributes: ['caseworker', 'caseworkerId'],
+      where: {
+        status: {
+          [Op.notIn]: ['Approved', 'Rejected'] // Only active Cases
+        }
+      }
+    });
+
+    const capacityMap = {};
+    cases.forEach(c => {
+      const cw = c.caseworker || 'Unassigned';
+      if (!capacityMap[cw]) capacityMap[cw] = 0;
+      capacityMap[cw] += 1;
+    });
+
+    const capacityArray = Object.keys(capacityMap).map(name => ({
+      name,
+      val: capacityMap[name]
+    }));
+
+    res.status(200).json({
+      status: "success",
+      message: "Team capacity retrieved successfully",
+      data: capacityArray
+    });
+  } catch (error) {
+    res.status(500).json({ status: "error", message: "Internal server error", error: error.message });
+  }
+};
+
+// Assign Case
+export const assignCase = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { assignTo, assignToName, reason } = req.body;
+
+    const caseData = await Case.findOne({ where: { caseId: id } }) || await Case.findByPk(id);
+
+    if (!caseData) return res.status(404).json({ status: "error", message: "Case not found" });
+
+    const updatedNotes = caseData.notes 
+      ? `${caseData.notes}\n[System]: Reassigned to ${assignToName || assignTo}. Reason: ${reason}` 
+      : `[System]: Reassigned to ${assignToName || assignTo}. Reason: ${reason}`;
+
+    await caseData.update({
+      caseworkerId: assignTo !== undefined ? assignTo : caseData.caseworkerId,
+      caseworker: assignToName || caseData.caseworker,
+      notes: updatedNotes
+    });
+
+    res.status(200).json({
+      status: "success",
+      message: "Case reassigned successfully",
+      data: { case: caseData }
+    });
+  } catch (error) {
+    res.status(500).json({ status: "error", message: "Internal server error", error: error.message });
+  }
+};

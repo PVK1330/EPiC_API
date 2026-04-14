@@ -39,8 +39,8 @@ const CaseModel = (sequelize, DataTypes) => {
       defaultValue: "medium",
     },
     status: {
-      type: DataTypes.ENUM("Approved", "Pending", "Rejected", "Review"),
-      defaultValue: "Pending",
+      type: DataTypes.STRING,
+      defaultValue: "Lead", // Initial Kanban Stage
     },
     submitted: {
       type: DataTypes.DATEONLY,
