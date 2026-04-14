@@ -3,7 +3,7 @@ import config from '../config/config.js';
 import UserModel from './user.model.js';
 import RoleModel from './role.model.js';
 import UnverifiedUserModel from './unverifiedUser.model.js';
-
+import CaseModel from './case.model.js';
 const env = process.env.NODE_ENV || 'development';
 const dbConfig = config[env];
 
@@ -15,6 +15,7 @@ db.sequelize = sequelize;
 db.User = UserModel(sequelize, Sequelize.DataTypes);
 db.Role = RoleModel(sequelize, Sequelize.DataTypes);
 db.UnverifiedUser = UnverifiedUserModel(sequelize, Sequelize.DataTypes);
+db.Case = CaseModel(sequelize, Sequelize.DataTypes);
 
 // Associations
 db.Role.hasMany(db.User, { foreignKey: 'role_id' });
