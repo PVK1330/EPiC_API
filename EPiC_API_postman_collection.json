@@ -1,0 +1,642 @@
+{
+  "info": {
+    "name": "EPiC_API",
+    "description": "Postman collection for EPiC_API endpoints with payloads",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/auth/register",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"John\",\n  \"last_name\": \"Doe\",\n  \"email\": \"test@example.com\",\n  \"password\": \"password123\",\n  \"country_code\": \"+1\",\n  \"mobile\": \"1234567890\",\n  \"role_id\": 3\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Verify OTP",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/auth/verify-otp",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"otp\": \"123456\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Resend OTP",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/auth/resend-otp",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"password123\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/auth/logout"
+          }
+        },
+        {
+          "name": "Forgot Password",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/auth/forgot-password",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Verify Reset OTP",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/auth/verify-reset-otp",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"otp\": \"123456\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Set Password",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/auth/set-password",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"newpassword123\",\n  \"confirmPassword\": \"newpassword123\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Resend OTP User",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/auth/resendOtpUser",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Verify OTP User",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/auth/verifyOtpUser",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"otp\": \"123456\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "User",
+      "item": [
+        {
+          "name": "Get Profile",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/user/profile"
+          }
+        },
+        {
+          "name": "Edit Profile",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/user/profile",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"John\",\n  \"last_name\": \"Doe\",\n  \"country_code\": \"+1\",\n  \"mobile\": \"0987654321\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "item": [
+        {
+          "name": "Create Admin",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/admin/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Admin\",\n  \"last_name\": \"User\",\n  \"email\": \"admin@epic.com\",\n  \"country_code\": \"+1\",\n  \"mobile\": \"1112223333\",\n  \"role_id\": 1,\n  \"password\": \"adminpass123\",\n  \"confirm_password\": \"adminpass123\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Get All Admins",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin?page=1&limit=10&search=&status=",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" },
+                { "key": "search", "value": "" },
+                { "key": "status", "value": "" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Admin By ID",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/admin/1"
+          }
+        },
+        {
+          "name": "Update Admin",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/admin/1",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Admin\",\n  \"last_name\": \"Updated\",\n  \"email\": \"admin@epic.com\",\n  \"country_code\": \"+1\",\n  \"mobile\": \"1112223333\",\n  \"role_id\": 1,\n  \"status\": \"active\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Toggle Admin Status",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/admin/toggle-status/1"
+          }
+        },
+        {
+          "name": "Reset Admin Password",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/admin/reset-password/1",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"new_password\": \"newadminpass123\",\n  \"confirm_password\": \"newadminpass123\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Delete Admin",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/admin/1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Caseworker",
+      "item": [
+        {
+          "name": "Create Caseworker",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/caseworker/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Case\",\n  \"last_name\": \"Worker\",\n  \"email\": \"caseworker@epic.com\",\n  \"country_code\": \"+1\",\n  \"mobile\": \"2223334444\",\n  \"role_id\": 2,\n  \"password\": \"cwpass123\",\n  \"confirm_password\": \"cwpass123\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Get All Caseworkers",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/caseworker?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "caseworker"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Caseworker By ID",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/caseworker/1"
+          }
+        },
+        {
+          "name": "Update Caseworker",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/caseworker/1",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Case\",\n  \"last_name\": \"Worker Update\",\n  \"email\": \"caseworker@epic.com\",\n  \"country_code\": \"+1\",\n  \"mobile\": \"2223334444\",\n  \"role_id\": 2,\n  \"status\": \"active\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Toggle Caseworker Status",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/caseworker/1/toggle-status"
+          }
+        },
+        {
+          "name": "Reset Caseworker Password",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/caseworker/1/reset-password",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"new_password\": \"newcwpass123\",\n  \"confirm_password\": \"newcwpass123\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Delete Caseworker",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/caseworker/1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Sponsors",
+      "item": [
+        {
+          "name": "Create Sponsor",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/sponsors/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Sponsor\",\n  \"last_name\": \"Person\",\n  \"email\": \"sponsor@epic.com\",\n  \"country_code\": \"+1\",\n  \"mobile\": \"3334445555\",\n  \"role_id\": 4,\n  \"password\": \"sponsorpass123\",\n  \"confirm_password\": \"sponsorpass123\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Get All Sponsors",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/sponsors?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "sponsors"]
+            }
+          }
+        },
+        {
+          "name": "Get Sponsor By ID",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/sponsors/1"
+          }
+        },
+        {
+          "name": "Update Sponsor",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/sponsors/1",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Sponsor Updated\",\n  \"last_name\": \"Person\",\n  \"email\": \"sponsor@epic.com\",\n  \"country_code\": \"+1\",\n  \"mobile\": \"3334445555\",\n  \"role_id\": 4,\n  \"status\": \"active\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Toggle Sponsor Status",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/sponsors/1/toggle-status"
+          }
+        },
+        {
+          "name": "Reset Sponsor Password",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/sponsors/1/reset-password",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"new_password\": \"newsponsorpass123\",\n  \"confirm_password\": \"newsponsorpass123\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Delete Sponsor",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/sponsors/1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Candidate",
+      "item": [
+        {
+          "name": "Create Candidate",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/candidate/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Candidate\",\n  \"last_name\": \"User\",\n  \"email\": \"candidate1@epic.com\",\n  \"country_code\": \"+1\",\n  \"mobile\": \"4445556666\",\n  \"role_id\": 3,\n  \"password\": \"candidatepass123\",\n  \"confirm_password\": \"candidatepass123\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Get All Candidates",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/candidate?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "candidate"]
+            }
+          }
+        },
+        {
+          "name": "Get Candidate By ID",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/candidate/1"
+          }
+        },
+        {
+          "name": "Update Candidate",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/candidate/1",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Candidate Updated\",\n  \"last_name\": \"User\",\n  \"email\": \"candidate1@epic.com\",\n  \"country_code\": \"+1\",\n  \"mobile\": \"4445556666\",\n  \"role_id\": 3,\n  \"status\": \"active\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Toggle Candidate Status",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/candidate/1/toggle-status"
+          }
+        },
+        {
+          "name": "Reset Candidate Password",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/candidate/1/reset-password",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"new_password\": \"newcandidatepass123\",\n  \"confirm_password\": \"newcandidatepass123\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Delete Candidate",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/candidate/1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Stripe",
+      "item": [
+        {
+          "name": "Create Payment Intent",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/stripe/create-payment-intent",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 500,\n  \"currency\": \"usd\",\n  \"payment_method_id\": \"pm_card_visa\",\n  \"metadata\": { \"order_id\": \"12345\" }\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Confirm Payment",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/stripe/confirm-payment",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"payment_intent_id\": \"pi_3xxx\",\n  \"payment_method_id\": \"pm_card_visa\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Get Payment Status",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/stripe/payment-status/pi_3xxx"
+          }
+        },
+        {
+          "name": "Cancel Payment",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/stripe/cancel-payment",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"payment_intent_id\": \"pi_3xxx\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Create Setup Intent",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/stripe/create-setup-intent",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_id\": \"cus_xxx\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Refund",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/stripe/refund",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"payment_intent_id\": \"pi_3xxx\",\n  \"amount\": 500,\n  \"reason\": \"requested_by_customer\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Create Subscription",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/stripe/create-subscription",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_id\": \"cus_xxx\",\n  \"price_id\": \"price_xxx\",\n  \"payment_method_id\": \"pm_xxx\",\n  \"metadata\": { \"plan\": \"gold\" }\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Renew Subscription",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/stripe/renew-subscription",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"subscription_id\": \"sub_xxx\",\n  \"payment_method_id\": \"pm_xxx\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Cancel Subscription",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/stripe/cancel-subscription",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"subscription_id\": \"sub_xxx\",\n  \"cancel_at_period_end\": true\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Get Subscription Status",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/stripe/subscription-status/sub_xxx"
+          }
+        },
+        {
+          "name": "Update Subscription",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/stripe/update-subscription",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"subscription_id\": \"sub_xxx\",\n  \"price_id\": \"price_new_xxx\",\n  \"quantity\": 1,\n  \"metadata\": { \"plan\": \"platinum\" }\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Webhook",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/stripe/webhook"
+          }
+        }
+      ]
+    }
+  ]
+}

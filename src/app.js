@@ -11,6 +11,7 @@ import caseworkerRoutes from './routes/caseworker.routes.js';
 import sponsorsRoutes from './routes/sponsors.routes.js';
 import candidateRoutes from './routes/candidate.routes.js';
 import stripeRoutes from './routes/stripe.routes.js';
+import caseRoutes from './routes/case.routes.js';
 
 const app = express();
 
@@ -32,5 +33,6 @@ app.use('/api/caseworker', caseworkerRoutes);
 app.use('/api/sponsors', sponsorsRoutes);
 app.use('/api/candidate', candidateRoutes);
 app.use('/api/stripe', stripeRoutes);
+app.use('/api/cases', caseRoutes);
 
 export default app;
