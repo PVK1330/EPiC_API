@@ -156,7 +156,7 @@ export const getAllSponsors = async (req, res) => {
         model: Role,
         attributes: ['id', 'name']
       }],
-      order: [['created_at', 'DESC']],
+      order: [["createdAt", "DESC"]],
       limit: parseInt(limit),
       offset: parseInt(offset)
     });
