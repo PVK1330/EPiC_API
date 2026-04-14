@@ -1,7 +1,7 @@
 import db from "../../models/index.js";
 import { Op } from "sequelize";
 import bcrypt from "bcryptjs";
-import transporter from "../../config/mail.js";
+import { sendAdminWelcomeEmail } from "../../services/email.service.js";
 import { generateAdminCredentialsTemplate } from "../../utils/emailTemplate.js";
 
 const User = db.User;
@@ -102,18 +102,16 @@ export const createAdmin = async (req, res) => {
       status: 'active'
     });
 
-    // Send admin credentials email
+    let emailSent = false;
     try {
-      const loginUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-      await transporter.sendMail({
-        from: process.env.EMAIL_USER,
+      const loginUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+      const result = await sendAdminWelcomeEmail({
         to: email,
-        subject: "Elite Pic - Admin Account Created",
         html: generateAdminCredentialsTemplate(email, generatedPassword, loginUrl),
       });
+      emailSent = result.sent === true;
     } catch (emailError) {
       console.error("Failed to send admin email:", emailError);
-      // Continue with response even if email fails
     }
 
     // Remove password from response
@@ -125,7 +123,7 @@ export const createAdmin = async (req, res) => {
       data: {
         admin: adminData,
         temporary_password: !password ? generatedPassword : null,
-        email_sent: true
+        email_sent: emailSent
       }
     });
 
@@ -173,7 +171,7 @@ export const getAllAdmins = async (req, res) => {
         model: Role,
         attributes: ['id', 'name']
       }],
-      order: [['created_at', 'DESC']],
+      order: [["createdAt", "DESC"]],
       limit: parseInt(limit),
       offset: parseInt(offset)
     });
