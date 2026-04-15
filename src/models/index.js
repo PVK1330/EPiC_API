@@ -37,6 +37,8 @@ import CaseCommunicationModel from './caseCommunication.model.js';
 
 import CaseNoteModel from './caseNote.model.js';
 
+import TaskModel from './task.model.js';
+
 
 
 const env = process.env.NODE_ENV || 'development';
@@ -89,6 +91,8 @@ db.CaseTimeline = CaseTimelineModel(sequelize, Sequelize.DataTypes);
 db.CaseCommunication = CaseCommunicationModel(sequelize, Sequelize.DataTypes);
 
 db.CaseNote = CaseNoteModel(sequelize, Sequelize.DataTypes);
+
+db.Task = TaskModel(sequelize, Sequelize.DataTypes);
 
 
 
@@ -147,6 +151,15 @@ db.CaseCommunication.belongsTo(db.User, { foreignKey: 'recipientId', as: 'recipi
 db.CaseNote.belongsTo(db.Case, { foreignKey: 'caseId' });
 db.CaseNote.belongsTo(db.User, { foreignKey: 'authorId', as: 'author' });
 db.CaseNote.belongsTo(db.CaseNote, { foreignKey: 'parentNoteId', as: 'parentNote' });
+
+// Task associations
+db.Task.belongsTo(db.User, { foreignKey: 'assigned_to', as: 'assignee' });
+db.Task.belongsTo(db.User, { foreignKey: 'created_by', as: 'creator' });
+db.Task.belongsTo(db.Case, { foreignKey: 'case_id' });
+db.User.hasMany(db.Task, { foreignKey: 'assigned_to', as: 'assignedTasks' });
+db.User.hasMany(db.Task, { foreignKey: 'created_by', as: 'createdTasks' });
+db.Case.hasMany(db.Task, { foreignKey: 'case_id', as: 'tasks' });
+
 db.Case.belongsTo(db.User, { foreignKey: 'assignedToId', as: 'assignedTo' });
 db.User.hasMany(db.Case, { foreignKey: 'assignedToId', as: 'assignedCases' });
 

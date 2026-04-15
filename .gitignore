@@ -68,7 +68,10 @@ typings/
 .env.test.local
 .env.production.local
 postman/
-/postman/
+/postman
+
+/logins.txt
+logins.txt
 
 # parcel-bundler cache (https://parceljs.org/)
 .cache

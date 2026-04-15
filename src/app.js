@@ -16,6 +16,7 @@ import escalationRoutes from './routes/escalation.routes.js';
 import permissionsRoutes from './routes/permissions.routes.js';
 import rbacRoutes from './routes/rbac.routes.js';
 import roleRoutes from './routes/role.routes.js';
+import { taskRoutes } from './routes/index.js';
 
 const app = express();
 
@@ -42,5 +43,6 @@ app.use('/api/escalations', escalationRoutes);
 app.use('/api/permissions', permissionsRoutes);
 app.use('/api/rbac', rbacRoutes);
 app.use('/api/roles', roleRoutes);
+app.use('/api/tasks', taskRoutes);
 
 export default app;
