@@ -20,6 +20,7 @@ router.patch("/:id/stage", caseController.updatePipelineStage);
 
 // CRUD Operations
 router.post("/", caseController.createCase);
+router.get("/filtered", caseController.getCasesWithFilters);
 router.get("/", caseController.getAllCases);
 router.get("/:id", caseController.getCaseById);
 router.put("/:id", caseController.updateCase);

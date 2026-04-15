@@ -2,37 +2,51 @@ const CaseModel = (sequelize, DataTypes) => {
   const Case = sequelize.define("Case", {
     id: {
       type: DataTypes.INTEGER,
-      primaryKey: true,
       autoIncrement: true,
+      primaryKey: true,
     },
+
     caseId: {
-      type: DataTypes.STRING,
-      allowNull: false,
-      unique: true,
-    },
-    candidate: {
-      type: DataTypes.STRING,
-      allowNull: false,
-    },
-    candidateId: {
-      type: DataTypes.STRING,
+      type: DataTypes.STRING, //CAS-000001 likewiseauto genrated 
       allowNull: true,
     },
-    business: {
-      type: DataTypes.STRING,
-      allowNull: false,
+
+    candidateId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: 'users',
+        key: 'id'
+      }
     },
     businessId: {
       type: DataTypes.STRING,
       allowNull: true,
     },
-    visaType: {
-      type: DataTypes.STRING,
-      allowNull: false,
-    },
-    petitionType: {
-      type: DataTypes.STRING,
+    sponsorId: {
+      type: DataTypes.INTEGER,
       allowNull: true,
+      references: {
+        model: 'users',
+        key: 'id'
+      }
+    },
+
+    visaTypeId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: 'visa_types',
+        key: 'id'
+      }
+    },
+    petitionTypeId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: 'petition_types',
+        key: 'id'
+      }
     },
     priority: {
       type: DataTypes.ENUM("low", "medium", "high", "urgent"),
@@ -70,13 +84,11 @@ const CaseModel = (sequelize, DataTypes) => {
       type: DataTypes.STRING,
       allowNull: true,
     },
-    caseworker: {
-      type: DataTypes.STRING,
-      allowNull: false,
-    },
-    caseworkerId: {
-      type: DataTypes.STRING,
+
+    assignedcaseworkerId: {
+      type: DataTypes.JSON,
       allowNull: true,
+      comment: "Array of caseworker IDs assigned to this case"
     },
     salaryOffered: {
       type: DataTypes.DECIMAL(10, 2),
@@ -94,6 +106,32 @@ const CaseModel = (sequelize, DataTypes) => {
     notes: {
       type: DataTypes.TEXT,
       allowNull: true,
+    },
+    biometricsDate: {
+      type: DataTypes.DATEONLY,
+      allowNull: true,
+      comment: "Date for biometrics appointment"
+    },
+    submissionDate: {
+      type: DataTypes.DATEONLY,
+      allowNull: true,
+      comment: "Date when case was submitted"
+    },
+    decisionDate: {
+      type: DataTypes.DATEONLY,
+      allowNull: true,
+      comment: "Date when decision was made"
+    },
+    applicationType: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+      comment: "Type of application (e.g., H1B, L1, Green Card)"
+    },
+    caseStage: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+      defaultValue: "Initial",
+      comment: "Current stage of the case"
     },
   }, {
     tableName: 'cases',

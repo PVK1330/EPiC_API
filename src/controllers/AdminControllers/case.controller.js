@@ -20,25 +20,30 @@ const generateCaseId = async () => {
     }
   }
   
-  return `#CAS-${String(nextId).padStart(3, "0")}`;
+  return `CAS-${String(nextId).padStart(6, "0")}`;
 };
 
 // Create Case
 export const createCase = async (req, res) => {
   try {
+    if (!req.body) {
+      return res.status(400).json({
+        status: "error",
+        message: "Request body is required",
+        data: null,
+      });
+    }
+
     const {
-      candidateName, candidate,
-      candidateId,
-      businessName, business,
-      businessId,
-      visaType,
-      petitionType,
+      candidateId,              // INTEGER - Foreign key to users table
+      sponsorId,                // INTEGER - Foreign key to users table  
+      visaTypeId,
+      petitionTypeId,
       priority,
       targetSubmissionDate,
       lcaNumber,
       receiptNumber,
-      assignedCaseworkerName, caseworker,
-      caseworkerId, assignedCaseworkerId,
+      assignedcaseworkerId,
       salaryOffered,
       totalAmount,
       paidAmount,
@@ -48,17 +53,23 @@ export const createCase = async (req, res) => {
       department
     } = req.body;
 
-    const candName = candidateName || candidate;
-    const busName = businessName || business;
-    const cwName = assignedCaseworkerName || caseworker;
-    const cwId = assignedCaseworkerId || caseworkerId;
+    const cwIds = Array.isArray(assignedcaseworkerId) ? assignedcaseworkerId : (assignedcaseworkerId ? [assignedcaseworkerId] : []);
 
-    // Basic validation
-    if (!candName || !busName || !visaType || !cwName || !targetSubmissionDate || totalAmount === undefined) {
+    // Field-wise validation
+    const errors = [];
+    
+    if (candidateId === undefined || candidateId === null || candidateId === '') errors.push("candidateId is required");
+    if (sponsorId === undefined || sponsorId === null || sponsorId === '') errors.push("sponsorId is required");
+    if (visaTypeId === undefined || visaTypeId === null || visaTypeId === '') errors.push("visaTypeId is required");
+    if (!cwIds.length) errors.push("assignedcaseworkerId is required");
+    if (targetSubmissionDate === undefined || targetSubmissionDate === null || targetSubmissionDate === '') errors.push("targetSubmissionDate is required");
+    if (totalAmount === undefined || totalAmount === null) errors.push("totalAmount is required");
+
+    if (errors.length > 0) {
       return res.status(400).json({
         status: "error",
-        message: "Missing required fields",
-        data: null,
+        message: "Validation failed",
+        data: { errors },
       });
     }
 
@@ -66,12 +77,11 @@ export const createCase = async (req, res) => {
 
     const newCase = await Case.create({
       caseId,
-      candidate: candName,
       candidateId,
-      business: busName,
       businessId,
-      visaType,
-      petitionType,
+      sponsorId,
+      visaTypeId,
+      petitionTypeId,
       priority: priority || "medium",
       status: "Pending",
       submitted: new Date(),
@@ -81,8 +91,7 @@ export const createCase = async (req, res) => {
       nationality,
       jobTitle,
       department,
-      caseworker: cwName,
-      caseworkerId: cwId,
+      assignedcaseworkerId: cwIds,
       salaryOffered: salaryOffered || 0,
       totalAmount: totalAmount || 0,
       paidAmount: paidAmount || 0,
@@ -96,6 +105,93 @@ export const createCase = async (req, res) => {
     });
   } catch (error) {
     console.error("Create Case Error:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error",
+      data: null,
+      error: error.message,
+    });
+  }
+};
+
+// Get Cases with Enhanced Filtering
+export const getCasesWithFilters = async (req, res) => {
+  try {
+    const { 
+      page = 1, 
+      limit = 10, 
+      search, 
+      status, 
+      priority, 
+      visaTypeId,
+      petitionTypeId,
+      candidateId,
+      sponsorId
+    } = req.query;
+    const offset = (page - 1) * limit;
+
+    const whereClause = {};
+
+    if (search) {
+      whereClause[Op.or] = [
+        { caseId: { [Op.iLike]: `%${search}%` } },
+        { candidate: { [Op.iLike]: `%${search}%` } },
+        { business: { [Op.iLike]: `%${search}%` } },
+        { caseworker: { [Op.iLike]: `%${search}%` } },
+      ];
+    }
+
+    if (status) whereClause.status = status;
+    if (priority) whereClause.priority = priority;
+    if (visaTypeId) whereClause.visaTypeId = visaTypeId;
+    if (petitionTypeId) whereClause.petitionTypeId = petitionTypeId;
+    if (candidateId) whereClause.candidateId = candidateId;
+    if (sponsorId) whereClause.sponsorId = sponsorId;
+
+    const { count, rows: cases } = await Case.findAndCountAll({
+      where: whereClause,
+      order: [["created_at", "DESC"]],
+      limit: parseInt(limit),
+      offset: parseInt(offset),
+      include: [
+        {
+          model: db.User,
+          as: 'candidate',
+          attributes: ['id', 'first_name', 'last_name', 'email']
+        },
+        {
+          model: db.User,
+          as: 'sponsor', 
+          attributes: ['id', 'first_name', 'last_name', 'email']
+        },
+        {
+          model: db.VisaType,
+          as: 'visaType',
+          attributes: ['id', 'name']
+        },
+        {
+          model: db.VisaType,
+          as: 'petitionType',
+          attributes: ['id', 'name']
+        }
+      ]
+    });
+
+    res.status(200).json({
+      status: "success",
+      message: "Cases retrieved successfully",
+      data: {
+        cases,
+        pagination: {
+          total: count,
+          page: parseInt(page),
+          limit: parseInt(limit),
+          pages: Math.ceil(count / limit),
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Get Cases with Filters Error:", error);
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -131,6 +227,28 @@ export const getAllCases = async (req, res) => {
       order: [["created_at", "DESC"]],
       limit: parseInt(limit),
       offset: parseInt(offset),
+      include: [
+        {
+          model: db.User,
+          as: 'candidate',
+          attributes: ['id', 'first_name', 'last_name', 'email']
+        },
+        {
+          model: db.User,
+          as: 'sponsor', 
+          attributes: ['id', 'first_name', 'last_name', 'email']
+        },
+        {
+          model: db.VisaType,
+          as: 'visaType',
+          attributes: ['id', 'name']
+        },
+        {
+          model: db.VisaType,
+          as: 'petitionType',
+          attributes: ['id', 'name']
+        }
+      ]
     });
 
     res.status(200).json({
@@ -162,7 +280,54 @@ export const getCaseById = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const caseData = await Case.findOne({ where: { caseId: id } }) || await Case.findByPk(id);
+    const caseData = await Case.findOne({ 
+      where: { caseId: id },
+      include: [
+        {
+          model: db.User,
+          as: 'candidate',
+          attributes: ['id', 'first_name', 'last_name', 'email']
+        },
+        {
+          model: db.User,
+          as: 'sponsor', 
+          attributes: ['id', 'first_name', 'last_name', 'email']
+        },
+        {
+          model: db.VisaType,
+          as: 'visaType',
+          attributes: ['id', 'name']
+        },
+        {
+          model: db.PetitionType,
+          as: 'petitionType',
+          attributes: ['id', 'name']
+        }
+      ]
+    }) || await Case.findByPk(id, {
+      include: [
+        {
+          model: db.User,
+          as: 'candidate',
+          attributes: ['id', 'first_name', 'last_name', 'email']
+        },
+        {
+          model: db.User,
+          as: 'sponsor', 
+          attributes: ['id', 'first_name', 'last_name', 'email']
+        },
+        {
+          model: db.VisaType,
+          as: 'visaType',
+          attributes: ['id', 'name']
+        },
+        {
+          model: db.PetitionType,
+          as: 'petitionType',
+          attributes: ['id', 'name']
+        }
+      ]
+    });
 
     if (!caseData) {
       return res.status(404).json({
@@ -204,19 +369,17 @@ export const updateCase = async (req, res) => {
     }
 
     const {
-      candidateName, candidate,
       candidateId,
-      businessName, business,
       businessId,
-      visaType,
-      petitionType,
+      sponsorId,
+      visaTypeId,
+      petitionTypeId,
       priority,
       status,
       targetSubmissionDate,
       lcaNumber,
       receiptNumber,
-      assignedCaseworkerName, caseworker,
-      assignedCaseworkerId, caseworkerId,
+      assignedcaseworkerId,
       salaryOffered,
       totalAmount,
       paidAmount,
@@ -226,18 +389,14 @@ export const updateCase = async (req, res) => {
       department
     } = req.body;
 
-    const candName = candidateName || candidate;
-    const busName = businessName || business;
-    const cwName = assignedCaseworkerName || caseworker;
-    const cwId = assignedCaseworkerId || caseworkerId;
+    const cwIds = Array.isArray(assignedcaseworkerId) ? assignedcaseworkerId : (assignedcaseworkerId ? [assignedcaseworkerId] : []);
 
     await caseData.update({
-      candidate: candName || caseData.candidate,
       candidateId: candidateId !== undefined ? candidateId : caseData.candidateId,
-      business: busName || caseData.business,
       businessId: businessId !== undefined ? businessId : caseData.businessId,
-      visaType: visaType || caseData.visaType,
-      petitionType: petitionType !== undefined ? petitionType : caseData.petitionType,
+      sponsorId: sponsorId !== undefined ? sponsorId : caseData.sponsorId,
+      visaTypeId: visaTypeId !== undefined ? visaTypeId : caseData.visaTypeId,
+      petitionTypeId: petitionTypeId !== undefined ? petitionTypeId : caseData.petitionTypeId,
       priority: priority || caseData.priority,
       status: status || caseData.status,
       targetSubmissionDate: targetSubmissionDate || caseData.targetSubmissionDate,
@@ -246,8 +405,7 @@ export const updateCase = async (req, res) => {
       nationality: nationality !== undefined ? nationality : caseData.nationality,
       jobTitle: jobTitle !== undefined ? jobTitle : caseData.jobTitle,
       department: department !== undefined ? department : caseData.department,
-      caseworker: cwName || caseData.caseworker,
-      caseworkerId: cwId !== undefined ? cwId : caseData.caseworkerId,
+      assignedcaseworkerId: cwIds.length > 0 ? cwIds : caseData.assignedcaseworkerId,
       salaryOffered: salaryOffered !== undefined ? salaryOffered : caseData.salaryOffered,
       totalAmount: totalAmount !== undefined ? totalAmount : caseData.totalAmount,
       paidAmount: paidAmount !== undefined ? paidAmount : caseData.paidAmount,
