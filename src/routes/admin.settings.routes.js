@@ -1,6 +1,7 @@
 import { Router } from "express";
 import * as adminSettingsController from "../controllers/AdminControllers/admin.settings.controller.js";
 import * as visaController from "../controllers/AdminControllers/Settings/visa.controller.js";
+import * as petitionTypeController from "../controllers/AdminControllers/Settings/petitionType.controller.js";
 import { verifyToken } from "../middlewares/auth.middleware.js";
 import { checkRole, ROLES } from "../middlewares/role.middleware.js";
 
@@ -17,6 +18,11 @@ router.get("/visa-types", visaController.listVisaTypes);
 router.post("/visa-types", visaController.createVisaType);
 router.patch("/visa-types/:id", visaController.updateVisaType);
 router.delete("/visa-types/:id", visaController.deleteVisaType);
+
+router.get("/petition-types", petitionTypeController.listPetitionTypes);
+router.post("/petition-types", petitionTypeController.createPetitionType);
+router.patch("/petition-types/:id", petitionTypeController.updatePetitionType);
+router.delete("/petition-types/:id", petitionTypeController.deletePetitionType);
 
 router.get("/case-categories", adminSettingsController.listCaseCategories);
 router.post("/case-categories", adminSettingsController.createCaseCategory);

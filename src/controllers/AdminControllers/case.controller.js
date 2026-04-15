@@ -20,12 +20,20 @@ const generateCaseId = async () => {
     }
   }
   
-  return `#CAS-${String(nextId).padStart(3, "0")}`;
+  return `CAS-${String(nextId).padStart(6, "0")}`;
 };
 
 // Create Case
 export const createCase = async (req, res) => {
   try {
+    if (!req.body) {
+      return res.status(400).json({
+        status: "error",
+        message: "Request body is required",
+        data: null,
+      });
+    }
+
     const {
       candidateId,
       businessId,
@@ -48,16 +56,28 @@ export const createCase = async (req, res) => {
 
     const cwIds = Array.isArray(assignedcaseworkerId) ? assignedcaseworkerId : (assignedcaseworkerId ? [assignedcaseworkerId] : []);
 
-    // Basic validation
-    if (!candidateId || !businessId || !visaTypeId || !cwIds.length || !targetSubmissionDate || totalAmount === undefined) {
+    // Field-wise validation
+    const errors = [];
+    
+    if (candidateId === undefined || candidateId === null || candidateId === '') errors.push("candidateId is required");
+    if (businessId === undefined || businessId === null || businessId === '') errors.push("businessId is required");
+    if (visaTypeId === undefined || visaTypeId === null || visaTypeId === '') errors.push("visaTypeId is required");
+    if (!cwIds.length) errors.push("assignedcaseworkerId is required");
+    if (targetSubmissionDate === undefined || targetSubmissionDate === null || targetSubmissionDate === '') errors.push("targetSubmissionDate is required");
+    if (totalAmount === undefined || totalAmount === null) errors.push("totalAmount is required");
+
+    if (errors.length > 0) {
       return res.status(400).json({
         status: "error",
-        message: "Missing required fields",
-        data: null,
+        message: "Validation failed",
+        data: { errors },
       });
     }
 
+    const caseId = await generateCaseId();
+
     const newCase = await Case.create({
+      caseId,
       candidateId,
       businessId,
       sponsorId,

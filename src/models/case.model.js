@@ -5,6 +5,11 @@ const CaseModel = (sequelize, DataTypes) => {
       autoIncrement: true,
       primaryKey: true,
     },
+    caseId: {
+      type: DataTypes.STRING, //CAS-000001 likewiseauto genrated
+      allowNull: true,
+    },
+
     candidateId: {
       type: DataTypes.INTEGER,
       allowNull: true,
@@ -38,7 +43,7 @@ const CaseModel = (sequelize, DataTypes) => {
       type: DataTypes.INTEGER,
       allowNull: true,
       references: {
-        model: 'visa_types',
+        model: 'petition_types',
         key: 'id'
       }
     },
