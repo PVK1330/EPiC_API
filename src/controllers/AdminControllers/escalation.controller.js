@@ -1,0 +1,386 @@
+import db from "../../models/index.js";
+import { Op } from "sequelize";
+
+const { Escalation, User, Case } = db;
+
+const calculateDaysOpen = (createdAt) => {
+  const created = new Date(createdAt);
+  const now = new Date();
+  const diffTime = Math.abs(now - created);
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  return diffDays;
+};
+
+export const createEscalation = async (req, res) => {
+  try {
+    const { caseId, candidate, severity, trigger, triggerType, assignedAdminId, relatedCaseId, notes } = req.body;
+
+    if (!caseId || !candidate || !severity || !trigger) {
+      return res.status(400).json({
+        status: "error",
+        message: "caseId, candidate, severity, and trigger are required",
+      });
+    }
+
+    let assignedAdminName = null;
+    if (assignedAdminId) {
+      const admin = await User.findByPk(assignedAdminId);
+      if (admin) {
+        assignedAdminName = `${admin.first_name} ${admin.last_name}`;
+      }
+    }
+
+    const escalation = await Escalation.create({
+      caseId,
+      candidate,
+      severity,
+      trigger,
+      triggerType: triggerType || "Other",
+      assignedAdminId,
+      assignedAdminName,
+      daysOpen: 0,
+      status: "Open",
+      notes,
+      relatedCaseId,
+    });
+
+    res.status(201).json({
+      status: "success",
+      message: "Escalation created successfully",
+      data: escalation,
+    });
+  } catch (error) {
+    console.error("Error creating escalation:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Failed to create escalation",
+      error: error.message,
+    });
+  }
+};
+
+export const getAllEscalations = async (req, res) => {
+  try {
+    const { severity, status, triggerType, assignedAdminId } = req.query;
+    const whereClause = {};
+
+    if (severity && severity !== "All") {
+      whereClause.severity = severity;
+    }
+    if (status && status !== "All") {
+      whereClause.status = status;
+    }
+    if (triggerType && triggerType !== "All") {
+      whereClause.triggerType = triggerType;
+    }
+    if (assignedAdminId) {
+      whereClause.assignedAdminId = assignedAdminId;
+    }
+
+    const escalations = await Escalation.findAll({
+      where: whereClause,
+      order: [["created_at", "DESC"]],
+      include: [
+        {
+          model: User,
+          as: "assignedAdmin",
+          attributes: ["id", "first_name", "last_name", "email"],
+        },
+        {
+          model: Case,
+          as: "relatedCase",
+          attributes: ["id", "caseId", "status"],
+        },
+      ],
+    });
+
+    const escalationsWithDaysOpen = escalations.map((esc) => {
+      const escalationData = esc.toJSON();
+      escalationData.daysOpen = calculateDaysOpen(escalationData.created_at);
+      return escalationData;
+    });
+
+    const kpi = {
+      critical: escalationsWithDaysOpen.filter((e) => e.severity === "Critical" && e.status !== "Resolved" && e.status !== "Closed").length,
+      high: escalationsWithDaysOpen.filter((e) => e.severity === "High" && e.status !== "Resolved" && e.status !== "Closed").length,
+      medium: escalationsWithDaysOpen.filter((e) => e.severity === "Medium" && e.status !== "Resolved" && e.status !== "Closed").length,
+      resolvedToday: escalationsWithDaysOpen.filter((e) => {
+        if (e.resolvedAt) {
+          const resolvedDate = new Date(e.resolvedAt).toDateString();
+          const today = new Date().toDateString();
+          return resolvedDate === today;
+        }
+        return false;
+      }).length,
+    };
+
+    res.status(200).json({
+      status: "success",
+      message: "Escalations retrieved successfully",
+      data: {
+        escalations: escalationsWithDaysOpen,
+        kpi,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching escalations:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Failed to fetch escalations",
+      error: error.message,
+    });
+  }
+};
+
+export const getEscalationById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const escalation = await Escalation.findByPk(id, {
+      include: [
+        {
+          model: User,
+          as: "assignedAdmin",
+          attributes: ["id", "first_name", "last_name", "email"],
+        },
+        {
+          model: Case,
+          as: "relatedCase",
+          attributes: ["id", "caseId", "status"],
+        },
+      ],
+    });
+
+    if (!escalation) {
+      return res.status(404).json({
+        status: "error",
+        message: "Escalation not found",
+      });
+    }
+
+    const escalationData = escalation.toJSON();
+    escalationData.daysOpen = calculateDaysOpen(escalationData.created_at);
+
+    res.status(200).json({
+      status: "success",
+      message: "Escalation retrieved successfully",
+      data: escalationData,
+    });
+  } catch (error) {
+    console.error("Error fetching escalation:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Failed to fetch escalation",
+      error: error.message,
+    });
+  }
+};
+
+export const updateEscalation = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { severity, trigger, triggerType, assignedAdminId, status, notes } = req.body;
+
+    const escalation = await Escalation.findByPk(id);
+
+    if (!escalation) {
+      return res.status(404).json({
+        status: "error",
+        message: "Escalation not found",
+      });
+    }
+
+    let assignedAdminName = escalation.assignedAdminName;
+    if (assignedAdminId && assignedAdminId !== escalation.assignedAdminId) {
+      const admin = await User.findByPk(assignedAdminId);
+      if (admin) {
+        assignedAdminName = `${admin.first_name} ${admin.last_name}`;
+      }
+    }
+
+    const updateData = {
+      severity: severity || escalation.severity,
+      trigger: trigger || escalation.trigger,
+      triggerType: triggerType || escalation.triggerType,
+      assignedAdminId: assignedAdminId !== undefined ? assignedAdminId : escalation.assignedAdminId,
+      assignedAdminName,
+      status: status || escalation.status,
+      notes: notes !== undefined ? notes : escalation.notes,
+    };
+
+    if (status === "Resolved" || status === "Closed") {
+      if (!escalation.resolvedAt) {
+        updateData.resolvedAt = new Date();
+        updateData.resolvedBy = req.user.userId;
+      }
+    }
+
+    await escalation.update(updateData);
+
+    const updatedEscalation = await Escalation.findByPk(id, {
+      include: [
+        {
+          model: User,
+          as: "assignedAdmin",
+          attributes: ["id", "first_name", "last_name", "email"],
+        },
+        {
+          model: Case,
+          as: "relatedCase",
+          attributes: ["id", "caseId", "status"],
+        },
+      ],
+    });
+
+    const escalationData = updatedEscalation.toJSON();
+    escalationData.daysOpen = calculateDaysOpen(escalationData.created_at);
+
+    res.status(200).json({
+      status: "success",
+      message: "Escalation updated successfully",
+      data: escalationData,
+    });
+  } catch (error) {
+    console.error("Error updating escalation:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Failed to update escalation",
+      error: error.message,
+    });
+  }
+};
+
+export const deleteEscalation = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const escalation = await Escalation.findByPk(id);
+
+    if (!escalation) {
+      return res.status(404).json({
+        status: "error",
+        message: "Escalation not found",
+      });
+    }
+
+    await escalation.destroy();
+
+    res.status(200).json({
+      status: "success",
+      message: "Escalation deleted successfully",
+    });
+  } catch (error) {
+    console.error("Error deleting escalation:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Failed to delete escalation",
+      error: error.message,
+    });
+  }
+};
+
+export const getEscalationKPI = async (req, res) => {
+  try {
+    const escalations = await Escalation.findAll({
+      where: {
+        status: { [Op.notIn]: ["Resolved", "Closed"] },
+      },
+    });
+
+    const kpi = {
+      critical: escalations.filter((e) => e.severity === "Critical").length,
+      high: escalations.filter((e) => e.severity === "High").length,
+      medium: escalations.filter((e) => e.severity === "Medium").length,
+      low: escalations.filter((e) => e.severity === "Low").length,
+      total: escalations.length,
+    };
+
+    const today = new Date().toDateString();
+    const resolvedToday = await Escalation.findAll({
+      where: {
+        status: "Resolved",
+        resolvedAt: {
+          [Op.gte]: new Date(today),
+        },
+      },
+    });
+
+    kpi.resolvedToday = resolvedToday.length;
+
+    res.status(200).json({
+      status: "success",
+      message: "KPI retrieved successfully",
+      data: kpi,
+    });
+  } catch (error) {
+    console.error("Error fetching KPI:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Failed to fetch KPI",
+      error: error.message,
+    });
+  }
+};
+
+export const assignEscalation = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { assignedAdminId } = req.body;
+
+    if (!assignedAdminId) {
+      return res.status(400).json({
+        status: "error",
+        message: "assignedAdminId is required",
+      });
+    }
+
+    const escalation = await Escalation.findByPk(id);
+
+    if (!escalation) {
+      return res.status(404).json({
+        status: "error",
+        message: "Escalation not found",
+      });
+    }
+
+    const admin = await User.findByPk(assignedAdminId);
+
+    if (!admin) {
+      return res.status(404).json({
+        status: "error",
+        message: "Admin not found",
+      });
+    }
+
+    await escalation.update({
+      assignedAdminId,
+      assignedAdminName: `${admin.first_name} ${admin.last_name}`,
+    });
+
+    const updatedEscalation = await Escalation.findByPk(id, {
+      include: [
+        {
+          model: User,
+          as: "assignedAdmin",
+          attributes: ["id", "first_name", "last_name", "email"],
+        },
+      ],
+    });
+
+    const escalationData = updatedEscalation.toJSON();
+    escalationData.daysOpen = calculateDaysOpen(escalationData.created_at);
+
+    res.status(200).json({
+      status: "success",
+      message: "Escalation assigned successfully",
+      data: escalationData,
+    });
+  } catch (error) {
+    console.error("Error assigning escalation:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Failed to assign escalation",
+      error: error.message,
+    });
+  }
+};

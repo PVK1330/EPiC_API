@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import * as caseworkerController from '../controllers/AdminControllers/caseworker.controller.js';
 import { verifyToken } from '../middlewares/auth.middleware.js';
-import { checkRole, ROLES } from '../middlewares/role.middleware.js';
+import { checkRole, checkPermission, ROLES } from '../middlewares/role.middleware.js';
 
 const router = Router();
 
@@ -12,18 +12,18 @@ router.use(verifyToken);
 router.use(checkRole([ROLES.ADMIN]));
 
 // CREATE Caseworker
-router.post("/", caseworkerController.createCaseworker);
+router.post("/", checkPermission('admin.caseworkers.create'), caseworkerController.createCaseworker);
 
 // READ Operations
-router.get("/", caseworkerController.getAllCaseworkers);
-router.get("/:id", caseworkerController.getCaseworkerById);
+router.get("/", checkPermission('admin.caseworkers.view'), caseworkerController.getAllCaseworkers);
+router.get("/:id", checkPermission('admin.caseworkers.view'), caseworkerController.getCaseworkerById);
 
 // UPDATE Operations
-router.put("/:id", caseworkerController.updateCaseworker);
-router.patch("/:id/toggle-status", caseworkerController.toggleCaseworkerStatus);
-router.patch("/:id/reset-password", caseworkerController.resetCaseworkerPassword);
+router.put("/:id", checkPermission('admin.caseworkers.update'), caseworkerController.updateCaseworker);
+router.patch("/:id/toggle-status", checkPermission('admin.users.toggle_status'), caseworkerController.toggleCaseworkerStatus);
+router.patch("/:id/reset-password", checkPermission('admin.users.reset_password'), caseworkerController.resetCaseworkerPassword);
 
 // DELETE Operations
-router.delete("/:id", caseworkerController.deleteCaseworker);
+router.delete("/:id", checkPermission('admin.caseworkers.delete'), caseworkerController.deleteCaseworker);
 
 export default router;

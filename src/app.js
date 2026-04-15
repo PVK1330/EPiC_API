@@ -12,12 +12,16 @@ import sponsorsRoutes from './routes/sponsors.routes.js';
 import candidateRoutes from './routes/candidate.routes.js';
 import stripeRoutes from './routes/stripe.routes.js';
 import caseRoutes from './routes/case.routes.js';
+import escalationRoutes from './routes/escalation.routes.js';
+import permissionsRoutes from './routes/permissions.routes.js';
+import rbacRoutes from './routes/rbac.routes.js';
+import roleRoutes from './routes/role.routes.js';
 
 const app = express();
 
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-  credentials: true,           // required for cookies to work cross-origin
+  credentials: true,           
 }));
 
 app.use(express.json());
@@ -34,5 +38,9 @@ app.use('/api/sponsors', sponsorsRoutes);
 app.use('/api/candidate', candidateRoutes);
 app.use('/api/stripe', stripeRoutes);
 app.use('/api/cases', caseRoutes);
+app.use('/api/escalations', escalationRoutes);
+app.use('/api/permissions', permissionsRoutes);
+app.use('/api/rbac', rbacRoutes);
+app.use('/api/roles', roleRoutes);
 
 export default app;

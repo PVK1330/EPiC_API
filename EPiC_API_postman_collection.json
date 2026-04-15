@@ -76,6 +76,52 @@
           }
         },
         {
+          "name": "2FA Setup",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/auth/2fa/setup"
+          }
+        },
+        {
+          "name": "2FA Verify Setup",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/auth/2fa/verify-setup",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"123456\",\n  \"backupCodes\": [\"CODE1\", \"CODE2\", \"CODE3\"]\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "2FA Verify (Login)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/auth/2fa/verify",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"password123\",\n  \"token\": \"123456\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "2FA Disable",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/auth/2fa/disable",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"password\": \"password123\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
           "name": "Forgot Password",
           "request": {
             "method": "POST",
@@ -517,7 +563,7 @@
           "request": {
             "method": "PATCH",
             "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-            "url": "{{baseUrl}}/api/cases/#CAS-001/assign",
+            "url": "{{baseUrl}}/api/cases/1/assign",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"assignTo\": \"CW-102\",\n  \"assignToName\": \"Marcus Green\",\n  \"reason\": \"Capacity reassignment\"\n}",
@@ -530,7 +576,7 @@
           "request": {
             "method": "PATCH",
             "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-            "url": "{{baseUrl}}/api/cases/#CAS-001/stage",
+            "url": "{{baseUrl}}/api/cases/1/stage",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"status\": \"Docs Pending\"\n}",
@@ -576,7 +622,7 @@
           "request": {
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-            "url": "{{baseUrl}}/api/cases/#CAS-001"
+            "url": "{{baseUrl}}/api/cases/1"
           }
         },
         {
@@ -584,7 +630,7 @@
           "request": {
             "method": "PUT",
             "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-            "url": "{{baseUrl}}/api/cases/#CAS-001",
+            "url": "{{baseUrl}}/api/cases/1",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"status\": \"Approved\",\n  \"notes\": \"Case was approved successfully\"\n}",
@@ -597,7 +643,93 @@
           "request": {
             "method": "DELETE",
             "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-            "url": "{{baseUrl}}/api/cases/#CAS-001"
+            "url": "{{baseUrl}}/api/cases/1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Escalations",
+      "item": [
+        {
+          "name": "Create Escalation",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/escalations",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"caseId\": \"VF-2835\",\n  \"candidate\": \"Li Wei\",\n  \"severity\": \"Critical\",\n  \"trigger\": \"Deadline breach — ILR expired\",\n  \"triggerType\": \"Deadline Breach\",\n  \"assignedAdminId\": 1,\n  \"relatedCaseId\": 1,\n  \"notes\": \"Urgent action required\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Get All Escalations",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/escalations?severity=All&status=All&triggerType=All&assignedAdminId=",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "escalations"],
+              "query": [
+                { "key": "severity", "value": "All" },
+                { "key": "status", "value": "All" },
+                { "key": "triggerType", "value": "All" },
+                { "key": "assignedAdminId", "value": "" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Escalation KPI",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/escalations/kpi"
+          }
+        },
+        {
+          "name": "Get Escalation By ID",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/escalations/1"
+          }
+        },
+        {
+          "name": "Update Escalation",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/escalations/1",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"severity\": \"High\",\n  \"trigger\": \"Updated trigger reason\",\n  \"triggerType\": \"Missing Docs\",\n  \"assignedAdminId\": 2,\n  \"status\": \"In Progress\",\n  \"notes\": \"Updated notes\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Assign Escalation",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/escalations/1/assign",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assignedAdminId\": 3\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Delete Escalation",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/escalations/1"
           }
         }
       ]
@@ -743,6 +875,245 @@
           "request": {
             "method": "POST",
             "url": "{{baseUrl}}/api/stripe/webhook"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Permissions",
+      "item": [
+        {
+          "name": "Get All Permissions",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/permissions/"
+          }
+        },
+        {
+          "name": "Get Permission by ID",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/permissions/1"
+          }
+        },
+        {
+          "name": "Create Permission",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/permissions/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"admin.custom.feature\",\n  \"description\": \"Access custom feature\",\n  \"module\": \"custom\",\n  \"action\": \"view\",\n  \"resource\": \"custom\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Update Permission",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/permissions/1",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"Updated description\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Delete Permission",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/permissions/1"
+          }
+        },
+        {
+          "name": "Check User Permission",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/permissions/check/permission?permission=admin.dashboard.view",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "permissions", "check", "permission"],
+              "query": [{ "key": "permission", "value": "admin.dashboard.view" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Roles",
+      "item": [
+        {
+          "name": "Get All Roles",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/roles/"
+          }
+        },
+        {
+          "name": "Get Role by ID",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/roles/1"
+          }
+        },
+        {
+          "name": "Get Role with Permissions",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/roles/1/with-permissions"
+          }
+        },
+        {
+          "name": "Create Role",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/roles/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Business Manager\",\n  \"description\": \"Manager for business operations\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Update Role",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/roles/5",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Business Admin\",\n  \"description\": \"Full business admin access\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Delete Role",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/roles/5"
+          }
+        },
+        {
+          "name": "Assign Permissions to Role",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/roles/5/permissions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"permissionIds\": [1, 2, 3, 5, 8, 10, 15, 16]\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Get Role Permissions",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/roles/5/permissions"
+          }
+        },
+        {
+          "name": "Remove Permission from Role",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/roles/5/permissions/10"
+          }
+        },
+        {
+          "name": "Clone Permissions Between Roles",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/roles/clone-permissions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sourceRoleId\": 1,\n  \"targetRoleId\": 5\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "RBAC",
+      "item": [
+        {
+          "name": "RBAC Overview",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/rbac/overview"
+          }
+        },
+        {
+          "name": "RBAC Matrix",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/rbac/matrix"
+          }
+        },
+        {
+          "name": "Users with Roles and Permissions",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/rbac/users"
+          }
+        },
+        {
+          "name": "Permission Audit",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/rbac/audit/1"
+          }
+        },
+        {
+          "name": "Orphan Permissions",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/rbac/orphan-permissions"
+          }
+        },
+        {
+          "name": "Roles Without Permissions",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/rbac/roles-without-permissions"
+          }
+        },
+        {
+          "name": "Bulk Assign Permissions",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/rbac/bulk-assign",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roleIds\": [2, 3],\n  \"permissionIds\": [1, 2, 3, 5, 8]\n}",
+              "options": { "raw": { "language": "json" } }
+            }
           }
         }
       ]

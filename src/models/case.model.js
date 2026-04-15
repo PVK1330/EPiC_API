@@ -1,9 +1,9 @@
 const CaseModel = (sequelize, DataTypes) => {
   const Case = sequelize.define("Case", {
     id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
+      type: DataTypes.INTEGER,
       primaryKey: true,
+      autoIncrement: true,
     },
     caseId: {
       type: DataTypes.STRING,
