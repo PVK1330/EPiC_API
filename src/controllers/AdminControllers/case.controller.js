@@ -299,7 +299,7 @@ export const getCaseById = async (req, res) => {
           attributes: ['id', 'name']
         },
         {
-          model: db.VisaType,
+          model: db.PetitionType,
           as: 'petitionType',
           attributes: ['id', 'name']
         }
@@ -322,7 +322,7 @@ export const getCaseById = async (req, res) => {
           attributes: ['id', 'name']
         },
         {
-          model: db.VisaType,
+          model: db.PetitionType,
           as: 'petitionType',
           attributes: ['id', 'name']
         }

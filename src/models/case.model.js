@@ -107,6 +107,32 @@ const CaseModel = (sequelize, DataTypes) => {
       type: DataTypes.TEXT,
       allowNull: true,
     },
+    biometricsDate: {
+      type: DataTypes.DATEONLY,
+      allowNull: true,
+      comment: "Date for biometrics appointment"
+    },
+    submissionDate: {
+      type: DataTypes.DATEONLY,
+      allowNull: true,
+      comment: "Date when case was submitted"
+    },
+    decisionDate: {
+      type: DataTypes.DATEONLY,
+      allowNull: true,
+      comment: "Date when decision was made"
+    },
+    applicationType: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+      comment: "Type of application (e.g., H1B, L1, Green Card)"
+    },
+    caseStage: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+      defaultValue: "Initial",
+      comment: "Current stage of the case"
+    },
   }, {
     tableName: 'cases',
     timestamps: true,

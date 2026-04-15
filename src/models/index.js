@@ -24,6 +24,16 @@ import EmailTemplateSettingModel from './emailTemplateSetting.model.js';
 
 import SlaSettingModel from './slaSetting.model.js';
 
+import CaseDocumentModel from './caseDocument.model.js';
+
+import CasePaymentModel from './casePayment.model.js';
+
+import CaseTimelineModel from './caseTimeline.model.js';
+
+import CaseCommunicationModel from './caseCommunication.model.js';
+
+import CaseNoteModel from './caseNote.model.js';
+
 
 
 const env = process.env.NODE_ENV || 'development';
@@ -64,6 +74,16 @@ db.EmailTemplateSetting = EmailTemplateSettingModel(sequelize, Sequelize.DataTyp
 
 db.SlaSetting = SlaSettingModel(sequelize, Sequelize.DataTypes);
 
+db.CaseDocument = CaseDocumentModel(sequelize, Sequelize.DataTypes);
+
+db.CasePayment = CasePaymentModel(sequelize, Sequelize.DataTypes);
+
+db.CaseTimeline = CaseTimelineModel(sequelize, Sequelize.DataTypes);
+
+db.CaseCommunication = CaseCommunicationModel(sequelize, Sequelize.DataTypes);
+
+db.CaseNote = CaseNoteModel(sequelize, Sequelize.DataTypes);
+
 
 
 // Associations
@@ -95,5 +115,31 @@ db.Case.belongsTo(db.User, { foreignKey: 'candidateId', as: 'candidate' });
 db.Case.belongsTo(db.User, { foreignKey: 'sponsorId', as: 'sponsor' });
 db.Case.belongsTo(db.VisaType, { foreignKey: 'visaTypeId', as: 'visaType' });
 db.Case.belongsTo(db.PetitionType, { foreignKey: 'petitionTypeId', as: 'petitionType' });
+
+// Case has many relationships
+db.Case.hasMany(db.CaseDocument, { foreignKey: 'caseId', as: 'documents' });
+db.Case.hasMany(db.CasePayment, { foreignKey: 'caseId', as: 'payments' });
+db.Case.hasMany(db.CaseTimeline, { foreignKey: 'caseId', as: 'timeline' });
+db.Case.hasMany(db.CaseCommunication, { foreignKey: 'caseId', as: 'communications' });
+db.Case.hasMany(db.CaseNote, { foreignKey: 'caseId', as: 'caseNotes' });
+
+// Case related model associations
+db.CaseDocument.belongsTo(db.Case, { foreignKey: 'caseId' });
+db.CaseDocument.belongsTo(db.User, { foreignKey: 'uploadedBy', as: 'uploader' });
+db.CaseDocument.belongsTo(db.User, { foreignKey: 'reviewedBy', as: 'reviewer' });
+
+db.CasePayment.belongsTo(db.Case, { foreignKey: 'caseId' });
+db.CasePayment.belongsTo(db.User, { foreignKey: 'receivedBy', as: 'receiver' });
+
+db.CaseTimeline.belongsTo(db.Case, { foreignKey: 'caseId' });
+db.CaseTimeline.belongsTo(db.User, { foreignKey: 'performedBy', as: 'performer' });
+
+db.CaseCommunication.belongsTo(db.Case, { foreignKey: 'caseId' });
+db.CaseCommunication.belongsTo(db.User, { foreignKey: 'senderId', as: 'sender' });
+db.CaseCommunication.belongsTo(db.User, { foreignKey: 'recipientId', as: 'recipient' });
+
+db.CaseNote.belongsTo(db.Case, { foreignKey: 'caseId' });
+db.CaseNote.belongsTo(db.User, { foreignKey: 'authorId', as: 'author' });
+db.CaseNote.belongsTo(db.CaseNote, { foreignKey: 'parentNoteId', as: 'parentNote' });
 
 export default db;
