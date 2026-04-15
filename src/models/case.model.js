@@ -5,8 +5,9 @@ const CaseModel = (sequelize, DataTypes) => {
       autoIncrement: true,
       primaryKey: true,
     },
+
     caseId: {
-      type: DataTypes.STRING, //CAS-000001 likewiseauto genrated
+      type: DataTypes.STRING, //CAS-000001 likewiseauto genrated 
       allowNull: true,
     },
 

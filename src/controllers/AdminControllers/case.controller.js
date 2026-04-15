@@ -35,9 +35,8 @@ export const createCase = async (req, res) => {
     }
 
     const {
-      candidateId,
-      businessId,
-      sponsorId,
+      candidateId,              // INTEGER - Foreign key to users table
+      sponsorId,                // INTEGER - Foreign key to users table  
       visaTypeId,
       petitionTypeId,
       priority,
@@ -60,7 +59,7 @@ export const createCase = async (req, res) => {
     const errors = [];
     
     if (candidateId === undefined || candidateId === null || candidateId === '') errors.push("candidateId is required");
-    if (businessId === undefined || businessId === null || businessId === '') errors.push("businessId is required");
+    if (sponsorId === undefined || sponsorId === null || sponsorId === '') errors.push("sponsorId is required");
     if (visaTypeId === undefined || visaTypeId === null || visaTypeId === '') errors.push("visaTypeId is required");
     if (!cwIds.length) errors.push("assignedcaseworkerId is required");
     if (targetSubmissionDate === undefined || targetSubmissionDate === null || targetSubmissionDate === '') errors.push("targetSubmissionDate is required");
