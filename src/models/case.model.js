@@ -1,38 +1,46 @@
 const CaseModel = (sequelize, DataTypes) => {
   const Case = sequelize.define("Case", {
     id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
+      type: DataTypes.INTEGER,
+      autoIncrement: true,
       primaryKey: true,
     },
-    caseId: {
-      type: DataTypes.STRING,
-      allowNull: false,
-      unique: true,
-    },
-    candidate: {
-      type: DataTypes.STRING,
-      allowNull: false,
-    },
     candidateId: {
-      type: DataTypes.STRING,
+      type: DataTypes.INTEGER,
       allowNull: true,
-    },
-    business: {
-      type: DataTypes.STRING,
-      allowNull: false,
+      references: {
+        model: 'users',
+        key: 'id'
+      }
     },
     businessId: {
       type: DataTypes.STRING,
       allowNull: true,
     },
-    visaType: {
-      type: DataTypes.STRING,
-      allowNull: false,
-    },
-    petitionType: {
-      type: DataTypes.STRING,
+    sponsorId: {
+      type: DataTypes.INTEGER,
       allowNull: true,
+      references: {
+        model: 'users',
+        key: 'id'
+      }
+    },
+
+    visaTypeId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: 'visa_types',
+        key: 'id'
+      }
+    },
+    petitionTypeId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: 'visa_types',
+        key: 'id'
+      }
     },
     priority: {
       type: DataTypes.ENUM("low", "medium", "high", "urgent"),
@@ -70,13 +78,11 @@ const CaseModel = (sequelize, DataTypes) => {
       type: DataTypes.STRING,
       allowNull: true,
     },
-    caseworker: {
-      type: DataTypes.STRING,
-      allowNull: false,
-    },
-    caseworkerId: {
-      type: DataTypes.STRING,
+
+    assignedcaseworkerId: {
+      type: DataTypes.JSON,
       allowNull: true,
+      comment: "Array of caseworker IDs assigned to this case"
     },
     salaryOffered: {
       type: DataTypes.DECIMAL(10, 2),

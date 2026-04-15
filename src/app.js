@@ -27,7 +27,7 @@ app.use(cookieParser());       // must be BEFORE any route that reads req.cookie
 app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
 // Mount before /api/admin so paths like /api/admin/settings/me are not captured by /api/admin/:id
-app.use('/api/admin/settings', adminSettingsRoutes);
+app.use('/api/settings', adminSettingsRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/caseworker', caseworkerRoutes);
 app.use('/api/sponsors', sponsorsRoutes);

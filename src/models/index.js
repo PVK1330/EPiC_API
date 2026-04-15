@@ -43,4 +43,10 @@ db.CaseworkerProfile.belongsTo(db.User, { foreignKey: 'user_id' });
 db.User.hasOne(db.AdminUserPreference, { foreignKey: 'user_id', as: 'adminPreferences' });
 db.AdminUserPreference.belongsTo(db.User, { foreignKey: 'user_id' });
 
+// Case associations
+db.Case.belongsTo(db.User, { foreignKey: 'candidateId', as: 'candidate' });
+db.Case.belongsTo(db.User, { foreignKey: 'sponsorId', as: 'sponsor' });
+db.Case.belongsTo(db.VisaType, { foreignKey: 'visaTypeId', as: 'visaType' });
+db.Case.belongsTo(db.VisaType, { foreignKey: 'petitionTypeId', as: 'petitionType' });
+
 export default db;

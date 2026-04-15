@@ -1,5 +1,6 @@
 import { Router } from "express";
 import * as adminSettingsController from "../controllers/AdminControllers/admin.settings.controller.js";
+import * as visaController from "../controllers/AdminControllers/Settings/visa.controller.js";
 import { verifyToken } from "../middlewares/auth.middleware.js";
 import { checkRole, ROLES } from "../middlewares/role.middleware.js";
 
@@ -12,10 +13,10 @@ router.get("/me", adminSettingsController.getMe);
 router.patch("/me", adminSettingsController.patchMe);
 router.post("/change-password", adminSettingsController.changePassword);
 
-router.get("/visa-types", adminSettingsController.listVisaTypes);
-router.post("/visa-types", adminSettingsController.createVisaType);
-router.patch("/visa-types/:id", adminSettingsController.updateVisaType);
-router.delete("/visa-types/:id", adminSettingsController.deleteVisaType);
+router.get("/visa-types", visaController.listVisaTypes);
+router.post("/visa-types", visaController.createVisaType);
+router.patch("/visa-types/:id", visaController.updateVisaType);
+router.delete("/visa-types/:id", visaController.deleteVisaType);
 
 router.get("/case-categories", adminSettingsController.listCaseCategories);
 router.post("/case-categories", adminSettingsController.createCaseCategory);
