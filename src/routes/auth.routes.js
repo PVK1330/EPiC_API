@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import * as auth from '../controllers/auth.controller.js';
+import { verifyToken } from '../middlewares/auth.middleware.js';
 
 const router = Router();
 
@@ -13,5 +14,11 @@ router.post("/verify-reset-otp", auth.verifyResetOTP);
 router.post("/set-password", auth.setPassword);
 router.post("/resendOtpUser", auth.resendOtpUser); // user table
 router.post("/verifyOtpUser", auth.verifyOtpUser); // user table
+
+// 2FA routes
+router.post("/2fa/setup", verifyToken, auth.setup2FA);
+router.post("/2fa/verify-setup", verifyToken, auth.verify2FASetup);
+router.post("/2fa/verify", auth.verify2FA);
+router.post("/2fa/disable", verifyToken, auth.disable2FA);
 
 export default router;

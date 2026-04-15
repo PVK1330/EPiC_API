@@ -9,7 +9,8 @@ const PORT = process.env.PORT || 5000;
 db.sequelize.sync().then(async () => {
   console.log('Database connected');
   await seedRoles();
-  await seedAdmin();
+  await seedAdmin(); 
+  
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
   });

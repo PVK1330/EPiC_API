@@ -86,11 +86,23 @@ export default (sequelize, DataTypes) => {
             password_reset_otp_expiry: {
                 type: DataTypes.DATE,
             },
+            two_factor_secret: {
+                type: DataTypes.TEXT,
+                allowNull: true,
+            },
+            two_factor_enabled: {
+                type: DataTypes.BOOLEAN,
+                defaultValue: false,
+            },
+            two_factor_backup_codes: {
+                type: DataTypes.JSON,
+                allowNull: true,
+            },
         },
         {
             tableName: "users",
             timestamps: true,
- 
+
             indexes: [
                 {
                     unique: true,

@@ -23,6 +23,9 @@ import CaseCategoryModel from './caseCategory.model.js';
 import EmailTemplateSettingModel from './emailTemplateSetting.model.js';
 
 import SlaSettingModel from './slaSetting.model.js';
+import EscalationModel from './escalation.model.js';
+import PermissionModel from './permission.model.js';
+import RolePermissionModel from './rolePermission.model.js';
 
 import CaseDocumentModel from './caseDocument.model.js';
 
@@ -73,6 +76,9 @@ db.CaseCategory = CaseCategoryModel(sequelize, Sequelize.DataTypes);
 db.EmailTemplateSetting = EmailTemplateSettingModel(sequelize, Sequelize.DataTypes);
 
 db.SlaSetting = SlaSettingModel(sequelize, Sequelize.DataTypes);
+db.Escalation = EscalationModel(sequelize, Sequelize.DataTypes);
+db.Permission = PermissionModel(sequelize, Sequelize.DataTypes);
+db.RolePermission = RolePermissionModel(sequelize, Sequelize.DataTypes);
 
 db.CaseDocument = CaseDocumentModel(sequelize, Sequelize.DataTypes);
 
@@ -141,5 +147,31 @@ db.CaseCommunication.belongsTo(db.User, { foreignKey: 'recipientId', as: 'recipi
 db.CaseNote.belongsTo(db.Case, { foreignKey: 'caseId' });
 db.CaseNote.belongsTo(db.User, { foreignKey: 'authorId', as: 'author' });
 db.CaseNote.belongsTo(db.CaseNote, { foreignKey: 'parentNoteId', as: 'parentNote' });
+db.Case.belongsTo(db.User, { foreignKey: 'assignedToId', as: 'assignedTo' });
+db.User.hasMany(db.Case, { foreignKey: 'assignedToId', as: 'assignedCases' });
+
+db.Case.belongsTo(db.User, { foreignKey: 'createdById', as: 'createdBy' });
+db.User.hasMany(db.Case, { foreignKey: 'createdById', as: 'createdCases' });
+
+// Escalation associations
+db.Escalation.belongsTo(db.User, { foreignKey: 'assignedAdminId', as: 'assignedAdmin' });
+db.User.hasMany(db.Escalation, { foreignKey: 'assignedAdminId', as: 'assignedEscalations' });
+
+db.Escalation.belongsTo(db.Case, { foreignKey: 'relatedCaseId', as: 'relatedCase' });
+db.Case.hasMany(db.Escalation, { foreignKey: 'relatedCaseId', as: 'escalations' });
+
+// Permission associations
+db.Role.belongsToMany(db.Permission, { 
+  through: db.RolePermission, 
+  foreignKey: 'role_id', 
+  otherKey: 'permission_id',
+  as: 'permissions'
+});
+db.Permission.belongsToMany(db.Role, { 
+  through: db.RolePermission, 
+  foreignKey: 'permission_id', 
+  otherKey: 'role_id',
+  as: 'roles'
+});
 
 export default db;

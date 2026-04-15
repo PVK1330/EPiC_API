@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import * as sponsorsController from '../controllers/AdminControllers/sponsors.controller.js';
 import { verifyToken } from '../middlewares/auth.middleware.js';
-import { checkRole, ROLES } from '../middlewares/role.middleware.js';
+import { checkRole, checkPermission, ROLES } from '../middlewares/role.middleware.js';
 
 const router = Router();
 
@@ -12,18 +12,18 @@ router.use(verifyToken);
 router.use(checkRole([ROLES.ADMIN]));
 
 // CREATE Sponsor
-router.post("/", sponsorsController.createSponsor);
+router.post("/", checkPermission('admin.sponsors.create'), sponsorsController.createSponsor);
 
 // READ Operations
-router.get("/", sponsorsController.getAllSponsors);
-router.get("/:id", sponsorsController.getSponsorById);
+router.get("/", checkPermission('admin.sponsors.view'), sponsorsController.getAllSponsors);
+router.get("/:id", checkPermission('admin.sponsors.view'), sponsorsController.getSponsorById);
 
 // UPDATE Operations
-router.put("/:id", sponsorsController.updateSponsor);
-router.patch("/:id/toggle-status", sponsorsController.toggleSponsorStatus);
-router.patch("/:id/reset-password", sponsorsController.resetSponsorPassword);
+router.put("/:id", checkPermission('admin.sponsors.update'), sponsorsController.updateSponsor);
+router.patch("/:id/toggle-status", checkPermission('admin.users.toggle_status'), sponsorsController.toggleSponsorStatus);
+router.patch("/:id/reset-password", checkPermission('admin.users.reset_password'), sponsorsController.resetSponsorPassword);
 
 // DELETE Operations
-router.delete("/:id", sponsorsController.deleteSponsor);
+router.delete("/:id", checkPermission('admin.sponsors.delete'), sponsorsController.deleteSponsor);
 
 export default router;

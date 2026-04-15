@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import * as candidateController from '../controllers/AdminControllers/candidate.controller.js';
 import { verifyToken } from '../middlewares/auth.middleware.js';
-import { checkRole, ROLES } from '../middlewares/role.middleware.js';
+import { checkRole, checkPermission, ROLES } from '../middlewares/role.middleware.js';
 
 const router = Router();
 
@@ -12,18 +12,18 @@ router.use(verifyToken);
 router.use(checkRole([ROLES.ADMIN]));
 
 // CREATE Candidate
-router.post("/", candidateController.createCandidate);
+router.post("/", checkPermission('admin.candidates.create'), candidateController.createCandidate);
 
 // READ Operations
-router.get("/", candidateController.getAllCandidates);
-router.get("/:id", candidateController.getCandidateById);
+router.get("/", checkPermission('admin.candidates.view'), candidateController.getAllCandidates);
+router.get("/:id", checkPermission('admin.candidates.view'), candidateController.getCandidateById);
 
 // UPDATE Operations
-router.put("/:id", candidateController.updateCandidate);
-router.patch("/:id/toggle-status", candidateController.toggleCandidateStatus);
-router.patch("/:id/reset-password", candidateController.resetCandidatePassword);
+router.put("/:id", checkPermission('admin.candidates.update'), candidateController.updateCandidate);
+router.patch("/:id/toggle-status", checkPermission('admin.users.toggle_status'), candidateController.toggleCandidateStatus);
+router.patch("/:id/reset-password", checkPermission('admin.users.reset_password'), candidateController.resetCandidatePassword);
 
 // DELETE Operations
-router.delete("/:id", candidateController.deleteCandidate);
+router.delete("/:id", checkPermission('admin.candidates.delete'), candidateController.deleteCandidate);
 
 export default router;
