@@ -133,7 +133,16 @@ db.Case.hasMany(db.CaseTimeline, { foreignKey: 'caseId', as: 'timeline' });
 db.Case.hasMany(db.CaseCommunication, { foreignKey: 'caseId', as: 'communications' });
 db.Case.hasMany(db.CaseNote, { foreignKey: 'caseId', as: 'caseNotes' });
 
-// Document associations handled in model file
+// Document associations
+db.Document.belongsTo(db.User, { foreignKey: 'userId', as: 'user' });
+db.Document.belongsTo(db.User, { foreignKey: 'uploadedBy', as: 'uploader' });
+db.Document.belongsTo(db.User, { foreignKey: 'reviewedBy', as: 'reviewer' });
+db.Document.belongsTo(db.Case, { foreignKey: 'caseId', as: 'case' });
+
+// User associations with Documents
+db.User.hasMany(db.Document, { foreignKey: 'userId', as: 'documents' });
+db.User.hasMany(db.Document, { foreignKey: 'uploadedBy', as: 'uploadedDocuments' });
+db.User.hasMany(db.Document, { foreignKey: 'reviewedBy', as: 'reviewedDocuments' });
 
 db.CasePayment.belongsTo(db.Case, { foreignKey: 'caseId' });
 db.CasePayment.belongsTo(db.User, { foreignKey: 'receivedBy', as: 'receiver' });

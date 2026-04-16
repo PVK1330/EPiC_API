@@ -112,5 +112,11 @@ export default (sequelize, DataTypes) => {
         }
     );
 
+    User.associate = function(models) {
+        User.hasMany(models.Document, { foreignKey: 'userId', as: 'documents' });
+        User.hasMany(models.Document, { foreignKey: 'uploadedBy', as: 'uploadedDocuments' });
+        User.hasMany(models.Document, { foreignKey: 'reviewedBy', as: 'reviewedDocuments' });
+    };
+
     return User;
 };

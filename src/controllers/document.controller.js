@@ -179,14 +179,14 @@ export const getCaseDocuments = async (req, res) => {
       where: whereClause,
       include: [
         {
-          model: User,
-          as: 'user',
-          attributes: ['id', 'first_name', 'last_name', 'email']
-        },
-        {
           model: Case,
           as: 'case',
-          attributes: ['id', 'caseReference']
+          attributes: ['id', 'caseId']
+        },
+        {
+          model: User,
+          as: 'uploader',
+          attributes: ['id', 'first_name', 'last_name', 'email']
         }
       ],
       order: [['uploadedAt', 'DESC']],
@@ -194,11 +194,19 @@ export const getCaseDocuments = async (req, res) => {
       offset: (parseInt(page) - 1) * parseInt(limit)
     });
 
+    // Add documentUrl to each document
+    const documentsWithUrls = documents.rows.map(doc => {
+      const docData = doc.toJSON();
+      const filename = docData.documentPath.split('\\').pop().split('/').pop();
+      docData.documentUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/uploads/${docData.documentCategory}/${docData.userId}/${filename}`;
+      return docData;
+    });
+
     res.status(200).json({
       status: "success",
       message: "Case documents retrieved successfully",
       data: {
-        documents: documents.rows,
+        documents: documentsWithUrls,
         pagination: {
           total: documents.count,
           page: parseInt(page),
