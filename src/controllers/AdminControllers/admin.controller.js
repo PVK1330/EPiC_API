@@ -141,7 +141,7 @@ export const createAdmin = async (req, res) => {
 // Get All Admins
 export const getAllAdmins = async (req, res) => {
   try {
-    const { page = 1, limit = 10, search, status } = req.query;
+    const { page = 1, limit = 10, search, status, role } = req.query;
     const offset = (page - 1) * limit;
 
     // Build where clause
@@ -160,6 +160,10 @@ export const getAllAdmins = async (req, res) => {
 
     if (status) {
       whereClause.status = status;
+    }
+
+    if (role) {
+      whereClause.role_id = role;
     }
 
     const { count, rows: admins } = await User.findAndCountAll({
@@ -487,6 +491,78 @@ export const toggleAdminStatus = async (req, res) => {
 
   } catch (error) {
     console.error("Toggle Admin Status Error:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error",
+      data: null,
+      error: error.message
+    });
+  }
+};
+
+// Export Admins to CSV
+export const exportAdmins = async (req, res) => {
+  try {
+    const { search, status, role } = req.query;
+
+    const whereClause = {
+      role_id: 1 // Admin role
+    };
+
+    if (search) {
+      whereClause[Op.or] = [
+        { first_name: { [Op.iLike]: `%${search}%` } },
+        { last_name: { [Op.iLike]: `%${search}%` } },
+        { email: { [Op.iLike]: `%${search}%` } },
+        { mobile: { [Op.iLike]: `%${search}%` } }
+      ];
+    }
+
+    if (status) {
+      whereClause.status = status;
+    }
+
+    if (role) {
+      whereClause.role_id = role;
+    }
+
+    const admins = await User.findAll({
+      where: whereClause,
+      attributes: {
+        exclude: ['password', 'otp_code', 'otp_expiry', 'password_reset_otp', 'password_reset_otp_expiry', 'temp_password']
+      },
+      include: [{
+        model: Role,
+        attributes: ['id', 'name']
+      }],
+      order: [["createdAt", "DESC"]]
+    });
+
+    // Generate CSV
+    const csvHeader = ['ID', 'First Name', 'Last Name', 'Email', 'Country Code', 'Mobile', 'Role', 'Status', 'Created At'];
+    const csvRows = admins.map(admin => [
+      admin.id,
+      admin.first_name,
+      admin.last_name,
+      admin.email,
+      admin.country_code,
+      admin.mobile,
+      admin.Role?.name || 'N/A',
+      admin.status,
+      admin.createdAt.toISOString()
+    ]);
+
+    const csvContent = [
+      csvHeader.join(','),
+      ...csvRows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="admins_export.csv"');
+    res.send(csvContent);
+
+  } catch (error) {
+    console.error("Export Admins Error:", error);
     res.status(500).json({
       status: "error",
       message: "Internal server error",

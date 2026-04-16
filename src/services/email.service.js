@@ -43,3 +43,14 @@ export async function sendCaseworkerWelcomeEmail({ to, html }) {
     html,
   });
 }
+
+/**
+ * Candidate account creation — credentials + login link.
+ */
+export async function sendCandidateWelcomeEmail({ to, html }) {
+  return sendMail({
+    to,
+    subject: "Elite Pic - Candidate Account Created",
+    html,
+  });
+}

@@ -16,6 +16,7 @@ router.post("/", checkPermission('admin.admin_users.create'), adminController.cr
 
 // READ Operations
 router.get("/", checkPermission('admin.admin_users.view'), adminController.getAllAdmins);
+router.get("/export", checkPermission('admin.admin_users.view'), adminController.exportAdmins);
 router.get("/:id", checkPermission('admin.admin_users.view'), adminController.getAdminById);
 
 // UPDATE Operations

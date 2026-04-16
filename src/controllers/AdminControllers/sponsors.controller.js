@@ -126,7 +126,7 @@ export const createSponsor = async (req, res) => {
 // Get All Sponsors
 export const getAllSponsors = async (req, res) => {
   try {
-    const { page = 1, limit = 10, search, status } = req.query;
+    const { page = 1, limit = 10, search, status, licenceStatus, riskLevel } = req.query;
     const offset = (page - 1) * limit;
 
     // Build where clause
@@ -146,6 +146,10 @@ export const getAllSponsors = async (req, res) => {
     if (status) {
       whereClause.status = status;
     }
+
+    // Note: licenceStatus and riskLevel filters require SponsorProfile model
+    // These parameters are added for future use when sponsor profile is implemented
+    // For now, they will be passed but not actively filtered
 
     const { count, rows: sponsors } = await User.findAndCountAll({
       where: whereClause,
@@ -472,6 +476,77 @@ export const toggleSponsorStatus = async (req, res) => {
 
   } catch (error) {
     console.error("Toggle Sponsor Status Error:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error",
+      data: null,
+      error: error.message
+    });
+  }
+};
+
+// Export Sponsors to CSV
+export const exportSponsors = async (req, res) => {
+  try {
+    const { search, status, licenceStatus, riskLevel } = req.query;
+
+    const whereClause = {
+      role_id: 4 // Sponsor/Business role
+    };
+
+    if (search) {
+      whereClause[Op.or] = [
+        { first_name: { [Op.iLike]: `%${search}%` } },
+        { last_name: { [Op.iLike]: `%${search}%` } },
+        { email: { [Op.iLike]: `%${search}%` } },
+        { mobile: { [Op.iLike]: `%${search}%` } }
+      ];
+    }
+
+    if (status) {
+      whereClause.status = status;
+    }
+
+    // Note: licenceStatus and riskLevel filters require SponsorProfile model
+    // These parameters are added for future use when sponsor profile is implemented
+
+    const sponsors = await User.findAll({
+      where: whereClause,
+      attributes: { 
+        exclude: ['password', 'otp_code', 'otp_expiry', 'password_reset_otp', 'password_reset_otp_expiry', 'temp_password'] 
+      },
+      include: [{
+        model: Role,
+        attributes: ['id', 'name']
+      }],
+      order: [["createdAt", "DESC"]]
+    });
+
+    // Generate CSV
+    const csvHeader = ['ID', 'First Name', 'Last Name', 'Email', 'Country Code', 'Mobile', 'Role', 'Status', 'Created At'];
+    const csvRows = sponsors.map(sponsor => [
+      sponsor.id,
+      sponsor.first_name,
+      sponsor.last_name,
+      sponsor.email,
+      sponsor.country_code,
+      sponsor.mobile,
+      sponsor.Role?.name || 'N/A',
+      sponsor.status,
+      sponsor.createdAt.toISOString()
+    ]);
+
+    const csvContent = [
+      csvHeader.join(','),
+      ...csvRows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="sponsors_export.csv"');
+    res.send(csvContent);
+
+  } catch (error) {
+    console.error("Export Sponsors Error:", error);
     res.status(500).json({
       status: "error",
       message: "Internal server error",

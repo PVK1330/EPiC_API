@@ -3,6 +3,7 @@ import app from './app.js';
 import db from './models/index.js';
 import seedRoles from './seeders/role.seeder.js';
 import seedAdmin from './seeders/admin.seeder.js';
+import { initializeFieldSettings } from './controllers/AdminControllers/applicationFields.controller.js';
 
 const PORT = process.env.PORT || 5000;
 
@@ -10,6 +11,7 @@ db.sequelize.sync().then(async () => {
   console.log('Database connected');
   await seedRoles();
   await seedAdmin(); 
+  await initializeFieldSettings();
   
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);

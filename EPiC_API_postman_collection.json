@@ -1375,6 +1375,174 @@
           }
         }
       ]
+    },
+    {
+      "name": "Application Fields",
+      "item": [
+        {
+          "name": "Get Field Settings",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/application-fields/settings"
+          }
+        },
+        {
+          "name": "Batch Update Field Visibility",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/application-fields/settings/visibility",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"visibility\": {\n    \"firstName\": true,\n    \"lastName\": true,\n    \"email\": true\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Update Single Field Visibility",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/application-fields/settings/firstName/visibility",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"field_key\": \"firstName\",\n  \"is_visible\": false\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Get Custom Fields",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/application-fields/custom-fields"
+          }
+        },
+        {
+          "name": "Create Custom Field",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/application-fields/custom-fields",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"field_id\": \"custom_employer_name\",\n  \"label\": \"Previous UK Employer Name\",\n  \"field_type\": \"text\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Update Custom Field",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/application-fields/custom-fields/1",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"label\": \"Updated Field Label\",\n  \"field_type\": \"textarea\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Delete Custom Field",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/application-fields/custom-fields/1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Export & Bulk Import",
+      "item": [
+        {
+          "name": "Export Admins",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/admin/export"
+          }
+        },
+        {
+          "name": "Export Caseworkers",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/caseworker/export"
+          }
+        },
+        {
+          "name": "Export Candidates",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/candidate/export"
+          }
+        },
+        {
+          "name": "Export Sponsors",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/sponsors/export"
+          }
+        },
+        {
+          "name": "Bulk Import Candidates",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/candidate/bulk-import",
+            "body": {
+              "mode": "formdata",
+              "formdata": [{ "key": "file", "type": "file" }]
+            }
+          }
+        },
+        {
+          "name": "Bulk Import Caseworkers",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/caseworker/bulk-import",
+            "body": {
+              "mode": "formdata",
+              "formdata": [{ "key": "file", "type": "file" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Caseworker Performance",
+      "item": [
+        {
+          "name": "Get Caseworker Performance Report",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/caseworker/:id/performance-report"
+          }
+        },
+        {
+          "name": "Reassign Case",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/caseworker/cases/:caseId/reassign",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"newCaseworkerId\": 2\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        }
+      ]
     }
   ]
 }

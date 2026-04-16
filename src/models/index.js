@@ -39,13 +39,13 @@ import CaseNoteModel from './caseNote.model.js';
 
 import TaskModel from './task.model.js';
 
+import ApplicationFieldSettingModel from './applicationFieldSetting.model.js';
 
+import ApplicationCustomFieldModel from './applicationCustomField.model.js';
 
 const env = process.env.NODE_ENV || 'development';
 
 const dbConfig = config[env];
-
-
 
 const sequelize = new Sequelize(dbConfig.database, dbConfig.username, dbConfig.password, dbConfig);
 
@@ -94,7 +94,8 @@ db.CaseNote = CaseNoteModel(sequelize, Sequelize.DataTypes);
 
 db.Task = TaskModel(sequelize, Sequelize.DataTypes);
 
-
+db.ApplicationFieldSetting = ApplicationFieldSettingModel(sequelize, Sequelize.DataTypes);
+db.ApplicationCustomField = ApplicationCustomFieldModel(sequelize, Sequelize.DataTypes);
 
 // Associations
 
