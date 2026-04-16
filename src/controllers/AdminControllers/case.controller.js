@@ -36,6 +36,7 @@ export const createCase = async (req, res) => {
 
     const {
       candidateId,              // INTEGER - Foreign key to users table
+      businessId,               // STRING
       sponsorId,                // INTEGER - Foreign key to users table  
       visaTypeId,
       petitionTypeId,
@@ -135,9 +136,9 @@ export const getCasesWithFilters = async (req, res) => {
     if (search) {
       whereClause[Op.or] = [
         { caseId: { [Op.iLike]: `%${search}%` } },
-        { candidate: { [Op.iLike]: `%${search}%` } },
-        { business: { [Op.iLike]: `%${search}%` } },
-        { caseworker: { [Op.iLike]: `%${search}%` } },
+        { businessId: { [Op.iLike]: `%${search}%` } },
+        { '$candidate.first_name$': { [Op.iLike]: `%${search}%` } },
+        { '$candidate.last_name$': { [Op.iLike]: `%${search}%` } }
       ];
     }
 
@@ -212,9 +213,9 @@ export const getAllCases = async (req, res) => {
     if (search) {
       whereClause[Op.or] = [
         { caseId: { [Op.iLike]: `%${search}%` } },
-        { candidate: { [Op.iLike]: `%${search}%` } },
-        { business: { [Op.iLike]: `%${search}%` } },
-        { caseworker: { [Op.iLike]: `%${search}%` } },
+        { businessId: { [Op.iLike]: `%${search}%` } },
+        { '$candidate.first_name$': { [Op.iLike]: `%${search}%` } },
+        { '$candidate.last_name$': { [Op.iLike]: `%${search}%` } }
       ];
     }
 
@@ -523,7 +524,7 @@ export const updatePipelineStage = async (req, res) => {
 export const getTeamCapacity = async (req, res) => {
   try {
     const cases = await Case.findAll({
-      attributes: ['caseworker', 'caseworkerId'],
+      attributes: ['assignedcaseworkerId'],
       where: {
         status: {
           [Op.notIn]: ['Approved', 'Rejected'] // Only active Cases
@@ -531,11 +532,36 @@ export const getTeamCapacity = async (req, res) => {
       }
     });
 
+    const userIds = new Set();
+    cases.forEach(c => {
+      const cwIds = Array.isArray(c.assignedcaseworkerId) ? c.assignedcaseworkerId : [];
+      cwIds.forEach(id => userIds.add(id));
+    });
+
+    const users = await db.User.findAll({
+      where: { id: Array.from(userIds) },
+      attributes: ['id', 'first_name', 'last_name']
+    });
+
+    const userMap = {};
+    users.forEach(u => {
+      userMap[u.id] = `${u.first_name} ${u.last_name}`;
+    });
+
     const capacityMap = {};
     cases.forEach(c => {
-      const cw = c.caseworker || 'Unassigned';
-      if (!capacityMap[cw]) capacityMap[cw] = 0;
-      capacityMap[cw] += 1;
+      const cwIds = Array.isArray(c.assignedcaseworkerId) ? c.assignedcaseworkerId : [];
+      if (cwIds.length === 0) {
+        const cw = 'Unassigned';
+        if (!capacityMap[cw]) capacityMap[cw] = 0;
+        capacityMap[cw] += 1;
+      } else {
+        cwIds.forEach(id => {
+          const cw = userMap[id] || `Caseworker ${id}`;
+          if (!capacityMap[cw]) capacityMap[cw] = 0;
+          capacityMap[cw] += 1;
+        });
+      }
     });
 
     const capacityArray = Object.keys(capacityMap).map(name => ({
@@ -567,9 +593,10 @@ export const assignCase = async (req, res) => {
       ? `${caseData.notes}\n[System]: Reassigned to ${assignToName || assignTo}. Reason: ${reason}` 
       : `[System]: Reassigned to ${assignToName || assignTo}. Reason: ${reason}`;
 
+    const cwIds = Array.isArray(assignTo) ? assignTo : (assignTo ? [assignTo] : caseData.assignedcaseworkerId);
+
     await caseData.update({
-      caseworkerId: assignTo !== undefined ? assignTo : caseData.caseworkerId,
-      caseworker: assignToName || caseData.caseworker,
+      assignedcaseworkerId: cwIds,
       notes: updatedNotes
     });
 
