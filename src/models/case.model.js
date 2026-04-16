@@ -19,10 +19,6 @@ const CaseModel = (sequelize, DataTypes) => {
         key: 'id'
       }
     },
-    businessId: {
-      type: DataTypes.STRING,
-      allowNull: true,
-    },
     sponsorId: {
       type: DataTypes.INTEGER,
       allowNull: true,

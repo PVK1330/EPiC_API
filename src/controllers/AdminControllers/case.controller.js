@@ -36,7 +36,6 @@ export const createCase = async (req, res) => {
 
     const {
       candidateId,              // INTEGER - Foreign key to users table
-      businessId,               // STRING
       sponsorId,                // INTEGER - Foreign key to users table  
       visaTypeId,
       petitionTypeId,
@@ -79,7 +78,6 @@ export const createCase = async (req, res) => {
     const newCase = await Case.create({
       caseId,
       candidateId,
-      businessId,
       sponsorId,
       visaTypeId,
       petitionTypeId,
@@ -136,7 +134,6 @@ export const getCasesWithFilters = async (req, res) => {
     if (search) {
       whereClause[Op.or] = [
         { caseId: { [Op.iLike]: `%${search}%` } },
-        { businessId: { [Op.iLike]: `%${search}%` } },
         { '$candidate.first_name$': { [Op.iLike]: `%${search}%` } },
         { '$candidate.last_name$': { [Op.iLike]: `%${search}%` } }
       ];
@@ -213,7 +210,6 @@ export const getAllCases = async (req, res) => {
     if (search) {
       whereClause[Op.or] = [
         { caseId: { [Op.iLike]: `%${search}%` } },
-        { businessId: { [Op.iLike]: `%${search}%` } },
         { '$candidate.first_name$': { [Op.iLike]: `%${search}%` } },
         { '$candidate.last_name$': { [Op.iLike]: `%${search}%` } }
       ];
@@ -371,7 +367,6 @@ export const updateCase = async (req, res) => {
 
     const {
       candidateId,
-      businessId,
       sponsorId,
       visaTypeId,
       petitionTypeId,
@@ -394,7 +389,6 @@ export const updateCase = async (req, res) => {
 
     await caseData.update({
       candidateId: candidateId !== undefined ? candidateId : caseData.candidateId,
-      businessId: businessId !== undefined ? businessId : caseData.businessId,
       sponsorId: sponsorId !== undefined ? sponsorId : caseData.sponsorId,
       visaTypeId: visaTypeId !== undefined ? visaTypeId : caseData.visaTypeId,
       petitionTypeId: petitionTypeId !== undefined ? petitionTypeId : caseData.petitionTypeId,
