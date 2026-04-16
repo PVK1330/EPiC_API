@@ -11,9 +11,9 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Deploy to VPS via SSH
+      - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.VPS_HOST }}
@@ -23,8 +23,11 @@ jobs:
           script: |
             cd /home/elitepicco/public_html/server.elitepic.co.uk
 
+            echo "Pulling latest code..."
             git pull origin main
 
+            echo "Installing dependencies..."
             npm install
 
-            pm2 restart server
+            echo "Restarting server..."
+            pm2 restart server || pm2 start src/server.js --name server
