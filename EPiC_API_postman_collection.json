@@ -1104,6 +1104,264 @@
           }
         },
         {
+          "name": "Documents - Upload",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Get token from login response",
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    pm.collectionVariables.set('authToken', response.data.token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "multipart/form-data"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "documentCategory",
+                  "value": "candidate",
+                  "type": "text"
+                },
+                {
+                  "key": "userId",
+                  "value": "1",
+                  "type": "text"
+                },
+                {
+                  "key": "documentType",
+                  "value": "Passport",
+                  "type": "text"
+                },
+                {
+                  "key": "caseId",
+                  "value": "1",
+                  "type": "text",
+                  "description": "Optional - only if document is case-related"
+                },
+                {
+                  "key": "documents",
+                  "type": "file",
+                  "src": "/path/to/your/test-file.pdf",
+                  "description": "Select one or more files to upload"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/documents/upload",
+              "host": ["{{baseUrl}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Documents - Get User Documents by Category",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/documents/category/:category/user/:userId",
+              "host": ["{{baseUrl}}"],
+              "path": [
+                {
+                  "key": "category",
+                  "value": "candidate"
+                },
+                {
+                  "key": "userId", 
+                  "value": "1"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Documents - Get Case Documents",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/documents/case/:caseId",
+              "host": ["{{baseUrl}}"],
+              "path": [
+                {
+                  "key": "caseId",
+                  "value": "1"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Documents - Get Document by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/documents/:documentId",
+              "host": ["{{baseUrl}}"],
+              "path": [
+                {
+                  "key": "documentId",
+                  "value": "1"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Documents - Update Document",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"documentType\": \"Updated Passport\",\n  \"documentCategory\": \"business\",\n  \"expiryDate\": \"2025-12-31\",\n  \"tags\": [\"important\", \"visa\"]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/documents/:documentId",
+              "host": ["{{baseUrl}}"],
+              "path": [
+                {
+                  "key": "documentId",
+                  "value": "1"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Documents - Update Document Status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"approved\",\n  \"reviewNotes\": \"Document verified and approved\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/documents/:documentId/status",
+              "host": ["{{baseUrl}}"],
+              "path": [
+                {
+                  "key": "documentId",
+                  "value": "1"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Documents - Download Document",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/documents/download/:documentId",
+              "host": ["{{baseUrl}}"],
+              "path": [
+                {
+                  "key": "documentId",
+                  "value": "1"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Documents - Delete Document",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/documents/:documentId",
+              "host": ["{{baseUrl}}"],
+              "path": [
+                {
+                  "key": "documentId",
+                  "value": "1"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
           "name": "Bulk Assign Permissions",
           "request": {
             "method": "POST",

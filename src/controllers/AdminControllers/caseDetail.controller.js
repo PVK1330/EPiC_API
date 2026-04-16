@@ -2,7 +2,7 @@ import db from "../../models/index.js";
 import { Op } from "sequelize";
 
 const Case = db.Case;
-const CaseDocument = db.CaseDocument;
+const Document = db.Document;
 const CasePayment = db.CasePayment;
 const CaseTimeline = db.CaseTimeline;
 const CaseCommunication = db.CaseCommunication;
@@ -47,7 +47,7 @@ export const getCaseDetails = async (req, res) => {
         //   attributes: ['id', 'name']
         // },
         {
-          model: CaseDocument,
+          model: Document,
           as: 'documents',
           include: [
             {

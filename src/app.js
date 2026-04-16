@@ -16,7 +16,7 @@ import escalationRoutes from './routes/escalation.routes.js';
 import permissionsRoutes from './routes/permissions.routes.js';
 import rbacRoutes from './routes/rbac.routes.js';
 import roleRoutes from './routes/role.routes.js';
-import { taskRoutes } from './routes/index.js';
+import { taskRoutes, documentRoutes } from './routes/index.js';
 
 const app = express();
 
@@ -32,7 +32,7 @@ app.use(cookieParser());       // must be BEFORE any route that reads req.cookie
 app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
 // Mount before /api/admin so paths like /api/admin/settings/me are not captured by /api/admin/:id
-app.use('/api/admin/settings', adminSettingsRoutes);
+app.use('/api/settings', adminSettingsRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/caseworker', caseworkerRoutes);
 app.use('/api/sponsors', sponsorsRoutes);
@@ -44,5 +44,6 @@ app.use('/api/permissions', permissionsRoutes);
 app.use('/api/rbac', rbacRoutes);
 app.use('/api/roles', roleRoutes);
 app.use('/api/tasks', taskRoutes);
+app.use('/api/documents', documentRoutes);
 
 export default app;
