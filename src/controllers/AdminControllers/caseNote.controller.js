@@ -46,7 +46,7 @@ export const createCaseNote = async (req, res) => {
       caseId,
       content,
       parentNoteId: parentNoteId || null,
-      createdBy: userId,
+      authorId: userId,
       updatedAt: new Date(),
     });
 
@@ -103,7 +103,7 @@ export const getCaseNotes = async (req, res) => {
         },
         {
           model: CaseNote,
-          as: 'replies',
+          as: 'parentNote',
           required: false,
           include: [
             {
@@ -171,7 +171,7 @@ export const updateCaseNote = async (req, res) => {
     }
 
     // Check permissions
-    if (note.createdBy !== userId && roleId !== ROLES.ADMIN) {
+    if (note.authorId !== userId && roleId !== ROLES.ADMIN) {
       return res.status(403).json({
         status: "error",
         message: "Access denied",
@@ -219,7 +219,7 @@ export const deleteCaseNote = async (req, res) => {
     }
 
     // Check permissions
-    if (note.createdBy !== userId && roleId !== ROLES.ADMIN) {
+    if (note.authorId !== userId && roleId !== ROLES.ADMIN) {
       return res.status(403).json({
         status: "error",
         message: "Access denied",
@@ -237,6 +237,63 @@ export const deleteCaseNote = async (req, res) => {
 
   } catch (error) {
     console.error("Delete Case Note Error:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error",
+      data: null,
+      error: error.message,
+    });
+  }
+};
+
+// Get case by note ID
+export const getCaseNoteByNoteId = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Find the note
+    const note = await CaseNote.findByPk(id, {
+      include: [
+        {
+          model: Case,
+          as: 'case',
+          attributes: ['id', 'status', 'created_at', 'updated_at']
+        }
+      ]
+    });
+    
+    if (!note) {
+      return res.status(404).json({
+        status: "error",
+        message: "Note not found",
+        data: null,
+      });
+    }
+    
+    res.status(200).json({
+      status: "success",
+      message: "Note retrieved successfully",
+      data: { 
+        note: {
+          id: note.id,
+          caseId: note.caseId,
+          noteType: note.noteType,
+          title: note.title,
+          content: note.content,
+          visibility: note.visibility,
+          isPinned: note.isPinned,
+          isArchived: note.isArchived,
+          reminderDate: note.reminderDate,
+          parentNoteId: note.parentNoteId,
+          createdAt: note.createdAt,
+          updatedAt: note.updatedAt,
+          case: note.case
+        }
+      },
+    });
+    
+  } catch (error) {
+    console.error("Get Case by Note ID Error:", error);
     res.status(500).json({
       status: "error",
       message: "Internal server error",

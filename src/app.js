@@ -17,6 +17,7 @@ import permissionsRoutes from './routes/permissions.routes.js';
 import rbacRoutes from './routes/rbac.routes.js';
 import roleRoutes from './routes/role.routes.js';
 import caseDetailRoutes from './routes/caseDetail.routes.js';
+import caseNoteRoutes from './routes/caseNote.routes.js';
 import { taskRoutes, documentRoutes } from './routes/index.js';
 import applicationFieldsRoutes from './routes/applicationFields.routes.js';
 
@@ -49,5 +50,6 @@ app.use('/api/tasks', taskRoutes);
 app.use('/api/documents', documentRoutes);
 app.use('/api/application-fields', applicationFieldsRoutes);
 app.use('/api/case-details', caseDetailRoutes);
+app.use('/api/case-notes', caseNoteRoutes);
 
 export default app;

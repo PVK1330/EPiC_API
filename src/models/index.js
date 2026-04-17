@@ -154,7 +154,7 @@ db.CaseCommunication.belongsTo(db.Case, { foreignKey: 'caseId' });
 db.CaseCommunication.belongsTo(db.User, { foreignKey: 'senderId', as: 'sender' });
 db.CaseCommunication.belongsTo(db.User, { foreignKey: 'recipientId', as: 'recipient' });
 
-db.CaseNote.belongsTo(db.Case, { foreignKey: 'caseId' });
+db.CaseNote.belongsTo(db.Case, { foreignKey: 'caseId', as: 'case' });
 db.CaseNote.belongsTo(db.User, { foreignKey: 'authorId', as: 'author' });
 db.CaseNote.belongsTo(db.CaseNote, { foreignKey: 'parentNoteId', as: 'parentNote' });
 
