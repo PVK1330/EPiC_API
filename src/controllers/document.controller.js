@@ -4,7 +4,7 @@ import fs from 'fs';
 
 const { Document, User, Case } = db;
 
-// Upload documents
+// Upload documents with system-generated document names
 export const uploadDocuments = async (req, res) => {
   try {
     // Multer processes files and form fields differently
@@ -19,7 +19,7 @@ export const uploadDocuments = async (req, res) => {
       return res.status(400).json({
         status: "error",
         message: "No files uploaded",
-        data: null
+        data: null,
       });
     }
 
@@ -29,7 +29,7 @@ export const uploadDocuments = async (req, res) => {
       return res.status(404).json({
         status: "error",
         message: "User not found",
-        data: null
+        data: null,
       });
     }
 
@@ -40,18 +40,57 @@ export const uploadDocuments = async (req, res) => {
         return res.status(404).json({
           status: "error",
           message: "Case not found",
-          data: null
+          data: null,
         });
       }
     }
 
     const uploadedDocuments = [];
 
-    for (const file of uploadedFiles) {
+    // Generate system document name
+    const generateSystemDocumentName = (originalName, documentType, index) => {
+      // Validate input parameters
+      if (!originalName || typeof originalName !== 'string') {
+        const now = new Date();
+        const dateStr = now.toISOString().split('T')[0].replace(/-/g, '');
+        const timeStr = now.toISOString().split('T')[1].split('.')[0].replace(/:/g, '');
+        return `DOC-${dateStr}-${timeStr}-${index.toString().padStart(4, '0')}.pdf`;
+      }
+      
+      const now = new Date();
+      const isoString = now.toISOString();
+      const dateStr = isoString.split('T')[0].replace(/-/g, '');
+      const timeStr = isoString.split('T')[1].split('.')[0].replace(/:/g, '');
+      
+      // Generate unique identifier
+      const identifier = index.toString().padStart(4, '0');
+      
+      // Determine prefix based on document type
+      const prefixes = {
+        'General': 'DOC',
+        'Passport': 'PAS',
+        'Visa': 'VISA',
+        'Education': 'EDU',
+        'Work': 'WRK',
+        'Contract': 'CTR',
+        'Medical': 'MED',
+        'Financial': 'FIN',
+        'Other': 'OTH'
+      };
+      
+      const prefix = prefixes[documentType] || 'DOC';
+      
+      return `${prefix}-${dateStr}-${timeStr}-${identifier}.pdf`;
+    };
+
+    for (const [index, file] of uploadedFiles.entries()) {
       // Move file from temp to correct directory structure
       const sourcePath = file.path;
       const targetDir = path.join('uploads', documentCategory, userId.toString());
-      const targetPath = path.join(targetDir, file.filename);
+      
+      // Generate system document name
+      const systemDocumentName = generateSystemDocumentName(file.originalname, documentType, index);
+      const targetPath = path.join(targetDir, systemDocumentName);
       
       // Create target directory if it doesn't exist
       fs.mkdirSync(targetDir, { recursive: true });
@@ -59,13 +98,13 @@ export const uploadDocuments = async (req, res) => {
       // Move file to correct location
       fs.renameSync(sourcePath, targetPath);
       
-      // Create document record with correct path
+      // Create document record with system-generated name
       const document = await Document.create({
         userId,
         caseId: caseId || null,
         documentType: documentType || 'General',
-        documentName: file.originalname,
-        userFileName: userFileName || (file.originalname === 'DOC-20250303-WA0004.pdf' ? file.originalname : (uploadedDocuments.length === 0 ? file.originalname : uploadedDocuments[0]?.userFileName || file.originalname)),
+        documentName: systemDocumentName,
+        userFileName: userFileName || file.originalname, // Keep user's preferred name
         documentPath: targetPath,
         documentCategory,
         mimeType: file.mimetype,
@@ -82,7 +121,7 @@ export const uploadDocuments = async (req, res) => {
         documentCategory: document.documentCategory,
         fileSize: document.fileSize,
         mimeType: document.mimeType,
-        documentUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/uploads/${documentCategory}/${userId}/${file.filename}`
+        documentUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/uploads/${documentCategory}/${userId}/${systemDocumentName}` 
       });
     }
 
@@ -108,20 +147,12 @@ export const uploadDocuments = async (req, res) => {
 // Get user documents by category
 export const getUserDocumentsByCategory = async (req, res) => {
   try {
-    const { category, userId } = req.params;
-    const { page = 1, limit = 10, status } = req.query;
+    const { userId } = req.params;
+    const { page = 1, limit = 10 } = req.query;
+    const offset = (page - 1) * limit;
 
-    const whereClause = {
-      userId,
-      documentCategory: category
-    };
-
-    if (status) {
-      whereClause.status = status;
-    }
-
-    const documents = await Document.findAndCountAll({
-      where: whereClause,
+    const documents = await Document.findAll({
+      where: { userId },
       include: [
         {
           model: User,
@@ -131,7 +162,7 @@ export const getUserDocumentsByCategory = async (req, res) => {
         {
           model: User,
           as: 'uploader',
-          attributes: ['id', 'first_name', 'last_name']
+          attributes: ['id', 'first_name', 'last_name', 'email']
         }
       ],
       order: [['uploadedAt', 'DESC']],
@@ -143,23 +174,22 @@ export const getUserDocumentsByCategory = async (req, res) => {
       status: "success",
       message: "Documents retrieved successfully",
       data: {
-        documents: documents.rows,
+        documents,
         pagination: {
-          total: documents.count,
+          total: documents.length,
           page: parseInt(page),
           limit: parseInt(limit),
-          totalPages: Math.ceil(documents.count / limit)
-        }
-      }
+          pages: Math.ceil(documents.length / limit),
+        },
+      },
     });
-
   } catch (error) {
-    console.error('Get documents error:', error);
+    console.error('Get user documents error:', error);
     res.status(500).json({
       status: "error",
-      message: "Failed to retrieve documents",
+      message: "Internal server error",
       data: null,
-      error: error.message
+      error: error.message,
     });
   }
 };
@@ -247,7 +277,7 @@ export const getDocumentById = async (req, res) => {
         {
           model: Case,
           as: 'case',
-          attributes: ['id', 'caseReference']
+          attributes: ['id', 'caseId']
         }
       ]
     });
@@ -264,7 +294,10 @@ export const getDocumentById = async (req, res) => {
       status: "success",
       message: "Document retrieved successfully",
       data: {
-        document
+        document: {
+          ...document.toJSON(),
+          documentUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/uploads/${document.documentCategory}/${document.userId}/${document.documentName}`
+        }
       }
     });
 
