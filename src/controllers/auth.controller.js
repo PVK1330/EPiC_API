@@ -161,19 +161,19 @@ export const verifyOTP = async (req, res) => {
 
     await unverifiedUser.destroy();
 
+    // Get role name for the payload
+    const role = await db.Role.findByPk(verifiedUser.role_id);
+
     const payload = {
       userId: verifiedUser.id,
       email: verifiedUser.email,
       role_id: verifiedUser.role_id,
+      role_name: role?.name || null,
     };
+
     const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "7d" });
 
-    res.cookie('token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+
 
     const userResponse = {
       id: verifiedUser.id,
@@ -275,8 +275,9 @@ export const login = async (req, res) => {
 
     const user = await db.User.findOne({
       where: { email },
-      include: [{ model: db.Role, attributes: ['id', 'name'] }],
+      include: [{ model: db.Role, as: 'role', attributes: ['id', 'name'] }],
     });
+
 
     if (!user) {
       return res.status(401).json({
@@ -323,12 +324,7 @@ export const login = async (req, res) => {
 
     const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '7d' });
 
-    res.cookie('token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+
 
     return res.status(200).json({
       status: 'success',

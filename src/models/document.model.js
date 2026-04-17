@@ -138,12 +138,6 @@ export default (sequelize, DataTypes) => {
     }
   );
 
-  Document.associate = function(models) {
-    Document.belongsTo(models.User, { foreignKey: 'userId', as: 'user' });
-    Document.belongsTo(models.User, { foreignKey: 'uploadedBy', as: 'uploader' });
-    Document.belongsTo(models.User, { foreignKey: 'reviewedBy', as: 'reviewer' });
-    Document.belongsTo(models.Case, { foreignKey: 'caseId', as: 'case' });
-  };
-
   return Document;
 };
+

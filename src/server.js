@@ -11,6 +11,8 @@ import jwt from 'jsonwebtoken';
 const PORT = process.env.PORT || 5000;
 
 db.sequelize.sync().then(async () => {
+
+
   console.log('Database connected');
   await seedRoles();
   await seedAdmin();

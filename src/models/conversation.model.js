@@ -1,13 +1,13 @@
 export default (sequelize, DataTypes) => {
-  const Message = sequelize.define(
-    "Message",
+  const Conversation = sequelize.define(
+    "Conversation",
     {
       id: {
         type: DataTypes.INTEGER,
         primaryKey: true,
         autoIncrement: true,
       },
-      senderId: {
+      participantOneId: {
         type: DataTypes.INTEGER,
         allowNull: false,
         references: {
@@ -15,7 +15,7 @@ export default (sequelize, DataTypes) => {
           key: "id",
         },
       },
-      receiverId: {
+      participantTwoId: {
         type: DataTypes.INTEGER,
         allowNull: false,
         references: {
@@ -23,33 +23,29 @@ export default (sequelize, DataTypes) => {
           key: "id",
         },
       },
-      conversationId: {
+      caseId: {
         type: DataTypes.INTEGER,
-        allowNull: false,
+        allowNull: true,
         references: {
-          model: "conversations",
+          model: "cases",
           key: "id",
         },
       },
-      content: {
+      lastMessage: {
         type: DataTypes.TEXT,
-        allowNull: false,
+        allowNull: true,
       },
-      messageType: {
-        type: DataTypes.ENUM("text", "image", "file"),
-        defaultValue: "text",
-      },
-      isRead: {
-        type: DataTypes.BOOLEAN,
-        defaultValue: false,
+      lastMessageAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
       },
     },
     {
-      tableName: "messages",
+      tableName: "conversations",
       timestamps: true,
     }
   );
 
-  return Message;
+  return Conversation;
 };
 

@@ -5,18 +5,49 @@ export const getMessages = async (req, res) => {
   try {
     const { receiverId } = req.params;
     const senderId = req.user.userId;
+    const userRole = req.user.role_id;
+    const { caseId } = req.query;
 
-    const messages = await db.Message.findAll({
+    const receiver = await db.User.findByPk(receiverId);
+    if (!receiver) {
+      return res.status(404).json({ success: false, message: "User not found." });
+    }
+
+    if ((userRole === 3 || userRole === 4) && ![1, 2].includes(receiver.role_id)) {
+      return res.status(403).json({ success: false, message: "You are not authorized to view messages with this user role." });
+    }
+
+    // Find the conversation
+    const conversation = await db.Conversation.findOne({
       where: {
         [Op.or]: [
-          { senderId, receiverId },
-          { senderId: receiverId, receiverId: senderId },
+          { participantOneId: senderId, participantTwoId: receiverId },
+          { participantOneId: receiverId, participantTwoId: senderId }
         ],
-      },
+        ...(caseId && { caseId })
+      }
+    });
+
+    if (!conversation) {
+      return res.status(200).json({ success: true, count: 0, data: [] });
+    }
+
+    const messages = await db.Message.findAll({
+      where: { conversationId: conversation.id },
       order: [["createdAt", "ASC"]],
       include: [
-        { model: db.User, as: "sender", attributes: ["id", "first_name", "last_name", "role_id"] },
-        { model: db.User, as: "receiver", attributes: ["id", "first_name", "last_name", "role_id"] }
+        { 
+          model: db.User, 
+          as: "sender", 
+          attributes: ["id", "first_name", "last_name", "role_id"],
+          include: [{ model: db.Role, as: 'role', attributes: ['name'] }]
+        },
+        { 
+          model: db.User, 
+          as: "receiver", 
+          attributes: ["id", "first_name", "last_name", "role_id"],
+          include: [{ model: db.Role, as: 'role', attributes: ['name'] }]
+        }
       ]
     });
 
@@ -28,7 +59,7 @@ export const getMessages = async (req, res) => {
 
 export const sendMessage = async (req, res) => {
   try {
-    const { receiverId, content } = req.body;
+    const { receiverId, content, caseId, messageType = 'text' } = req.body;
     const senderId = req.user.userId;
 
     if (!receiverId || !content) {
@@ -41,26 +72,61 @@ export const sendMessage = async (req, res) => {
     }
 
     const userRole = req.user.role_id;
-    // Security check: Candidate/Business can only send to Admin/Caseworker
     if ((userRole === 3 || userRole === 4) && ![1, 2].includes(receiver.role_id)) {
       return res.status(403).json({ success: false, message: "You are not authorized to message this user role." });
+    }
+
+    // Find or create conversation
+    let conversation = await db.Conversation.findOne({
+      where: {
+        [Op.or]: [
+          { participantOneId: senderId, participantTwoId: receiverId },
+          { participantOneId: receiverId, participantTwoId: senderId }
+        ],
+        ...(caseId && { caseId })
+      }
+    });
+
+    if (!conversation) {
+      conversation = await db.Conversation.create({
+        participantOneId: senderId,
+        participantTwoId: receiverId,
+        caseId: caseId || null,
+        lastMessage: content,
+        lastMessageAt: new Date()
+      });
+    } else {
+      await conversation.update({
+        lastMessage: content,
+        lastMessageAt: new Date()
+      });
     }
 
     const newMessage = await db.Message.create({
       senderId,
       receiverId,
+      conversationId: conversation.id,
       content,
+      messageType
     });
 
-    // Populate sender and receiver info
     const messageInfo = await db.Message.findByPk(newMessage.id, {
       include: [
-        { model: db.User, as: "sender", attributes: ["id", "first_name", "last_name", "role_id"] },
-        { model: db.User, as: "receiver", attributes: ["id", "first_name", "last_name", "role_id"] }
+        { 
+          model: db.User, 
+          as: "sender", 
+          attributes: ["id", "first_name", "last_name", "role_id"],
+          include: [{ model: db.Role, as: 'role', attributes: ['name'] }]
+        },
+        { 
+          model: db.User, 
+          as: "receiver", 
+          attributes: ["id", "first_name", "last_name", "role_id"],
+          include: [{ model: db.Role, as: 'role', attributes: ['name'] }]
+        }
       ]
     });
 
-    // Emit message via WebSockets to both ends to keep history synced across instances
     if (req.app.get('io')) {
       const io = req.app.get('io');
       io.to(receiverId.toString()).emit("newMessage", messageInfo);
@@ -70,6 +136,51 @@ export const sendMessage = async (req, res) => {
     res.status(201).json({ success: true, data: messageInfo });
   } catch (error) {
     res.status(500).json({ success: false, message: "Error sending message", error: error.message });
+  }
+};
+
+export const getRecentConversations = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    const conversations = await db.Conversation.findAll({
+      where: {
+        [Op.or]: [{ participantOneId: userId }, { participantTwoId: userId }]
+      },
+      order: [['lastMessageAt', 'DESC']],
+      include: [
+        { 
+          model: db.User, 
+          as: "participantOne", 
+          attributes: ["id", "first_name", "last_name", "role_id"],
+          include: [{ model: db.Role, as: 'role', attributes: ['name'] }]
+        },
+        { 
+          model: db.User, 
+          as: "participantTwo", 
+          attributes: ["id", "first_name", "last_name", "role_id"],
+          include: [{ model: db.Role, as: 'role', attributes: ['name'] }]
+        },
+        { model: db.Case, as: "case", attributes: ["id", "caseId"] }
+      ]
+    });
+
+    const formattedConversations = conversations.map(conv => {
+      const otherUser = conv.participantOneId === userId ? conv.participantTwo : conv.participantOne;
+      return {
+        id: conv.id,
+        user: otherUser,
+        case: conv.case,
+        lastMessage: {
+          content: conv.lastMessage,
+          createdAt: conv.lastMessageAt
+        }
+      };
+    });
+
+    res.status(200).json({ success: true, count: formattedConversations.length, data: formattedConversations });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Error retrieving conversations", error: error.message });
   }
 };
 
@@ -89,7 +200,10 @@ export const getChatUsers = async (req, res) => {
 
     const chatUsers = await db.User.findAll({
       where: whereClause,
-      attributes: ['id', 'first_name', 'last_name', 'email', 'role_id']
+      attributes: ['id', 'first_name', 'last_name', 'email', 'role_id'],
+      include: [
+        { model: db.Role, as: 'role', attributes: ['name'] }
+      ]
     });
 
     res.status(200).json({ success: true, count: chatUsers.length, data: chatUsers });
@@ -113,3 +227,4 @@ export const markAsRead = async (req, res) => {
     res.status(500).json({ success: false, message: "Error updating message status", error: error.message });
   }
 };
+

@@ -15,11 +15,7 @@ export const verifyToken = (req, res, next) => {
       }
     }
 
-    // Fallback: HttpOnly cookie
-    if (!token && req.cookies?.token) {
-      token = req.cookies.token;
-      tokenSource = 'cookie';
-    }
+
 
     if (!token) {
       return res.status(401).json({

@@ -45,7 +45,10 @@ import ApplicationCustomFieldModel from './applicationCustomField.model.js';
 
 import MessageModel from './message.model.js';
 
+import ConversationModel from './conversation.model.js';
+
 const env = process.env.NODE_ENV || 'development';
+
 
 const dbConfig = config[env];
 
@@ -99,10 +102,19 @@ db.Task = TaskModel(sequelize, Sequelize.DataTypes);
 db.ApplicationFieldSetting = ApplicationFieldSettingModel(sequelize, Sequelize.DataTypes);
 db.ApplicationCustomField = ApplicationCustomFieldModel(sequelize, Sequelize.DataTypes);
 db.Message = MessageModel(sequelize, Sequelize.DataTypes);
+db.Conversation = ConversationModel(sequelize, Sequelize.DataTypes);
 
 // Associations
 
+db.Conversation.belongsTo(db.User, { foreignKey: "participantOneId", as: "participantOne" });
+db.Conversation.belongsTo(db.User, { foreignKey: "participantTwoId", as: "participantTwo" });
+db.Conversation.belongsTo(db.Case, { foreignKey: "caseId", as: "case" });
+db.Conversation.hasMany(db.Message, { foreignKey: "conversationId", as: "messages" });
+
+db.Message.belongsTo(db.Conversation, { foreignKey: "conversationId", as: "conversation" });
+
 db.Role.hasMany(db.User, { foreignKey: 'role_id', as: 'role' });
+
 
 db.User.belongsTo(db.Role, { foreignKey: 'role_id', as: 'role' });
 
