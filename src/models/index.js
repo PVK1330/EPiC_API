@@ -99,10 +99,9 @@ db.ApplicationCustomField = ApplicationCustomFieldModel(sequelize, Sequelize.Dat
 
 // Associations
 
-db.Role.hasMany(db.User, { foreignKey: 'role_id' });
+db.Role.hasMany(db.User, { foreignKey: 'role_id', as: 'role' });
 
-db.User.belongsTo(db.Role, { foreignKey: 'role_id' });
-
+db.User.belongsTo(db.Role, { foreignKey: 'role_id', as: 'role' });
 
 
 db.Role.hasMany(db.UnverifiedUser, { foreignKey: 'role_id' });
