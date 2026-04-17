@@ -14,6 +14,21 @@
       "key": "token",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "adminToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "caseworkerToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "candidateToken",
+      "value": "",
+      "type": "string"
     }
   ],
   "item": [
@@ -28,7 +43,11 @@
             "body": {
               "mode": "raw",
               "raw": "{\n  \"first_name\": \"John\",\n  \"last_name\": \"Doe\",\n  \"email\": \"test@example.com\",\n  \"password\": \"password123\",\n  \"country_code\": \"+1\",\n  \"mobile\": \"1234567890\",\n  \"role_id\": 3\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -40,7 +59,11 @@
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"test@example.com\",\n  \"otp\": \"123456\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -52,7 +75,11 @@
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"test@example.com\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -64,7 +91,11 @@
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"password123\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -79,7 +110,12 @@
           "name": "2FA Setup",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/auth/2fa/setup"
           }
         },
@@ -87,12 +123,21 @@
           "name": "2FA Verify Setup",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/auth/2fa/verify-setup",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"token\": \"123456\",\n  \"backupCodes\": [\"CODE1\", \"CODE2\", \"CODE3\"]\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -104,7 +149,11 @@
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"password123\",\n  \"token\": \"123456\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -112,12 +161,21 @@
           "name": "2FA Disable",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/auth/2fa/disable",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"password\": \"password123\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -129,7 +187,11 @@
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"test@example.com\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -141,7 +203,11 @@
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"test@example.com\",\n  \"otp\": \"123456\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -153,7 +219,11 @@
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"newpassword123\",\n  \"confirmPassword\": \"newpassword123\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -165,7 +235,11 @@
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"test@example.com\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -177,7 +251,11 @@
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"test@example.com\",\n  \"otp\": \"123456\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         }
@@ -190,7 +268,12 @@
           "name": "Get Profile",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/user/profile"
           }
         },
@@ -198,12 +281,21 @@
           "name": "Edit Profile",
           "request": {
             "method": "PUT",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/user/profile",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"first_name\": \"John\",\n  \"last_name\": \"Doe\",\n  \"country_code\": \"+1\",\n  \"mobile\": \"0987654321\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         }
@@ -216,12 +308,21 @@
           "name": "Create Admin",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/admin/",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"first_name\": \"Admin\",\n  \"last_name\": \"User\",\n  \"email\": \"admin@epic.com\",\n  \"country_code\": \"+1\",\n  \"mobile\": \"1112223333\",\n  \"role_id\": 1,\n  \"password\": \"adminpass123\",\n  \"confirm_password\": \"adminpass123\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -229,16 +330,38 @@
           "name": "Get All Admins",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/api/admin?page=1&limit=10&search=&status=",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "admin"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin"
+              ],
               "query": [
-                { "key": "page", "value": "1" },
-                { "key": "limit", "value": "10" },
-                { "key": "search", "value": "" },
-                { "key": "status", "value": "" }
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "search",
+                  "value": ""
+                },
+                {
+                  "key": "status",
+                  "value": ""
+                }
               ]
             }
           }
@@ -247,7 +370,12 @@
           "name": "Get Admin By ID",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/admin/1"
           }
         },
@@ -255,12 +383,21 @@
           "name": "Update Admin",
           "request": {
             "method": "PUT",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/admin/1",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"first_name\": \"Admin\",\n  \"last_name\": \"Updated\",\n  \"email\": \"admin@epic.com\",\n  \"country_code\": \"+1\",\n  \"mobile\": \"1112223333\",\n  \"role_id\": 1,\n  \"status\": \"active\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -268,7 +405,12 @@
           "name": "Toggle Admin Status",
           "request": {
             "method": "PATCH",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/admin/toggle-status/1"
           }
         },
@@ -276,12 +418,21 @@
           "name": "Reset Admin Password",
           "request": {
             "method": "PATCH",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/admin/reset-password/1",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"new_password\": \"newadminpass123\",\n  \"confirm_password\": \"newadminpass123\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -289,7 +440,12 @@
           "name": "Delete Admin",
           "request": {
             "method": "DELETE",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/admin/1"
           }
         }
@@ -302,12 +458,21 @@
           "name": "Create Caseworker",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/caseworker/",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"first_name\": \"Case\",\n  \"last_name\": \"Worker\",\n  \"email\": \"caseworker@epic.com\",\n  \"country_code\": \"+1\",\n  \"mobile\": \"2223334444\",\n  \"role_id\": 2,\n  \"password\": \"cwpass123\",\n  \"confirm_password\": \"cwpass123\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -315,14 +480,30 @@
           "name": "Get All Caseworkers",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/api/caseworker?page=1&limit=10",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "caseworker"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "caseworker"
+              ],
               "query": [
-                { "key": "page", "value": "1" },
-                { "key": "limit", "value": "10" }
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
               ]
             }
           }
@@ -331,7 +512,12 @@
           "name": "Get Caseworker By ID",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/caseworker/1"
           }
         },
@@ -339,12 +525,21 @@
           "name": "Update Caseworker",
           "request": {
             "method": "PUT",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/caseworker/1",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"first_name\": \"Case\",\n  \"last_name\": \"Worker Update\",\n  \"email\": \"caseworker@epic.com\",\n  \"country_code\": \"+1\",\n  \"mobile\": \"2223334444\",\n  \"role_id\": 2,\n  \"status\": \"active\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -352,7 +547,12 @@
           "name": "Toggle Caseworker Status",
           "request": {
             "method": "PATCH",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/caseworker/1/toggle-status"
           }
         },
@@ -360,12 +560,21 @@
           "name": "Reset Caseworker Password",
           "request": {
             "method": "PATCH",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/caseworker/1/reset-password",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"new_password\": \"newcwpass123\",\n  \"confirm_password\": \"newcwpass123\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -373,7 +582,12 @@
           "name": "Delete Caseworker",
           "request": {
             "method": "DELETE",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/caseworker/1"
           }
         }
@@ -386,12 +600,21 @@
           "name": "Create Sponsor",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/sponsors/",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"first_name\": \"Sponsor\",\n  \"last_name\": \"Person\",\n  \"email\": \"sponsor@epic.com\",\n  \"country_code\": \"+1\",\n  \"mobile\": \"3334445555\",\n  \"role_id\": 4,\n  \"password\": \"sponsorpass123\",\n  \"confirm_password\": \"sponsorpass123\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -399,11 +622,21 @@
           "name": "Get All Sponsors",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/api/sponsors?page=1&limit=10",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "sponsors"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sponsors"
+              ]
             }
           }
         },
@@ -411,7 +644,12 @@
           "name": "Get Sponsor By ID",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/sponsors/1"
           }
         },
@@ -419,12 +657,21 @@
           "name": "Update Sponsor",
           "request": {
             "method": "PUT",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/sponsors/1",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"first_name\": \"Sponsor Updated\",\n  \"last_name\": \"Person\",\n  \"email\": \"sponsor@epic.com\",\n  \"country_code\": \"+1\",\n  \"mobile\": \"3334445555\",\n  \"role_id\": 4,\n  \"status\": \"active\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -432,7 +679,12 @@
           "name": "Toggle Sponsor Status",
           "request": {
             "method": "PATCH",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/sponsors/1/toggle-status"
           }
         },
@@ -440,12 +692,21 @@
           "name": "Reset Sponsor Password",
           "request": {
             "method": "PATCH",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/sponsors/1/reset-password",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"new_password\": \"newsponsorpass123\",\n  \"confirm_password\": \"newsponsorpass123\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -453,7 +714,12 @@
           "name": "Delete Sponsor",
           "request": {
             "method": "DELETE",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/sponsors/1"
           }
         }
@@ -466,12 +732,21 @@
           "name": "Create Candidate",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/candidate/",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"first_name\": \"Candidate\",\n  \"last_name\": \"User\",\n  \"email\": \"candidate1@epic.com\",\n  \"country_code\": \"+1\",\n  \"mobile\": \"4445556666\",\n  \"role_id\": 3,\n  \"password\": \"candidatepass123\",\n  \"confirm_password\": \"candidatepass123\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -479,11 +754,21 @@
           "name": "Get All Candidates",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/api/candidate?page=1&limit=10",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "candidate"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "candidate"
+              ]
             }
           }
         },
@@ -491,7 +776,12 @@
           "name": "Get Candidate By ID",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/candidate/1"
           }
         },
@@ -499,12 +789,21 @@
           "name": "Update Candidate",
           "request": {
             "method": "PUT",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/candidate/1",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"first_name\": \"Candidate Updated\",\n  \"last_name\": \"User\",\n  \"email\": \"candidate1@epic.com\",\n  \"country_code\": \"+1\",\n  \"mobile\": \"4445556666\",\n  \"role_id\": 3,\n  \"status\": \"active\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -512,7 +811,12 @@
           "name": "Toggle Candidate Status",
           "request": {
             "method": "PATCH",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/candidate/1/toggle-status"
           }
         },
@@ -520,12 +824,21 @@
           "name": "Reset Candidate Password",
           "request": {
             "method": "PATCH",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/candidate/1/reset-password",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"new_password\": \"newcandidatepass123\",\n  \"confirm_password\": \"newcandidatepass123\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -533,7 +846,12 @@
           "name": "Delete Candidate",
           "request": {
             "method": "DELETE",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/candidate/1"
           }
         }
@@ -546,7 +864,12 @@
           "name": "Get Pipeline Cases",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/cases/pipeline"
           }
         },
@@ -554,7 +877,12 @@
           "name": "Get Team Capacity",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/cases/capacity"
           }
         },
@@ -562,12 +890,21 @@
           "name": "Assign Case",
           "request": {
             "method": "PATCH",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/cases/1/assign",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"assignTo\": \"CW-102\",\n  \"assignToName\": \"Marcus Green\",\n  \"reason\": \"Capacity reassignment\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -575,12 +912,21 @@
           "name": "Update Pipeline Stage",
           "request": {
             "method": "PATCH",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/cases/1/stage",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"status\": \"Docs Pending\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -588,12 +934,21 @@
           "name": "Create Case",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/cases/",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"candidate\": \"John Doe\",\n  \"candidateId\": \"CAND-001\",\n  \"business\": \"Tech Solutions Pvt Ltd\",\n  \"businessId\": \"BUS-001\",\n  \"visaType\": \"H1B\",\n  \"petitionType\": \"Initial\",\n  \"priority\": \"high\",\n  \"targetSubmissionDate\": \"2026-05-01\",\n  \"lcaNumber\": \"LCA123456\",\n  \"receiptNumber\": \"RCPT789456\",\n  \"nationality\": \"Indian\",\n  \"jobTitle\": \"Software Engineer\",\n  \"department\": \"IT\",\n  \"caseworker\": \"Alice Smith\",\n  \"caseworkerId\": \"EMP-001\",\n  \"salaryOffered\": 85000.00,\n  \"totalAmount\": 5000.00,\n  \"paidAmount\": 2000.00,\n  \"notes\": \"Urgent processing required\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -601,18 +956,46 @@
           "name": "Get All Cases",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/api/cases?page=1&limit=10&search=&status=&priority=&visaType=",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "cases"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "cases"
+              ],
               "query": [
-                { "key": "page", "value": "1" },
-                { "key": "limit", "value": "10" },
-                { "key": "search", "value": "" },
-                { "key": "status", "value": "" },
-                { "key": "priority", "value": "" },
-                { "key": "visaType", "value": "" }
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "search",
+                  "value": ""
+                },
+                {
+                  "key": "status",
+                  "value": ""
+                },
+                {
+                  "key": "priority",
+                  "value": ""
+                },
+                {
+                  "key": "visaType",
+                  "value": ""
+                }
               ]
             }
           }
@@ -621,7 +1004,12 @@
           "name": "Get Case By ID",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/cases/1"
           }
         },
@@ -629,12 +1017,21 @@
           "name": "Update Case",
           "request": {
             "method": "PUT",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/cases/1",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"status\": \"Approved\",\n  \"notes\": \"Case was approved successfully\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -642,7 +1039,12 @@
           "name": "Delete Case",
           "request": {
             "method": "DELETE",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/cases/1"
           }
         }
@@ -655,12 +1057,21 @@
           "name": "Create Escalation",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/escalations",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"caseId\": \"VF-2835\",\n  \"candidate\": \"Li Wei\",\n  \"severity\": \"Critical\",\n  \"trigger\": \"Deadline breach — ILR expired\",\n  \"triggerType\": \"Deadline Breach\",\n  \"assignedAdminId\": 1,\n  \"relatedCaseId\": 1,\n  \"notes\": \"Urgent action required\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -668,16 +1079,38 @@
           "name": "Get All Escalations",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/api/escalations?severity=All&status=All&triggerType=All&assignedAdminId=",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "escalations"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "escalations"
+              ],
               "query": [
-                { "key": "severity", "value": "All" },
-                { "key": "status", "value": "All" },
-                { "key": "triggerType", "value": "All" },
-                { "key": "assignedAdminId", "value": "" }
+                {
+                  "key": "severity",
+                  "value": "All"
+                },
+                {
+                  "key": "status",
+                  "value": "All"
+                },
+                {
+                  "key": "triggerType",
+                  "value": "All"
+                },
+                {
+                  "key": "assignedAdminId",
+                  "value": ""
+                }
               ]
             }
           }
@@ -686,7 +1119,12 @@
           "name": "Get Escalation KPI",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/escalations/kpi"
           }
         },
@@ -694,7 +1132,12 @@
           "name": "Get Escalation By ID",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/escalations/1"
           }
         },
@@ -702,12 +1145,21 @@
           "name": "Update Escalation",
           "request": {
             "method": "PUT",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/escalations/1",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"severity\": \"High\",\n  \"trigger\": \"Updated trigger reason\",\n  \"triggerType\": \"Missing Docs\",\n  \"assignedAdminId\": 2,\n  \"status\": \"In Progress\",\n  \"notes\": \"Updated notes\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -715,12 +1167,21 @@
           "name": "Assign Escalation",
           "request": {
             "method": "PATCH",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/escalations/1/assign",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"assignedAdminId\": 3\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -728,7 +1189,12 @@
           "name": "Delete Escalation",
           "request": {
             "method": "DELETE",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/escalations/1"
           }
         }
@@ -741,12 +1207,21 @@
           "name": "Create Payment Intent",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/stripe/create-payment-intent",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"amount\": 500,\n  \"currency\": \"usd\",\n  \"payment_method_id\": \"pm_card_visa\",\n  \"metadata\": { \"order_id\": \"12345\" }\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -754,12 +1229,21 @@
           "name": "Confirm Payment",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/stripe/confirm-payment",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"payment_intent_id\": \"pi_3xxx\",\n  \"payment_method_id\": \"pm_card_visa\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -767,7 +1251,12 @@
           "name": "Get Payment Status",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/stripe/payment-status/pi_3xxx"
           }
         },
@@ -775,12 +1264,21 @@
           "name": "Cancel Payment",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/stripe/cancel-payment",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"payment_intent_id\": \"pi_3xxx\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -788,12 +1286,21 @@
           "name": "Create Setup Intent",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/stripe/create-setup-intent",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"customer_id\": \"cus_xxx\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -801,12 +1308,21 @@
           "name": "Refund",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/stripe/refund",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"payment_intent_id\": \"pi_3xxx\",\n  \"amount\": 500,\n  \"reason\": \"requested_by_customer\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -814,12 +1330,21 @@
           "name": "Create Subscription",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/stripe/create-subscription",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"customer_id\": \"cus_xxx\",\n  \"price_id\": \"price_xxx\",\n  \"payment_method_id\": \"pm_xxx\",\n  \"metadata\": { \"plan\": \"gold\" }\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -827,12 +1352,21 @@
           "name": "Renew Subscription",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/stripe/renew-subscription",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"subscription_id\": \"sub_xxx\",\n  \"payment_method_id\": \"pm_xxx\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -840,12 +1374,21 @@
           "name": "Cancel Subscription",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/stripe/cancel-subscription",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"subscription_id\": \"sub_xxx\",\n  \"cancel_at_period_end\": true\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -853,7 +1396,12 @@
           "name": "Get Subscription Status",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/stripe/subscription-status/sub_xxx"
           }
         },
@@ -861,12 +1409,21 @@
           "name": "Update Subscription",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/stripe/update-subscription",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"subscription_id\": \"sub_xxx\",\n  \"price_id\": \"price_new_xxx\",\n  \"quantity\": 1,\n  \"metadata\": { \"plan\": \"platinum\" }\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -886,7 +1443,12 @@
           "name": "Get All Permissions",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/permissions/"
           }
         },
@@ -894,7 +1456,12 @@
           "name": "Get Permission by ID",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/permissions/1"
           }
         },
@@ -902,12 +1469,21 @@
           "name": "Create Permission",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/permissions/",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"name\": \"admin.custom.feature\",\n  \"description\": \"Access custom feature\",\n  \"module\": \"custom\",\n  \"action\": \"view\",\n  \"resource\": \"custom\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -915,12 +1491,21 @@
           "name": "Update Permission",
           "request": {
             "method": "PUT",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/permissions/1",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"description\": \"Updated description\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -928,7 +1513,12 @@
           "name": "Delete Permission",
           "request": {
             "method": "DELETE",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/permissions/1"
           }
         },
@@ -936,12 +1526,29 @@
           "name": "Check User Permission",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/api/permissions/check/permission?permission=admin.dashboard.view",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "permissions", "check", "permission"],
-              "query": [{ "key": "permission", "value": "admin.dashboard.view" }]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "permissions",
+                "check",
+                "permission"
+              ],
+              "query": [
+                {
+                  "key": "permission",
+                  "value": "admin.dashboard.view"
+                }
+              ]
             }
           }
         }
@@ -954,7 +1561,12 @@
           "name": "Get All Roles",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/roles/"
           }
         },
@@ -962,7 +1574,12 @@
           "name": "Get Role by ID",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/roles/1"
           }
         },
@@ -970,7 +1587,12 @@
           "name": "Get Role with Permissions",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/roles/1/with-permissions"
           }
         },
@@ -978,12 +1600,21 @@
           "name": "Create Role",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/roles/",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"name\": \"Business Manager\",\n  \"description\": \"Manager for business operations\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -991,12 +1622,21 @@
           "name": "Update Role",
           "request": {
             "method": "PUT",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/roles/5",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"name\": \"Business Admin\",\n  \"description\": \"Full business admin access\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -1004,7 +1644,12 @@
           "name": "Delete Role",
           "request": {
             "method": "DELETE",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/roles/5"
           }
         },
@@ -1012,12 +1657,21 @@
           "name": "Assign Permissions to Role",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/roles/5/permissions",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"permissionIds\": [1, 2, 3, 5, 8, 10, 15, 16]\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -1025,7 +1679,12 @@
           "name": "Get Role Permissions",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/roles/5/permissions"
           }
         },
@@ -1033,7 +1692,12 @@
           "name": "Remove Permission from Role",
           "request": {
             "method": "DELETE",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/roles/5/permissions/10"
           }
         },
@@ -1041,12 +1705,21 @@
           "name": "Clone Permissions Between Roles",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/roles/clone-permissions",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"sourceRoleId\": 1,\n  \"targetRoleId\": 5\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         }
@@ -1059,7 +1732,12 @@
           "name": "RBAC Overview",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/rbac/overview"
           }
         },
@@ -1067,7 +1745,12 @@
           "name": "RBAC Matrix",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/rbac/matrix"
           }
         },
@@ -1075,7 +1758,12 @@
           "name": "Users with Roles and Permissions",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/rbac/users"
           }
         },
@@ -1083,7 +1771,12 @@
           "name": "Permission Audit",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/rbac/audit/1"
           }
         },
@@ -1091,7 +1784,12 @@
           "name": "Orphan Permissions",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/rbac/orphan-permissions"
           }
         },
@@ -1099,7 +1797,12 @@
           "name": "Roles Without Permissions",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/rbac/roles-without-permissions"
           }
         },
@@ -1165,7 +1868,9 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/documents/upload",
-              "host": ["{{baseUrl}}"]
+              "host": [
+                "{{baseUrl}}"
+              ]
             }
           },
           "response": []
@@ -1182,14 +1887,16 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/api/documents/category/:category/user/:userId",
-              "host": ["{{baseUrl}}"],
+              "host": [
+                "{{baseUrl}}"
+              ],
               "path": [
                 {
                   "key": "category",
                   "value": "candidate"
                 },
                 {
-                  "key": "userId", 
+                  "key": "userId",
                   "value": "1"
                 }
               ]
@@ -1209,7 +1916,9 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/api/documents/case/:caseId",
-              "host": ["{{baseUrl}}"],
+              "host": [
+                "{{baseUrl}}"
+              ],
               "path": [
                 {
                   "key": "caseId",
@@ -1232,7 +1941,9 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/api/documents/:documentId",
-              "host": ["{{baseUrl}}"],
+              "host": [
+                "{{baseUrl}}"
+              ],
               "path": [
                 {
                   "key": "documentId",
@@ -1268,7 +1979,9 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/documents/:documentId",
-              "host": ["{{baseUrl}}"],
+              "host": [
+                "{{baseUrl}}"
+              ],
               "path": [
                 {
                   "key": "documentId",
@@ -1304,7 +2017,9 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/documents/:documentId/status",
-              "host": ["{{baseUrl}}"],
+              "host": [
+                "{{baseUrl}}"
+              ],
               "path": [
                 {
                   "key": "documentId",
@@ -1327,7 +2042,9 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/api/documents/download/:documentId",
-              "host": ["{{baseUrl}}"],
+              "host": [
+                "{{baseUrl}}"
+              ],
               "path": [
                 {
                   "key": "documentId",
@@ -1350,7 +2067,9 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/api/documents/:documentId",
-              "host": ["{{baseUrl}}"],
+              "host": [
+                "{{baseUrl}}"
+              ],
               "path": [
                 {
                   "key": "documentId",
@@ -1365,12 +2084,21 @@
           "name": "Bulk Assign Permissions",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/rbac/bulk-assign",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"roleIds\": [2, 3],\n  \"permissionIds\": [1, 2, 3, 5, 8]\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         }
@@ -1383,7 +2111,12 @@
           "name": "Get Field Settings",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/application-fields/settings"
           }
         },
@@ -1391,12 +2124,21 @@
           "name": "Batch Update Field Visibility",
           "request": {
             "method": "PATCH",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/application-fields/settings/visibility",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"visibility\": {\n    \"firstName\": true,\n    \"lastName\": true,\n    \"email\": true\n  }\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -1404,12 +2146,21 @@
           "name": "Update Single Field Visibility",
           "request": {
             "method": "PATCH",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/application-fields/settings/firstName/visibility",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"field_key\": \"firstName\",\n  \"is_visible\": false\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -1417,7 +2168,12 @@
           "name": "Get Custom Fields",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/application-fields/custom-fields"
           }
         },
@@ -1425,12 +2181,21 @@
           "name": "Create Custom Field",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/application-fields/custom-fields",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"field_id\": \"custom_employer_name\",\n  \"label\": \"Previous UK Employer Name\",\n  \"field_type\": \"text\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -1438,12 +2203,21 @@
           "name": "Update Custom Field",
           "request": {
             "method": "PUT",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/application-fields/custom-fields/1",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"label\": \"Updated Field Label\",\n  \"field_type\": \"textarea\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -1451,7 +2225,12 @@
           "name": "Delete Custom Field",
           "request": {
             "method": "DELETE",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/application-fields/custom-fields/1"
           }
         }
@@ -1464,7 +2243,12 @@
           "name": "Export Admins",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/admin/export"
           }
         },
@@ -1472,7 +2256,12 @@
           "name": "Export Caseworkers",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/caseworker/export"
           }
         },
@@ -1480,7 +2269,12 @@
           "name": "Export Candidates",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/candidate/export"
           }
         },
@@ -1488,7 +2282,12 @@
           "name": "Export Sponsors",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/sponsors/export"
           }
         },
@@ -1496,11 +2295,21 @@
           "name": "Bulk Import Candidates",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/candidate/bulk-import",
             "body": {
               "mode": "formdata",
-              "formdata": [{ "key": "file", "type": "file" }]
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file"
+                }
+              ]
             }
           }
         },
@@ -1508,11 +2317,21 @@
           "name": "Bulk Import Caseworkers",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/caseworker/bulk-import",
             "body": {
               "mode": "formdata",
-              "formdata": [{ "key": "file", "type": "file" }]
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file"
+                }
+              ]
             }
           }
         }
@@ -1525,7 +2344,12 @@
           "name": "Get Caseworker Performance Report",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/caseworker/:id/performance-report"
           }
         },
@@ -1533,14 +2357,253 @@
           "name": "Reassign Case",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": "{{baseUrl}}/api/caseworker/cases/:caseId/reassign",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"newCaseworkerId\": 2\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
+        }
+      ]
+    },
+    {
+      "name": "Messages",
+      "item": [
+        {
+          "name": "Admin Chat",
+          "item": [
+            {
+              "name": "[Admin] Get Chat Users",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/messages/users"
+              }
+            },
+            {
+              "name": "[Admin] Get Messages Thread",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/messages/2"
+              }
+            },
+            {
+              "name": "[Admin] Send Message",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/messages/",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"receiverId\": 2,\n  \"content\": \"Hello from Admin!\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "[Admin] Mark Messages as Read",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/messages/mark-read",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"senderId\": 2\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "Caseworker Chat",
+          "item": [
+            {
+              "name": "[Caseworker] Get Chat Users",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{caseworkerToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/messages/users"
+              }
+            },
+            {
+              "name": "[Caseworker] Get Messages Thread",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{caseworkerToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/messages/2"
+              }
+            },
+            {
+              "name": "[Caseworker] Send Message",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{caseworkerToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/messages/",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"receiverId\": 2,\n  \"content\": \"Hello from Caseworker!\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "[Caseworker] Mark Messages as Read",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{caseworkerToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/messages/mark-read",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"senderId\": 2\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "Candidate Chat",
+          "item": [
+            {
+              "name": "[Candidate] Get Chat Users",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{candidateToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/messages/users"
+              }
+            },
+            {
+              "name": "[Candidate] Get Messages Thread",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{candidateToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/messages/2"
+              }
+            },
+            {
+              "name": "[Candidate] Send Message",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{candidateToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/messages/",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"receiverId\": 2,\n  \"content\": \"Hello from Candidate!\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "[Candidate] Mark Messages as Read",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{candidateToken}}"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/messages/mark-read",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"senderId\": 2\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            }
+          ]
         }
       ]
     }

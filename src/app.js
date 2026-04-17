@@ -18,6 +18,7 @@ import rbacRoutes from './routes/rbac.routes.js';
 import roleRoutes from './routes/role.routes.js';
 import { taskRoutes, documentRoutes } from './routes/index.js';
 import applicationFieldsRoutes from './routes/applicationFields.routes.js';
+import messageRoutes from './routes/message.routes.js';
 
 const app = express();
 
@@ -47,5 +48,6 @@ app.use('/api/roles', roleRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/documents', documentRoutes);
 app.use('/api/application-fields', applicationFieldsRoutes);
+app.use('/api/messages', messageRoutes);
 
 export default app;

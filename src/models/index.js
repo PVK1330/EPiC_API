@@ -43,6 +43,8 @@ import ApplicationFieldSettingModel from './applicationFieldSetting.model.js';
 
 import ApplicationCustomFieldModel from './applicationCustomField.model.js';
 
+import MessageModel from './message.model.js';
+
 const env = process.env.NODE_ENV || 'development';
 
 const dbConfig = config[env];
@@ -96,6 +98,7 @@ db.Task = TaskModel(sequelize, Sequelize.DataTypes);
 
 db.ApplicationFieldSetting = ApplicationFieldSettingModel(sequelize, Sequelize.DataTypes);
 db.ApplicationCustomField = ApplicationCustomFieldModel(sequelize, Sequelize.DataTypes);
+db.Message = MessageModel(sequelize, Sequelize.DataTypes);
 
 // Associations
 
@@ -144,6 +147,11 @@ db.Document.belongsTo(db.Case, { foreignKey: 'caseId', as: 'case' });
 db.User.hasMany(db.Document, { foreignKey: 'userId', as: 'documents' });
 db.User.hasMany(db.Document, { foreignKey: 'uploadedBy', as: 'uploadedDocuments' });
 db.User.hasMany(db.Document, { foreignKey: 'reviewedBy', as: 'reviewedDocuments' });
+
+db.Message.belongsTo(db.User, { foreignKey: 'senderId', as: 'sender' });
+db.Message.belongsTo(db.User, { foreignKey: 'receiverId', as: 'receiver' });
+db.User.hasMany(db.Message, { foreignKey: 'senderId', as: 'sentMessages' });
+db.User.hasMany(db.Message, { foreignKey: 'receiverId', as: 'receivedMessages' });
 
 db.CasePayment.belongsTo(db.Case, { foreignKey: 'caseId' });
 db.CasePayment.belongsTo(db.User, { foreignKey: 'receivedBy', as: 'receiver' });
