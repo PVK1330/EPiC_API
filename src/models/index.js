@@ -102,10 +102,9 @@ db.Message = MessageModel(sequelize, Sequelize.DataTypes);
 
 // Associations
 
-db.Role.hasMany(db.User, { foreignKey: 'role_id' });
+db.Role.hasMany(db.User, { foreignKey: 'role_id', as: 'role' });
 
-db.User.belongsTo(db.Role, { foreignKey: 'role_id' });
-
+db.User.belongsTo(db.Role, { foreignKey: 'role_id', as: 'role' });
 
 
 db.Role.hasMany(db.UnverifiedUser, { foreignKey: 'role_id' });
@@ -163,7 +162,7 @@ db.CaseCommunication.belongsTo(db.Case, { foreignKey: 'caseId' });
 db.CaseCommunication.belongsTo(db.User, { foreignKey: 'senderId', as: 'sender' });
 db.CaseCommunication.belongsTo(db.User, { foreignKey: 'recipientId', as: 'recipient' });
 
-db.CaseNote.belongsTo(db.Case, { foreignKey: 'caseId' });
+db.CaseNote.belongsTo(db.Case, { foreignKey: 'caseId', as: 'case' });
 db.CaseNote.belongsTo(db.User, { foreignKey: 'authorId', as: 'author' });
 db.CaseNote.belongsTo(db.CaseNote, { foreignKey: 'parentNoteId', as: 'parentNote' });
 

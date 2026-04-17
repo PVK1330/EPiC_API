@@ -53,7 +53,7 @@ router.delete('/:documentId',
   deleteDocument
 );
 
-router.patch('/:documentId/status', 
+router.patch('/status/:documentId', 
   verifyToken, 
   checkPermission('document_review'), 
   updateDocumentStatus

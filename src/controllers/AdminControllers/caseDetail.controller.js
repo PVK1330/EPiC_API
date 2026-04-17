@@ -8,6 +8,8 @@ const CaseTimeline = db.CaseTimeline;
 const CaseCommunication = db.CaseCommunication;
 const CaseNote = db.CaseNote;
 const User = db.User;
+const VisaType = db.VisaType;
+const PetitionType = db.PetitionType;
 
 // Get comprehensive case details for single case page
 export const getCaseDetails = async (req, res) => {
@@ -29,23 +31,23 @@ export const getCaseDetails = async (req, res) => {
         {
           model: User,
           as: 'candidate',
-          attributes: ['id', 'first_name', 'last_name', 'email', 'phone', 'nationality']
+          attributes: ['id', 'first_name', 'last_name', 'email', 'mobile']
         },
         {
           model: User,
           as: 'sponsor',
-          attributes: ['id', 'first_name', 'last_name', 'email', 'phone', 'company_name']
+          attributes: ['id', 'first_name', 'last_name', 'email', 'mobile']
         },
         {
           model: db.VisaType,
           as: 'visaType',
           attributes: ['id', 'name']
         },
-        // {
-        //   model: db.PetitionType,
-        //   as: 'petitionType',
-        //   attributes: ['id', 'name']
-        // },
+        {
+          model: db.PetitionType,
+          as: 'petitionType',
+          attributes: ['id', 'name']
+        },
         {
           model: Document,
           as: 'documents',
@@ -224,7 +226,6 @@ export const getCaseDetails = async (req, res) => {
         additional: {
           lcaNumber: caseData.lcaNumber,
           receiptNumber: caseData.receiptNumber,
-          nationality: caseData.nationality,
           jobTitle: caseData.jobTitle,
           department: caseData.department,
           notes: caseData.notes

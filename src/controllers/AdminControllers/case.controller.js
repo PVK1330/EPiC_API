@@ -73,6 +73,26 @@ export const createCase = async (req, res) => {
       });
     }
 
+    // Check if candidate exists
+    const candidate = await db.User.findByPk(candidateId);
+    if (!candidate) {
+      return res.status(404).json({
+        status: "error",
+        message: "Candidate not found",
+        data: null,
+      });
+    }
+
+    // Check if sponsor exists
+    const sponsor = await db.User.findByPk(sponsorId);
+    if (!sponsor) {
+      return res.status(404).json({
+        status: "error",
+        message: "Sponsor not found",
+        data: null,
+      });
+    }
+
     const caseId = await generateCaseId();
 
     const newCase = await Case.create({
@@ -199,7 +219,7 @@ export const getCasesWithFilters = async (req, res) => {
   }
 };
 
-// Get All Cases
+// Get All Cases with Statistics
 export const getAllCases = async (req, res) => {
   try {
     const { page = 1, limit = 10, search, status, priority, visaType } = req.query;
@@ -241,18 +261,30 @@ export const getAllCases = async (req, res) => {
           attributes: ['id', 'name']
         },
         {
-          model: db.VisaType,
+          model: db.PetitionType,
           as: 'petitionType',
           attributes: ['id', 'name']
         }
       ]
     });
 
+    // Get case statistics
+    const totalCount = await Case.count();
+    const pendingCount = await Case.count({ where: { status: 'Pending' } });
+    const approvedCount = await Case.count({ where: { status: 'Completed' } });
+    const rejectedCount = await Case.count({ where: { status: 'Cancelled' } });
+
     res.status(200).json({
       status: "success",
       message: "Cases retrieved successfully",
       data: {
         cases,
+        statistics: {
+          total: totalCount,
+          pending: pendingCount,
+          approved: approvedCount,
+          rejected: rejectedCount,
+        },
         pagination: {
           total: count,
           page: parseInt(page),
@@ -271,6 +303,7 @@ export const getAllCases = async (req, res) => {
     });
   }
 };
+
 
 // Get Case By ID
 export const getCaseById = async (req, res) => {

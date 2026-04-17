@@ -126,3 +126,65 @@ export const editProfile = async (req, res) => {
     });
   }
 };
+
+
+// Get all users grouped by roles
+export const getAllUsers = async (req, res) => {
+  try {
+    // Get all users with their roles
+    const users = await User.findAll({
+      attributes: { 
+        exclude: ['password', 'otp_code', 'otp_expiry', 'password_reset_otp', 'password_reset_otp_expiry', 'temp_password'] 
+      },
+      include: [
+        {
+          model: db.Role,
+          as: 'role',
+          attributes: ['id', 'name']
+        }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+
+    // Group users by role
+    const usersByRole = {
+      admin: [],
+      candidate: [],
+      sponsor: [],
+      caseworker: []
+    };
+
+    users.forEach(user => {
+      const roleName = user.role?.name?.toLowerCase() || 'unknown';
+      
+      if (roleName === 'admin') {
+        usersByRole.admin.push(user);
+      } else if (roleName === 'candidate') {
+        usersByRole.candidate.push(user);
+      } else if (roleName === 'sponsor') {
+        usersByRole.sponsor.push(user);
+      } else if (roleName === 'caseworker') {
+        usersByRole.caseworker.push(user);
+      }
+    });
+
+    res.status(200).json({
+      status: "success",
+      message: "Users retrieved successfully",
+      data: {
+        admin: usersByRole.admin,
+        candidate: usersByRole.candidate,
+        sponsor: usersByRole.sponsor,
+        caseworker: usersByRole.caseworker
+      }
+    });
+
+  } catch (err) {
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error",
+      data: null,
+      error: err.message
+    });
+  }
+};
