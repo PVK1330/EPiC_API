@@ -19,10 +19,6 @@ const CaseModel = (sequelize, DataTypes) => {
         key: 'id'
       }
     },
-    businessId: {
-      type: DataTypes.STRING,
-      allowNull: true,
-    },
     sponsorId: {
       type: DataTypes.INTEGER,
       allowNull: true,
@@ -53,8 +49,8 @@ const CaseModel = (sequelize, DataTypes) => {
       defaultValue: "medium",
     },
     status: {
-      type: DataTypes.STRING,
-      defaultValue: "Lead", // Initial Kanban Stage
+      type: DataTypes.ENUM('Lead', 'Pending', 'In Progress', 'Completed', 'On Hold', 'Cancelled'),
+      defaultValue: "Lead",
     },
     submitted: {
       type: DataTypes.DATEONLY,

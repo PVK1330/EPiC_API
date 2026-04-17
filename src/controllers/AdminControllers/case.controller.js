@@ -73,12 +73,31 @@ export const createCase = async (req, res) => {
       });
     }
 
+    // Check if candidate exists
+    const candidate = await db.User.findByPk(candidateId);
+    if (!candidate) {
+      return res.status(404).json({
+        status: "error",
+        message: "Candidate not found",
+        data: null,
+      });
+    }
+
+    // Check if sponsor exists
+    const sponsor = await db.User.findByPk(sponsorId);
+    if (!sponsor) {
+      return res.status(404).json({
+        status: "error",
+        message: "Sponsor not found",
+        data: null,
+      });
+    }
+
     const caseId = await generateCaseId();
 
     const newCase = await Case.create({
       caseId,
       candidateId,
-      businessId,
       sponsorId,
       visaTypeId,
       petitionTypeId,
@@ -135,9 +154,8 @@ export const getCasesWithFilters = async (req, res) => {
     if (search) {
       whereClause[Op.or] = [
         { caseId: { [Op.iLike]: `%${search}%` } },
-        { candidate: { [Op.iLike]: `%${search}%` } },
-        { business: { [Op.iLike]: `%${search}%` } },
-        { caseworker: { [Op.iLike]: `%${search}%` } },
+        { '$candidate.first_name$': { [Op.iLike]: `%${search}%` } },
+        { '$candidate.last_name$': { [Op.iLike]: `%${search}%` } }
       ];
     }
 
@@ -201,7 +219,7 @@ export const getCasesWithFilters = async (req, res) => {
   }
 };
 
-// Get All Cases
+// Get All Cases with Statistics
 export const getAllCases = async (req, res) => {
   try {
     const { page = 1, limit = 10, search, status, priority, visaType } = req.query;
@@ -212,9 +230,8 @@ export const getAllCases = async (req, res) => {
     if (search) {
       whereClause[Op.or] = [
         { caseId: { [Op.iLike]: `%${search}%` } },
-        { candidate: { [Op.iLike]: `%${search}%` } },
-        { business: { [Op.iLike]: `%${search}%` } },
-        { caseworker: { [Op.iLike]: `%${search}%` } },
+        { '$candidate.first_name$': { [Op.iLike]: `%${search}%` } },
+        { '$candidate.last_name$': { [Op.iLike]: `%${search}%` } }
       ];
     }
 
@@ -244,18 +261,30 @@ export const getAllCases = async (req, res) => {
           attributes: ['id', 'name']
         },
         {
-          model: db.VisaType,
+          model: db.PetitionType,
           as: 'petitionType',
           attributes: ['id', 'name']
         }
       ]
     });
 
+    // Get case statistics
+    const totalCount = await Case.count();
+    const pendingCount = await Case.count({ where: { status: 'Pending' } });
+    const approvedCount = await Case.count({ where: { status: 'Completed' } });
+    const rejectedCount = await Case.count({ where: { status: 'Cancelled' } });
+
     res.status(200).json({
       status: "success",
       message: "Cases retrieved successfully",
       data: {
         cases,
+        statistics: {
+          total: totalCount,
+          pending: pendingCount,
+          approved: approvedCount,
+          rejected: rejectedCount,
+        },
         pagination: {
           total: count,
           page: parseInt(page),
@@ -274,6 +303,7 @@ export const getAllCases = async (req, res) => {
     });
   }
 };
+
 
 // Get Case By ID
 export const getCaseById = async (req, res) => {
@@ -370,7 +400,6 @@ export const updateCase = async (req, res) => {
 
     const {
       candidateId,
-      businessId,
       sponsorId,
       visaTypeId,
       petitionTypeId,
@@ -393,7 +422,6 @@ export const updateCase = async (req, res) => {
 
     await caseData.update({
       candidateId: candidateId !== undefined ? candidateId : caseData.candidateId,
-      businessId: businessId !== undefined ? businessId : caseData.businessId,
       sponsorId: sponsorId !== undefined ? sponsorId : caseData.sponsorId,
       visaTypeId: visaTypeId !== undefined ? visaTypeId : caseData.visaTypeId,
       petitionTypeId: petitionTypeId !== undefined ? petitionTypeId : caseData.petitionTypeId,
@@ -523,7 +551,7 @@ export const updatePipelineStage = async (req, res) => {
 export const getTeamCapacity = async (req, res) => {
   try {
     const cases = await Case.findAll({
-      attributes: ['caseworker', 'caseworkerId'],
+      attributes: ['assignedcaseworkerId'],
       where: {
         status: {
           [Op.notIn]: ['Approved', 'Rejected'] // Only active Cases
@@ -531,11 +559,36 @@ export const getTeamCapacity = async (req, res) => {
       }
     });
 
+    const userIds = new Set();
+    cases.forEach(c => {
+      const cwIds = Array.isArray(c.assignedcaseworkerId) ? c.assignedcaseworkerId : [];
+      cwIds.forEach(id => userIds.add(id));
+    });
+
+    const users = await db.User.findAll({
+      where: { id: Array.from(userIds) },
+      attributes: ['id', 'first_name', 'last_name']
+    });
+
+    const userMap = {};
+    users.forEach(u => {
+      userMap[u.id] = `${u.first_name} ${u.last_name}`;
+    });
+
     const capacityMap = {};
     cases.forEach(c => {
-      const cw = c.caseworker || 'Unassigned';
-      if (!capacityMap[cw]) capacityMap[cw] = 0;
-      capacityMap[cw] += 1;
+      const cwIds = Array.isArray(c.assignedcaseworkerId) ? c.assignedcaseworkerId : [];
+      if (cwIds.length === 0) {
+        const cw = 'Unassigned';
+        if (!capacityMap[cw]) capacityMap[cw] = 0;
+        capacityMap[cw] += 1;
+      } else {
+        cwIds.forEach(id => {
+          const cw = userMap[id] || `Caseworker ${id}`;
+          if (!capacityMap[cw]) capacityMap[cw] = 0;
+          capacityMap[cw] += 1;
+        });
+      }
     });
 
     const capacityArray = Object.keys(capacityMap).map(name => ({
@@ -567,9 +620,10 @@ export const assignCase = async (req, res) => {
       ? `${caseData.notes}\n[System]: Reassigned to ${assignToName || assignTo}. Reason: ${reason}` 
       : `[System]: Reassigned to ${assignToName || assignTo}. Reason: ${reason}`;
 
+    const cwIds = Array.isArray(assignTo) ? assignTo : (assignTo ? [assignTo] : caseData.assignedcaseworkerId);
+
     await caseData.update({
-      caseworkerId: assignTo !== undefined ? assignTo : caseData.caseworkerId,
-      caseworker: assignToName || caseData.caseworker,
+      assignedcaseworkerId: cwIds,
       notes: updatedNotes
     });
 

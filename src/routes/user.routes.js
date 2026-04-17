@@ -11,4 +11,7 @@ router.get("/profile", verifyToken, userController.profile);
 // Edit user profile - accessible for all authenticated users
 router.put("/profile", verifyToken, userController.editProfile);
 
+// Get all users with role-wise grouping - accessible for all authenticated users
+router.get("/all", verifyToken, userController.getAllUsers);
+
 export default router;

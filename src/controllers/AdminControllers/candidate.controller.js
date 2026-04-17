@@ -1,9 +1,15 @@
 import db from "../../models/index.js";
 import { Op } from "sequelize";
 import bcrypt from "bcryptjs";
+import multer from "multer";
 
 const User = db.User;
 const Role = db.Role;
+
+// Multer configuration for file upload
+const upload = multer({ storage: multer.memoryStorage() });
+
+export const uploadMiddleware = upload.single('file');
 
 // Create Candidate
 export const createCandidate = async (req, res) => {
@@ -126,7 +132,7 @@ export const createCandidate = async (req, res) => {
 // Get All Candidates
 export const getAllCandidates = async (req, res) => {
   try {
-    const { page = 1, limit = 10, search, status } = req.query;
+    const { page = 1, limit = 10, search, status, visaType, paymentStatus } = req.query;
     const offset = (page - 1) * limit;
 
     // Build where clause
@@ -147,18 +153,48 @@ export const getAllCandidates = async (req, res) => {
       whereClause.status = status;
     }
 
+    // Build include clause for filtering by visa type and payment status
+    const includeClause = [{
+      model: Role,
+      attributes: ['id', 'name']
+    }];
+
+    const caseWhere = {};
+    
+    if (visaType) {
+      caseWhere.visaTypeId = visaType;
+    }
+    
+    if (paymentStatus) {
+      if (paymentStatus === 'Paid') {
+        caseWhere.paidAmount = { [Op.col]: 'totalAmount' };
+      } else if (paymentStatus === 'Partial') {
+        caseWhere.paidAmount = { [Op.gt]: 0, [Op.lt]: db.sequelize.col('totalAmount') };
+      } else if (paymentStatus === 'Outstanding') {
+        caseWhere.paidAmount = 0;
+      }
+    }
+
+    if (Object.keys(caseWhere).length > 0) {
+      includeClause.push({
+        model: db.Case,
+        as: 'cases',
+        where: caseWhere,
+        required: true,
+        attributes: []
+      });
+    }
+
     const { count, rows: candidates } = await User.findAndCountAll({
       where: whereClause,
       attributes: { 
         exclude: ['password', 'otp_code', 'otp_expiry', 'password_reset_otp', 'password_reset_otp_expiry', 'temp_password'] 
       },
-      include: [{
-        model: Role,
-        attributes: ['id', 'name']
-      }],
+      include: includeClause,
       order: [["createdAt", "DESC"]],
       limit: parseInt(limit),
-      offset: parseInt(offset)
+      offset: parseInt(offset),
+      distinct: true
     });
 
     res.status(200).json({
@@ -472,6 +508,194 @@ export const toggleCandidateStatus = async (req, res) => {
 
   } catch (error) {
     console.error("Toggle Candidate Status Error:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error",
+      data: null,
+      error: error.message
+    });
+  }
+};
+
+// Export Candidates to CSV
+export const exportCandidates = async (req, res) => {
+  try {
+    const { search, status, visaType, paymentStatus } = req.query;
+
+    const whereClause = {
+      role_id: 3 // Candidate role
+    };
+
+    if (search) {
+      whereClause[Op.or] = [
+        { first_name: { [Op.iLike]: `%${search}%` } },
+        { last_name: { [Op.iLike]: `%${search}%` } },
+        { email: { [Op.iLike]: `%${search}%` } },
+        { mobile: { [Op.iLike]: `%${search}%` } }
+      ];
+    }
+
+    if (status) {
+      whereClause.status = status;
+    }
+
+    // Build include clause for filtering by visa type and payment status
+    const includeClause = [{
+      model: Role,
+      attributes: ['id', 'name']
+    }];
+
+    const caseWhere = {};
+    
+    if (visaType) {
+      caseWhere.visaTypeId = visaType;
+    }
+    
+    if (paymentStatus) {
+      if (paymentStatus === 'Paid') {
+        caseWhere.paidAmount = { [Op.col]: 'totalAmount' };
+      } else if (paymentStatus === 'Partial') {
+        caseWhere.paidAmount = { [Op.gt]: 0, [Op.lt]: db.sequelize.col('totalAmount') };
+      } else if (paymentStatus === 'Outstanding') {
+        caseWhere.paidAmount = 0;
+      }
+    }
+
+    if (Object.keys(caseWhere).length > 0) {
+      includeClause.push({
+        model: db.Case,
+        as: 'cases',
+        where: caseWhere,
+        required: true,
+        attributes: []
+      });
+    }
+
+    const candidates = await User.findAll({
+      where: whereClause,
+      attributes: { 
+        exclude: ['password', 'otp_code', 'otp_expiry', 'password_reset_otp', 'password_reset_otp_expiry', 'temp_password'] 
+      },
+      include: includeClause,
+      order: [["createdAt", "DESC"]]
+    });
+
+    // Generate CSV
+    const csvHeader = ['ID', 'First Name', 'Last Name', 'Email', 'Country Code', 'Mobile', 'Role', 'Status', 'Created At'];
+    const csvRows = candidates.map(candidate => [
+      candidate.id,
+      candidate.first_name,
+      candidate.last_name,
+      candidate.email,
+      candidate.country_code,
+      candidate.mobile,
+      candidate.Role?.name || 'N/A',
+      candidate.status,
+      candidate.createdAt.toISOString()
+    ]);
+
+    const csvContent = [
+      csvHeader.join(','),
+      ...csvRows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="candidates_export.csv"');
+    res.send(csvContent);
+
+  } catch (error) {
+    console.error("Export Candidates Error:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error",
+      data: null,
+      error: error.message
+    });
+  }
+};
+
+// Bulk Import Candidates from CSV
+export const bulkImportCandidates = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        status: "error",
+        message: "No file uploaded",
+        data: null
+      });
+    }
+
+    const csvData = req.file.buffer.toString('utf-8');
+    const lines = csvData.split('\n').filter(line => line.trim());
+    
+    if (lines.length < 2) {
+      return res.status(400).json({
+        status: "error",
+        message: "CSV file is empty or has no data rows",
+        data: null
+      });
+    }
+
+    const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+    const results = {
+      success: [],
+      errors: []
+    };
+
+    for (let i = 1; i < lines.length; i++) {
+      try {
+        const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
+        const rowData = {};
+        
+        headers.forEach((header, index) => {
+          rowData[header] = values[index] || '';
+        });
+
+        // Generate password
+        const generatedPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-4);
+        const hashedPassword = await bcrypt.hash(generatedPassword, 12);
+
+        const candidate = await User.create({
+          first_name: rowData.first_name || rowData.firstName || '',
+          last_name: rowData.last_name || rowData.lastName || '',
+          email: rowData.email,
+          country_code: rowData.country_code || rowData.countryCode || '+44',
+          mobile: rowData.mobile,
+          role_id: 3,
+          password: hashedPassword,
+          is_email_verified: true,
+          is_otp_verified: true,
+          status: 'active'
+        });
+
+        results.success.push({
+          row: i + 1,
+          id: candidate.id,
+          email: candidate.email,
+          temporary_password: generatedPassword
+        });
+
+      } catch (error) {
+        results.errors.push({
+          row: i + 1,
+          error: error.message
+        });
+      }
+    }
+
+    res.status(200).json({
+      status: "success",
+      message: "Bulk import completed",
+      data: {
+        total_processed: lines.length - 1,
+        successful: results.success.length,
+        failed: results.errors.length,
+        results
+      }
+    });
+
+  } catch (error) {
+    console.error("Bulk Import Candidates Error:", error);
     res.status(500).json({
       status: "error",
       message: "Internal server error",

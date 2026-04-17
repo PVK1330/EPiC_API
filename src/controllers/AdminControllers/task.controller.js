@@ -325,6 +325,61 @@ export const getTaskById = async (req, res) => {
   }
 };
 
+export const getTaskByCaseId = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const roleId = req.user?.role_id;
+    const userId = req.user?.userId;
+
+    const caseId = parseInt(id, 10);
+    if (Number.isNaN(caseId)) {
+      return res.status(400).json({
+        status: "error",
+        message: "Invalid case id",
+        data: null,
+      });
+    }
+
+    const rows = await Task.findAll({
+      where: { case_id: caseId },
+      include: [userInclude("assignee"), userInclude("creator")],
+    });
+
+    if (roleId === ROLES.ADMIN) {
+      return res.status(200).json({
+        status: "success",
+        message: "Tasks retrieved successfully",
+        data: { tasks: rows.map(mapTask) },
+      });
+    }
+
+    if (roleId === ROLES.CASEWORKER) {
+      const filtered = rows.filter(
+        (t) => t.assigned_to === userId || t.created_by === userId
+      );
+      return res.status(200).json({
+        status: "success",
+        message: "Tasks retrieved successfully",
+        data: { tasks: filtered.map(mapTask) },
+      });
+    }
+
+    return res.status(403).json({
+      status: "error",
+      message: "Access denied",
+      data: null,
+    });
+  } catch (error) {
+    console.error("Get Tasks by Case ID Error:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error",
+      data: null,
+      error: error.message,
+    });
+  }
+};
+
 export const updateTask = async (req, res) => {
   try {
     const { id } = req.params;

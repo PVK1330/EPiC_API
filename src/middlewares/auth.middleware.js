@@ -2,15 +2,23 @@ import jwt from 'jsonwebtoken';
 
 export const verifyToken = (req, res, next) => {
   try {
-    // Primary: read from HttpOnly cookie
-    let token = req.cookies?.token;
+    // Primary: Authorization Header (Bearer Token) - Best for APIs
+    let token = null;
+    let tokenSource = 'none';
 
-    // Fallback: Authorization: Bearer <token>
-    if (!token && req.headers['authorization']) {
+    // Check Authorization Header first
+    if (req.headers['authorization']) {
       const parts = req.headers['authorization'].split(' ');
       if (parts.length === 2 && parts[0] === 'Bearer') {
         token = parts[1];
+        tokenSource = 'authorization header';
       }
+    }
+
+    // Fallback: HttpOnly cookie
+    if (!token && req.cookies?.token) {
+      token = req.cookies.token;
+      tokenSource = 'cookie';
     }
 
     if (!token) {
@@ -25,6 +33,7 @@ export const verifyToken = (req, res, next) => {
     req.user = decoded;   // { userId, email, role_id, role_name }
     next();
   } catch (err) {
+    console.error('verifyToken - Token verification failed:', err.message);
     return res.status(401).json({
       status: 'error',
       message: 'Invalid or expired token.',

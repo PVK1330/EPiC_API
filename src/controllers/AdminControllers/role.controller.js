@@ -40,7 +40,7 @@ export const createRole = async (req, res) => {
     console.error('Error creating role:', error);
     res.status(500).json({
       success: false,
-      message: 'Error creating role',
+      message: 'Error role',
       error: error.message,
     });
   }

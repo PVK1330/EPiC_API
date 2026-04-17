@@ -5,16 +5,20 @@ export const checkRole = (allowedRoleIds) => {
     try {
       const userRoleId = req.user?.role_id;
 
-      if (!allowedRoleIds.includes(userRoleId)) {
+      // Handle both single role ID and array of role IDs
+      const allowedIds = Array.isArray(allowedRoleIds) ? allowedRoleIds : [allowedRoleIds];
+
+      if (!allowedIds.includes(userRoleId)) {
         return res.status(403).json({
           status: 'error',
-          message: 'Access denied — insufficient permissions.',
+          message: 'Access denied - insufficient permissions.',
           data: null,
         });
       }
 
       next();
     } catch (err) {
+      console.error('checkRole - Error:', err);
       return res.status(500).json({
         status: 'error',
         message: 'Role check failed.',

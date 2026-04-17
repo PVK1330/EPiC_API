@@ -1104,6 +1104,291 @@
           }
         },
         {
+          "name": "Documents - Upload",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Get token from login response",
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    pm.collectionVariables.set('authToken', response.data.token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "multipart/form-data"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "documentCategory",
+                  "value": "candidate",
+                  "type": "text"
+                },
+                {
+                  "key": "userId",
+                  "value": "1",
+                  "type": "text"
+                },
+                {
+                  "key": "documentType",
+                  "value": "Passport",
+                  "type": "text"
+                },
+                {
+                  "key": "caseId",
+                  "value": "1",
+                  "type": "text",
+                  "description": "Optional - only if document is case-related"
+                },
+                {
+                  "key": "documents",
+                  "type": "file",
+                  "src": "/path/to/your/test-file.pdf",
+                  "description": "Select one or more files to upload"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/documents/upload",
+              "host": ["{{baseUrl}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Documents - Get User Documents by Category",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/documents/category/:category/user/:userId",
+              "host": ["{{baseUrl}}"],
+              "path": [
+                {
+                  "key": "category",
+                  "value": "candidate"
+                },
+                {
+                  "key": "userId", 
+                  "value": "1"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Documents - Get User Documents by Category",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/documents/category/:category/user/:userId",
+              "host": ["{{baseUrl}}"],
+              "path": [
+                {
+                  "key": "category",
+                  "value": "candidate"
+                },
+                {
+                  "key": "userId", 
+                  "value": "1"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Documents - Get Case Documents",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/documents/case/:caseId",
+              "host": ["{{baseUrl}}"],
+              "path": [
+                {
+                  "key": "caseId",
+                  "value": "1"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Documents - Get Document by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/documents/:documentId",
+              "host": ["{{baseUrl}}"],
+              "path": [
+                {
+                  "key": "documentId",
+                  "value": "1"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Documents - Update Document",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"documentType\": \"Updated Passport\",\n  \"documentCategory\": \"business\",\n  \"expiryDate\": \"2025-12-31\",\n  \"tags\": [\"important\", \"visa\"]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/documents/:documentId",
+              "host": ["{{baseUrl}}"],
+              "path": [
+                {
+                  "key": "documentId",
+                  "value": "1"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Documents - Update Document Status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"approved\",\n  \"reviewNotes\": \"Document verified and approved\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/documents/:documentId/status",
+              "host": ["{{baseUrl}}"],
+              "path": [
+                {
+                  "key": "documentId",
+                  "value": "1"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Documents - Download Document",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/documents/download/:documentId",
+              "host": ["{{baseUrl}}"],
+              "path": [
+                {
+                  "key": "documentId",
+                  "value": "1"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Documents - Delete Document",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/documents/:documentId",
+              "host": ["{{baseUrl}}"],
+              "path": [
+                {
+                  "key": "documentId",
+                  "value": "1"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
           "name": "Bulk Assign Permissions",
           "request": {
             "method": "POST",
@@ -1112,6 +1397,174 @@
             "body": {
               "mode": "raw",
               "raw": "{\n  \"roleIds\": [2, 3],\n  \"permissionIds\": [1, 2, 3, 5, 8]\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Application Fields",
+      "item": [
+        {
+          "name": "Get Field Settings",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/application-fields/settings"
+          }
+        },
+        {
+          "name": "Batch Update Field Visibility",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/application-fields/settings/visibility",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"visibility\": {\n    \"firstName\": true,\n    \"lastName\": true,\n    \"email\": true\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Update Single Field Visibility",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/application-fields/settings/firstName/visibility",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"field_key\": \"firstName\",\n  \"is_visible\": false\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Get Custom Fields",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/application-fields/custom-fields"
+          }
+        },
+        {
+          "name": "Create Custom Field",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/application-fields/custom-fields",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"field_id\": \"custom_employer_name\",\n  \"label\": \"Previous UK Employer Name\",\n  \"field_type\": \"text\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Update Custom Field",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/application-fields/custom-fields/1",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"label\": \"Updated Field Label\",\n  \"field_type\": \"textarea\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Delete Custom Field",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/application-fields/custom-fields/1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Export & Bulk Import",
+      "item": [
+        {
+          "name": "Export Admins",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/admin/export"
+          }
+        },
+        {
+          "name": "Export Caseworkers",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/caseworker/export"
+          }
+        },
+        {
+          "name": "Export Candidates",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/candidate/export"
+          }
+        },
+        {
+          "name": "Export Sponsors",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/sponsors/export"
+          }
+        },
+        {
+          "name": "Bulk Import Candidates",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/candidate/bulk-import",
+            "body": {
+              "mode": "formdata",
+              "formdata": [{ "key": "file", "type": "file" }]
+            }
+          }
+        },
+        {
+          "name": "Bulk Import Caseworkers",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/caseworker/bulk-import",
+            "body": {
+              "mode": "formdata",
+              "formdata": [{ "key": "file", "type": "file" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Caseworker Performance",
+      "item": [
+        {
+          "name": "Get Caseworker Performance Report",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/caseworker/:id/performance-report"
+          }
+        },
+        {
+          "name": "Reassign Case",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/caseworker/cases/:caseId/reassign",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"newCaseworkerId\": 2\n}",
               "options": { "raw": { "language": "json" } }
             }
           }

@@ -27,7 +27,7 @@ import EscalationModel from './escalation.model.js';
 import PermissionModel from './permission.model.js';
 import RolePermissionModel from './rolePermission.model.js';
 
-import CaseDocumentModel from './caseDocument.model.js';
+import DocumentModel from './document.model.js';
 
 import CasePaymentModel from './casePayment.model.js';
 
@@ -39,13 +39,13 @@ import CaseNoteModel from './caseNote.model.js';
 
 import TaskModel from './task.model.js';
 
+import ApplicationFieldSettingModel from './applicationFieldSetting.model.js';
 
+import ApplicationCustomFieldModel from './applicationCustomField.model.js';
 
 const env = process.env.NODE_ENV || 'development';
 
 const dbConfig = config[env];
-
-
 
 const sequelize = new Sequelize(dbConfig.database, dbConfig.username, dbConfig.password, dbConfig);
 
@@ -82,7 +82,7 @@ db.Escalation = EscalationModel(sequelize, Sequelize.DataTypes);
 db.Permission = PermissionModel(sequelize, Sequelize.DataTypes);
 db.RolePermission = RolePermissionModel(sequelize, Sequelize.DataTypes);
 
-db.CaseDocument = CaseDocumentModel(sequelize, Sequelize.DataTypes);
+db.Document = DocumentModel(sequelize, Sequelize.DataTypes);
 
 db.CasePayment = CasePaymentModel(sequelize, Sequelize.DataTypes);
 
@@ -94,14 +94,14 @@ db.CaseNote = CaseNoteModel(sequelize, Sequelize.DataTypes);
 
 db.Task = TaskModel(sequelize, Sequelize.DataTypes);
 
-
+db.ApplicationFieldSetting = ApplicationFieldSettingModel(sequelize, Sequelize.DataTypes);
+db.ApplicationCustomField = ApplicationCustomFieldModel(sequelize, Sequelize.DataTypes);
 
 // Associations
 
-db.Role.hasMany(db.User, { foreignKey: 'role_id' });
+db.Role.hasMany(db.User, { foreignKey: 'role_id', as: 'role' });
 
-db.User.belongsTo(db.Role, { foreignKey: 'role_id' });
-
+db.User.belongsTo(db.Role, { foreignKey: 'role_id', as: 'role' });
 
 
 db.Role.hasMany(db.UnverifiedUser, { foreignKey: 'role_id' });
@@ -127,16 +127,22 @@ db.Case.belongsTo(db.VisaType, { foreignKey: 'visaTypeId', as: 'visaType' });
 db.Case.belongsTo(db.PetitionType, { foreignKey: 'petitionTypeId', as: 'petitionType' });
 
 // Case has many relationships
-db.Case.hasMany(db.CaseDocument, { foreignKey: 'caseId', as: 'documents' });
+db.Case.hasMany(db.Document, { foreignKey: 'caseId', as: 'documents' });
 db.Case.hasMany(db.CasePayment, { foreignKey: 'caseId', as: 'payments' });
 db.Case.hasMany(db.CaseTimeline, { foreignKey: 'caseId', as: 'timeline' });
 db.Case.hasMany(db.CaseCommunication, { foreignKey: 'caseId', as: 'communications' });
 db.Case.hasMany(db.CaseNote, { foreignKey: 'caseId', as: 'caseNotes' });
 
-// Case related model associations
-db.CaseDocument.belongsTo(db.Case, { foreignKey: 'caseId' });
-db.CaseDocument.belongsTo(db.User, { foreignKey: 'uploadedBy', as: 'uploader' });
-db.CaseDocument.belongsTo(db.User, { foreignKey: 'reviewedBy', as: 'reviewer' });
+// Document associations
+db.Document.belongsTo(db.User, { foreignKey: 'userId', as: 'user' });
+db.Document.belongsTo(db.User, { foreignKey: 'uploadedBy', as: 'uploader' });
+db.Document.belongsTo(db.User, { foreignKey: 'reviewedBy', as: 'reviewer' });
+db.Document.belongsTo(db.Case, { foreignKey: 'caseId', as: 'case' });
+
+// User associations with Documents
+db.User.hasMany(db.Document, { foreignKey: 'userId', as: 'documents' });
+db.User.hasMany(db.Document, { foreignKey: 'uploadedBy', as: 'uploadedDocuments' });
+db.User.hasMany(db.Document, { foreignKey: 'reviewedBy', as: 'reviewedDocuments' });
 
 db.CasePayment.belongsTo(db.Case, { foreignKey: 'caseId' });
 db.CasePayment.belongsTo(db.User, { foreignKey: 'receivedBy', as: 'receiver' });
@@ -148,7 +154,7 @@ db.CaseCommunication.belongsTo(db.Case, { foreignKey: 'caseId' });
 db.CaseCommunication.belongsTo(db.User, { foreignKey: 'senderId', as: 'sender' });
 db.CaseCommunication.belongsTo(db.User, { foreignKey: 'recipientId', as: 'recipient' });
 
-db.CaseNote.belongsTo(db.Case, { foreignKey: 'caseId' });
+db.CaseNote.belongsTo(db.Case, { foreignKey: 'caseId', as: 'case' });
 db.CaseNote.belongsTo(db.User, { foreignKey: 'authorId', as: 'author' });
 db.CaseNote.belongsTo(db.CaseNote, { foreignKey: 'parentNoteId', as: 'parentNote' });
 

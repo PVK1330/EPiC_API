@@ -1,6 +1,7 @@
 import db from "../../models/index.js";
 import { Op } from "sequelize";
 import bcrypt from "bcryptjs";
+import multer from "multer";
 import { ROLES } from "../../middlewares/role.middleware.js";
 import { sendCaseworkerWelcomeEmail } from "../../services/email.service.js";
 import { generateCaseworkerCredentialsTemplate } from "../../utils/emailTemplate.js";
@@ -10,6 +11,11 @@ const Role = db.Role;
 const CaseworkerProfile = db.CaseworkerProfile;
 
 const CASEWORKER_ROLE = ROLES.CASEWORKER;
+
+// Multer configuration for file upload
+const upload = multer({ storage: multer.memoryStorage() });
+
+export const uploadMiddleware = upload.single('file');
 
 const PROFILE_KEYS = [
   "employee_id",
@@ -272,7 +278,7 @@ export const createCaseworker = async (req, res) => {
 // Get All Caseworkers
 export const getAllCaseworkers = async (req, res) => {
   try {
-    const { page = 1, limit = 10, search, status } = req.query;
+    const { page = 1, limit = 10, search, status, department } = req.query;
     const offset = (page - 1) * limit;
 
     const whereClause = {
@@ -292,6 +298,14 @@ export const getAllCaseworkers = async (req, res) => {
       whereClause.status = status;
     }
 
+    // Build include clause for filtering by department
+    const includeClause = caseworkerInclude();
+    
+    if (department) {
+      includeClause[1].where = { department: { [Op.iLike]: `%${department}%` } };
+      includeClause[1].required = true;
+    }
+
     const { count, rows: caseworkers } = await User.findAndCountAll({
       where: whereClause,
       attributes: {
@@ -304,18 +318,43 @@ export const getAllCaseworkers = async (req, res) => {
           "temp_password",
         ],
       },
-      include: caseworkerInclude(),
+      include: includeClause,
       order: [["createdAt", "DESC"]],
       limit: parseInt(limit, 10),
       offset: parseInt(offset, 10),
       distinct: true,
     });
 
+    // Add performance metrics to each caseworker
+    const caseworkersWithMetrics = await Promise.all(
+      caseworkers.map(async (caseworker) => {
+        const cases = await db.Case.findAll({
+          where: { assignedToId: caseworker.id }
+        });
+
+        const totalCases = cases.length;
+        const completedCases = cases.filter(c => c.status === 'completed').length;
+        const inProgressCases = cases.filter(c => c.status === 'in_progress').length;
+        const pendingCases = cases.filter(c => c.status === 'pending').length;
+
+        const caseworkerData = caseworker.toJSON();
+        caseworkerData.performance = {
+          totalCases,
+          completedCases,
+          inProgressCases,
+          pendingCases,
+          completionRate: totalCases > 0 ? (completedCases / totalCases * 100).toFixed(2) : 0
+        };
+
+        return caseworkerData;
+      })
+    );
+
     res.status(200).json({
       status: "success",
       message: "Caseworkers retrieved successfully",
       data: {
-        caseworkers,
+        caseworkers: caseworkersWithMetrics,
         pagination: {
           total: count,
           page: parseInt(page, 10),
@@ -644,6 +683,371 @@ export const toggleCaseworkerStatus = async (req, res) => {
       message: "Internal server error",
       data: null,
       error: error.message,
+    });
+  }
+};
+
+// Export Caseworkers to CSV
+export const exportCaseworkers = async (req, res) => {
+  try {
+    const { search, status, department } = req.query;
+
+    const whereClause = {
+      role_id: CASEWORKER_ROLE,
+    };
+
+    if (search) {
+      whereClause[Op.or] = [
+        { first_name: { [Op.iLike]: `%${search}%` } },
+        { last_name: { [Op.iLike]: `%${search}%` } },
+        { email: { [Op.iLike]: `%${search}%` } },
+        { mobile: { [Op.iLike]: `%${search}%` } },
+      ];
+    }
+
+    if (status) {
+      whereClause.status = status;
+    }
+
+    // Build include clause for filtering by department
+    const includeClause = caseworkerInclude();
+    
+    if (department) {
+      includeClause[1].where = { department: { [Op.iLike]: `%${department}%` } };
+      includeClause[1].required = true;
+    }
+
+    const caseworkers = await User.findAll({
+      where: whereClause,
+      attributes: {
+        exclude: [
+          "password",
+          "otp_code",
+          "otp_expiry",
+          "password_reset_otp",
+          "password_reset_otp_expiry",
+          "temp_password",
+        ],
+      },
+      include: includeClause,
+      order: [["createdAt", "DESC"]],
+    });
+
+    // Generate CSV
+    const csvHeader = ['ID', 'First Name', 'Last Name', 'Email', 'Country Code', 'Mobile', 'Department', 'Status', 'Created At'];
+    const csvRows = caseworkers.map(caseworker => [
+      caseworker.id,
+      caseworker.first_name,
+      caseworker.last_name,
+      caseworker.email,
+      caseworker.country_code,
+      caseworker.mobile,
+      caseworker.CaseworkerProfile?.department || 'N/A',
+      caseworker.status,
+      caseworker.createdAt.toISOString()
+    ]);
+
+    const csvContent = [
+      csvHeader.join(','),
+      ...csvRows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="caseworkers_export.csv"');
+    res.send(csvContent);
+
+  } catch (error) {
+    console.error("Export Caseworkers Error:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error",
+      data: null,
+      error: error.message,
+    });
+  }
+};
+
+// Bulk Import Caseworkers from CSV
+export const bulkImportCaseworkers = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        status: "error",
+        message: "No file uploaded",
+        data: null
+      });
+    }
+
+    const csvData = req.file.buffer.toString('utf-8');
+    const lines = csvData.split('\n').filter(line => line.trim());
+    
+    if (lines.length < 2) {
+      return res.status(400).json({
+        status: "error",
+        message: "CSV file is empty or has no data rows",
+        data: null
+      });
+    }
+
+    const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+    const results = {
+      success: [],
+      errors: []
+    };
+
+    for (let i = 1; i < lines.length; i++) {
+      try {
+        const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
+        const rowData = {};
+        
+        headers.forEach((header, index) => {
+          rowData[header] = values[index] || '';
+        });
+
+        // Generate password
+        const generatedPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-4);
+        const hashedPassword = await bcrypt.hash(generatedPassword, 12);
+
+        // Create caseworker
+        const caseworker = await User.create({
+          first_name: rowData.first_name || rowData.firstName || '',
+          last_name: rowData.last_name || rowData.lastName || '',
+          email: rowData.email,
+          country_code: rowData.country_code || rowData.countryCode || '+44',
+          mobile: rowData.mobile,
+          role_id: CASEWORKER_ROLE,
+          password: hashedPassword,
+          is_email_verified: true,
+          is_otp_verified: true,
+          status: 'active'
+        });
+
+        // Create caseworker profile
+        const profileData = {};
+        PROFILE_KEYS.forEach(key => {
+          const csvKey = key.replace(/_/g, ' ').toLowerCase();
+          const camelKey = key.replace(/_([a-z])/g, (g) => g[1].toUpperCase());
+          if (rowData[key] || rowData[csvKey] || rowData[camelKey]) {
+            profileData[key] = rowData[key] || rowData[csvKey] || rowData[camelKey];
+          }
+        });
+
+        await CaseworkerProfile.create({
+          user_id: caseworker.id,
+          ...profileData
+        });
+
+        // Send welcome email
+        try {
+          const loginUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+          await sendCaseworkerWelcomeEmail({
+            to: caseworker.email,
+            html: generateCaseworkerCredentialsTemplate(caseworker.email, generatedPassword, loginUrl),
+          });
+        } catch (emailError) {
+          console.error("Failed to send caseworker email:", emailError);
+        }
+
+        results.success.push({
+          row: i + 1,
+          id: caseworker.id,
+          email: caseworker.email,
+          temporary_password: generatedPassword
+        });
+
+      } catch (error) {
+        results.errors.push({
+          row: i + 1,
+          error: error.message
+        });
+      }
+    }
+
+    res.status(200).json({
+      status: "success",
+      message: "Bulk import completed",
+      data: {
+        total_processed: lines.length - 1,
+        successful: results.success.length,
+        failed: results.errors.length,
+        results
+      }
+    });
+
+  } catch (error) {
+    console.error("Bulk Import Caseworkers Error:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error",
+      data: null,
+      error: error.message
+    });
+  }
+};
+
+// Get Performance Report for Caseworker
+export const getPerformanceReport = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { startDate, endDate } = req.query;
+
+    const caseworker = await User.findOne({
+      where: { id, role_id: CASEWORKER_ROLE },
+      include: caseworkerInclude()
+    });
+
+    if (!caseworker) {
+      return res.status(404).json({
+        status: "error",
+        message: "Caseworker not found",
+        data: null
+      });
+    }
+
+    // Build date filter
+    const dateFilter = {};
+    if (startDate) {
+      dateFilter[Op.gte] = new Date(startDate);
+    }
+    if (endDate) {
+      dateFilter[Op.lte] = new Date(endDate);
+    }
+
+    // Get cases assigned to this caseworker
+    const cases = await db.Case.findAll({
+      where: {
+        assignedToId: id,
+        ...dateFilter
+      },
+      include: [
+        {
+          model: db.CaseTimeline,
+          as: 'timeline',
+          order: [['createdAt', 'DESC']]
+        }
+      ]
+    });
+
+    // Calculate metrics
+    const totalCases = cases.length;
+    const completedCases = cases.filter(c => c.status === 'completed').length;
+    const inProgressCases = cases.filter(c => c.status === 'in_progress').length;
+    const pendingCases = cases.filter(c => c.status === 'pending').length;
+
+    // Calculate average completion time
+    const completedWithTimeline = cases.filter(c => c.status === 'completed' && c.timeline && c.timeline.length > 0);
+    const completionTimes = completedWithTimeline.map(c => {
+      const created = new Date(c.createdAt).getTime();
+      const lastUpdate = new Date(c.timeline[0].createdAt).getTime();
+      return lastUpdate - created;
+    });
+    const avgCompletionTime = completionTimes.length > 0 
+      ? completionTimes.reduce((a, b) => a + b, 0) / completionTimes.length 
+      : 0;
+
+    res.status(200).json({
+      status: "success",
+      message: "Performance report retrieved successfully",
+      data: {
+        caseworker: {
+          id: caseworker.id,
+          name: `${caseworker.first_name} ${caseworker.last_name}`,
+          email: caseworker.email
+        },
+        metrics: {
+          totalCases,
+          completedCases,
+          inProgressCases,
+          pendingCases,
+          completionRate: totalCases > 0 ? (completedCases / totalCases * 100).toFixed(2) : 0,
+          avgCompletionTime: Math.round(avgCompletionTime / (1000 * 60 * 60 * 24)), // in days
+          dateRange: {
+            startDate: startDate || 'all time',
+            endDate: endDate || 'now'
+          }
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error("Get Performance Report Error:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error",
+      data: null,
+      error: error.message
+    });
+  }
+};
+
+// Reassign Case to another Caseworker
+export const reassignCase = async (req, res) => {
+  try {
+    const { caseId } = req.params;
+    const { newCaseworkerId } = req.body;
+
+    if (!newCaseworkerId) {
+      return res.status(400).json({
+        status: "error",
+        message: "New caseworker ID is required",
+        data: null
+      });
+    }
+
+    // Verify case exists
+    const caseData = await db.Case.findByPk(caseId);
+    if (!caseData) {
+      return res.status(404).json({
+        status: "error",
+        message: "Case not found",
+        data: null
+      });
+    }
+
+    // Verify new caseworker exists and is a caseworker
+    const newCaseworker = await User.findOne({
+      where: { id: newCaseworkerId, role_id: CASEWORKER_ROLE }
+    });
+    if (!newCaseworker) {
+      return res.status(404).json({
+        status: "error",
+        message: "New caseworker not found or is not a caseworker",
+        data: null
+      });
+    }
+
+    // Update case assignment
+    await caseData.update({ assignedToId: newCaseworkerId });
+
+    // Add timeline entry
+    await db.CaseTimeline.create({
+      caseId: caseId,
+      performedBy: req.user?.id || 1,
+      action: 'reassigned',
+      description: `Case reassigned from caseworker ${caseData.assignedToId} to caseworker ${newCaseworkerId}`,
+      changes: {
+        previousAssignedTo: caseData.assignedToId,
+        newAssignedTo: newCaseworkerId
+      }
+    });
+
+    res.status(200).json({
+      status: "success",
+      message: "Case reassigned successfully",
+      data: {
+        caseId,
+        previousAssignedTo: caseData.assignedToId,
+        newAssignedTo: newCaseworkerId
+      }
+    });
+
+  } catch (error) {
+    console.error("Reassign Case Error:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error",
+      data: null,
+      error: error.message
     });
   }
 };

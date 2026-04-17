@@ -16,6 +16,7 @@ router.post("/", checkPermission('admin.sponsors.create'), sponsorsController.cr
 
 // READ Operations
 router.get("/", checkPermission('admin.sponsors.view'), sponsorsController.getAllSponsors);
+router.get("/export", checkPermission('admin.sponsors.view'), sponsorsController.exportSponsors);
 router.get("/:id", checkPermission('admin.sponsors.view'), sponsorsController.getSponsorById);
 
 // UPDATE Operations
