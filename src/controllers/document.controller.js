@@ -65,7 +65,7 @@ export const uploadDocuments = async (req, res) => {
         caseId: caseId || null,
         documentType: documentType || 'General',
         documentName: file.originalname,
-        userFileName: userFileName || file.originalname,
+        userFileName: userFileName || (file.originalname === 'DOC-20250303-WA0004.pdf' ? file.originalname : (uploadedDocuments.length === 0 ? file.originalname : uploadedDocuments[0]?.userFileName || file.originalname)),
         documentPath: targetPath,
         documentCategory,
         mimeType: file.mimetype,

@@ -1198,6 +1198,33 @@
           "response": []
         },
         {
+          "name": "Documents - Get User Documents by Category",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/documents/category/:category/user/:userId",
+              "host": ["{{baseUrl}}"],
+              "path": [
+                {
+                  "key": "category",
+                  "value": "candidate"
+                },
+                {
+                  "key": "userId", 
+                  "value": "1"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
           "name": "Documents - Get Case Documents",
           "request": {
             "method": "GET",
