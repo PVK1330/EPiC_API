@@ -1,0 +1,125 @@
+name: Deploy Server to VPS
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'Server/**'
+  pull_request:
+    branches:
+      - main
+      - master
+    paths:
+      - 'Server/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: Server/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./Server
+        run: npm ci
+
+      - name: Create deployment package
+        working-directory: ./Server
+        run: |
+          tar -czf server-deploy.tar.gz \
+            --exclude=node_modules \
+            --exclude=.git \
+            --exclude=*.log \
+            --exclude=.github \
+            .
+
+      - name: Deploy to VPS via SSH
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            # Navigate to deployment directory
+            cd ${{ secrets.VPS_DEPLOY_PATH || '/var/www/epic-api' }}
+            
+            # Create backup of current deployment
+            if [ -d "current" ]; then
+              cp -r current backup-$(date +%Y%m%d-%H%M%S)
+            fi
+            
+            # Create new deployment directory
+            mkdir -p new-release
+            
+            # Copy deployment package from GitHub Actions runner
+            # Note: The package needs to be transferred via SCP first
+            
+            # Switch to new release
+            cd new-release
+            
+            # Install dependencies
+            npm ci --production
+            
+            # Set environment variables
+            echo "NODE_ENV=production" > .env
+            echo "PORT=${{ secrets.PORT || 5000 }}" >> .env
+            echo "DB_HOST=${{ secrets.DB_HOST }}" >> .env
+            echo "DB_PORT=${{ secrets.DB_PORT }}" >> .env
+            echo "DB_NAME=${{ secrets.DB_NAME }}" >> .env
+            echo "DB_USER=${{ secrets.DB_USER }}" >> .env
+            echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" >> .env
+            echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" >> .env
+            echo "STRIPE_SECRET_KEY=${{ secrets.STRIPE_SECRET_KEY }}" >> .env
+            echo "EMAIL_HOST=${{ secrets.EMAIL_HOST }}" >> .env
+            echo "EMAIL_PORT=${{ secrets.EMAIL_PORT }}" >> .env
+            echo "EMAIL_USER=${{ secrets.EMAIL_USER }}" >> .env
+            echo "EMAIL_PASSWORD=${{ secrets.EMAIL_PASSWORD }}" >> .env
+            
+            # Run database migrations
+            npm run migrate
+            
+            # Switch to new release
+            cd ..
+            rm -rf current
+            mv new-release current
+            
+            # Restart application with PM2
+            pm2 restart epic-api || pm2 start current/src/server.js --name epic-api
+            pm2 save
+            
+            # Clean up old backups (keep last 3)
+            ls -t backup-* 2>/dev/null | tail -n +4 | xargs rm -rf || true
+
+      - name: Copy deployment package to VPS
+        run: |
+          scp -P ${{ secrets.VPS_PORT || 22 }} \
+            -o StrictHostKeyChecking=no \
+            Server/server-deploy.tar.gz \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:${{ secrets.VPS_DEPLOY_PATH || '/var/www/epic-api' }}/new-release/
+
+      - name: Extract and deploy on VPS
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            cd ${{ secrets.VPS_DEPLOY_PATH || '/var/www/epic-api' }}/new-release
+            tar -xzf server-deploy.tar.gz
+            rm server-deploy.tar.gz
+
+      - name: Cleanup
+        if: always()
+        run: rm -f Server/server-deploy.tar.gz

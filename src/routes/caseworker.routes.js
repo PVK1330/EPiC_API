@@ -16,7 +16,9 @@ router.post("/", checkPermission('admin.caseworkers.create'), caseworkerControll
 
 // READ Operations
 router.get("/", checkPermission('admin.caseworkers.view'), caseworkerController.getAllCaseworkers);
+router.get("/export", checkPermission('admin.caseworkers.view'), caseworkerController.exportCaseworkers);
 router.get("/:id", checkPermission('admin.caseworkers.view'), caseworkerController.getCaseworkerById);
+router.get("/:id/performance-report", checkPermission('admin.caseworkers.view'), caseworkerController.getPerformanceReport);
 
 // UPDATE Operations
 router.put("/:id", checkPermission('admin.caseworkers.update'), caseworkerController.updateCaseworker);
@@ -25,5 +27,11 @@ router.patch("/:id/reset-password", checkPermission('admin.users.reset_password'
 
 // DELETE Operations
 router.delete("/:id", checkPermission('admin.caseworkers.delete'), caseworkerController.deleteCaseworker);
+
+// BULK IMPORT Operations
+router.post("/bulk-import", caseworkerController.uploadMiddleware, checkPermission('admin.caseworkers.create'), caseworkerController.bulkImportCaseworkers);
+
+// CASE MANAGEMENT Operations
+router.post("/cases/:caseId/reassign", checkPermission('admin.caseworkers.update'), caseworkerController.reassignCase);
 
 export default router;
