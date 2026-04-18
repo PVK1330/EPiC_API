@@ -172,7 +172,7 @@ export const getAllAdmins = async (req, res) => {
         exclude: ['password', 'otp_code', 'otp_expiry', 'password_reset_otp', 'password_reset_otp_expiry', 'temp_password'] 
       },
       include: [{
-        model: Role,
+        model: Role,        as: "role",
         attributes: ['id', 'name']
       }],
       order: [["createdAt", "DESC"]],
@@ -216,7 +216,7 @@ export const getAdminById = async (req, res) => {
         exclude: ['password', 'otp_code', 'otp_expiry', 'password_reset_otp', 'password_reset_otp_expiry', 'temp_password'] 
       },
       include: [{
-        model: Role,
+        model: Role,        as: "role",
         attributes: ['id', 'name']
       }]
     });
@@ -339,9 +339,9 @@ export const updateAdmin = async (req, res) => {
         exclude: ['password', 'otp_code', 'otp_expiry', 'password_reset_otp', 'password_reset_otp_expiry', 'temp_password'] 
       },
       include: [{
-        model: Role,
+        model: Role,        as: "role",
         attributes: ['id', 'name']
-      }]
+      }]  
     });
 
     res.status(200).json({
@@ -532,7 +532,7 @@ export const exportAdmins = async (req, res) => {
         exclude: ['password', 'otp_code', 'otp_expiry', 'password_reset_otp', 'password_reset_otp_expiry', 'temp_password']
       },
       include: [{
-        model: Role,
+        model: Role,        as: "role",
         attributes: ['id', 'name']
       }],
       order: [["createdAt", "DESC"]]

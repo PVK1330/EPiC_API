@@ -1,8 +1,16 @@
 -- Tasks: assignments with optional case link; FKs to users (assignee, creator) and cases.
 -- Run after `users` and `cases` exist.
 
-CREATE TYPE "enum_tasks_priority" AS ENUM ('low', 'medium', 'high');
-CREATE TYPE "enum_tasks_status" AS ENUM ('pending', 'in-progress', 'completed');
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'enum_tasks_priority') THEN
+        CREATE TYPE "enum_tasks_priority" AS ENUM ('low', 'medium', 'high');
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'enum_tasks_status') THEN
+        CREATE TYPE "enum_tasks_status" AS ENUM ('pending', 'in-progress', 'completed');
+    END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS "tasks" (
   "id" SERIAL PRIMARY KEY,

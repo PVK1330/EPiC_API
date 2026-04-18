@@ -18,7 +18,7 @@ async function requireAdmin(req, res) {
   }
   const user = await User.findOne({
     where: { id: userId, role_id: ROLES.ADMIN },
-    include: [{ model: Role, attributes: ["id", "name"] }],
+    include: [{ model: Role, as: 'role', attributes: ["id", "name"] }],
   });
   if (!user) {
     res.status(403).json({ status: "error", message: "Admin access required.", data: null });

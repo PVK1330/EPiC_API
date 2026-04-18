@@ -156,6 +156,7 @@ export const getAllCandidates = async (req, res) => {
     // Build include clause for filtering by visa type and payment status
     const includeClause = [{
       model: Role,
+        as: 'role',
       attributes: ['id', 'name']
     }];
 
@@ -234,6 +235,7 @@ export const getCandidateById = async (req, res) => {
       },
       include: [{
         model: Role,
+        as: 'role',
         attributes: ['id', 'name']
       }]
     });
@@ -357,6 +359,7 @@ export const updateCandidate = async (req, res) => {
       },
       include: [{
         model: Role,
+        as: 'role',
         attributes: ['id', 'name']
       }]
     });
@@ -542,6 +545,7 @@ export const exportCandidates = async (req, res) => {
     // Build include clause for filtering by visa type and payment status
     const includeClause = [{
       model: Role,
+        as: 'role',
       attributes: ['id', 'name']
     }];
 
