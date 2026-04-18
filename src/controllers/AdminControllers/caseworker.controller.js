@@ -43,6 +43,7 @@ function caseworkerInclude() {
   return [
     {
       model: Role,
+      as: 'role',
       attributes: ["id", "name"],
     },
     {

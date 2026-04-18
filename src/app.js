@@ -20,6 +20,7 @@ import caseDetailRoutes from './routes/caseDetail.routes.js';
 import caseNoteRoutes from './routes/caseNote.routes.js';
 import { taskRoutes, documentRoutes } from './routes/index.js';
 import applicationFieldsRoutes from './routes/applicationFields.routes.js';
+import dashboardRoutes from './routes/admin.dashboard.routes.js';
 import messageRoutes from './routes/message.routes.js';
 
 const app = express();
@@ -53,5 +54,6 @@ app.use('/api/application-fields', applicationFieldsRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/case-details', caseDetailRoutes);
 app.use('/api/case-notes', caseNoteRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 
 export default app;

@@ -1,0 +1,22 @@
+import express from "express";
+import { verifyToken } from "../middlewares/auth.middleware.js";
+import { checkRole } from "../middlewares/role.middleware.js";
+import dashboardController from "../controllers/AdminControllers/dashboard.controller.js";
+
+const router = express.Router();
+
+// Apply authentication middleware to all dashboard routes
+router.use(verifyToken);
+
+// Dashboard Statistics
+router.get("/stats", dashboardController.getDashboardStats);
+
+// Recent Activities
+router.get("/recent-cases", dashboardController.getRecentCases);
+router.get("/recent-tasks", dashboardController.getRecentTasks);
+router.get("/recent-activities", dashboardController.getRecentActivities);
+
+// Quick Actions
+router.get("/quick-actions", dashboardController.getQuickActions);
+
+export default router;

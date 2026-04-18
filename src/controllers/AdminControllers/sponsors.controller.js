@@ -158,6 +158,7 @@ export const getAllSponsors = async (req, res) => {
       },
       include: [{
         model: Role,
+        as: 'role',
         attributes: ['id', 'name']
       }],
       order: [["createdAt", "DESC"]],
@@ -202,6 +203,7 @@ export const getSponsorById = async (req, res) => {
       },
       include: [{
         model: Role,
+        as: 'role',
         attributes: ['id', 'name']
       }]
     });
@@ -325,6 +327,7 @@ export const updateSponsor = async (req, res) => {
       },
       include: [{
         model: Role,
+        as: 'role',
         attributes: ['id', 'name']
       }]
     });
@@ -517,6 +520,7 @@ export const exportSponsors = async (req, res) => {
       },
       include: [{
         model: Role,
+        as: 'role',
         attributes: ['id', 'name']
       }],
       order: [["createdAt", "DESC"]]
