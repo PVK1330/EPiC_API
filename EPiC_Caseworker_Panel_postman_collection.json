@@ -1,0 +1,409 @@
+{
+  "info": {
+    "name": "EPiC_Caseworker_Panel",
+    "description": "Postman collection for EPiC API Caseworker Panel endpoints",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000",
+      "type": "string"
+    },
+    {
+      "key": "caseworkerToken",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login (Caseworker)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"caseworker@epic.com\",\n  \"password\": \"cwpass123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Dashboard",
+      "item": [
+        {
+          "name": "Get Dashboard Stats",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{caseworkerToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/caseworker/cases/dashboard/stats"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Cases",
+      "item": [
+        {
+          "name": "Get My Cases (Assigned)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{caseworkerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/caseworker/cases?page=1&limit=10&search=&status=&priority=&visaTypeId=&petitionTypeId=&sortBy=created_at&sortOrder=DESC",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "caseworker",
+                "cases"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "search",
+                  "value": ""
+                },
+                {
+                  "key": "status",
+                  "value": ""
+                },
+                {
+                  "key": "priority",
+                  "value": ""
+                },
+                {
+                  "key": "visaTypeId",
+                  "value": ""
+                },
+                {
+                  "key": "petitionTypeId",
+                  "value": ""
+                },
+                {
+                  "key": "sortBy",
+                  "value": "created_at"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "DESC"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get My Pipeline Cases",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{caseworkerToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/caseworker/cases/pipeline"
+          }
+        },
+        {
+          "name": "Update My Case Status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{caseworkerToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/caseworker/cases/CAS-000001/status",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"In Progress\",\n  \"notes\": \"Started reviewing documents\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Get My Cases - Active Status Filter",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{caseworkerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/caseworker/cases?status=active",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "caseworker",
+                "cases"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "active"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get My Cases - Overdue Filter",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{caseworkerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/caseworker/cases?status=overdue",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "caseworker",
+                "cases"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "overdue"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get My Cases - High Priority Filter",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{caseworkerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/caseworker/cases?priority=high",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "caseworker",
+                "cases"
+              ],
+              "query": [
+                {
+                  "key": "priority",
+                  "value": "high"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get My Cases - Sorted by Target Date",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{caseworkerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/caseworker/cases?sortBy=targetSubmissionDate&sortOrder=ASC",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "caseworker",
+                "cases"
+              ],
+              "query": [
+                {
+                  "key": "sortBy",
+                  "value": "targetSubmissionDate"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "ASC"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Profile",
+      "item": [
+        {
+          "name": "Get My Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{caseworkerToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/user/profile"
+          }
+        },
+        {
+          "name": "Update My Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{caseworkerToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/user/profile",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Case\",\n  \"last_name\": \"Worker\",\n  \"country_code\": \"+1\",\n  \"mobile\": \"2223334444\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Messages",
+      "item": [
+        {
+          "name": "Get Chat Users",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{caseworkerToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/messages/users"
+          }
+        },
+        {
+          "name": "Get Conversations",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{caseworkerToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/messages/conversations"
+          }
+        },
+        {
+          "name": "Get Messages Thread",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{caseworkerToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/messages/2"
+          }
+        },
+        {
+          "name": "Send Message",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{caseworkerToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/messages/",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"receiverId\": 3,\n  \"content\": \"Hello from Caseworker!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Mark Messages as Read",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{caseworkerToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/messages/mark-read",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"senderId\": 3\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

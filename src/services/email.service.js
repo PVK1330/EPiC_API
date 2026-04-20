@@ -54,3 +54,14 @@ export async function sendCandidateWelcomeEmail({ to, html }) {
     html,
   });
 }
+
+/**
+ * Case reschedule notification — date changes with reason.
+ */
+export async function sendRescheduleEmail({ to, html }) {
+  return sendMail({
+    to,
+    subject: "Elite Pic - Case Rescheduled",
+    html,
+  });
+}

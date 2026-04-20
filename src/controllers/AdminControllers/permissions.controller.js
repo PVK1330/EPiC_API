@@ -261,6 +261,7 @@ export const checkUserPermission = async (req, res) => {
       include: [
         {
           model: Role,
+          as: 'role',
           include: [
             {
               model: Permission,
