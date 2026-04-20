@@ -47,8 +47,9 @@ import MessageModel from './message.model.js';
 
 import ConversationModel from './conversation.model.js';
 
-const env = process.env.NODE_ENV || 'development';
+import RescheduleHistoryModel from './rescheduleHistory.model.js';
 
+const env = process.env.NODE_ENV || 'development';
 
 const dbConfig = config[env];
 
@@ -103,6 +104,7 @@ db.ApplicationFieldSetting = ApplicationFieldSettingModel(sequelize, Sequelize.D
 db.ApplicationCustomField = ApplicationCustomFieldModel(sequelize, Sequelize.DataTypes);
 db.Message = MessageModel(sequelize, Sequelize.DataTypes);
 db.Conversation = ConversationModel(sequelize, Sequelize.DataTypes);
+db.RescheduleHistory = RescheduleHistoryModel(sequelize, Sequelize.DataTypes);
 
 // Associations
 
@@ -198,6 +200,12 @@ db.User.hasMany(db.Escalation, { foreignKey: 'assignedAdminId', as: 'assignedEsc
 
 db.Escalation.belongsTo(db.Case, { foreignKey: 'relatedCaseId', as: 'relatedCase' });
 db.Case.hasMany(db.Escalation, { foreignKey: 'relatedCaseId', as: 'escalations' });
+
+// Reschedule history associations
+db.RescheduleHistory.belongsTo(db.Case, { foreignKey: 'caseId', as: 'case' });
+db.RescheduleHistory.belongsTo(db.User, { foreignKey: 'createdById', as: 'createdBy' });
+db.Case.hasMany(db.RescheduleHistory, { foreignKey: 'caseId', as: 'rescheduleHistory' });
+db.User.hasMany(db.RescheduleHistory, { foreignKey: 'createdById', as: 'rescheduleHistory' });
 
 // Permission associations
 db.Role.belongsToMany(db.Permission, { 

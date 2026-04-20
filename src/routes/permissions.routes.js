@@ -11,14 +11,14 @@ router.use(verifyToken);
 // Apply role-based access control - Only Admin can manage permissions
 router.use(checkRole([ROLES.ADMIN]));
 
+// User permission check - must come before /:id to avoid route conflict
+router.get("/check/permission", permissionsController.checkUserPermission);
+
 // Permission CRUD operations
 router.get("/", permissionsController.getAllPermissions);
 router.post("/", permissionsController.createPermission);
 router.get("/:id", permissionsController.getPermissionById);
 router.put("/:id", permissionsController.updatePermission);
 router.delete("/:id", permissionsController.deletePermission);
-
-// User permission check
-router.get("/check/permission", permissionsController.checkUserPermission);
 
 export default router;

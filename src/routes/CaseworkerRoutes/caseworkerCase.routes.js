@@ -1,0 +1,26 @@
+import { Router } from "express";
+import * as caseworkerCaseController from "../../controllers/CaseworkerControllers/caseworkerCase.controller.js";
+import { verifyToken } from "../../middlewares/auth.middleware.js";
+import { checkRole, ROLES } from "../../middlewares/role.middleware.js";
+
+const router = Router();
+
+// Require authentication for all routes
+router.use(verifyToken);
+
+// Require caseworker role for all routes
+router.use(checkRole([ROLES.CASEWORKER]));
+
+// Get cases assigned to logged-in caseworker with filters
+router.get("/", caseworkerCaseController.getMyCases);
+
+// Get dashboard statistics for logged-in caseworker
+router.get("/dashboard/stats", caseworkerCaseController.getMyDashboardStats);
+
+// Get pipeline cases for logged-in caseworker
+router.get("/pipeline", caseworkerCaseController.getMyPipelineCases);
+
+// Update case status (caseworker can update their assigned cases)
+router.patch("/:id/status", caseworkerCaseController.updateMyCaseStatus);
+
+export default router;

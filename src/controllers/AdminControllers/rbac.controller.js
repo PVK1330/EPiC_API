@@ -241,6 +241,7 @@ export const getPermissionAudit = async (req, res) => {
           include: [
             {
               model: User,
+              as: 'role',
               attributes: ["id", "first_name", "last_name", "email", "status"],
             },
           ],

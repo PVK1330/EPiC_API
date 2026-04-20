@@ -8,6 +8,7 @@ import userRoutes from './routes/user.routes.js';
 import adminRoutes from './routes/admin.routes.js';
 import adminSettingsRoutes from './routes/admin.settings.routes.js';
 import caseworkerRoutes from './routes/caseworker.routes.js';
+import caseworkerCaseRoutes from './routes/CaseworkerRoutes/caseworkerCase.routes.js';
 import sponsorsRoutes from './routes/sponsors.routes.js';
 import candidateRoutes from './routes/candidate.routes.js';
 import stripeRoutes from './routes/stripe.routes.js';
@@ -22,6 +23,7 @@ import { taskRoutes, documentRoutes } from './routes/index.js';
 import applicationFieldsRoutes from './routes/applicationFields.routes.js';
 import dashboardRoutes from './routes/admin.dashboard.routes.js';
 import messageRoutes from './routes/message.routes.js';
+import rescheduleRoutes from './routes/CaseworkerRoutes/reschedule.routes.js';
 
 const app = express();
 
@@ -40,6 +42,7 @@ app.use('/api/user', userRoutes);
 app.use('/api/settings', adminSettingsRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/caseworker', caseworkerRoutes);
+app.use('/api/caseworker/cases', caseworkerCaseRoutes);
 app.use('/api/sponsors', sponsorsRoutes);
 app.use('/api/candidate', candidateRoutes);
 app.use('/api/stripe', stripeRoutes);
@@ -55,5 +58,6 @@ app.use('/api/messages', messageRoutes);
 app.use('/api/case-details', caseDetailRoutes);
 app.use('/api/case-notes', caseNoteRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/cases/reschedule', rescheduleRoutes);
 
 export default app;
