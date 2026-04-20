@@ -1,36 +1,12 @@
 {
   "info": {
+    "_postman_id": "4f0b59a7-9e57-4da8-8d32-b53444f9c694",
     "name": "EPiC_API",
     "description": "Postman collection for EPiC_API endpoints with payloads",
-    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "53852611",
+    "_collection_link": "https://go.postman.co/collection/53852611-4f0b59a7-9e57-4da8-8d32-b53444f9c694?source=collection_link"
   },
-  "variable": [
-    {
-      "key": "baseUrl",
-      "value": "http://localhost:5000",
-      "type": "string"
-    },
-    {
-      "key": "token",
-      "value": "",
-      "type": "string"
-    },
-    {
-      "key": "adminToken",
-      "value": "",
-      "type": "string"
-    },
-    {
-      "key": "caseworkerToken",
-      "value": "",
-      "type": "string"
-    },
-    {
-      "key": "candidateToken",
-      "value": "",
-      "type": "string"
-    }
-  ],
   "item": [
     {
       "name": "Auth",
@@ -39,7 +15,7 @@
           "name": "Register",
           "request": {
             "method": "POST",
-            "url": "{{baseUrl}}/api/auth/register",
+            "header": [],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"first_name\": \"John\",\n  \"last_name\": \"Doe\",\n  \"email\": \"test@example.com\",\n  \"password\": \"password123\",\n  \"country_code\": \"+1\",\n  \"mobile\": \"1234567890\",\n  \"role_id\": 3\n}",
@@ -48,14 +24,26 @@
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Verify OTP",
           "request": {
             "method": "POST",
-            "url": "{{baseUrl}}/api/auth/verify-otp",
+            "header": [],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"test@example.com\",\n  \"otp\": \"123456\"\n}",
@@ -64,14 +52,26 @@
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/verify-otp",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "verify-otp"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Resend OTP",
           "request": {
             "method": "POST",
-            "url": "{{baseUrl}}/api/auth/resend-otp",
+            "header": [],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"test@example.com\"\n}",
@@ -80,31 +80,67 @@
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/resend-otp",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "resend-otp"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Login",
           "request": {
             "method": "POST",
-            "url": "{{baseUrl}}/api/auth/login",
+            "header": [],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"password123\"\n}",
+              "raw": "{\n  \"email\": \"admin@elitepic.com\",\n  \"password\": \"admin123\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Logout",
           "request": {
             "method": "POST",
-            "url": "{{baseUrl}}/api/auth/logout"
-          }
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "logout"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "2FA Setup",
@@ -116,8 +152,20 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/auth/2fa/setup"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/2fa/setup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "2fa",
+                "setup"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "2FA Verify Setup",
@@ -129,7 +177,6 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/auth/2fa/verify-setup",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"token\": \"123456\",\n  \"backupCodes\": [\"CODE1\", \"CODE2\", \"CODE3\"]\n}",
@@ -138,14 +185,27 @@
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/2fa/verify-setup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "2fa",
+                "verify-setup"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "2FA Verify (Login)",
           "request": {
             "method": "POST",
-            "url": "{{baseUrl}}/api/auth/2fa/verify",
+            "header": [],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"password123\",\n  \"token\": \"123456\"\n}",
@@ -154,8 +214,21 @@
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/2fa/verify",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "2fa",
+                "verify"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "2FA Disable",
@@ -167,7 +240,6 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/auth/2fa/disable",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"password\": \"password123\"\n}",
@@ -176,14 +248,27 @@
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/2fa/disable",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "2fa",
+                "disable"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Forgot Password",
           "request": {
             "method": "POST",
-            "url": "{{baseUrl}}/api/auth/forgot-password",
+            "header": [],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"test@example.com\"\n}",
@@ -192,14 +277,26 @@
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/forgot-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "forgot-password"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Verify Reset OTP",
           "request": {
             "method": "POST",
-            "url": "{{baseUrl}}/api/auth/verify-reset-otp",
+            "header": [],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"test@example.com\",\n  \"otp\": \"123456\"\n}",
@@ -208,14 +305,26 @@
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/verify-reset-otp",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "verify-reset-otp"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Set Password",
           "request": {
             "method": "POST",
-            "url": "{{baseUrl}}/api/auth/set-password",
+            "header": [],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"newpassword123\",\n  \"confirmPassword\": \"newpassword123\"\n}",
@@ -224,14 +333,26 @@
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/set-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "set-password"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Resend OTP User",
           "request": {
             "method": "POST",
-            "url": "{{baseUrl}}/api/auth/resendOtpUser",
+            "header": [],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"test@example.com\"\n}",
@@ -240,14 +361,26 @@
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/resendOtpUser",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "resendOtpUser"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Verify OTP User",
           "request": {
             "method": "POST",
-            "url": "{{baseUrl}}/api/auth/verifyOtpUser",
+            "header": [],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"test@example.com\",\n  \"otp\": \"123456\"\n}",
@@ -256,8 +389,20 @@
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/verifyOtpUser",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "verifyOtpUser"
+              ]
             }
-          }
+          },
+          "response": []
         }
       ]
     },
@@ -274,8 +419,19 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/user/profile"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/user/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "user",
+                "profile"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "Edit Profile",
@@ -287,7 +443,6 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/user/profile",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"first_name\": \"John\",\n  \"last_name\": \"Doe\",\n  \"country_code\": \"+1\",\n  \"mobile\": \"0987654321\"\n}",
@@ -296,8 +451,45 @@
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/user/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "user",
+                "profile"
+              ]
             }
-          }
+          },
+          "response": []
+        },
+        {
+          "name": "All users",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/user/all",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "user",
+                "all"
+              ]
+            }
+          },
+          "response": []
         }
       ]
     },
@@ -314,17 +506,27 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/admin/",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"first_name\": \"Admin\",\n  \"last_name\": \"User\",\n  \"email\": \"admin@epic.com\",\n  \"country_code\": \"+1\",\n  \"mobile\": \"1112223333\",\n  \"role_id\": 1,\n  \"password\": \"adminpass123\",\n  \"confirm_password\": \"adminpass123\"\n}",
+              "raw": "{\n  \"first_name\": \"Admin\",\n  \"last_name\": \"User\",\n  \"email\": \"admin@epc.com\",\n  \"country_code\": \"+1\",\n  \"mobile\": \"1112228333\",\n  \"role_id\": 1,\n  \"password\": \"adminpass123\",\n  \"confirm_password\": \"adminpass123\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Get All Admins",
@@ -364,7 +566,8 @@
                 }
               ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Get Admin By ID",
@@ -376,8 +579,19 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/admin/1"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/7",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "7"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "Update Admin",
@@ -389,17 +603,28 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/admin/1",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"first_name\": \"Admin\",\n  \"last_name\": \"Updated\",\n  \"email\": \"admin@epic.com\",\n  \"country_code\": \"+1\",\n  \"mobile\": \"1112223333\",\n  \"role_id\": 1,\n  \"status\": \"active\"\n}",
+              "raw": "{\n  \"first_name\": \"Admin\",\n  \"last_name\": \"Updated\",\n  \"email\": \"admin@ep4ic.com\",\n  \"country_code\": \"+1\",\n  \"mobile\": \"1112223333\",\n  \"role_id\": 1,\n  \"status\": \"active\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/7",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "7"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Toggle Admin Status",
@@ -411,8 +636,20 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/admin/toggle-status/1"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/toggle-status/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "toggle-status",
+                "1"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "Reset Admin Password",
@@ -424,7 +661,6 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/admin/reset-password/1",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"new_password\": \"newadminpass123\",\n  \"confirm_password\": \"newadminpass123\"\n}",
@@ -433,8 +669,21 @@
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/reset-password/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "reset-password",
+                "1"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Delete Admin",
@@ -446,8 +695,19 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/admin/1"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/7",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "7"
+              ]
+            }
+          },
+          "response": []
         }
       ]
     },
@@ -464,7 +724,6 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/caseworker/",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"first_name\": \"Case\",\n  \"last_name\": \"Worker\",\n  \"email\": \"caseworker@epic.com\",\n  \"country_code\": \"+1\",\n  \"mobile\": \"2223334444\",\n  \"role_id\": 2,\n  \"password\": \"cwpass123\",\n  \"confirm_password\": \"cwpass123\"\n}",
@@ -473,8 +732,19 @@
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/caseworker",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "caseworker"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Get All Caseworkers",
@@ -506,7 +776,8 @@
                 }
               ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Get Caseworker By ID",
@@ -518,8 +789,19 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/caseworker/1"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/caseworker/10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "caseworker",
+                "10"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "Update Caseworker",
@@ -531,7 +813,6 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/caseworker/1",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"first_name\": \"Case\",\n  \"last_name\": \"Worker Update\",\n  \"email\": \"caseworker@epic.com\",\n  \"country_code\": \"+1\",\n  \"mobile\": \"2223334444\",\n  \"role_id\": 2,\n  \"status\": \"active\"\n}",
@@ -540,8 +821,20 @@
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/caseworker/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "caseworker",
+                "1"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Toggle Caseworker Status",
@@ -553,8 +846,20 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/caseworker/1/toggle-status"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/caseworker/10/toggle-status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "caseworker",
+                "10",
+                "toggle-status"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "Reset Caseworker Password",
@@ -566,7 +871,6 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/caseworker/1/reset-password",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"new_password\": \"newcwpass123\",\n  \"confirm_password\": \"newcwpass123\"\n}",
@@ -575,8 +879,21 @@
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/caseworker/1/reset-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "caseworker",
+                "1",
+                "reset-password"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Delete Caseworker",
@@ -588,8 +905,19 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/caseworker/1"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/caseworker/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "caseworker",
+                "1"
+              ]
+            }
+          },
+          "response": []
         }
       ]
     },
@@ -606,17 +934,27 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/sponsors/",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"first_name\": \"Sponsor\",\n  \"last_name\": \"Person\",\n  \"email\": \"sponsor@epic.com\",\n  \"country_code\": \"+1\",\n  \"mobile\": \"3334445555\",\n  \"role_id\": 4,\n  \"password\": \"sponsorpass123\",\n  \"confirm_password\": \"sponsorpass123\"\n}",
+              "raw": "{\n  \"first_name\": \"Sponsor\",\n  \"last_name\": \"Person\",\n  \"email\": \"sponsor@epic.co.in\",\n  \"country_code\": \"+1\",\n  \"mobile\": \"3334448555\",\n  \"role_id\": 4,\n  \"password\": \"sponsorpass123\",\n  \"confirm_password\": \"sponsorpass123\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/sponsors",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sponsors"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Get All Sponsors",
@@ -629,7 +967,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/sponsors?page=1&limit=10",
+              "raw": "{{baseUrl}}/api/sponsors",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -638,7 +976,8 @@
                 "sponsors"
               ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Get Sponsor By ID",
@@ -650,8 +989,19 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/sponsors/1"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/sponsors/9",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sponsors",
+                "9"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "Update Sponsor",
@@ -663,17 +1013,28 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/sponsors/1",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"first_name\": \"Sponsor Updated\",\n  \"last_name\": \"Person\",\n  \"email\": \"sponsor@epic.com\",\n  \"country_code\": \"+1\",\n  \"mobile\": \"3334445555\",\n  \"role_id\": 4,\n  \"status\": \"active\"\n}",
+              "raw": "{\n  \"first_name\": \"Sponsor Updated\",\n  \"last_name\": \"Person\",\n  \"email\": \"sponsor@epic.co.in\",\n  \"country_code\": \"+1\",\n  \"mobile\": \"33344455255\",\n  \"role_id\": 4,\n  \"status\": \"active\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/sponsors/9",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sponsors",
+                "9"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Toggle Sponsor Status",
@@ -685,8 +1046,20 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/sponsors/1/toggle-status"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/sponsors/9/toggle-status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sponsors",
+                "9",
+                "toggle-status"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "Reset Sponsor Password",
@@ -698,7 +1071,6 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/sponsors/1/reset-password",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"new_password\": \"newsponsorpass123\",\n  \"confirm_password\": \"newsponsorpass123\"\n}",
@@ -707,8 +1079,21 @@
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/sponsors/9/reset-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sponsors",
+                "9",
+                "reset-password"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Delete Sponsor",
@@ -720,8 +1105,19 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/sponsors/1"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/sponsors/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sponsors",
+                "1"
+              ]
+            }
+          },
+          "response": []
         }
       ]
     },
@@ -735,20 +1131,31 @@
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{token}}"
+                "value": "Bearer {{token}}",
+                "type": "text"
               }
             ],
-            "url": "{{baseUrl}}/api/candidate/",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"first_name\": \"Candidate\",\n  \"last_name\": \"User\",\n  \"email\": \"candidate1@epic.com\",\n  \"country_code\": \"+1\",\n  \"mobile\": \"4445556666\",\n  \"role_id\": 3,\n  \"password\": \"candidatepass123\",\n  \"confirm_password\": \"candidatepass123\"\n}",
+              "raw": "{\n  \"first_name\": \"Candidate\",\n  \"last_name\": \"User\",\n  \"email\": \"candidate212@epic.com\",\n  \"country_code\": \"+1\",\n  \"mobile\": \"44455538666\",\n  \"role_id\": 3,\n  \"password\": \"candidatepass123\",\n  \"confirm_password\": \"candidatepass123\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/candidate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "candidate"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Get All Candidates",
@@ -761,7 +1168,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/candidate?page=1&limit=10",
+              "raw": "{{baseUrl}}/api/candidate",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -770,7 +1177,8 @@
                 "candidate"
               ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Get Candidate By ID",
@@ -782,8 +1190,19 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/candidate/1"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/candidate/2",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "candidate",
+                "2"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "Update Candidate",
@@ -795,17 +1214,28 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/candidate/1",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"first_name\": \"Candidate Updated\",\n  \"last_name\": \"User\",\n  \"email\": \"candidate1@epic.com\",\n  \"country_code\": \"+1\",\n  \"mobile\": \"4445556666\",\n  \"role_id\": 3,\n  \"status\": \"active\"\n}",
+              "raw": "{\n  \"first_name\": \"Candidate Updated\",\n  \"last_name\": \"User\",\n  \"email\": \"candidate14@epic.com\",\n  \"country_code\": \"+1\",\n  \"mobile\": \"4445886666\",\n  \"role_id\": 3,\n  \"status\": \"active\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/candidate/8",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "candidate",
+                "8"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Toggle Candidate Status",
@@ -817,8 +1247,20 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/candidate/1/toggle-status"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/candidate/8/toggle-status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "candidate",
+                "8",
+                "toggle-status"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "Reset Candidate Password",
@@ -830,7 +1272,6 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/candidate/1/reset-password",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"new_password\": \"newcandidatepass123\",\n  \"confirm_password\": \"newcandidatepass123\"\n}",
@@ -839,8 +1280,21 @@
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/candidate/1/reset-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "candidate",
+                "1",
+                "reset-password"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Delete Candidate",
@@ -852,8 +1306,19 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/candidate/1"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/candidate/8",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "candidate",
+                "8"
+              ]
+            }
+          },
+          "response": []
         }
       ]
     },
@@ -870,8 +1335,19 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/cases/pipeline"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/cases/pipeline",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "cases",
+                "pipeline"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "Get Team Capacity",
@@ -883,8 +1359,19 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/cases/capacity"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/cases/capacity",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "cases",
+                "capacity"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "Assign Case",
@@ -896,7 +1383,6 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/cases/1/assign",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"assignTo\": \"CW-102\",\n  \"assignToName\": \"Marcus Green\",\n  \"reason\": \"Capacity reassignment\"\n}",
@@ -905,8 +1391,21 @@
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/cases/1/assign",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "cases",
+                "1",
+                "assign"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Update Pipeline Stage",
@@ -918,7 +1417,6 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/cases/1/stage",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"status\": \"Docs Pending\"\n}",
@@ -927,8 +1425,21 @@
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/cases/1/stage",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "cases",
+                "1",
+                "stage"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Create Case",
@@ -940,17 +1451,27 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/cases/",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"candidate\": \"John Doe\",\n  \"candidateId\": \"CAND-001\",\n  \"business\": \"Tech Solutions Pvt Ltd\",\n  \"businessId\": \"BUS-001\",\n  \"visaType\": \"H1B\",\n  \"petitionType\": \"Initial\",\n  \"priority\": \"high\",\n  \"targetSubmissionDate\": \"2026-05-01\",\n  \"lcaNumber\": \"LCA123456\",\n  \"receiptNumber\": \"RCPT789456\",\n  \"nationality\": \"Indian\",\n  \"jobTitle\": \"Software Engineer\",\n  \"department\": \"IT\",\n  \"caseworker\": \"Alice Smith\",\n  \"caseworkerId\": \"EMP-001\",\n  \"salaryOffered\": 85000.00,\n  \"totalAmount\": 5000.00,\n  \"paidAmount\": 2000.00,\n  \"notes\": \"Urgent processing required\"\n}",
+              "raw": "{\n  \"candidateId\": 4,\n  \"sponsorId\": 5,\n  \"visaTypeId\": 1,\n  \"petitionTypeId\": 2,\n  \"priority\": \"high\",\n  \"targetSubmissionDate\": \"2026-05-01\",\n  \"lcaNumber\": \"LCA123456\",\n  \"receiptNumber\": \"REC789456\",\n  \"assignedcaseworkerId\": [6],\n  \"salaryOffered\": 85000,\n  \"totalAmount\": 5000,\n  \"paidAmount\": 2000,\n  \"notes\": \"Urgent processing required\",\n  \"nationality\": \"Indian\",\n  \"jobTitle\": \"Software Engineer\",\n  \"department\": \"IT\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/cases",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "cases"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Get All Cases",
@@ -998,7 +1519,8 @@
                 }
               ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Get Case By ID",
@@ -1010,8 +1532,19 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/cases/1"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/cases/5",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "cases",
+                "5"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "Update Case",
@@ -1023,17 +1556,28 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/cases/1",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"status\": \"Approved\",\n  \"notes\": \"Case was approved successfully\"\n}",
+              "raw": "{\n  \"candidateId\": 4,\n  \"sponsorId\": 5,\n  \"visaTypeId\": 1,\n  \"petitionTypeId\": 2,\n  \"priority\": \"high\",\n  \"targetSubmissionDate\": \"2026-05-01\",\n  \"lcaNumber\": \"LCA123456\",\n  \"receiptNumber\": \"REC789456\",\n  \"assignedcaseworkerId\": [6],\n  \"salaryOffered\": 85000,\n  \"totalAmount\": 5000,\n  \"paidAmount\": 2000,\n  \"notes\": \"Urgent processing required\",\n  \"nationality\": \"Indian\",\n  \"jobTitle\": \"Software Engineer\",\n  \"department\": \"IT\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/cases/5",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "cases",
+                "5"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Delete Case",
@@ -1045,8 +1589,44 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/cases/1"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/cases/2",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "cases",
+                "2"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Case details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/case-details/7",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "case-details",
+                "7"
+              ]
+            }
+          },
+          "response": []
         }
       ]
     },
@@ -1063,7 +1643,6 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/escalations",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"caseId\": \"VF-2835\",\n  \"candidate\": \"Li Wei\",\n  \"severity\": \"Critical\",\n  \"trigger\": \"Deadline breach — ILR expired\",\n  \"triggerType\": \"Deadline Breach\",\n  \"assignedAdminId\": 1,\n  \"relatedCaseId\": 1,\n  \"notes\": \"Urgent action required\"\n}",
@@ -1072,8 +1651,19 @@
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/escalations",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "escalations"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Get All Escalations",
@@ -1113,7 +1703,8 @@
                 }
               ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Get Escalation KPI",
@@ -1125,8 +1716,19 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/escalations/kpi"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/escalations/kpi",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "escalations",
+                "kpi"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "Get Escalation By ID",
@@ -1138,8 +1740,19 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/escalations/1"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/escalations/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "escalations",
+                "1"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "Update Escalation",
@@ -1151,7 +1764,6 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/escalations/1",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"severity\": \"High\",\n  \"trigger\": \"Updated trigger reason\",\n  \"triggerType\": \"Missing Docs\",\n  \"assignedAdminId\": 2,\n  \"status\": \"In Progress\",\n  \"notes\": \"Updated notes\"\n}",
@@ -1160,8 +1772,20 @@
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/escalations/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "escalations",
+                "1"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Assign Escalation",
@@ -1173,7 +1797,6 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/escalations/1/assign",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"assignedAdminId\": 3\n}",
@@ -1182,8 +1805,21 @@
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/escalations/1/assign",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "escalations",
+                "1",
+                "assign"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Delete Escalation",
@@ -1195,8 +1831,19 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/escalations/1"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/escalations/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "escalations",
+                "1"
+              ]
+            }
+          },
+          "response": []
         }
       ]
     },
@@ -1213,7 +1860,6 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/stripe/create-payment-intent",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"amount\": 500,\n  \"currency\": \"usd\",\n  \"payment_method_id\": \"pm_card_visa\",\n  \"metadata\": { \"order_id\": \"12345\" }\n}",
@@ -1222,8 +1868,20 @@
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/stripe/create-payment-intent",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "stripe",
+                "create-payment-intent"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Confirm Payment",
@@ -1235,7 +1893,6 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/stripe/confirm-payment",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"payment_intent_id\": \"pi_3xxx\",\n  \"payment_method_id\": \"pm_card_visa\"\n}",
@@ -1244,8 +1901,20 @@
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/stripe/confirm-payment",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "stripe",
+                "confirm-payment"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Get Payment Status",
@@ -1257,8 +1926,20 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/stripe/payment-status/pi_3xxx"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/stripe/payment-status/pi_3xxx",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "stripe",
+                "payment-status",
+                "pi_3xxx"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "Cancel Payment",
@@ -1270,7 +1951,6 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/stripe/cancel-payment",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"payment_intent_id\": \"pi_3xxx\"\n}",
@@ -1279,8 +1959,20 @@
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/stripe/cancel-payment",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "stripe",
+                "cancel-payment"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Create Setup Intent",
@@ -1292,7 +1984,6 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/stripe/create-setup-intent",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"customer_id\": \"cus_xxx\"\n}",
@@ -1301,8 +1992,20 @@
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/stripe/create-setup-intent",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "stripe",
+                "create-setup-intent"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Refund",
@@ -1314,7 +2017,6 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/stripe/refund",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"payment_intent_id\": \"pi_3xxx\",\n  \"amount\": 500,\n  \"reason\": \"requested_by_customer\"\n}",
@@ -1323,8 +2025,20 @@
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/stripe/refund",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "stripe",
+                "refund"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Create Subscription",
@@ -1336,7 +2050,6 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/stripe/create-subscription",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"customer_id\": \"cus_xxx\",\n  \"price_id\": \"price_xxx\",\n  \"payment_method_id\": \"pm_xxx\",\n  \"metadata\": { \"plan\": \"gold\" }\n}",
@@ -1345,8 +2058,20 @@
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/stripe/create-subscription",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "stripe",
+                "create-subscription"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Renew Subscription",
@@ -1358,7 +2083,6 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/stripe/renew-subscription",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"subscription_id\": \"sub_xxx\",\n  \"payment_method_id\": \"pm_xxx\"\n}",
@@ -1367,8 +2091,20 @@
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/stripe/renew-subscription",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "stripe",
+                "renew-subscription"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Cancel Subscription",
@@ -1380,7 +2116,6 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/stripe/cancel-subscription",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"subscription_id\": \"sub_xxx\",\n  \"cancel_at_period_end\": true\n}",
@@ -1389,8 +2124,20 @@
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/stripe/cancel-subscription",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "stripe",
+                "cancel-subscription"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Get Subscription Status",
@@ -1402,8 +2149,20 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/stripe/subscription-status/sub_xxx"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/stripe/subscription-status/sub_xxx",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "stripe",
+                "subscription-status",
+                "sub_xxx"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "Update Subscription",
@@ -1415,7 +2174,6 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/stripe/update-subscription",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"subscription_id\": \"sub_xxx\",\n  \"price_id\": \"price_new_xxx\",\n  \"quantity\": 1,\n  \"metadata\": { \"plan\": \"platinum\" }\n}",
@@ -1424,15 +2182,39 @@
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/stripe/update-subscription",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "stripe",
+                "update-subscription"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Webhook",
           "request": {
             "method": "POST",
-            "url": "{{baseUrl}}/api/stripe/webhook"
-          }
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/stripe/webhook",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "stripe",
+                "webhook"
+              ]
+            }
+          },
+          "response": []
         }
       ]
     },
@@ -1449,8 +2231,19 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/permissions/"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/permissions/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "permissions",
+                ""
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "Get Permission by ID",
@@ -1462,8 +2255,19 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/permissions/1"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/permissions/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "permissions",
+                "1"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "Create Permission",
@@ -1475,7 +2279,6 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/permissions/",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"name\": \"admin.custom.feature\",\n  \"description\": \"Access custom feature\",\n  \"module\": \"custom\",\n  \"action\": \"view\",\n  \"resource\": \"custom\"\n}",
@@ -1484,8 +2287,20 @@
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/permissions/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "permissions",
+                ""
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Update Permission",
@@ -1497,7 +2312,6 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/permissions/1",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"description\": \"Updated description\"\n}",
@@ -1506,8 +2320,20 @@
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/permissions/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "permissions",
+                "1"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Delete Permission",
@@ -1519,8 +2345,19 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/permissions/1"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/permissions/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "permissions",
+                "1"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "Check User Permission",
@@ -1550,7 +2387,8 @@
                 }
               ]
             }
-          }
+          },
+          "response": []
         }
       ]
     },
@@ -1567,8 +2405,19 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/roles/"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/roles/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "roles",
+                ""
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "Get Role by ID",
@@ -1580,8 +2429,19 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/roles/1"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/roles/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "roles",
+                "1"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "Get Role with Permissions",
@@ -1593,8 +2453,20 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/roles/1/with-permissions"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/roles/1/with-permissions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "roles",
+                "1",
+                "with-permissions"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "Create Role",
@@ -1606,7 +2478,6 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/roles/",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"name\": \"Business Manager\",\n  \"description\": \"Manager for business operations\"\n}",
@@ -1615,8 +2486,20 @@
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/roles/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "roles",
+                ""
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Update Role",
@@ -1628,7 +2511,6 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/roles/5",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"name\": \"Business Admin\",\n  \"description\": \"Full business admin access\"\n}",
@@ -1637,8 +2519,20 @@
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/roles/5",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "roles",
+                "5"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Delete Role",
@@ -1650,8 +2544,19 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/roles/5"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/roles/5",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "roles",
+                "5"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "Assign Permissions to Role",
@@ -1663,7 +2568,6 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/roles/5/permissions",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"permissionIds\": [1, 2, 3, 5, 8, 10, 15, 16]\n}",
@@ -1672,8 +2576,21 @@
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/roles/5/permissions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "roles",
+                "5",
+                "permissions"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Get Role Permissions",
@@ -1685,8 +2602,20 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/roles/5/permissions"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/roles/5/permissions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "roles",
+                "5",
+                "permissions"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "Remove Permission from Role",
@@ -1698,8 +2627,21 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/roles/5/permissions/10"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/roles/5/permissions/10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "roles",
+                "5",
+                "permissions",
+                "10"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "Clone Permissions Between Roles",
@@ -1711,7 +2653,6 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/roles/clone-permissions",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"sourceRoleId\": 1,\n  \"targetRoleId\": 5\n}",
@@ -1720,8 +2661,20 @@
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/roles/clone-permissions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "roles",
+                "clone-permissions"
+              ]
             }
-          }
+          },
+          "response": []
         }
       ]
     },
@@ -1738,8 +2691,19 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/rbac/overview"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/rbac/overview",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "rbac",
+                "overview"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "RBAC Matrix",
@@ -1751,8 +2715,19 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/rbac/matrix"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/rbac/matrix",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "rbac",
+                "matrix"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "Users with Roles and Permissions",
@@ -1764,8 +2739,19 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/rbac/users"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/rbac/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "rbac",
+                "users"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "Permission Audit",
@@ -1777,8 +2763,20 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/rbac/audit/1"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/rbac/audit/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "rbac",
+                "audit",
+                "1"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "Orphan Permissions",
@@ -1790,8 +2788,19 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/rbac/orphan-permissions"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/rbac/orphan-permissions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "rbac",
+                "orphan-permissions"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "Roles Without Permissions",
@@ -1803,8 +2812,19 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/rbac/roles-without-permissions"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/rbac/roles-without-permissions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "rbac",
+                "roles-without-permissions"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "Documents - Upload",
@@ -1818,7 +2838,8 @@
                   "    const response = pm.response.json();",
                   "    pm.collectionVariables.set('authToken', response.data.token);",
                   "}"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -1861,13 +2882,13 @@
                 {
                   "key": "documents",
                   "type": "file",
-                  "src": "/path/to/your/test-file.pdf",
-                  "description": "Select one or more files to upload"
+                  "description": "Select one or more files to upload",
+                  "src": "/path/to/your/test-file.pdf"
                 }
               ]
             },
             "url": {
-              "raw": "{{baseUrl}}/api/documents/upload",
+              "raw": "{{baseUrl}}",
               "host": [
                 "{{baseUrl}}"
               ]
@@ -1886,19 +2907,13 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/documents/category/:category/user/:userId",
+              "raw": "{{baseUrl}}/[object Object]/[object Object]",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                {
-                  "key": "category",
-                  "value": "candidate"
-                },
-                {
-                  "key": "userId",
-                  "value": "1"
-                }
+                "[object Object]",
+                "[object Object]"
               ]
             }
           },
@@ -1915,17 +2930,13 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/documents/category/:category/user/:userId",
-              "host": ["{{baseUrl}}"],
+              "raw": "{{baseUrl}}/[object Object]/[object Object]",
+              "host": [
+                "{{baseUrl}}"
+              ],
               "path": [
-                {
-                  "key": "category",
-                  "value": "candidate"
-                },
-                {
-                  "key": "userId", 
-                  "value": "1"
-                }
+                "[object Object]",
+                "[object Object]"
               ]
             }
           },
@@ -1942,15 +2953,12 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/documents/case/:caseId",
+              "raw": "{{baseUrl}}/[object Object]",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                {
-                  "key": "caseId",
-                  "value": "1"
-                }
+                "[object Object]"
               ]
             }
           },
@@ -1967,15 +2975,12 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/documents/:documentId",
+              "raw": "{{baseUrl}}/[object Object]",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                {
-                  "key": "documentId",
-                  "value": "1"
-                }
+                "[object Object]"
               ]
             }
           },
@@ -2005,15 +3010,12 @@
               }
             },
             "url": {
-              "raw": "{{baseUrl}}/api/documents/:documentId",
+              "raw": "{{baseUrl}}/[object Object]",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                {
-                  "key": "documentId",
-                  "value": "1"
-                }
+                "[object Object]"
               ]
             }
           },
@@ -2043,15 +3045,12 @@
               }
             },
             "url": {
-              "raw": "{{baseUrl}}/api/documents/:documentId/status",
+              "raw": "{{baseUrl}}/[object Object]",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                {
-                  "key": "documentId",
-                  "value": "1"
-                }
+                "[object Object]"
               ]
             }
           },
@@ -2068,15 +3067,12 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/documents/download/:documentId",
+              "raw": "{{baseUrl}}/[object Object]",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                {
-                  "key": "documentId",
-                  "value": "1"
-                }
+                "[object Object]"
               ]
             }
           },
@@ -2093,15 +3089,12 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/documents/:documentId",
+              "raw": "{{baseUrl}}/[object Object]",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                {
-                  "key": "documentId",
-                  "value": "1"
-                }
+                "[object Object]"
               ]
             }
           },
@@ -2117,7 +3110,6 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/rbac/bulk-assign",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"roleIds\": [2, 3],\n  \"permissionIds\": [1, 2, 3, 5, 8]\n}",
@@ -2126,86 +3118,238 @@
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/rbac/bulk-assign",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "rbac",
+                "bulk-assign"
+              ]
             }
-          }
+          },
+          "response": []
         }
       ]
     },
     {
-      "name": "Application Fields",
+      "name": "Documents",
       "item": [
         {
-          "name": "Get Field Settings",
+          "name": "upload document",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "caseId",
+                  "value": "2",
+                  "type": "text",
+                  "uuid": "838ed1a9-0abc-43d3-90b9-4689b276a886"
+                },
+                {
+                  "key": "documentCategory",
+                  "value": "candidate",
+                  "type": "text",
+                  "uuid": "fa1980a0-7a9e-4a79-870f-61aabb6667e1"
+                },
+                {
+                  "key": "documents",
+                  "type": "file",
+                  "uuid": "3ac53d0f-d457-4454-bbf3-1661fb14921e",
+                  "src": "/C:/Users/dell/Documents/Presentation2.pdf"
+                },
+                {
+                  "key": "expiryDate",
+                  "value": "",
+                  "type": "text",
+                  "uuid": "bbb86b5a-79ab-4497-8644-b5b1204c5295"
+                },
+                {
+                  "key": "userFileName",
+                  "value": "Aadhar Card",
+                  "type": "text",
+                  "uuid": "8b53c70c-5cec-4f14-99d4-9e2642aa911f"
+                },
+                {
+                  "key": "userId",
+                  "value": "2",
+                  "type": "text",
+                  "uuid": "f957643d-2a08-4003-a549-70c43d81adbf"
+                }
+              ]
+            },
+            "url": {
+              "raw": "http://localhost:5000/api/documents/upload",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "5000",
+              "path": [
+                "api",
+                "documents",
+                "upload"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "get document",
           "request": {
             "method": "GET",
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{token}}"
+                "value": "Bearer {{token}}",
+                "type": "text"
               }
             ],
-            "url": "{{baseUrl}}/api/application-fields/settings"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/documents/13",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "documents",
+                "13"
+              ]
+            }
+          },
+          "response": []
         },
         {
-          "name": "Batch Update Field Visibility",
+          "name": "delete document",
           "request": {
-            "method": "PATCH",
+            "method": "DELETE",
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{token}}"
+                "value": "Bearer {{token}}",
+                "type": "text"
               }
             ],
-            "url": "{{baseUrl}}/api/application-fields/settings/visibility",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"visibility\": {\n    \"firstName\": true,\n    \"lastName\": true,\n    \"email\": true\n  }\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
+            "url": {
+              "raw": "{{baseUrl}}/api/documents/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "documents",
+                "1"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
-          "name": "Update Single Field Visibility",
-          "request": {
-            "method": "PATCH",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": "{{baseUrl}}/api/application-fields/settings/firstName/visibility",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"field_key\": \"firstName\",\n  \"is_visible\": false\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          }
-        },
-        {
-          "name": "Get Custom Fields",
+          "name": "Download Document",
           "request": {
             "method": "GET",
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{token}}"
+                "value": "Bearer {{token}}",
+                "type": "text"
               }
             ],
-            "url": "{{baseUrl}}/api/application-fields/custom-fields"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/documents/download/13",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "documents",
+                "download",
+                "13"
+              ]
+            }
+          },
+          "response": []
         },
         {
-          "name": "Create Custom Field",
+          "name": "update document status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"status\":\"approved\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/documents/status/13",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "documents",
+                "status",
+                "13"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "document list by caseid",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/documents/case/5",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "documents",
+                "case",
+                "5"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Petition Types",
+      "item": [
+        {
+          "name": "Add Petition",
           "request": {
             "method": "POST",
             "header": [
@@ -2214,20 +3358,62 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/application-fields/custom-fields",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"field_id\": \"custom_employer_name\",\n  \"label\": \"Previous UK Employer Name\",\n  \"field_type\": \"text\"\n}",
+              "raw": "{\n  \"name\": \"Transfer-1B\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/settings/petition-types",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "settings",
+                "petition-types"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
-          "name": "Update Custom Field",
+          "name": "GET all",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Transfer-1B\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/settings/petition-types",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "settings",
+                "petition-types"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Type",
           "request": {
             "method": "PUT",
             "header": [
@@ -2236,403 +3422,440 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/api/application-fields/custom-fields/1",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"label\": \"Updated Field Label\",\n  \"field_type\": \"textarea\"\n}",
+              "raw": "{\n  \"name\": \"Transfer-1B\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/settings/petition-types/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "settings",
+                "petition-types",
+                "1"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
-          "name": "Delete Custom Field",
+          "name": "Delete",
           "request": {
             "method": "DELETE",
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{token}}"
+                "value": "Bearer {{token}}",
+                "type": "text"
               }
             ],
-            "url": "{{baseUrl}}/api/application-fields/custom-fields/1"
-          }
+            "url": {
+              "raw": "{{baseUrl}}/api/settings/petition-types/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "settings",
+                "petition-types",
+                "1"
+              ]
+            }
+          },
+          "response": []
         }
       ]
     },
     {
-      "name": "Export & Bulk Import",
+      "name": "case task",
       "item": [
         {
-          "name": "Export Admins",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": "{{baseUrl}}/api/admin/export"
-          }
-        },
-        {
-          "name": "Export Caseworkers",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": "{{baseUrl}}/api/caseworker/export"
-          }
-        },
-        {
-          "name": "Export Candidates",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": "{{baseUrl}}/api/candidate/export"
-          }
-        },
-        {
-          "name": "Export Sponsors",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": "{{baseUrl}}/api/sponsors/export"
-          }
-        },
-        {
-          "name": "Bulk Import Candidates",
+          "name": "Add task",
           "request": {
             "method": "POST",
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{token}}"
+                "value": "Bearer {{token}}",
+                "type": "text"
               }
             ],
-            "url": "{{baseUrl}}/api/candidate/bulk-import",
-            "body": {
-              "mode": "formdata",
-              "formdata": [
-                {
-                  "key": "file",
-                  "type": "file"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "Bulk Import Caseworkers",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": "{{baseUrl}}/api/caseworker/bulk-import",
-            "body": {
-              "mode": "formdata",
-              "formdata": [
-                {
-                  "key": "file",
-                  "type": "file"
-                }
-              ]
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "Caseworker Performance",
-      "item": [
-        {
-          "name": "Get Caseworker Performance Report",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": "{{baseUrl}}/api/caseworker/:id/performance-report"
-          }
-        },
-        {
-          "name": "Reassign Case",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": "{{baseUrl}}/api/caseworker/cases/:caseId/reassign",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"newCaseworkerId\": 2\n}",
+              "raw": "{\r\n  \"title\": \"Complete Document Review\",\r\n  \"due_date\": \"2025-12-31\",\r\n  \"priority\": \"high\",\r\n  \"status\": \"pending\",\r\n  \"case_id\": 7,\r\n  \"assigned_to\": 2,\r\n  \"description\": \"Review all submitted documents for the case\"\r\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tasks"
+              ]
             }
-          }
+          },
+          "response": []
+        },
+        {
+          "name": "delete task",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n  \"title\": \"Complete Document Review\",\r\n  \"due_date\": \"2025-12-31\",\r\n  \"priority\": \"high\",\r\n  \"status\": \"pending\",\r\n  \"case_id\": 7,\r\n  \"assigned_to\": 2,\r\n  \"description\": \"Review all submitted documents for the case\"\r\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks/2",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tasks",
+                "2"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update task",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n  \"title\": \"Complete Document Review\",\r\n  \"due_date\": \"2025-12-31\",\r\n  \"priority\": \"high\",\r\n  \"status\": \"pending\",\r\n  \"case_id\": 7,\r\n  \"assigned_to\": 2,\r\n  \"description\": \"Review all submitted documents for the case\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks/3",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tasks",
+                "3"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get all task",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": ""
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tasks"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "get by task id",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks/3",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tasks",
+                "3"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "task by case id",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks/case/7",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tasks",
+                "case",
+                "7"
+              ]
+            }
+          },
+          "response": []
         }
       ]
     },
     {
-      "name": "Messages",
+      "name": "Case Note",
       "item": [
         {
-          "name": "Admin Chat",
-          "item": [
-            {
-              "name": "[Admin] Get Chat Users",
-              "request": {
-                "method": "GET",
-                "header": [
-                  {
-                    "key": "Authorization",
-                    "value": "Bearer {{adminToken}}"
-                  }
-                ],
-                "url": "{{baseUrl}}/api/messages/users"
+          "name": "Add Note",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
               }
-            },
-            {
-              "name": "[Admin] Get Messages Thread",
-              "request": {
-                "method": "GET",
-                "header": [
-                  {
-                    "key": "Authorization",
-                    "value": "Bearer {{adminToken}}"
-                  }
-                ],
-                "url": "{{baseUrl}}/api/messages/2"
-              }
-            },
-            {
-              "name": "[Admin] Send Message",
-              "request": {
-                "method": "POST",
-                "header": [
-                  {
-                    "key": "Authorization",
-                    "value": "Bearer {{adminToken}}"
-                  }
-                ],
-                "url": "{{baseUrl}}/api/messages/",
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"receiverId\": 2,\n  \"content\": \"Hello from Admin!\"\n}",
-                  "options": {
-                    "raw": {
-                      "language": "json"
-                    }
-                  }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"caseId\":7,\r\n    \"content\":\"Client has been slow to respond. May need to escalate if bank statements not received by 10 Apr. CoS looks fine.\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
                 }
               }
             },
-            {
-              "name": "[Admin] Mark Messages as Read",
-              "request": {
-                "method": "PUT",
-                "header": [
-                  {
-                    "key": "Authorization",
-                    "value": "Bearer {{adminToken}}"
-                  }
-                ],
-                "url": "{{baseUrl}}/api/messages/mark-read",
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"senderId\": 2\n}",
-                  "options": {
-                    "raw": {
-                      "language": "json"
-                    }
-                  }
-                }
-              }
+            "url": {
+              "raw": "{{baseUrl}}/api/case-notes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "case-notes"
+              ]
             }
-          ]
+          },
+          "response": []
         },
         {
-          "name": "Caseworker Chat",
-          "item": [
-            {
-              "name": "[Caseworker] Get Chat Users",
-              "request": {
-                "method": "GET",
-                "header": [
-                  {
-                    "key": "Authorization",
-                    "value": "Bearer {{caseworkerToken}}"
-                  }
-                ],
-                "url": "{{baseUrl}}/api/messages/users"
+          "name": "get by case id",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
               }
-            },
-            {
-              "name": "[Caseworker] Get Messages Thread",
-              "request": {
-                "method": "GET",
-                "header": [
-                  {
-                    "key": "Authorization",
-                    "value": "Bearer {{caseworkerToken}}"
-                  }
-                ],
-                "url": "{{baseUrl}}/api/messages/2"
-              }
-            },
-            {
-              "name": "[Caseworker] Send Message",
-              "request": {
-                "method": "POST",
-                "header": [
-                  {
-                    "key": "Authorization",
-                    "value": "Bearer {{caseworkerToken}}"
-                  }
-                ],
-                "url": "{{baseUrl}}/api/messages/",
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"receiverId\": 2,\n  \"content\": \"Hello from Caseworker!\"\n}",
-                  "options": {
-                    "raw": {
-                      "language": "json"
-                    }
-                  }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/case-notes?caseId=7&page=1&limit=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "case-notes"
+              ],
+              "query": [
+                {
+                  "key": "caseId",
+                  "value": "7"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
                 }
-              }
-            },
-            {
-              "name": "[Caseworker] Mark Messages as Read",
-              "request": {
-                "method": "PUT",
-                "header": [
-                  {
-                    "key": "Authorization",
-                    "value": "Bearer {{caseworkerToken}}"
-                  }
-                ],
-                "url": "{{baseUrl}}/api/messages/mark-read",
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"senderId\": 2\n}",
-                  "options": {
-                    "raw": {
-                      "language": "json"
-                    }
-                  }
-                }
-              }
+              ]
             }
-          ]
+          },
+          "response": []
         },
         {
-          "name": "Candidate Chat",
-          "item": [
-            {
-              "name": "[Candidate] Get Chat Users",
-              "request": {
-                "method": "GET",
-                "header": [
-                  {
-                    "key": "Authorization",
-                    "value": "Bearer {{candidateToken}}"
-                  }
-                ],
-                "url": "{{baseUrl}}/api/messages/users"
+          "name": "get note by note id",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
               }
-            },
-            {
-              "name": "[Candidate] Get Messages Thread",
-              "request": {
-                "method": "GET",
-                "header": [
-                  {
-                    "key": "Authorization",
-                    "value": "Bearer {{candidateToken}}"
-                  }
-                ],
-                "url": "{{baseUrl}}/api/messages/2"
-              }
-            },
-            {
-              "name": "[Candidate] Send Message",
-              "request": {
-                "method": "POST",
-                "header": [
-                  {
-                    "key": "Authorization",
-                    "value": "Bearer {{candidateToken}}"
-                  }
-                ],
-                "url": "{{baseUrl}}/api/messages/",
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"receiverId\": 2,\n  \"content\": \"Hello from Candidate!\"\n}",
-                  "options": {
-                    "raw": {
-                      "language": "json"
-                    }
-                  }
-                }
-              }
-            },
-            {
-              "name": "[Candidate] Mark Messages as Read",
-              "request": {
-                "method": "PUT",
-                "header": [
-                  {
-                    "key": "Authorization",
-                    "value": "Bearer {{candidateToken}}"
-                  }
-                ],
-                "url": "{{baseUrl}}/api/messages/mark-read",
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"senderId\": 2\n}",
-                  "options": {
-                    "raw": {
-                      "language": "json"
-                    }
-                  }
-                }
-              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/case-notes/note/2",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "case-notes",
+                "note",
+                "2"
+              ]
             }
-          ]
+          },
+          "response": []
+        },
+        {
+          "name": "Delete note",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/case-notes/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "case-notes",
+                "1"
+              ]
+            }
+          },
+          "response": []
         }
       ]
+    },
+    {
+      "name": "Visa Types",
+      "item": [
+        {
+          "name": "Add visa",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Transfer-1B\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/settings/visa-types",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "settings",
+                "visa-types"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get visa types",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/settings/visa-types",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "settings",
+                "visa-types"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000"
+    },
+    {
+      "key": "token",
+      "value": ""
     }
   ]
 }
