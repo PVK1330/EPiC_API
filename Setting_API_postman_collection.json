@@ -1,0 +1,417 @@
+{
+  "info": {
+    "_postman_id": "a1b2c3d4-settings-api-elitepic",
+    "name": "ElitePic — Admin Settings API",
+    "description": "Settings routes mounted at `/api/settings`. Requires `verifyToken` + ADMIN role.\n\n**Environment:** set `baseUrl` (e.g. `http://72.61.188.186:5001`) and `token` (JWT). Authorization header: `Bearer {{token}}`.\n\n**Email template keys:** `payment`, `doc`, `opened`, `expiry`, `welcome`.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://72.61.188.186:5001"
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "visaTypeId",
+      "value": "1"
+    },
+    {
+      "key": "petitionTypeId",
+      "value": "1"
+    },
+    {
+      "key": "caseCategoryId",
+      "value": "1"
+    },
+    {
+      "key": "emailTemplateKey",
+      "value": "payment"
+    }
+  ],
+  "item": [
+    {
+      "name": "Profile & preferences",
+      "item": [
+        {
+          "name": "GET /me — current admin profile & preferences",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/settings/me"
+          }
+        },
+        {
+          "name": "PATCH /me — preferences only (no profile fields)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"avatar_url\": \"https://example.com/avatars/admin.png\",\n  \"two_factor_enabled\": false,\n  \"email_notifications\": true,\n  \"case_updates\": true,\n  \"payment_alerts\": false,\n  \"timezone\": \"UTC-05:00 Eastern Time\",\n  \"language\": \"English\",\n  \"date_format\": \"MM/DD/YYYY\",\n  \"data_collection\": false\n}"
+            },
+            "url": "{{baseUrl}}/api/settings/me"
+          }
+        },
+        {
+          "name": "PATCH /me — profile + preferences (all fields)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Admin\",\n  \"last_name\": \"User\",\n  \"email\": \"admin@example.com\",\n  \"country_code\": \"+1\",\n  \"mobile\": \"5551234567\",\n  \"avatar_url\": null,\n  \"two_factor_enabled\": false,\n  \"email_notifications\": true,\n  \"case_updates\": true,\n  \"payment_alerts\": false,\n  \"timezone\": \"UTC-05:00 Eastern Time\",\n  \"language\": \"English\",\n  \"date_format\": \"MM/DD/YYYY\",\n  \"data_collection\": false\n}"
+            },
+            "url": "{{baseUrl}}/api/settings/me"
+          }
+        },
+        {
+          "name": "POST /change-password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"current_password\": \"YourCurrentPassword123\",\n  \"new_password\": \"YourNewPassword123\"\n}"
+            },
+            "url": "{{baseUrl}}/api/settings/change-password"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Visa types",
+      "item": [
+        {
+          "name": "GET /visa-types",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/settings/visa-types"
+          }
+        },
+        {
+          "name": "POST /visa-types",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Skilled Worker Visa\"\n}"
+            },
+            "url": "{{baseUrl}}/api/settings/visa-types"
+          }
+        },
+        {
+          "name": "PATCH /visa-types/:id",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Skilled Worker Visa (updated)\"\n}"
+            },
+            "url": "{{baseUrl}}/api/settings/visa-types/{{visaTypeId}}"
+          }
+        },
+        {
+          "name": "DELETE /visa-types/:id",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/api/settings/visa-types/{{visaTypeId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Petition types",
+      "item": [
+        {
+          "name": "GET /petition-types",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/settings/petition-types"
+          }
+        },
+        {
+          "name": "POST /petition-types",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"I-129 Petition\"\n}"
+            },
+            "url": "{{baseUrl}}/api/settings/petition-types"
+          }
+        },
+        {
+          "name": "PATCH /petition-types/:id",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"I-129 Petition (updated)\"\n}"
+            },
+            "url": "{{baseUrl}}/api/settings/petition-types/{{petitionTypeId}}"
+          }
+        },
+        {
+          "name": "DELETE /petition-types/:id",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/api/settings/petition-types/{{petitionTypeId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Case categories",
+      "item": [
+        {
+          "name": "GET /case-categories",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/settings/case-categories"
+          }
+        },
+        {
+          "name": "POST /case-categories",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"VIP\"\n}"
+            },
+            "url": "{{baseUrl}}/api/settings/case-categories"
+          }
+        },
+        {
+          "name": "DELETE /case-categories/:id",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/api/settings/case-categories/{{caseCategoryId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Email templates",
+      "item": [
+        {
+          "name": "GET /email-templates — list all",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/settings/email-templates"
+          }
+        },
+        {
+          "name": "GET /email-templates/:key — single (use key var)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/settings/email-templates/{{emailTemplateKey}}"
+          }
+        },
+        {
+          "name": "GET /email-templates/payment",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/settings/email-templates/payment"
+          }
+        },
+        {
+          "name": "GET /email-templates/doc",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/settings/email-templates/doc"
+          }
+        },
+        {
+          "name": "GET /email-templates/opened",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/settings/email-templates/opened"
+          }
+        },
+        {
+          "name": "GET /email-templates/expiry",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/settings/email-templates/expiry"
+          }
+        },
+        {
+          "name": "GET /email-templates/welcome",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/settings/email-templates/welcome"
+          }
+        },
+        {
+          "name": "PUT /email-templates/:key — subject + body",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"subject\": \"[VisaFlow] Action Required: Outstanding Payment\",\n  \"body\": \"Dear {{client_name}},\\n\\nWe wanted to remind you that your outstanding balance of {{amount}} is now {{days_overdue}} days overdue.\\n\\nPlease arrange payment at your earliest convenience.\\n\\nBest regards,\\nVisaFlow Team\"\n}"
+            },
+            "url": "{{baseUrl}}/api/settings/email-templates/{{emailTemplateKey}}"
+          }
+        },
+        {
+          "name": "PUT /email-templates/:key — body only (partial)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"body\": \"Please upload the requested documents for your case.\"\n}"
+            },
+            "url": "{{baseUrl}}/api/settings/email-templates/doc"
+          }
+        },
+        {
+          "name": "PUT /email-templates/:key — subject only (partial)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"subject\": \"[VisaFlow] Documents required\"\n}"
+            },
+            "url": "{{baseUrl}}/api/settings/email-templates/doc"
+          }
+        }
+      ]
+    },
+    {
+      "name": "SLA",
+      "item": [
+        {
+          "name": "GET /sla",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/settings/sla"
+          }
+        },
+        {
+          "name": "PUT /sla — all fields (matches DB defaults / migration seed)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"skilled_worker_days\": 45,\n  \"ilr_days\": 30,\n  \"student_visa_days\": 60,\n  \"escalation_stuck_days\": 3,\n  \"missing_docs_escalation_days\": 7\n}"
+            },
+            "url": "{{baseUrl}}/api/settings/sla"
+          }
+        },
+        {
+          "name": "PUT /sla — partial (one field)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"escalation_stuck_days\": 5\n}"
+            },
+            "url": "{{baseUrl}}/api/settings/sla"
+          }
+        }
+      ]
+    }
+  ]
+}
