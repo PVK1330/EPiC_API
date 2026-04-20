@@ -444,3 +444,11 @@ export const getQuickActions = async (req, res) => {
     });
   }
 };
+
+export default {
+  getDashboardStats,
+  getRecentCases,
+  getRecentTasks,
+  getRecentActivities,
+  getQuickActions
+};
