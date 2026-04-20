@@ -52,7 +52,7 @@ async function requireAdmin(req, res) {
 
     where: { id: userId, role_id: ROLES.ADMIN },
 
-    include: [{ model: Role, attributes: ["id", "name"] }],
+    include: [{ model: Role, as: "role", attributes: ["id", "name"] }],
 
   });
 
@@ -144,7 +144,7 @@ export const getMe = async (req, res) => {
 
           role_id: plain.role_id,
 
-          role_name: plain.Role?.name || null,
+          role_name: plain.role?.name || null,
 
         },
 
@@ -324,7 +324,7 @@ export const patchMe = async (req, res) => {
 
 
 
-    await user.reload({ include: [{ model: Role, attributes: ["id", "name"] }] });
+    await user.reload({ include: [{ model: Role, as: "role", attributes: ["id", "name"] }] });
 
     await prefs.reload();
 
@@ -358,7 +358,7 @@ export const patchMe = async (req, res) => {
 
           role_id: plain.role_id,
 
-          role_name: plain.Role?.name || null,
+          role_name: plain.role?.name || null,
 
         },
 

@@ -278,6 +278,50 @@
       ]
     },
     {
+      "name": "Reschedule",
+      "item": [
+        {
+          "name": "Reschedule Case",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{caseworkerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/cases/reschedule/1",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"targetSubmissionDate\": \"2026-06-01\",\n  \"biometricsDate\": \"2026-05-15\",\n  \"reason\": \"Client requested delay\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Get Reschedule History",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{caseworkerToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/cases/reschedule/1/history"
+          }
+        }
+      ]
+    },
+    {
       "name": "Profile",
       "item": [
         {

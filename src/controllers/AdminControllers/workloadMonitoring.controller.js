@@ -50,29 +50,32 @@ export const getWorkloadOverview = async (req, res) => {
           attributes: ['id', 'name']
         },
         {
-          model: Case,
-          as: 'assignedCases',
-          attributes: ['id', 'status', 'createdAt', 'updatedAt'],
-          where: {
-            createdAt: { [Op.gte]: startDate }
-          },
-          required: false
-        },
-        {
           model: Task,
           as: 'assignedTasks',
-          attributes: ['id', 'status', 'priority', 'dueDate', 'createdAt'],
+          attributes: ['id', 'status', 'priority', 'due_date', 'created_at'],
           where: {
-            createdAt: { [Op.gte]: startDate }
+            created_at: { [Op.gte]: startDate }
           },
           required: false
         }
       ]
     });
 
+    // Get all cases within date range and manually assign to caseworkers
+    const allCases = await Case.findAll({
+      where: {
+        created_at: { [Op.gte]: startDate }
+      },
+      attributes: ['id', 'status', 'created_at', 'updated_at', 'assignedcaseworkerId']
+    });
+
     // Process workload data for each caseworker
     const workloadData = caseworkers.map(caseworker => {
-      const cases = caseworker.assignedCases || [];
+      // Filter cases where this caseworker is assigned (using JSON array)
+      const cases = allCases.filter(c => {
+        const assignedIds = c.assignedcaseworkerId || [];
+        return Array.isArray(assignedIds) && assignedIds.includes(caseworker.id);
+      });
       const tasks = caseworker.assignedTasks || [];
 
       const activeCases = cases.filter(c => c.status !== 'Completed' && c.status !== 'Cancelled').length;
@@ -191,29 +194,12 @@ export const getCaseworkerWorkload = async (req, res) => {
 
     const caseworker = await User.findOne({
       where: { id: caseworkerId, role_id: 2 },
-      attributes: ['id', 'first_name', 'last_name', 'email', 'createdAt'],
+      attributes: ['id', 'first_name', 'last_name', 'email', 'created_at'],
       include: [
         {
           model: Role,
           as: 'role',
           attributes: ['id', 'name']
-        },
-        {
-          model: Case,
-          as: 'assignedCases',
-          attributes: ['id', 'status', 'created_at', 'updated_at'],
-          where: {
-            created_at: { [Op.gte]: startDate }
-          },
-          include: [
-            {
-              model: CaseNote,
-              as: 'caseNotes',
-              attributes: ['id', 'content', 'created_at'],
-              required: false
-            }
-          ],
-          required: false
         },
         {
           model: Task,
@@ -227,6 +213,27 @@ export const getCaseworkerWorkload = async (req, res) => {
       ]
     });
 
+    // Get all cases within date range and manually filter for this caseworker
+    const allCases = await Case.findAll({
+      where: {
+        created_at: { [Op.gte]: startDate }
+      },
+      include: [
+        {
+          model: CaseNote,
+          as: 'caseNotes',
+          attributes: ['id', 'content', 'created_at'],
+          required: false
+        }
+      ]
+    });
+
+    // Filter cases where this caseworker is assigned
+    const cases = allCases.filter(c => {
+      const assignedIds = c.assignedcaseworkerId || [];
+      return Array.isArray(assignedIds) && assignedIds.includes(parseInt(caseworkerId));
+    });
+
     if (!caseworker) {
       return res.status(404).json({
         status: "error",
@@ -236,7 +243,6 @@ export const getCaseworkerWorkload = async (req, res) => {
     }
 
     // Process detailed workload data
-    const cases = caseworker.assignedCases || [];
     const tasks = caseworker.assignedTasks || [];
 
     const detailedData = {
@@ -245,7 +251,7 @@ export const getCaseworkerWorkload = async (req, res) => {
         name: `${caseworker.first_name} ${caseworker.last_name}`,
         email: caseworker.email,
         role: caseworker.role?.name,
-        joinDate: caseworker.createdAt
+        joinDate: caseworker.created_at
       },
       caseWorkload: {
         total: cases.length,
@@ -263,8 +269,8 @@ export const getCaseworkerWorkload = async (req, res) => {
         completed: tasks.filter(t => t.status === 'completed').length,
         overdue: tasks.filter(t => 
           t.status !== 'completed' && 
-          t.dueDate && 
-          new Date(t.dueDate) < now
+          t.due_date && 
+          new Date(t.due_date) < now
         ).length,
         priorityBreakdown: {
           high: tasks.filter(t => t.priority === 'high').length,
@@ -324,35 +330,43 @@ export const getWorkloadTrends = async (req, res) => {
       attributes: ['id', 'first_name', 'last_name'],
       include: [
         {
-          model: Case,
-          as: 'assignedCases',
-          attributes: ['id', 'status', 'createdAt'],
-          where: {
-            createdAt: { [Op.gte]: startDate }
-          },
-          required: false
-        },
-        {
           model: Task,
           as: 'assignedTasks',
-          attributes: ['id', 'status', 'priority', 'createdAt'],
+          attributes: ['id', 'status', 'priority', 'created_at'],
           where: {
-            createdAt: { [Op.gte]: startDate }
+            created_at: { [Op.gte]: startDate }
           },
           required: false
         }
       ]
     });
 
+    // Get all cases within date range
+    const allCases = await Case.findAll({
+      where: {
+        created_at: { [Op.gte]: startDate }
+      },
+      attributes: ['id', 'status', 'created_at', 'assignedcaseworkerId']
+    });
+
+    // Attach cases to caseworkers based on JSON array
+    const caseworkersWithCases = caseworkers.map(cw => ({
+      ...cw.toJSON(),
+      assignedCases: allCases.filter(c => {
+        const assignedIds = c.assignedcaseworkerId || [];
+        return Array.isArray(assignedIds) && assignedIds.includes(cw.id);
+      })
+    }));
+
     // Generate trend data based on period
     let trendData = [];
     
     if (period === 'monthly') {
-      trendData = generateMonthlyTrends(caseworkers, startDate, endDate);
+      trendData = generateMonthlyTrends(caseworkersWithCases, startDate, endDate);
     } else if (period === 'weekly') {
-      trendData = generateWeeklyTrends(caseworkers, startDate, endDate);
+      trendData = generateWeeklyTrends(caseworkersWithCases, startDate, endDate);
     } else {
-      trendData = generateDailyTrends(caseworkers, startDate, endDate);
+      trendData = generateDailyTrends(caseworkersWithCases, startDate, endDate);
     }
 
     res.status(200).json({
@@ -399,18 +413,9 @@ export const getWorkloadAlerts = async (req, res) => {
       attributes: ['id', 'first_name', 'last_name', 'email'],
       include: [
         {
-          model: Case,
-          as: 'assignedCases',
-          attributes: ['id', 'status', 'createdAt'],
-          where: {
-            status: { [Op.notIn]: ['Completed', 'Cancelled'] }
-          },
-          required: false
-        },
-        {
           model: Task,
           as: 'assignedTasks',
-          attributes: ['id', 'status', 'priority', 'dueDate', 'createdAt'],
+          attributes: ['id', 'status', 'priority', 'due_date', 'created_at'],
           where: {
             status: { [Op.ne]: 'completed' }
           },
@@ -419,10 +424,22 @@ export const getWorkloadAlerts = async (req, res) => {
       ]
     });
 
+    // Get all active cases
+    const allCases = await Case.findAll({
+      where: {
+        status: { [Op.notIn]: ['Completed', 'Cancelled'] }
+      },
+      attributes: ['id', 'status', 'created_at', 'assignedcaseworkerId']
+    });
+
     const alerts = [];
 
     caseworkers.forEach(caseworker => {
-      const cases = caseworker.assignedCases || [];
+      // Filter cases where this caseworker is assigned (using JSON array)
+      const cases = allCases.filter(c => {
+        const assignedIds = c.assignedcaseworkerId || [];
+        return Array.isArray(assignedIds) && assignedIds.includes(caseworker.id);
+      });
       const tasks = caseworker.assignedTasks || [];
 
       // Check for high workload
@@ -511,8 +528,8 @@ function calculateAverageCompletionTime(items) {
   if (completedItems.length === 0) return 0;
   
   const totalTime = completedItems.reduce((sum, item) => {
-    if (item.updatedAt && item.createdAt) {
-      return sum + (new Date(item.updatedAt) - new Date(item.createdAt));
+    if (item.updated_at && item.created_at) {
+      return sum + (new Date(item.updated_at) - new Date(item.created_at));
     }
     return sum;
   }, 0);
@@ -540,10 +557,10 @@ function generateMonthlyTrends(caseworkers, startDate, endDate) {
     
     const monthData = caseworkers.map(caseworker => {
       const cases = (caseworker.assignedCases || []).filter(c => 
-        new Date(c.createdAt) >= monthStart && new Date(c.createdAt) <= monthEnd
+        new Date(c.created_at) >= monthStart && new Date(c.created_at) <= monthEnd
       );
       const tasks = (caseworker.assignedTasks || []).filter(t => 
-        new Date(t.createdAt) >= monthStart && new Date(t.createdAt) <= monthEnd
+        new Date(t.created_at) >= monthStart && new Date(t.created_at) <= monthEnd
       );
       
       return {
