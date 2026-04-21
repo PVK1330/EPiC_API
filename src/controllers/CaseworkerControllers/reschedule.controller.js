@@ -1,6 +1,7 @@
 import db from "../../models/index.js";
 import { sendRescheduleEmail } from "../../services/email.service.js";
 import { generateRescheduleEmailTemplate } from "../../utils/emailTemplate.js";
+import { ROLES } from "../../middlewares/role.middleware.js";
 
 const Case = db.Case;
 const User = db.User;
@@ -10,6 +11,17 @@ const RescheduleHistory = db.RescheduleHistory;
 export const rescheduleCase = async (req, res) => {
   try {
     const { id } = req.params;
+    const userRoleId = req.user.role_id;
+
+    // Verify user is a caseworker
+    if (userRoleId !== ROLES.CASEWORKER) {
+      return res.status(403).json({
+        status: "error",
+        message: "Access denied. Only caseworkers can reschedule cases.",
+        data: null,
+      });
+    }
+
     const { 
       targetSubmissionDate, 
       biometricsDate, 
@@ -140,6 +152,16 @@ export const rescheduleCase = async (req, res) => {
 export const getRescheduleHistory = async (req, res) => {
   try {
     const { id } = req.params;
+    const userRoleId = req.user.role_id;
+
+    // Verify user is a caseworker
+    if (userRoleId !== ROLES.CASEWORKER) {
+      return res.status(403).json({
+        status: "error",
+        message: "Access denied. Only caseworkers can view reschedule history.",
+        data: null,
+      });
+    }
 
     const history = await RescheduleHistory.findAll({
       where: { caseId: id },

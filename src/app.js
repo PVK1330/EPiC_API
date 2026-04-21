@@ -44,8 +44,8 @@ app.use('/api/user', userRoutes);
 // Mount before /api/admin so paths like /api/admin/settings/me are not captured by /api/admin/:id
 app.use('/api/settings', adminSettingsRoutes);
 app.use('/api/admin', adminRoutes);
-app.use('/api/caseworker', caseworkerRoutes);
 app.use('/api/caseworker/cases', caseworkerCaseRoutes);
+app.use('/api/caseworker', caseworkerRoutes);
 app.use('/api/sponsors', sponsorsRoutes);
 app.use('/api/candidate', candidateRoutes);
 app.use('/api/stripe', stripeRoutes);
