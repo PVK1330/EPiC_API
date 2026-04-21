@@ -84,6 +84,7 @@ const CaseModel = (sequelize, DataTypes) => {
     assignedcaseworkerId: {
       type: DataTypes.JSON,
       allowNull: true,
+      field: '"assignedcaseworkerId"',
       comment: "Array of caseworker IDs assigned to this case"
     },
     salaryOffered: {

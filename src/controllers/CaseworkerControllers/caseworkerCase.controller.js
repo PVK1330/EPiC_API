@@ -10,7 +10,7 @@ const buildCaseworkerWhereClause = (userId) => {
   return {
     [Op.and]: [
       sequelize.where(
-        sequelize.literal(`assignedcaseworkerId::jsonb ? '${userId}'`),
+        sequelize.literal(`"assignedcaseworkerId"::jsonb ? '${userId}'`),
         true
       ),
     ],
