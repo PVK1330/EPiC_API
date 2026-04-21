@@ -5,7 +5,6 @@ import multer from "multer";
 import { ROLES } from "../../middlewares/role.middleware.js";
 import { sendCaseworkerWelcomeEmail } from "../../services/email.service.js";
 import { generateCaseworkerCredentialsTemplate } from "../../utils/emailTemplate.js";
-import { notifyUserCreated } from "../../services/notification.service.js";
 
 const User = db.User;
 const Role = db.Role;
@@ -231,19 +230,6 @@ export const createCaseworker = async (req, res) => {
       });
     } catch (emailError) {
       console.error("Failed to send caseworker email:", emailError);
-    }
-
-    // Send notification to all admins about new caseworker creation
-    try {
-      await notifyUserCreated(ROLES.ADMIN, {
-        id: caseworker.id,
-        email: caseworker.email,
-        role: 'caseworker',
-        first_name: caseworker.first_name,
-        last_name: caseworker.last_name,
-      });
-    } catch (notifError) {
-      console.error('Failed to send user creation notification:', notifError);
     }
 
     const full = await User.findOne({

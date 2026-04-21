@@ -186,14 +186,14 @@ db.CaseNote.belongsTo(db.CaseNote, { foreignKey: 'parentNoteId', as: 'parentNote
 
 // Task associations
 db.Task.belongsTo(db.User, { foreignKey: 'assigned_to', as: 'assignee' });
-db.Task.belongsTo(db.User, { foreignKey: 'created_by', as: 'creator' });
 db.Task.belongsTo(db.Case, { foreignKey: 'case_id' });
 db.User.hasMany(db.Task, { foreignKey: 'assigned_to', as: 'assignedTasks' });
 db.User.hasMany(db.Task, { foreignKey: 'created_by', as: 'createdTasks' });
 db.Case.hasMany(db.Task, { foreignKey: 'case_id', as: 'tasks' });
 
-db.Case.belongsTo(db.User, { foreignKey: 'assignedToId', as: 'assignedTo' });
-db.User.hasMany(db.Case, { foreignKey: 'assignedToId', as: 'assignedCases' });
+// Note: assignedcaseworkerId is a JSON array, not a foreign key, so these associations are not applicable
+// db.Case.belongsTo(db.User, { foreignKey: 'assignedToId', as: 'assignedTo' });
+// db.User.hasMany(db.Case, { foreignKey: 'assignedToId', as: 'assignedCases' });
 
 db.Case.belongsTo(db.User, { foreignKey: 'createdById', as: 'createdBy' });
 db.User.hasMany(db.Case, { foreignKey: 'createdById', as: 'createdCases' });

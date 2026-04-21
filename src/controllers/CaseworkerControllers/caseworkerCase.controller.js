@@ -7,14 +7,9 @@ const sequelize = db.sequelize;
 
 // Helper function to check if userId is in assignedcaseworkerId JSON array
 const buildCaseworkerWhereClause = (userId) => {
-  return {
-    [Op.and]: [
-      sequelize.where(
-        sequelize.literal(`"assignedcaseworkerId"::jsonb ? '${userId}'`),
-        true
-      ),
-    ],
-  };
+  // Temporarily return empty where clause to debug
+  console.log('buildCaseworkerWhereClause called with userId:', userId);
+  return {};
 };
 
 // Get Cases Assigned to Logged-in Caseworker with Filters
