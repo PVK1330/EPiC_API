@@ -1,5 +1,6 @@
 import db from '../models/index.js';
 import { Op } from 'sequelize';
+import bcrypt from 'bcryptjs';
 import path from 'path';
 import fs from 'fs';
 
@@ -14,9 +15,16 @@ export const profile = async (req, res) => {
     // Find user by ID
     const user = await User.findOne({
       where: { id: userId },
-      attributes: { 
-        exclude: ['password', 'otp_code', 'otp_expiry', 'password_reset_otp', 'password_reset_otp_expiry', 'temp_password'] 
-      }
+      attributes: {
+        exclude: [
+          "password",
+          "otp_code",
+          "otp_expiry",
+          "password_reset_otp",
+          "password_reset_otp_expiry",
+          "temp_password",
+        ],
+      },
     });
 
     if (!user) {
@@ -100,38 +108,17 @@ export const editProfile = async (req, res) => {
       }
     }
 
-    // Handle profile picture upload
-    let profilePicPath = user.profile_pic; // Keep existing profile pic if no new one uploaded
-
-    if (req.file) {
-      // Create user-specific directory structure
-      const userUploadDir = path.join('uploads', 'profile_pic', String(userId));
-      
-      // Ensure directory exists
-      fs.mkdirSync(userUploadDir, { recursive: true });
-      
-      // Generate unique filename
-      const timestamp = Date.now();
-      const fileExtension = path.extname(req.file.originalname);
-      const fileName = `${timestamp}${fileExtension}`;
-      profilePicPath = path.join(userUploadDir, fileName);
-      
-      // Move file from temp to final location
-      fs.renameSync(req.file.path, profilePicPath);
-      
-      // Delete old profile picture if it exists
-      if (user.profile_pic && fs.existsSync(user.profile_pic)) {
-        fs.unlinkSync(user.profile_pic);
-      }
+    if (req.file?.path && fs.existsSync(req.file.path)) {
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch (_) {}
     }
 
-    // Update user profile
     const updateData = {
       first_name: first_name || user.first_name,
       last_name: last_name || user.last_name,
       country_code: country_code || user.country_code,
       mobile: mobile || user.mobile,
-      profile_pic: profilePicPath
     };
 
     await user.update(updateData);
@@ -139,9 +126,16 @@ export const editProfile = async (req, res) => {
     // Return updated user profile without sensitive fields
     const updatedUser = await User.findOne({
       where: { id: userId },
-      attributes: { 
-        exclude: ['password', 'otp_code', 'otp_expiry', 'password_reset_otp', 'password_reset_otp_expiry', 'temp_password'] 
-      }
+      attributes: {
+        exclude: [
+          "password",
+          "otp_code",
+          "otp_expiry",
+          "password_reset_otp",
+          "password_reset_otp_expiry",
+          "temp_password",
+        ],
+      },
     });
 
     // Convert profile_pic path to URL-friendly format and add base URL
@@ -168,14 +162,80 @@ export const editProfile = async (req, res) => {
   }
 };
 
+/** POST /api/user/change-password — authenticated user updates own password */
+export const changeOwnPassword = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { current_password, new_password } = req.body || {};
+
+    if (!current_password || !new_password) {
+      return res.status(400).json({
+        status: "error",
+        message: "current_password and new_password are required",
+        data: null,
+      });
+    }
+
+    if (new_password.length < 8) {
+      return res.status(400).json({
+        status: "error",
+        message: "New password must be at least 8 characters",
+        data: null,
+      });
+    }
+
+    const full = await User.findOne({ where: { id: userId } });
+    if (!full) {
+      return res.status(404).json({
+        status: "error",
+        message: "User not found",
+        data: null,
+      });
+    }
+
+    const ok = await bcrypt.compare(current_password, full.password);
+    if (!ok) {
+      return res.status(400).json({
+        status: "error",
+        message: "Current password is incorrect",
+        data: null,
+      });
+    }
+
+    const hashed = await bcrypt.hash(new_password, 12);
+    await full.update({ password: hashed });
+
+    res.status(200).json({
+      status: "success",
+      message: "Password updated successfully.",
+      data: null,
+    });
+  } catch (err) {
+    console.error("changeOwnPassword error:", err);
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error",
+      data: null,
+      error: err.message,
+    });
+  }
+};
+
 
 // Get all users grouped by roles
 export const getAllUsers = async (req, res) => {
   try {
     // Get all users with their roles
     const users = await User.findAll({
-      attributes: { 
-        exclude: ['password', 'otp_code', 'otp_expiry', 'password_reset_otp', 'password_reset_otp_expiry', 'temp_password'] 
+      attributes: {
+        exclude: [
+          "password",
+          "otp_code",
+          "otp_expiry",
+          "password_reset_otp",
+          "password_reset_otp_expiry",
+          "temp_password",
+        ],
       },
       include: [
         {

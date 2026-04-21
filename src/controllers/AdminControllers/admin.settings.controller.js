@@ -254,7 +254,11 @@ export const patchMe = async (req, res) => {
 
       if (nextEmail !== user.email) {
 
-        const taken = await User.findOne({ where: { email: nextEmail, id: { [Op.ne]: user.id } } });
+        const taken = await User.findOne({
+
+          where: { email: nextEmail, id: { [Op.ne]: user.id } },
+
+        });
 
         if (taken) {
 

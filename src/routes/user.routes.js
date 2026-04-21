@@ -9,6 +9,9 @@ const router = Router();
 // Get user profile - accessible for all authenticated users
 router.get("/profile", verifyToken, userController.profile);
 
+// Change own password - all authenticated users
+router.post("/change-password", verifyToken, userController.changeOwnPassword);
+
 // Edit user profile - accessible for all authenticated users
 router.put("/profile", handleProfilePicUpload, verifyToken, userController.editProfile);
 

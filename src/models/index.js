@@ -51,6 +51,10 @@ import RescheduleHistoryModel from './rescheduleHistory.model.js';
 
 import NotificationModel from './notification.model.js';
 
+import CandidateAccountSettingsModel from './candidateAccountSettings.model.js';
+
+import CandidateFeedbackModel from './candidateFeedback.model.js';
+
 const env = process.env.NODE_ENV || 'development';
 
 const dbConfig = config[env];
@@ -109,6 +113,10 @@ db.Conversation = ConversationModel(sequelize, Sequelize.DataTypes);
 db.RescheduleHistory = RescheduleHistoryModel(sequelize, Sequelize.DataTypes);
 
 db.Notification = NotificationModel(sequelize, Sequelize.DataTypes);
+
+db.CandidateAccountSettings = CandidateAccountSettingsModel(sequelize, Sequelize.DataTypes);
+
+db.CandidateFeedback = CandidateFeedbackModel(sequelize, Sequelize.DataTypes);
 
 // Associations
 
@@ -230,5 +238,11 @@ db.Notification.belongsTo(db.User, { foreignKey: 'userId', as: 'user' });
 db.Notification.belongsTo(db.Role, { foreignKey: 'roleId', as: 'role' });
 db.User.hasMany(db.Notification, { foreignKey: 'userId', as: 'notifications' });
 db.Role.hasMany(db.Notification, { foreignKey: 'roleId', as: 'notifications' });
+
+db.User.hasOne(db.CandidateAccountSettings, { foreignKey: 'user_id', as: 'candidateAccountSettings' });
+db.CandidateAccountSettings.belongsTo(db.User, { foreignKey: 'user_id', as: 'user' });
+
+db.User.hasMany(db.CandidateFeedback, { foreignKey: 'user_id', as: 'candidateFeedbacks' });
+db.CandidateFeedback.belongsTo(db.User, { foreignKey: 'user_id', as: 'user' });
 
 export default db;

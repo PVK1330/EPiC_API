@@ -98,10 +98,6 @@ export default (sequelize, DataTypes) => {
                 type: DataTypes.JSON,
                 allowNull: true,
             },
-            profile_pic: {
-                type: DataTypes.STRING(255),
-                allowNull: true,
-            },
         },
         {
             tableName: "users",
