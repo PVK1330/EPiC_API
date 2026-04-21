@@ -1,6 +1,8 @@
 import db from "../../models/index.js";
 import { Op } from "sequelize";
 import bcrypt from "bcryptjs";
+import { ROLES } from "../../middlewares/role.middleware.js";
+import { notifyUserCreated } from "../../services/notification.service.js";
 
 const User = db.User;
 const Role = db.Role;
@@ -102,6 +104,19 @@ export const createSponsor = async (req, res) => {
 
     // Remove password from response
     const { password: _, ...sponsorData } = sponsor.toJSON();
+
+    // Send notification to all admins about new sponsor creation
+    try {
+      await notifyUserCreated(ROLES.ADMIN, {
+        id: sponsor.id,
+        email: sponsor.email,
+        role: 'sponsor',
+        first_name: sponsor.first_name,
+        last_name: sponsor.last_name,
+      });
+    } catch (notifError) {
+      console.error('Failed to send user creation notification:', notifError);
+    }
 
     res.status(201).json({
       status: "success",

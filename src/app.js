@@ -19,7 +19,7 @@ import rbacRoutes from './routes/rbac.routes.js';
 import roleRoutes from './routes/role.routes.js';
 import caseDetailRoutes from './routes/caseDetail.routes.js';
 import caseNoteRoutes from './routes/caseNote.routes.js';
-import { taskRoutes, documentRoutes } from './routes/index.js';
+import { taskRoutes, documentRoutes, notificationRoutes } from './routes/index.js';
 import applicationFieldsRoutes from './routes/applicationFields.routes.js';
 import dashboardRoutes from './routes/admin.dashboard.routes.js';
 import workloadRoutes from './routes/admin.workload.routes.js';
@@ -33,6 +33,8 @@ app.use(cors({
   credentials: true,           
 }));
 
+// Stripe webhooks must use raw body for signature verification.
+app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());       // must be BEFORE any route that reads req.cookies
@@ -54,6 +56,7 @@ app.use('/api/rbac', rbacRoutes);
 app.use('/api/roles', roleRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/documents', documentRoutes);
+app.use('/api/notifications', notificationRoutes);
 app.use('/api/application-fields', applicationFieldsRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/case-details', caseDetailRoutes);

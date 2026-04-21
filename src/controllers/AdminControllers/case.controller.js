@@ -1,5 +1,6 @@
 import db from "../../models/index.js";
 import { Op } from "sequelize";
+import { notifyCaseAssigned, notifyCaseStatusChanged } from "../../services/notification.service.js";
 
 const Case = db.Case;
 
@@ -116,6 +117,27 @@ export const createCase = async (req, res) => {
       paidAmount: paidAmount || 0,
       notes,
     });
+
+    // Send notifications to assigned caseworkers
+    if (cwIds.length > 0) {
+      // Fetch visa type name for notification
+      const visaType = await db.VisaType.findByPk(visaTypeId);
+      const visaTypeName = visaType ? visaType.name : 'Not specified';
+      
+      const caseData = {
+        id: newCase.id,
+        caseId: newCase.caseId,
+        candidateName: `${candidate.first_name} ${candidate.last_name}`,
+        visaType: visaTypeName,
+      };
+      for (const caseworkerId of cwIds) {
+        try {
+          await notifyCaseAssigned(caseworkerId, caseData);
+        } catch (notifError) {
+          console.error('Failed to send notification to caseworker:', caseworkerId, notifError);
+        }
+      }
+    }
 
     res.status(201).json({
       status: "success",
@@ -420,6 +442,8 @@ export const updateCase = async (req, res) => {
 
     const cwIds = Array.isArray(assignedcaseworkerId) ? assignedcaseworkerId : (assignedcaseworkerId ? [assignedcaseworkerId] : []);
 
+    const oldStatus = caseData.status;
+
     await caseData.update({
       candidateId: candidateId !== undefined ? candidateId : caseData.candidateId,
       sponsorId: sponsorId !== undefined ? sponsorId : caseData.sponsorId,
@@ -439,6 +463,34 @@ export const updateCase = async (req, res) => {
       paidAmount: paidAmount !== undefined ? paidAmount : caseData.paidAmount,
       notes: notes !== undefined ? notes : caseData.notes,
     });
+
+    // Send status change notification if status changed
+    if (status && status !== oldStatus) {
+      const candidate = await db.User.findByPk(caseData.candidateId);
+      const sponsor = await db.User.findByPk(caseData.sponsorId);
+      const userIdsToNotify = [];
+      
+      // Notify candidate
+      if (candidate) userIdsToNotify.push(candidate.id);
+      // Notify sponsor
+      if (sponsor) userIdsToNotify.push(sponsor.id);
+      // Notify assigned caseworkers
+      if (caseData.assignedcaseworkerId) {
+        userIdsToNotify.push(...caseData.assignedcaseworkerId);
+      }
+
+      if (userIdsToNotify.length > 0) {
+        try {
+          await notifyCaseStatusChanged(userIdsToNotify, {
+            id: caseData.id,
+            caseId: caseData.caseId,
+            candidateName: candidate ? `${candidate.first_name} ${candidate.last_name}` : 'Unknown',
+          }, oldStatus, status);
+        } catch (notifError) {
+          console.error('Failed to send status change notification:', notifError);
+        }
+      }
+    }
 
     res.status(200).json({
       status: "success",

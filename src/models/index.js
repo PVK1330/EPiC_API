@@ -49,6 +49,8 @@ import ConversationModel from './conversation.model.js';
 
 import RescheduleHistoryModel from './rescheduleHistory.model.js';
 
+import NotificationModel from './notification.model.js';
+
 const env = process.env.NODE_ENV || 'development';
 
 const dbConfig = config[env];
@@ -105,6 +107,8 @@ db.ApplicationCustomField = ApplicationCustomFieldModel(sequelize, Sequelize.Dat
 db.Message = MessageModel(sequelize, Sequelize.DataTypes);
 db.Conversation = ConversationModel(sequelize, Sequelize.DataTypes);
 db.RescheduleHistory = RescheduleHistoryModel(sequelize, Sequelize.DataTypes);
+
+db.Notification = NotificationModel(sequelize, Sequelize.DataTypes);
 
 // Associations
 
@@ -220,5 +224,11 @@ db.Permission.belongsToMany(db.Role, {
   otherKey: 'role_id',
   as: 'roles'
 });
+
+// Notification associations
+db.Notification.belongsTo(db.User, { foreignKey: 'userId', as: 'user' });
+db.Notification.belongsTo(db.Role, { foreignKey: 'roleId', as: 'role' });
+db.User.hasMany(db.Notification, { foreignKey: 'userId', as: 'notifications' });
+db.Role.hasMany(db.Notification, { foreignKey: 'roleId', as: 'notifications' });
 
 export default db;

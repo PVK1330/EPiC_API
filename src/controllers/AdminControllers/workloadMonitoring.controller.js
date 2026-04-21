@@ -7,6 +7,181 @@ const Case = db.Case;
 const Task = db.Task;
 const CaseNote = db.CaseNote;
 
+// Export workload data as CSV
+export const exportWorkloadCSV = async (req, res) => {
+  try {
+    const userId = req.user?.userId ?? req.user?.id;
+    if (!userId) {
+      return res.status(401).json({
+        status: "error",
+        message: "Authentication required",
+        data: null
+      });
+    }
+
+    const { timeRange = '30days' } = req.query;
+
+    // Calculate date range
+    const now = new Date();
+    let startDate;
+    
+    switch (timeRange) {
+      case '7days':
+        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        break;
+      case '30days':
+        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        break;
+      case '90days':
+        startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+        break;
+      default:
+        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    }
+
+    // Get caseworker workload data
+    const caseworkers = await User.findAll({
+      where: { role_id: 2 },
+      attributes: ['id', 'first_name', 'last_name', 'email'],
+      include: [
+        {
+          model: Role,
+          as: 'role',
+          attributes: ['id', 'name']
+        },
+        {
+          model: Task,
+          as: 'assignedTasks',
+          attributes: ['id', 'status', 'priority', 'due_date', 'created_at'],
+          where: {
+            created_at: { [Op.gte]: startDate }
+          },
+          required: false
+        }
+      ]
+    });
+
+    // Get all cases within date range
+    const allCases = await Case.findAll({
+      where: {
+        created_at: { [Op.gte]: startDate }
+      },
+      attributes: ['id', 'status', 'created_at', 'updated_at', 'assignedcaseworkerId']
+    });
+
+    // Process workload data for each caseworker
+    const workloadData = caseworkers.map(caseworker => {
+      const cases = allCases.filter(c => {
+        const assignedIds = c.assignedcaseworkerId || [];
+        return Array.isArray(assignedIds) && assignedIds.includes(caseworker.id);
+      });
+      const tasks = caseworker.assignedTasks || [];
+
+      const activeCases = cases.filter(c => c.status !== 'Completed' && c.status !== 'Cancelled').length;
+      const completedCases = cases.filter(c => c.status === 'Completed').length;
+      
+      const pendingTasks = tasks.filter(t => t.status === 'pending').length;
+      const inProgressTasks = tasks.filter(t => t.status === 'in-progress').length;
+      const completedTasks = tasks.filter(t => t.status === 'completed').length;
+      const overdueTasks = tasks.filter(t => 
+        t.status !== 'completed' && 
+        t.due_date && 
+        new Date(t.due_date) < now
+      ).length;
+
+      const highPriorityTasks = tasks.filter(t => t.priority === 'high' && t.status !== 'completed').length;
+      const mediumPriorityTasks = tasks.filter(t => t.priority === 'medium' && t.status !== 'completed').length;
+      const lowPriorityTasks = tasks.filter(t => t.priority === 'low' && t.status !== 'completed').length;
+
+      const workloadScore = (activeCases * 2) + (pendingTasks * 1) + (inProgressTasks * 1.5) + (overdueTasks * 3);
+
+      return {
+        caseworkerName: `${caseworker.first_name} ${caseworker.last_name}`,
+        email: caseworker.email,
+        role: caseworker.role?.name,
+        totalCases: cases.length,
+        activeCases,
+        completedCases,
+        caseCompletionRate: cases.length > 0 ? Math.round((completedCases / cases.length) * 100) : 0,
+        totalTasks: tasks.length,
+        pendingTasks,
+        inProgressTasks,
+        completedTasks,
+        overdueTasks,
+        taskCompletionRate: tasks.length > 0 ? Math.round((completedTasks / tasks.length) * 100) : 0,
+        highPriorityTasks,
+        mediumPriorityTasks,
+        lowPriorityTasks,
+        workloadScore: Math.round(workloadScore),
+        workloadLevel: workloadScore > 20 ? 'High' : workloadScore > 10 ? 'Medium' : 'Low'
+      };
+    });
+
+    // Generate CSV
+    const headers = [
+      'Caseworker Name',
+      'Email',
+      'Role',
+      'Total Cases',
+      'Active Cases',
+      'Completed Cases',
+      'Case Completion Rate (%)',
+      'Total Tasks',
+      'Pending Tasks',
+      'In Progress Tasks',
+      'Completed Tasks',
+      'Overdue Tasks',
+      'Task Completion Rate (%)',
+      'High Priority Tasks',
+      'Medium Priority Tasks',
+      'Low Priority Tasks',
+      'Workload Score',
+      'Workload Level'
+    ];
+
+    const csvRows = [headers.join(',')];
+
+    workloadData.forEach(row => {
+      const values = [
+        `"${row.caseworkerName}"`,
+        `"${row.email}"`,
+        `"${row.role}"`,
+        row.totalCases,
+        row.activeCases,
+        row.completedCases,
+        row.caseCompletionRate,
+        row.totalTasks,
+        row.pendingTasks,
+        row.inProgressTasks,
+        row.completedTasks,
+        row.overdueTasks,
+        row.taskCompletionRate,
+        row.highPriorityTasks,
+        row.mediumPriorityTasks,
+        row.lowPriorityTasks,
+        row.workloadScore,
+        `"${row.workloadLevel}"`
+      ];
+      csvRows.push(values.join(','));
+    });
+
+    const csvContent = csvRows.join('\n');
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename=workload_report_${new Date().toISOString().split('T')[0]}.csv`);
+    res.send(csvContent);
+
+  } catch (error) {
+    console.error("Export Workload CSV Error:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error",
+      data: null,
+      error: error.message
+    });
+  }
+};
+
 // Get Workload Overview
 export const getWorkloadOverview = async (req, res) => {
   try {
@@ -595,6 +770,7 @@ function generateDailyTrends(caseworkers, startDate, endDate) {
 }
 
 export default {
+  exportWorkloadCSV,
   getWorkloadOverview,
   getCaseworkerWorkload,
   getWorkloadTrends,

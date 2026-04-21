@@ -1,4 +1,4 @@
-import express, { Router } from 'express';
+import { Router } from 'express';
 import * as stripeController from '../controllers/CandidateControllers/stripepayment.controller.js';
 import { verifyToken } from '../middlewares/auth.middleware.js';
 
@@ -32,6 +32,6 @@ router.get("/subscription-status/:subscription_id", stripeController.getSubscrip
 router.post("/update-subscription", stripeController.updateSubscription);
 
 // Webhook Route (no authentication required for webhooks)
-router.post("/webhook", express.raw({ type: 'application/json' }), stripeController.handleWebhook);
+router.post("/webhook", stripeController.handleWebhook);
 
 export default router;

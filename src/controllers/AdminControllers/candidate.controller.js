@@ -2,6 +2,8 @@ import db from "../../models/index.js";
 import { Op } from "sequelize";
 import bcrypt from "bcryptjs";
 import multer from "multer";
+import { ROLES } from "../../middlewares/role.middleware.js";
+import { notifyUserCreated } from "../../services/notification.service.js";
 
 const User = db.User;
 const Role = db.Role;
@@ -108,6 +110,19 @@ export const createCandidate = async (req, res) => {
 
     // Remove password from response
     const { password: _, ...candidateData } = candidate.toJSON();
+
+    // Send notification to all admins about new candidate creation
+    try {
+      await notifyUserCreated(ROLES.ADMIN, {
+        id: candidate.id,
+        email: candidate.email,
+        role: 'candidate',
+        first_name: candidate.first_name,
+        last_name: candidate.last_name,
+      });
+    } catch (notifError) {
+      console.error('Failed to send user creation notification:', notifError);
+    }
 
     res.status(201).json({
       status: "success",
