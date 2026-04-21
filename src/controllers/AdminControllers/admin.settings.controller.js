@@ -268,27 +268,19 @@ export const patchMe = async (req, res) => {
 
     }
 
-    if (country_code !== undefined) profileUpdates.country_code = String(country_code).trim();
+    if (country_code !== undefined) {
 
-    if (mobile !== undefined) profileUpdates.mobile = String(mobile).trim();
+      const cc = String(country_code).trim();
 
+      if (cc !== "") profileUpdates.country_code = cc;
 
+    }
 
-    if (Object.keys(profileUpdates).length > 0) {
+    if (mobile !== undefined) {
 
-      if (profileUpdates.first_name === "" || profileUpdates.last_name === "") {
+      const mob = String(mobile).trim();
 
-        return res.status(400).json({ status: "error", message: "First name and last name cannot be empty", data: null });
-
-      }
-
-      if (profileUpdates.country_code === "" || profileUpdates.mobile === "") {
-
-        return res.status(400).json({ status: "error", message: "Country code and mobile are required", data: null });
-
-      }
-
-      await user.update(profileUpdates);
+      if (mob !== "") profileUpdates.mobile = mob;
 
     }
 
@@ -319,6 +311,30 @@ export const patchMe = async (req, res) => {
     if (Object.keys(prefUpdates).length > 0) {
 
       await prefs.update(prefUpdates);
+
+    }
+
+
+
+    if (Object.keys(profileUpdates).length > 0) {
+
+      if (profileUpdates.first_name === "" || profileUpdates.last_name === "") {
+
+        return res.status(400).json({ status: "error", message: "First name and last name cannot be empty", data: null });
+
+      }
+
+      const mergedCc = profileUpdates.country_code !== undefined ? profileUpdates.country_code : user.country_code;
+
+      const mergedMob = profileUpdates.mobile !== undefined ? profileUpdates.mobile : user.mobile;
+
+      if (!String(mergedCc || "").trim() || !String(mergedMob || "").trim()) {
+
+        return res.status(400).json({ status: "error", message: "Country code and mobile are required", data: null });
+
+      }
+
+      await user.update(profileUpdates);
 
     }
 
@@ -389,6 +405,152 @@ export const patchMe = async (req, res) => {
   } catch (error) {
 
     console.error("patchMe settings error:", error);
+
+    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
+
+  }
+
+};
+
+
+
+export const patchMePreferences = async (req, res) => {
+
+  try {
+
+    const user = await requireAdmin(req, res);
+
+    if (!user) return;
+
+
+
+    const prefs = await getOrCreatePreferences(user.id);
+
+
+
+    const {
+
+      avatar_url,
+
+      two_factor_enabled,
+
+      email_notifications,
+
+      case_updates,
+
+      payment_alerts,
+
+      timezone,
+
+      language,
+
+      date_format,
+
+      data_collection,
+
+    } = req.body || {};
+
+
+
+    const prefUpdates = {};
+
+    if (avatar_url !== undefined) prefUpdates.avatar_url = avatar_url === null ? null : String(avatar_url).trim() || null;
+
+    if (two_factor_enabled !== undefined) prefUpdates.two_factor_enabled = Boolean(two_factor_enabled);
+
+    if (email_notifications !== undefined) prefUpdates.email_notifications = Boolean(email_notifications);
+
+    if (case_updates !== undefined) prefUpdates.case_updates = Boolean(case_updates);
+
+    if (payment_alerts !== undefined) prefUpdates.payment_alerts = Boolean(payment_alerts);
+
+    if (timezone !== undefined) prefUpdates.timezone = String(timezone);
+
+    if (language !== undefined) prefUpdates.language = String(language);
+
+    if (date_format !== undefined) prefUpdates.date_format = String(date_format);
+
+    if (data_collection !== undefined) prefUpdates.data_collection = Boolean(data_collection);
+
+
+
+    if (Object.keys(prefUpdates).length === 0) {
+
+      return res.status(400).json({ status: "error", message: "No preference fields to update", data: null });
+
+    }
+
+
+
+    await prefs.update(prefUpdates);
+
+    await prefs.reload();
+
+    await user.reload({ include: [{ model: Role, as: "role", attributes: ["id", "name"] }] });
+
+
+
+    const plain = user.toJSON();
+
+
+
+    res.status(200).json({
+
+      status: "success",
+
+      message: "Preferences updated.",
+
+      data: {
+
+        profile: {
+
+          first_name: plain.first_name,
+
+          last_name: plain.last_name,
+
+          email: plain.email,
+
+          country_code: plain.country_code,
+
+          mobile: plain.mobile,
+
+          phone: buildPhoneDisplay(plain.country_code, plain.mobile),
+
+          avatar_url: prefs.avatar_url || null,
+
+          role_id: plain.role_id,
+
+          role_name: plain.role?.name || null,
+
+        },
+
+        preferences: {
+
+          two_factor_enabled: prefs.two_factor_enabled,
+
+          email_notifications: prefs.email_notifications,
+
+          case_updates: prefs.case_updates,
+
+          payment_alerts: prefs.payment_alerts,
+
+          timezone: prefs.timezone,
+
+          language: prefs.language,
+
+          date_format: prefs.date_format,
+
+          data_collection: prefs.data_collection,
+
+        },
+
+      },
+
+    });
+
+  } catch (error) {
+
+    console.error("patchMePreferences error:", error);
 
     res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
 
