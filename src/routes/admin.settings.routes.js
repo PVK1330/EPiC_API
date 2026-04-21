@@ -12,6 +12,7 @@ router.use(checkRole([ROLES.ADMIN]));
 
 router.get("/me", adminSettingsController.getMe);
 router.patch("/me", adminSettingsController.patchMe);
+router.patch("/me/preferences", adminSettingsController.patchMePreferences);
 router.post("/change-password", adminSettingsController.changePassword);
 
 router.get("/visa-types", visaController.listVisaTypes);
