@@ -1,5 +1,7 @@
 import db from '../models/index.js';
 import { Op } from 'sequelize';
+import path from 'path';
+import fs from 'fs';
 
 const User = db.User;
 
@@ -23,6 +25,12 @@ export const profile = async (req, res) => {
         message: "User not found",
         data: null
       });
+    }
+
+    // Convert profile_pic path to URL-friendly format and add base URL
+    if (user.profile_pic) {
+      const normalizedPath = user.profile_pic.replace(/\\/g, '/');
+      user.profile_pic = `${process.env.BASE_URL}/${normalizedPath}`;
     }
 
     res.status(200).json({
@@ -50,7 +58,8 @@ export const editProfile = async (req, res) => {
     const userId = req.user.userId;
     
     // Get editable fields from request body
-    const { first_name, last_name, country_code, mobile } = req.body;
+    const body = req.body || {};
+    const { first_name, last_name, country_code, mobile } = body;
 
     // Find user by ID
     const user = await User.findOne({ where: { id: userId } });
@@ -91,12 +100,38 @@ export const editProfile = async (req, res) => {
       }
     }
 
+    // Handle profile picture upload
+    let profilePicPath = user.profile_pic; // Keep existing profile pic if no new one uploaded
+
+    if (req.file) {
+      // Create user-specific directory structure
+      const userUploadDir = path.join('uploads', 'profile_pic', String(userId));
+      
+      // Ensure directory exists
+      fs.mkdirSync(userUploadDir, { recursive: true });
+      
+      // Generate unique filename
+      const timestamp = Date.now();
+      const fileExtension = path.extname(req.file.originalname);
+      const fileName = `${timestamp}${fileExtension}`;
+      profilePicPath = path.join(userUploadDir, fileName);
+      
+      // Move file from temp to final location
+      fs.renameSync(req.file.path, profilePicPath);
+      
+      // Delete old profile picture if it exists
+      if (user.profile_pic && fs.existsSync(user.profile_pic)) {
+        fs.unlinkSync(user.profile_pic);
+      }
+    }
+
     // Update user profile
     const updateData = {
       first_name: first_name || user.first_name,
       last_name: last_name || user.last_name,
       country_code: country_code || user.country_code,
-      mobile: mobile || user.mobile
+      mobile: mobile || user.mobile,
+      profile_pic: profilePicPath
     };
 
     await user.update(updateData);
@@ -108,6 +143,12 @@ export const editProfile = async (req, res) => {
         exclude: ['password', 'otp_code', 'otp_expiry', 'password_reset_otp', 'password_reset_otp_expiry', 'temp_password'] 
       }
     });
+
+    // Convert profile_pic path to URL-friendly format and add base URL
+    if (updatedUser.profile_pic) {
+      const normalizedPath = updatedUser.profile_pic.replace(/\\/g, '/');
+      updatedUser.profile_pic = `${process.env.BASE_URL}/${normalizedPath}`;
+    }
 
     res.status(200).json({
       status: "success",
