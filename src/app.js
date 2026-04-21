@@ -43,6 +43,10 @@ app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
 // Mount before /api/admin so paths like /api/admin/settings/me are not captured by /api/admin/:id
 app.use('/api/settings', adminSettingsRoutes);
+// Mount specific admin sub-routes before the general admin routes to avoid conflicts with /api/admin/:id
+app.use('/api/admin/permissions', permissionsRoutes);
+app.use('/api/admin/rbac', rbacRoutes);
+app.use('/api/admin/roles', roleRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/caseworker/cases', caseworkerCaseRoutes);
 app.use('/api/caseworker', caseworkerRoutes);
@@ -51,9 +55,6 @@ app.use('/api/candidate', candidateRoutes);
 app.use('/api/stripe', stripeRoutes);
 app.use('/api/cases', caseRoutes);
 app.use('/api/escalations', escalationRoutes);
-app.use('/api/permissions', permissionsRoutes);
-app.use('/api/rbac', rbacRoutes);
-app.use('/api/roles', roleRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/documents', documentRoutes);
 app.use('/api/notifications', notificationRoutes);

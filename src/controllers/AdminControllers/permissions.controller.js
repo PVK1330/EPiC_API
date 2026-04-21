@@ -49,7 +49,7 @@ export const getAllPermissions = async (req, res) => {
     console.error("Get All Permissions Error:", error);
     res.status(500).json({
       status: "error",
-      message: "Internal server error",
+      message: "Failed to fetch permissions",
       data: null,
       error: error.message,
     });
@@ -67,6 +67,7 @@ export const getPermissionById = async (req, res) => {
           model: Role,
           as: "roles",
           attributes: ["id", "name"],
+          through: { attributes: [] },
         },
       ],
     });
@@ -108,7 +109,6 @@ export const createPermission = async (req, res) => {
       });
     }
 
-    // Check if permission already exists
     const existingPermission = await Permission.findOne({ where: { name } });
     if (existingPermission) {
       return res.status(400).json({
@@ -157,7 +157,6 @@ export const updatePermission = async (req, res) => {
       });
     }
 
-    // Check if name is being changed and if it already exists
     if (name && name !== permission.name) {
       const existingPermission = await Permission.findOne({
         where: { name, id: { [Op.ne]: id } },
@@ -187,6 +186,7 @@ export const updatePermission = async (req, res) => {
           model: Role,
           as: "roles",
           attributes: ["id", "name"],
+          through: { attributes: [] },
         },
       ],
     });
@@ -221,9 +221,7 @@ export const deletePermission = async (req, res) => {
       });
     }
 
-    // Delete role permissions associated with this permission
     await RolePermission.destroy({ where: { permission_id: id } });
-
     await permission.destroy();
 
     res.status(200).json({
@@ -241,7 +239,6 @@ export const deletePermission = async (req, res) => {
     });
   }
 };
-
 
 // Check if user has specific permission
 export const checkUserPermission = async (req, res) => {
@@ -261,11 +258,12 @@ export const checkUserPermission = async (req, res) => {
       include: [
         {
           model: Role,
-          as: 'role',
+          as: "role",       // ← fixed: lowercase alias matching association
           include: [
             {
               model: Permission,
               as: "permissions",
+              through: { attributes: [] },
             },
           ],
         },
@@ -280,7 +278,7 @@ export const checkUserPermission = async (req, res) => {
       });
     }
 
-    const hasPermission = user.Role?.permissions?.some(
+    const hasPermission = user.role?.permissions?.some(
       (p) => p.name === permission
     );
 
@@ -291,7 +289,7 @@ export const checkUserPermission = async (req, res) => {
         hasPermission,
         permission,
         userId,
-        role: user.Role?.name,
+        role: user.role?.name,
       },
     });
   } catch (error) {

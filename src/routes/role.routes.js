@@ -5,10 +5,7 @@ import { checkRole, ROLES } from '../middlewares/role.middleware.js';
 
 const router = Router();
 
-// Apply authentication middleware to all routes
 router.use(verifyToken);
-
-// Apply role-based access control - Only Admin can manage roles
 router.use(checkRole([ROLES.ADMIN]));
 
 // CREATE Role
@@ -32,5 +29,8 @@ router.delete("/:id/permissions/:permissionId", roleController.removePermissionF
 
 // Clone Permissions
 router.post("/clone-permissions", roleController.cloneRolePermissions);
+
+// Update user role
+router.patch("/users/:userId/role", roleController.updateUserRole);
 
 export default router;

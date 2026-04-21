@@ -1,8 +1,14 @@
 import db from "../../models/index.js";
 import { Op } from "sequelize";
 import bcrypt from "bcryptjs";
+import multer from "multer";
 import { ROLES } from "../../middlewares/role.middleware.js";
 import { notifyUserCreated } from "../../services/notification.service.js";
+
+// Multer configuration for file upload
+const upload = multer({ storage: multer.memoryStorage() });
+
+export const uploadMiddleware = upload.single('file');
 
 const User = db.User;
 const Role = db.Role;
@@ -503,6 +509,111 @@ export const toggleSponsorStatus = async (req, res) => {
   }
 };
 
+// Bulk Import Sponsors from CSV
+export const bulkImportSponsors = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        status: "error",
+        message: "No file uploaded",
+        data: null
+      });
+    }
+
+    const csvData = req.file.buffer.toString('utf-8');
+    const lines = csvData.split('\n').filter(line => line.trim());
+    
+    if (lines.length < 2) {
+      return res.status(400).json({
+        status: "error",
+        message: "CSV file is empty or has no data rows",
+        data: null
+      });
+    }
+
+    const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+    const results = {
+      success: [],
+      errors: []
+    };
+
+    for (let i = 1; i < lines.length; i++) {
+      try {
+        const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
+        const rowData = {};
+        
+        headers.forEach((header, index) => {
+          rowData[header] = values[index] || '';
+        });
+
+        // Generate password
+        const generatedPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-4);
+        const hashedPassword = await bcrypt.hash(generatedPassword, 12);
+
+        const sponsor = await User.create({
+          first_name: rowData.first_name || rowData.firstName || '',
+          last_name: rowData.last_name || rowData.lastName || '',
+          email: rowData.email,
+          country_code: rowData.country_code || rowData.countryCode || '+1',
+          mobile: rowData.mobile,
+          role_id: 4,
+          password: hashedPassword,
+          is_email_verified: true,
+          is_otp_verified: true,
+          status: 'active'
+        });
+
+        // Send notification to sponsor about account creation with credentials
+        try {
+          await notifyUserCreated(ROLES.BUSINESS, {
+            id: sponsor.id,
+            email: sponsor.email,
+            password: generatedPassword,
+            role: 'sponsor',
+            first_name: sponsor.first_name,
+            last_name: sponsor.last_name,
+          });
+        } catch (notifError) {
+          console.error(`Failed to send notification to ${sponsor.email}:`, notifError);
+        }
+
+        results.success.push({
+          row: i + 1,
+          id: sponsor.id,
+          email: sponsor.email,
+          temporary_password: generatedPassword
+        });
+
+      } catch (error) {
+        results.errors.push({
+          row: i + 1,
+          error: error.message
+        });
+      }
+    }
+
+    res.status(200).json({
+      status: "success",
+      message: "Bulk import completed",
+      data: {
+        total_processed: lines.length - 1,
+        successful: results.success.length,
+        failed: results.errors.length,
+        results
+      }
+    });
+
+  } catch (error) {
+    console.error("Bulk Import Sponsors Error:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error",
+      data: null,
+      error: error.message
+    });
+  }
+};
+
 // Export Sponsors to CSV
 export const exportSponsors = async (req, res) => {
   try {
@@ -550,7 +661,7 @@ export const exportSponsors = async (req, res) => {
       sponsor.email,
       sponsor.country_code,
       sponsor.mobile,
-      sponsor.Role?.name || 'N/A',
+      sponsor.role?.name || 'N/A',
       sponsor.status,
       sponsor.createdAt.toISOString()
     ]);

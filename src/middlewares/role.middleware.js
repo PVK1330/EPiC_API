@@ -5,6 +5,15 @@ export const checkRole = (allowedRoleIds) => {
     try {
       const userRoleId = req.user?.role_id;
 
+      // Validate that role_id is a valid integer
+      if (userRoleId === undefined || userRoleId === null || !Number.isInteger(userRoleId)) {
+        return res.status(401).json({
+          status: 'error',
+          message: 'Invalid role ID in token. Please re-authenticate.',
+          data: null,
+        });
+      }
+
       // Handle both single role ID and array of role IDs
       const allowedIds = Array.isArray(allowedRoleIds) ? allowedRoleIds : [allowedRoleIds];
 
@@ -39,6 +48,15 @@ export const checkPermission = (permissionName) => {
         return res.status(401).json({
           status: 'error',
           message: 'Authentication required.',
+          data: null,
+        });
+      }
+
+      // Validate that role_id is a valid integer
+      if (!Number.isInteger(roleId)) {
+        return res.status(401).json({
+          status: 'error',
+          message: 'Invalid role ID in token. Please re-authenticate.',
           data: null,
         });
       }
@@ -102,6 +120,15 @@ export const checkAnyPermission = (permissionNames) => {
         return res.status(401).json({
           status: 'error',
           message: 'Authentication required.',
+          data: null,
+        });
+      }
+
+      // Validate that role_id is a valid integer
+      if (!Number.isInteger(roleId)) {
+        return res.status(401).json({
+          status: 'error',
+          message: 'Invalid role ID in token. Please re-authenticate.',
           data: null,
         });
       }

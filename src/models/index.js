@@ -51,6 +51,8 @@ import RescheduleHistoryModel from './rescheduleHistory.model.js';
 
 import NotificationModel from './notification.model.js';
 
+import DepartmentModel from './department.model.js';
+
 const env = process.env.NODE_ENV || 'development';
 
 const dbConfig = config[env];
@@ -110,6 +112,8 @@ db.RescheduleHistory = RescheduleHistoryModel(sequelize, Sequelize.DataTypes);
 
 db.Notification = NotificationModel(sequelize, Sequelize.DataTypes);
 
+db.Department = DepartmentModel(sequelize, Sequelize.DataTypes);
+
 // Associations
 
 db.Conversation.belongsTo(db.User, { foreignKey: "participantOneId", as: "participantOne" });
@@ -119,8 +123,7 @@ db.Conversation.hasMany(db.Message, { foreignKey: "conversationId", as: "message
 
 db.Message.belongsTo(db.Conversation, { foreignKey: "conversationId", as: "conversation" });
 
-db.Role.hasMany(db.User, { foreignKey: 'role_id', as: 'role' });
-
+db.Role.hasMany(db.User, { foreignKey: 'role_id', as: 'users' });
 
 db.User.belongsTo(db.Role, { foreignKey: 'role_id', as: 'role' });
 
@@ -191,9 +194,8 @@ db.User.hasMany(db.Task, { foreignKey: 'assigned_to', as: 'assignedTasks' });
 db.User.hasMany(db.Task, { foreignKey: 'created_by', as: 'createdTasks' });
 db.Case.hasMany(db.Task, { foreignKey: 'case_id', as: 'tasks' });
 
-// Note: assignedcaseworkerId is a JSON array, not a foreign key, so these associations are not applicable
-// db.Case.belongsTo(db.User, { foreignKey: 'assignedToId', as: 'assignedTo' });
-// db.User.hasMany(db.Case, { foreignKey: 'assignedToId', as: 'assignedCases' });
+db.Case.belongsTo(db.User, { foreignKey: 'assignedToId', as: 'assignedTo' });
+db.User.hasMany(db.Case, { foreignKey: 'assignedToId', as: 'assignedCases' });
 
 db.Case.belongsTo(db.User, { foreignKey: 'createdById', as: 'createdBy' });
 db.User.hasMany(db.Case, { foreignKey: 'createdById', as: 'createdCases' });

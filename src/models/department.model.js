@@ -1,6 +1,6 @@
 export default (sequelize, DataTypes) => {
-  const Role = sequelize.define(
-    "Role",
+  const Department = sequelize.define(
+    "Department",
     {
       id: {
         type: DataTypes.INTEGER,
@@ -8,20 +8,20 @@ export default (sequelize, DataTypes) => {
         autoIncrement: true,
       },
       name: {
-        type: DataTypes.STRING(50),
+        type: DataTypes.STRING(100),
         allowNull: false,
         unique: true,
       },
-      description: {
-        type: DataTypes.TEXT,
-        allowNull: true,
+      is_active: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: true,
       },
     },
     {
-      tableName: "roles",
+      tableName: "departments",
       timestamps: true,
     }
   );
 
-  return Role;
+  return Department;
 };

@@ -547,7 +547,7 @@ export const exportAdmins = async (req, res) => {
       admin.email,
       admin.country_code,
       admin.mobile,
-      admin.Role?.name || 'N/A',
+      admin.role?.name || 'N/A',
       admin.status,
       admin.createdAt.toISOString()
     ]);
