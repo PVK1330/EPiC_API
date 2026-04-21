@@ -1,7 +1,21 @@
 import db from "../../models/index.js";
 import { Op } from "sequelize";
+import { ROLES } from "../../middlewares/role.middleware.js";
 
 const Case = db.Case;
+const sequelize = db.sequelize;
+
+// Helper function to check if userId is in assignedcaseworkerId JSON array
+const buildCaseworkerWhereClause = (userId) => {
+  return {
+    [Op.and]: [
+      sequelize.where(
+        sequelize.literal(`assignedcaseworkerId::jsonb ? '${userId}'`),
+        true
+      ),
+    ],
+  };
+};
 
 // Get Cases Assigned to Logged-in Caseworker with Filters
 export const getMyCases = async (req, res) => {
@@ -10,7 +24,7 @@ export const getMyCases = async (req, res) => {
     const userRoleId = req.user.role_id;
 
     // Verify user is a caseworker
-    if (userRoleId !== 2) {
+    if (userRoleId !== ROLES.CASEWORKER) {
       return res.status(403).json({
         status: "error",
         message: "Access denied. Only caseworkers can view their assigned cases.",
@@ -32,11 +46,7 @@ export const getMyCases = async (req, res) => {
     const offset = (page - 1) * limit;
 
     // Build where clause - filter by assigned caseworker
-    const whereClause = {
-      assignedcaseworkerId: {
-        [Op.contains]: [userId] // Check if userId is in the assignedcaseworkerId array
-      }
-    };
+    const whereClause = buildCaseworkerWhereClause(userId);
 
     // Add search filter
     if (search) {
@@ -121,23 +131,23 @@ export const getMyCases = async (req, res) => {
 
     // Get statistics for the caseworker's cases
     const myTotal = await Case.count({
-      where: { assignedcaseworkerId: { [Op.contains]: [userId] } }
+      where: buildCaseworkerWhereClause(userId)
     });
     const myActive = await Case.count({
       where: { 
-        assignedcaseworkerId: { [Op.contains]: [userId] },
+        ...buildCaseworkerWhereClause(userId),
         status: { [Op.in]: ['Pending', 'In Progress', 'Under Review'] }
       }
     });
     const myOverdue = await Case.count({
       where: { 
-        assignedcaseworkerId: { [Op.contains]: [userId] },
+        ...buildCaseworkerWhereClause(userId),
         status: 'Overdue'
       }
     });
     const myCompleted = await Case.count({
       where: { 
-        assignedcaseworkerId: { [Op.contains]: [userId] },
+        ...buildCaseworkerWhereClause(userId),
         status: { [Op.in]: ['Approved', 'Rejected', 'Closed'] }
       }
     });
@@ -179,7 +189,7 @@ export const getMyDashboardStats = async (req, res) => {
     const userRoleId = req.user.role_id;
 
     // Verify user is a caseworker
-    if (userRoleId !== 2) {
+    if (userRoleId !== ROLES.CASEWORKER) {
       return res.status(403).json({
         status: "error",
         message: "Access denied. Only caseworkers can view their dashboard stats.",
@@ -192,13 +202,13 @@ export const getMyDashboardStats = async (req, res) => {
 
     // Get all assigned cases
     const myTotal = await Case.count({
-      where: { assignedcaseworkerId: { [Op.contains]: [userId] } }
+      where: buildCaseworkerWhereClause(userId)
     });
 
     // Get active cases
     const myActive = await Case.count({
       where: { 
-        assignedcaseworkerId: { [Op.contains]: [userId] },
+        ...buildCaseworkerWhereClause(userId),
         status: { [Op.in]: ['Pending', 'In Progress', 'Under Review'] }
       }
     });
@@ -206,7 +216,7 @@ export const getMyDashboardStats = async (req, res) => {
     // Get overdue cases
     const myOverdue = await Case.count({
       where: { 
-        assignedcaseworkerId: { [Op.contains]: [userId] },
+        ...buildCaseworkerWhereClause(userId),
         status: 'Overdue'
       }
     });
@@ -214,7 +224,7 @@ export const getMyDashboardStats = async (req, res) => {
     // Get due today cases
     const myDueToday = await Case.count({
       where: { 
-        assignedcaseworkerId: { [Op.contains]: [userId] },
+        ...buildCaseworkerWhereClause(userId),
         targetSubmissionDate: todayStr
       }
     });
@@ -223,7 +233,7 @@ export const getMyDashboardStats = async (req, res) => {
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     const myCompletedMonth = await Case.count({
       where: { 
-        assignedcaseworkerId: { [Op.contains]: [userId] },
+        ...buildCaseworkerWhereClause(userId),
         status: { [Op.in]: ['Approved', 'Rejected', 'Closed'] },
         updated_at: { [Op.gte]: startOfMonth }
       }
@@ -231,7 +241,7 @@ export const getMyDashboardStats = async (req, res) => {
 
     // Get recent cases (last 5)
     const recentCases = await Case.findAll({
-      where: { assignedcaseworkerId: { [Op.contains]: [userId] } },
+      where: buildCaseworkerWhereClause(userId),
       order: [['created_at', 'DESC']],
       limit: 5,
       include: [
@@ -285,7 +295,7 @@ export const getMyPipelineCases = async (req, res) => {
     const userRoleId = req.user.role_id;
 
     // Verify user is a caseworker
-    if (userRoleId !== 2) {
+    if (userRoleId !== ROLES.CASEWORKER) {
       return res.status(403).json({
         status: "error",
         message: "Access denied. Only caseworkers can view their pipeline.",
@@ -294,7 +304,7 @@ export const getMyPipelineCases = async (req, res) => {
     }
 
     const cases = await Case.findAll({
-      where: { assignedcaseworkerId: { [Op.contains]: [userId] } },
+      where: buildCaseworkerWhereClause(userId),
       order: [['created_at', 'DESC']],
       include: [
         {
@@ -357,7 +367,7 @@ export const updateMyCaseStatus = async (req, res) => {
     const userRoleId = req.user.role_id;
 
     // Verify user is a caseworker
-    if (userRoleId !== 2) {
+    if (userRoleId !== ROLES.CASEWORKER) {
       return res.status(403).json({
         status: "error",
         message: "Access denied. Only caseworkers can update case status.",
@@ -370,12 +380,12 @@ export const updateMyCaseStatus = async (req, res) => {
     const caseData = await Case.findOne({ 
       where: { 
         caseId: id,
-        assignedcaseworkerId: { [Op.contains]: [userId] }
+        ...buildCaseworkerWhereClause(userId)
       } 
     }) || await Case.findOne({ 
       where: { 
         id: id,
-        assignedcaseworkerId: { [Op.contains]: [userId] }
+        ...buildCaseworkerWhereClause(userId)
       } 
     });
 
