@@ -151,7 +151,7 @@ export const getRecentCases = async (req, res) => {
       include: [
         {
           model: User,
-          as: 'assignedUser',
+          as: 'assignedTo',
           attributes: ['id', 'first_name', 'last_name', 'email']
         }
       ]
@@ -210,7 +210,7 @@ export const getRecentTasks = async (req, res) => {
       include: [
         {
           model: User,
-          as: 'assignedUser',
+          as: 'assignedTo',
           attributes: ['id', 'first_name', 'last_name', 'email']
         },
         {
@@ -283,7 +283,7 @@ export const getRecentActivities = async (req, res) => {
       include: [
         {
           model: User,
-          as: 'assignedUser',
+          as: 'assignedTo',
           attributes: ['id', 'first_name', 'last_name']
         },
         {
@@ -300,7 +300,7 @@ export const getRecentActivities = async (req, res) => {
       include: [
         {
           model: User,
-          as: 'assignedUser',
+          as: 'assignedTo',
           attributes: ['id', 'first_name', 'last_name']
         }
       ]
