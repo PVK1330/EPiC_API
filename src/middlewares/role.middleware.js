@@ -1,5 +1,34 @@
 import db from '../models/index.js';
 
+// Simple in-memory cache for role permissions
+const permissionCache = new Map();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+function getCachedPermissions(roleId) {
+  const cached = permissionCache.get(roleId);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached.permissions;
+  }
+  return null;
+}
+
+function setCachedPermissions(roleId, permissions) {
+  permissionCache.set(roleId, {
+    permissions,
+    timestamp: Date.now()
+  });
+}
+
+function clearPermissionCache(roleId) {
+  if (roleId) {
+    permissionCache.delete(roleId);
+  } else {
+    permissionCache.clear();
+  }
+}
+
+export { clearPermissionCache };
+
 export const checkRole = (allowedRoleIds) => {
   return (req, res, next) => {
     try {
@@ -43,28 +72,36 @@ export const checkPermission = (permissionName) => {
         });
       }
 
-      // Get user's role with permissions
-      const Role = db.Role;
-      const Permission = db.Permission;
+      // Check cache first
+      let permissions = getCachedPermissions(roleId);
+      
+      if (!permissions) {
+        // Get user's role with permissions from database
+        const Role = db.Role;
+        const Permission = db.Permission;
 
-      const role = await Role.findByPk(roleId, {
-        include: [
-          {
-            model: Permission,
-            as: 'permissions',
-          },
-        ],
-      });
-
-      if (!role) {
-        return res.status(403).json({
-          status: 'error',
-          message: 'Role not found.',
-          data: null,
+        const role = await Role.findByPk(roleId, {
+          include: [
+            {
+              model: Permission,
+              as: 'permissions',
+            },
+          ],
         });
+
+        if (!role) {
+          return res.status(403).json({
+            status: 'error',
+            message: 'Role not found.',
+            data: null,
+          });
+        }
+
+        permissions = role.permissions;
+        setCachedPermissions(roleId, permissions);
       }
 
-      const hasPermission = role.permissions?.some(
+      const hasPermission = permissions?.some(
         (p) => p.name === permissionName
       );
 
@@ -106,27 +143,36 @@ export const checkAnyPermission = (permissionNames) => {
         });
       }
 
-      const Role = db.Role;
-      const Permission = db.Permission;
+      // Check cache first
+      let permissions = getCachedPermissions(roleId);
+      
+      if (!permissions) {
+        // Get user's role with permissions from database
+        const Role = db.Role;
+        const Permission = db.Permission;
 
-      const role = await Role.findByPk(roleId, {
-        include: [
-          {
-            model: Permission,
-            as: 'permissions',
-          },
-        ],
-      });
-
-      if (!role) {
-        return res.status(403).json({
-          status: 'error',
-          message: 'Role not found.',
-          data: null,
+        const role = await Role.findByPk(roleId, {
+          include: [
+            {
+              model: Permission,
+              as: 'permissions',
+            },
+          ],
         });
+
+        if (!role) {
+          return res.status(403).json({
+            status: 'error',
+            message: 'Role not found.',
+            data: null,
+          });
+        }
+
+        permissions = role.permissions;
+        setCachedPermissions(roleId, permissions);
       }
 
-      const userPermissionNames = role.permissions?.map((p) => p.name) || [];
+      const userPermissionNames = permissions?.map((p) => p.name) || [];
       const hasAnyPermission = permissionNames.some((p) =>
         userPermissionNames.includes(p)
       );
@@ -139,7 +185,7 @@ export const checkAnyPermission = (permissionNames) => {
         });
       }
 
-      req.userPermissions = role.permissions;
+      req.userPermissions = permissions;
 
       next();
     } catch (err) {

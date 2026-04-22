@@ -115,7 +115,7 @@ db.Conversation.hasMany(db.Message, { foreignKey: "conversationId", as: "message
 
 db.Message.belongsTo(db.Conversation, { foreignKey: "conversationId", as: "conversation" });
 
-db.Role.hasMany(db.User, { foreignKey: 'role_id', as: 'role' });
+db.Role.hasMany(db.User, { foreignKey: 'role_id', as: 'users' });
 
 
 db.User.belongsTo(db.Role, { foreignKey: 'role_id', as: 'role' });
@@ -188,8 +188,8 @@ db.User.hasMany(db.Task, { foreignKey: 'assigned_to', as: 'assignedTasks' });
 db.User.hasMany(db.Task, { foreignKey: 'created_by', as: 'createdTasks' });
 db.Case.hasMany(db.Task, { foreignKey: 'case_id', as: 'tasks' });
 
-db.Case.belongsTo(db.User, { foreignKey: 'assignedToId', as: 'assignedTo' });
-db.User.hasMany(db.Case, { foreignKey: 'assignedToId', as: 'assignedCases' });
+// Note: Case uses assignedcaseworkerId (JSON array) for multiple caseworker assignments
+// Single assignedTo association removed to avoid conflict
 
 db.Case.belongsTo(db.User, { foreignKey: 'createdById', as: 'createdBy' });
 db.User.hasMany(db.Case, { foreignKey: 'createdById', as: 'createdCases' });

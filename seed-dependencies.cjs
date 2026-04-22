@@ -1,10 +1,15 @@
 const { Sequelize } = require('sequelize');
 
-const sequelize = new Sequelize('epic-crm', 'postgres', 'Nikhil@7887', { 
-  host: 'localhost', 
-  dialect: 'postgres', 
-  logging: false 
-});
+const sequelize = new Sequelize(
+  process.env.DB_NAME || 'epic-crm',
+  process.env.DB_USER || 'postgres',
+  process.env.DB_PASSWORD,
+  {
+    host: process.env.DB_HOST || 'localhost',
+    dialect: 'postgres',
+    logging: false
+  }
+);
 
 (async () => {
   try {
