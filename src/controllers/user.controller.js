@@ -108,18 +108,17 @@ export const editProfile = async (req, res) => {
       }
     }
 
-    if (req.file?.path && fs.existsSync(req.file.path)) {
-      try {
-        fs.unlinkSync(req.file.path);
-      } catch (_) {}
-    }
-
     const updateData = {
       first_name: first_name || user.first_name,
       last_name: last_name || user.last_name,
       country_code: country_code || user.country_code,
       mobile: mobile || user.mobile,
     };
+
+    // Add profile_pic if file was uploaded
+    if (req.file?.path) {
+      updateData.profile_pic = req.file.path;
+    }
 
     await user.update(updateData);
 
