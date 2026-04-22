@@ -172,32 +172,39 @@ export default (sequelize, DataTypes) => {
             sponsorLetter: {
                 type: DataTypes.STRING(500),
                 allowNull: true,
+                field: 'sponsor_letter',
             },
             insuranceCertificate: {
                 type: DataTypes.STRING(500),
                 allowNull: true,
+                field: 'insurance_certificate',
             },
             hrPolicies: {
                 type: DataTypes.STRING(500),
                 allowNull: true,
+                field: 'hr_policies',
             },
             organisationalChart: {
                 type: DataTypes.STRING(500),
                 allowNull: true,
+                field: 'organisational_chart',
             },
             recruitmentDocs: {
                 type: DataTypes.STRING(500),
                 allowNull: true,
+                field: 'recruitment_docs',
             },
             activeCases: {
                 type: DataTypes.INTEGER,
                 allowNull: true,
                 defaultValue: 0,
+                field: 'active_cases',
             },
             sponsoredWorkers: {
                 type: DataTypes.INTEGER,
                 allowNull: true,
                 defaultValue: 0,
+                field: 'sponsored_workers',
             },
             notes: {
                 type: DataTypes.TEXT,
@@ -207,6 +214,7 @@ export default (sequelize, DataTypes) => {
                 type: DataTypes.INTEGER,
                 allowNull: true,
                 defaultValue: 20,
+                field: 'risk_pct',
             },
         },
         {
