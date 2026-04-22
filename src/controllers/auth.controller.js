@@ -8,6 +8,7 @@ import { generateOTPTemplate, generateCredentialsTemplate } from '../utils/email
 
 const User = db.User;
 const UnverifiedUser = db.UnverifiedUser;
+const AdminUserPreference = db.AdminUserPreference;
 const RESET_TOKEN_EXPIRY = '10m';
 const RESET_TOKEN_PURPOSE = 'password_reset';
 
@@ -275,8 +276,10 @@ export const login = async (req, res) => {
       });
     }
 
+    const emailNorm = String(email).trim().toLowerCase();
+
     const user = await db.User.findOne({
-      where: { email },
+      where: { email: emailNorm },
       include: [{ model: db.Role, as: 'role', attributes: ['id', 'name'] }],
     });
 
@@ -347,10 +350,12 @@ export const login = async (req, res) => {
     });
   } catch (err) {
     console.error('Login error:', err);
+    const isProd = process.env.NODE_ENV === 'production';
     return res.status(500).json({
       status: 'error',
-      message: 'Login failed. Please try again.',
+      message: isProd ? 'Login failed. Please try again.' : err.message,
       data: null,
+      ...(!isProd && { error: err.message }),
     });
   }
 };
@@ -762,6 +767,16 @@ export const verify2FASetup = async (req, res) => {
     user.two_factor_backup_codes = backupCodes || generateBackupCodes();
     await user.save();
 
+    try {
+      const [prefs] = await AdminUserPreference.findOrCreate({
+        where: { user_id: userId },
+        defaults: { user_id: userId },
+      });
+      await prefs.update({ two_factor_enabled: true });
+    } catch (prefErr) {
+      console.error('Admin preferences sync after 2FA enable:', prefErr);
+    }
+
     res.status(200).json({
       status: 'success',
       message: '2FA enabled successfully',
@@ -923,6 +938,16 @@ export const disable2FA = async (req, res) => {
     user.two_factor_secret = null;
     user.two_factor_backup_codes = null;
     await user.save();
+
+    try {
+      const [prefs] = await AdminUserPreference.findOrCreate({
+        where: { user_id: userId },
+        defaults: { user_id: userId },
+      });
+      await prefs.update({ two_factor_enabled: false });
+    } catch (prefErr) {
+      console.error('Admin preferences sync after 2FA disable:', prefErr);
+    }
 
     res.status(200).json({
       status: 'success',

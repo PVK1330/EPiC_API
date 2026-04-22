@@ -1,23 +1,30 @@
 import db from '../models/index.js';
 
+export const ROLES = {
+  ADMIN: 1,
+  CASEWORKER: 2,
+  CANDIDATE: 3,
+  BUSINESS: 4,
+};
+
+function normalizeRoleId(roleId) {
+  if (roleId === undefined || roleId === null) return null;
+  const n = Number(roleId);
+  return Number.isNaN(n) ? null : n;
+}
+
+function isAdminRole(roleId) {
+  return normalizeRoleId(roleId) === ROLES.ADMIN;
+}
+
 export const checkRole = (allowedRoleIds) => {
   return (req, res, next) => {
     try {
-      const userRoleId = req.user?.role_id;
+      const userRoleId = normalizeRoleId(req.user?.role_id);
+      const allowedRaw = Array.isArray(allowedRoleIds) ? allowedRoleIds : [allowedRoleIds];
+      const allowedIds = allowedRaw.map((id) => normalizeRoleId(id)).filter((id) => id !== null);
 
-      // Validate that role_id is a valid integer
-      if (userRoleId === undefined || userRoleId === null || !Number.isInteger(userRoleId)) {
-        return res.status(401).json({
-          status: 'error',
-          message: 'Invalid role ID in token. Please re-authenticate.',
-          data: null,
-        });
-      }
-
-      // Handle both single role ID and array of role IDs
-      const allowedIds = Array.isArray(allowedRoleIds) ? allowedRoleIds : [allowedRoleIds];
-
-      if (!allowedIds.includes(userRoleId)) {
+      if (userRoleId === null || !allowedIds.includes(userRoleId)) {
         return res.status(403).json({
           status: 'error',
           message: 'Access denied - insufficient permissions.',
@@ -37,14 +44,13 @@ export const checkRole = (allowedRoleIds) => {
   };
 };
 
-// Check if user has specific permission
 export const checkPermission = (permissionName) => {
   return async (req, res, next) => {
     try {
       const userId = req.user?.userId;
       const roleId = req.user?.role_id;
 
-      if (!userId || !roleId) {
+      if (!userId || roleId === undefined || roleId === null) {
         return res.status(401).json({
           status: 'error',
           message: 'Authentication required.',
@@ -52,16 +58,10 @@ export const checkPermission = (permissionName) => {
         });
       }
 
-      // Validate that role_id is a valid integer
-      if (!Number.isInteger(roleId)) {
-        return res.status(401).json({
-          status: 'error',
-          message: 'Invalid role ID in token. Please re-authenticate.',
-          data: null,
-        });
+      if (isAdminRole(roleId)) {
+        return next();
       }
 
-      // Get user's role with permissions
       const Role = db.Role;
       const Permission = db.Permission;
 
@@ -94,7 +94,6 @@ export const checkPermission = (permissionName) => {
         });
       }
 
-      // Attach permissions to request for later use
       req.userPermissions = role.permissions;
 
       next();
@@ -109,14 +108,13 @@ export const checkPermission = (permissionName) => {
   };
 };
 
-// Check if user has any of the specified permissions
 export const checkAnyPermission = (permissionNames) => {
   return async (req, res, next) => {
     try {
       const userId = req.user?.userId;
       const roleId = req.user?.role_id;
 
-      if (!userId || !roleId) {
+      if (!userId || roleId === undefined || roleId === null) {
         return res.status(401).json({
           status: 'error',
           message: 'Authentication required.',
@@ -124,13 +122,8 @@ export const checkAnyPermission = (permissionNames) => {
         });
       }
 
-      // Validate that role_id is a valid integer
-      if (!Number.isInteger(roleId)) {
-        return res.status(401).json({
-          status: 'error',
-          message: 'Invalid role ID in token. Please re-authenticate.',
-          data: null,
-        });
+      if (isAdminRole(roleId)) {
+        return next();
       }
 
       const Role = db.Role;
@@ -178,12 +171,4 @@ export const checkAnyPermission = (permissionNames) => {
       });
     }
   };
-};
-
-// Role ID constants — import these in routes instead of hardcoding numbers
-export const ROLES = {
-  ADMIN: 1,
-  CASEWORKER: 2,
-  CANDIDATE: 3,
-  BUSINESS: 4,
 };
