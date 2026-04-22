@@ -246,6 +246,11 @@ export const getAllCandidates = async (req, res) => {
         as: "role",
         attributes: ["id", "name"],
       },
+      {
+        model: CandidateApplication,
+        as: "application",
+        required: false,
+      },
     ];
 
     const caseWhere = {};
@@ -276,18 +281,7 @@ export const getAllCandidates = async (req, res) => {
         attributes: [],
       });
     }
-    const includeClause = [
-      {
-        model: Role,
-        as: "role",
-        attributes: ["id", "name"],
-      },
-      {
-        model: CandidateApplication,
-        as: "application",
-        required: false,
-      },
-    ];
+
 
     // Filtering by visa type and payment status temporarily disabled to fix 500 error
     // TODO: Re-enable after Case associations are properly configured
@@ -751,6 +745,11 @@ export const exportCandidates = async (req, res) => {
         as: "role",
         attributes: ["id", "name"],
       },
+      {
+        model: CandidateApplication,
+        as: "application",
+        required: false,
+      },
     ];
 
     const caseWhere = {};
@@ -781,18 +780,7 @@ export const exportCandidates = async (req, res) => {
         attributes: [],
       });
     }
-    const includeClause = [
-      {
-        model: Role,
-        as: "role",
-        attributes: ["id", "name"],
-      },
-      {
-        model: CandidateApplication,
-        as: "application",
-        required: false,
-      },
-    ];
+
 
     // Filtering by visa type and payment status temporarily disabled to fix 500 error
     // TODO: Re-enable after Case associations are properly configured
@@ -813,29 +801,6 @@ export const exportCandidates = async (req, res) => {
       order: [["createdAt", "DESC"]],
     });
 
-    // Generate CSV
-    const csvHeader = [
-      "ID",
-      "First Name",
-      "Last Name",
-      "Email",
-      "Country Code",
-      "Mobile",
-      "Role",
-      "Status",
-      "Created At",
-    ];
-    const csvRows = candidates.map((candidate) => [
-      candidate.id,
-      candidate.first_name,
-      candidate.last_name,
-      candidate.email,
-      candidate.country_code,
-      candidate.mobile,
-      candidate.Role?.name || "N/A",
-      candidate.status,
-      candidate.createdAt.toISOString(),
-    ]);
     // Generate CSV with application fields
     const csvHeader = [
       "ID",

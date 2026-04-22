@@ -49,7 +49,19 @@ const CaseModel = (sequelize, DataTypes) => {
       defaultValue: "medium",
     },
     status: {
-      type: DataTypes.ENUM('Lead', 'Pending', 'In Progress', 'Completed', 'On Hold', 'Cancelled'),
+      type: DataTypes.ENUM(
+        'Lead',
+        'Pending',
+        'In Progress',
+        'Completed',
+        'On Hold',
+        'Cancelled',
+        'Under Review',
+        'Overdue',
+        'Approved',
+        'Rejected',
+        'Closed'
+      ),
       defaultValue: "Lead",
     },
     submitted: {

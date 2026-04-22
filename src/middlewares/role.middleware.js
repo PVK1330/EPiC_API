@@ -1,5 +1,18 @@
 import db from "../models/index.js";
 
+export const ROLES = {
+  ADMIN: 1,
+  CASEWORKER: 2,
+  CANDIDATE: 3,
+  BUSINESS: 4,
+};
+
+const normalizeRoleId = (id) => {
+  if (id === null || id === undefined) return null;
+  const parsed = parseInt(id, 10);
+  return isNaN(parsed) ? null : parsed;
+};
+
 // Simple in-memory cache for role permissions
 const permissionCache = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes

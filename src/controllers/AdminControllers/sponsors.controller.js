@@ -1,7 +1,6 @@
 import db from "../../models/index.js";
 import { Op } from "sequelize";
 import bcrypt from "bcryptjs";
-<<<<<<< HEAD
 import multer from "multer";
 import { ROLES } from "../../middlewares/role.middleware.js";
 import { notifyUserCreated } from "../../services/notification.service.js";
@@ -10,9 +9,7 @@ import { notifyUserCreated } from "../../services/notification.service.js";
 const upload = multer({ storage: multer.memoryStorage() });
 
 export const uploadMiddleware = upload.single('file');
-=======
 import { generateStrongPassword } from "../../utils/passwordGenerator.js";
->>>>>>> main
 
 const User = db.User;
 const Role = db.Role;
