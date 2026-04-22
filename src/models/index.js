@@ -58,6 +58,8 @@ import CandidateFeedbackModel from "./candidateFeedback.model.js";
 
 import CandidateApplicationModel from "./candidateApplication.model.js";
 
+import SponsorProfileModel from "./sponsorProfile.model.js";
+
 const env = process.env.NODE_ENV || "development";
 
 const dbConfig = config[env];
@@ -144,6 +146,8 @@ db.CandidateApplication = CandidateApplicationModel(
   sequelize,
   Sequelize.DataTypes,
 );
+
+db.SponsorProfile = SponsorProfileModel(sequelize, Sequelize.DataTypes);
 
 // Associations
 
@@ -349,5 +353,11 @@ db.CandidateApplication.belongsTo(db.User, {
   foreignKey: "userId",
   as: "user",
 });
+// Sponsor Profile associations
+db.User.hasOne(db.SponsorProfile, {
+  foreignKey: "userId",
+  as: "sponsorProfile",
+});
+db.SponsorProfile.belongsTo(db.User, { foreignKey: "userId", as: "user" });
 
 export default db;

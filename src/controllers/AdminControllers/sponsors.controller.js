@@ -16,6 +16,7 @@ import { generateStrongPassword } from "../../utils/passwordGenerator.js";
 
 const User = db.User;
 const Role = db.Role;
+const SponsorProfile = db.SponsorProfile;
 
 // Create Sponsor
 export const createSponsor = async (req, res) => {
@@ -28,7 +29,24 @@ export const createSponsor = async (req, res) => {
       mobile,
       role_id = 4, // Default to Sponsor role
       password,
-      confirm_password
+      confirm_password,
+      companyName,
+      tradingName,
+      registrationNumber,
+      industrySector,
+      sponsorLicenceNumber,
+      licenceStatus,
+      licenceExpiryDate,
+      registeredAddress,
+      city,
+      postalCode,
+      country,
+      cosAllocation,
+      activeCases,
+      sponsoredWorkers,
+      riskLevel,
+      riskPct,
+      outstandingBalance
     } = req.body;
 
     // Validate required fields
@@ -115,6 +133,38 @@ export const createSponsor = async (req, res) => {
     // Remove password from response
     const { password: _, ...sponsorData } = sponsor.toJSON();
 
+    // Create SponsorProfile if business fields are provided
+    const hasBusinessFields = companyName || tradingName || registrationNumber || 
+      sponsorLicenceNumber || industrySector || licenceStatus || licenceExpiryDate ||
+      registeredAddress || city || postalCode || country || cosAllocation ||
+      activeCases || sponsoredWorkers || riskLevel || riskPct || outstandingBalance;
+    
+    if (hasBusinessFields) {
+      const profileData = {};
+      if (companyName) profileData.companyName = companyName;
+      if (tradingName) profileData.tradingName = tradingName;
+      if (registrationNumber) profileData.registrationNumber = registrationNumber;
+      if (industrySector) profileData.industrySector = industrySector;
+      if (sponsorLicenceNumber) profileData.sponsorLicenceNumber = sponsorLicenceNumber;
+      if (licenceStatus) profileData.licenceStatus = licenceStatus;
+      if (licenceExpiryDate) profileData.licenceExpiryDate = licenceExpiryDate;
+      if (registeredAddress) profileData.registeredAddress = registeredAddress;
+      if (city) profileData.city = city;
+      if (postalCode) profileData.postalCode = postalCode;
+      if (country) profileData.country = country;
+      if (cosAllocation) profileData.cosAllocation = cosAllocation;
+      if (activeCases) profileData.activeCases = activeCases;
+      if (sponsoredWorkers) profileData.sponsoredWorkers = sponsoredWorkers;
+      if (riskLevel) profileData.riskLevel = riskLevel;
+      if (riskPct) profileData.riskPct = riskPct;
+      if (outstandingBalance) profileData.outstandingBalance = outstandingBalance;
+
+      await SponsorProfile.create({
+        userId: sponsor.id,
+        ...profileData
+      });
+    }
+
     // Send notification to all admins about new sponsor creation
     try {
       await notifyUserCreated(ROLES.ADMIN, {
@@ -172,20 +222,23 @@ export const getAllSponsors = async (req, res) => {
       whereClause.status = status;
     }
 
-    // Note: licenceStatus and riskLevel filters require SponsorProfile model
-    // These parameters are added for future use when sponsor profile is implemented
-    // For now, they will be passed but not actively filtered
+    // Build include clause
+    const includeClause = [{
+      model: Role,
+      as: 'role',
+      attributes: ['id', 'name']
+    }, {
+      model: SponsorProfile,
+      as: 'sponsorProfile',
+      required: false
+    }];
 
     const { count, rows: sponsors } = await User.findAndCountAll({
       where: whereClause,
       attributes: { 
         exclude: ['password', 'otp_code', 'otp_expiry', 'password_reset_otp', 'password_reset_otp_expiry', 'temp_password'] 
       },
-      include: [{
-        model: Role,
-        as: 'role',
-        attributes: ['id', 'name']
-      }],
+      include: includeClause,
       order: [["createdAt", "DESC"]],
       limit: parseInt(limit),
       offset: parseInt(offset)
@@ -256,9 +309,7 @@ export const getSponsorById = async (req, res) => {
       error: error.message
     });
   }
-};
-
-// Update Sponsor
+} // Added closing bracket here
 export const updateSponsor = async (req, res) => {
   try {
     const { id } = req.params;
@@ -269,7 +320,50 @@ export const updateSponsor = async (req, res) => {
       country_code,
       mobile,
       role_id,
-      status
+      status,
+      companyName,
+      tradingName,
+      registrationNumber,
+      sponsorLicenceNumber,
+      licenceRating,
+      industrySector,
+      yearEstablished,
+      website,
+      registeredAddress,
+      tradingAddress,
+      city,
+      state,
+      country,
+      postalCode,
+      authorisingName,
+      authorisingPhone,
+      authorisingEmail,
+      keyContactName,
+      keyContactPhone,
+      keyContactEmail,
+      ownershipType,
+      hrName,
+      hrPhone,
+      hrEmail,
+      licenceIssueDate,
+      licenceExpiryDate,
+      cosAllocation,
+      billingName,
+      billingEmail,
+      billingPhone,
+      outstandingBalance,
+      paymentTerms,
+      sponsorLetter,
+      insuranceCertificate,
+      hrPolicies,
+      organisationalChart,
+      recruitmentDocs,
+      licenceStatus,
+      riskLevel,
+      activeCases,
+      sponsoredWorkers,
+      notes,
+      riskPct
     } = req.body;
 
     // Find sponsor
@@ -344,7 +438,77 @@ export const updateSponsor = async (req, res) => {
 
     await sponsor.update(updateData);
 
-    // Get updated sponsor with role
+    // Update SponsorProfile if business fields are provided
+    const hasBusinessFields = companyName || tradingName || registrationNumber || 
+      sponsorLicenceNumber || licenceRating || industrySector || yearEstablished || 
+      website || registeredAddress || tradingAddress || city || state || country || 
+      postalCode || authorisingName || authorisingPhone || authorisingEmail || 
+      keyContactName || keyContactPhone || keyContactEmail || ownershipType || 
+      hrName || hrPhone || hrEmail || licenceIssueDate || licenceExpiryDate || 
+      cosAllocation || billingName || billingEmail || billingPhone || 
+      outstandingBalance || paymentTerms || sponsorLetter || insuranceCertificate || 
+      hrPolicies || organisationalChart || recruitmentDocs || licenceStatus || riskLevel ||
+      activeCases || sponsoredWorkers || notes || riskPct;
+    
+    if (hasBusinessFields) {
+      let profile = await SponsorProfile.findOne({ where: { userId: id } });
+      
+      const profileData = {};
+      if (companyName) profileData.companyName = companyName;
+      if (tradingName) profileData.tradingName = tradingName;
+      if (registrationNumber) profileData.registrationNumber = registrationNumber;
+      if (sponsorLicenceNumber) profileData.sponsorLicenceNumber = sponsorLicenceNumber;
+      if (licenceRating) profileData.licenceRating = licenceRating;
+      if (industrySector) profileData.industrySector = industrySector;
+      if (yearEstablished) profileData.yearEstablished = yearEstablished;
+      if (website) profileData.website = website;
+      if (registeredAddress) profileData.registeredAddress = registeredAddress;
+      if (tradingAddress) profileData.tradingAddress = tradingAddress;
+      if (city) profileData.city = city;
+      if (state) profileData.state = state;
+      if (country) profileData.country = country;
+      if (postalCode) profileData.postalCode = postalCode;
+      if (authorisingName) profileData.authorisingName = authorisingName;
+      if (authorisingPhone) profileData.authorisingPhone = authorisingPhone;
+      if (authorisingEmail) profileData.authorisingEmail = authorisingEmail;
+      if (keyContactName) profileData.keyContactName = keyContactName;
+      if (keyContactPhone) profileData.keyContactPhone = keyContactPhone;
+      if (keyContactEmail) profileData.keyContactEmail = keyContactEmail;
+      if (ownershipType) profileData.ownershipType = ownershipType;
+      if (hrName) profileData.hrName = hrName;
+      if (hrPhone) profileData.hrPhone = hrPhone;
+      if (hrEmail) profileData.hrEmail = hrEmail;
+      if (licenceIssueDate) profileData.licenceIssueDate = licenceIssueDate;
+      if (licenceExpiryDate) profileData.licenceExpiryDate = licenceExpiryDate;
+      if (cosAllocation) profileData.cosAllocation = cosAllocation;
+      if (billingName) profileData.billingName = billingName;
+      if (billingEmail) profileData.billingEmail = billingEmail;
+      if (billingPhone) profileData.billingPhone = billingPhone;
+      if (outstandingBalance) profileData.outstandingBalance = outstandingBalance;
+      if (paymentTerms) profileData.paymentTerms = paymentTerms;
+      if (sponsorLetter) profileData.sponsorLetter = sponsorLetter;
+      if (insuranceCertificate) profileData.insuranceCertificate = insuranceCertificate;
+      if (hrPolicies) profileData.hrPolicies = hrPolicies;
+      if (organisationalChart) profileData.organisationalChart = organisationalChart;
+      if (recruitmentDocs) profileData.recruitmentDocs = recruitmentDocs;
+      if (licenceStatus) profileData.licenceStatus = licenceStatus;
+      if (riskLevel) profileData.riskLevel = riskLevel;
+      if (activeCases) profileData.activeCases = activeCases;
+      if (sponsoredWorkers) profileData.sponsoredWorkers = sponsoredWorkers;
+      if (notes) profileData.notes = notes;
+      if (riskPct) profileData.riskPct = riskPct;
+
+      if (profile) {
+        await profile.update(profileData);
+      } else {
+        await SponsorProfile.create({
+          userId: id,
+          ...profileData
+        });
+      }
+    }
+
+    // Get updated sponsor with role and profile
     const updatedSponsor = await User.findOne({
       where: { id },
       attributes: { 
@@ -354,6 +518,10 @@ export const updateSponsor = async (req, res) => {
         model: Role,
         as: 'role',
         attributes: ['id', 'name']
+      }, {
+        model: SponsorProfile,
+        as: 'sponsorProfile',
+        required: false
       }]
     });
 
@@ -567,6 +735,16 @@ export const bulkImportSponsors = async (req, res) => {
           status: 'active'
         });
 
+        // Create SponsorProfile if business fields are provided
+        if (rowData.companyName || rowData.licenceStatus || rowData.riskLevel) {
+          await SponsorProfile.create({
+            userId: sponsor.id,
+            companyName: rowData.companyName || null,
+            licenceStatus: rowData.licenceStatus || null,
+            riskLevel: rowData.riskLevel || null
+          });
+        }
+
         // Send notification to sponsor about account creation with credentials
         try {
           await notifyUserCreated(ROLES.BUSINESS, {
@@ -645,19 +823,23 @@ export const exportSponsors = async (req, res) => {
 
     const sponsors = await User.findAll({
       where: whereClause,
-      attributes: { 
-        exclude: ['password', 'otp_code', 'otp_expiry', 'password_reset_otp', 'password_reset_otp_expiry', 'temp_password'] 
+      attributes: {
+        exclude: ['password', 'otp_code', 'otp_expiry', 'password_reset_otp', 'password_reset_otp_expiry', 'temp_password']
       },
       include: [{
         model: Role,
         as: 'role',
         attributes: ['id', 'name']
+      }, {
+        model: SponsorProfile,
+        as: 'sponsorProfile',
+        required: false
       }],
       order: [["createdAt", "DESC"]]
     });
 
     // Generate CSV
-    const csvHeader = ['ID', 'First Name', 'Last Name', 'Email', 'Country Code', 'Mobile', 'Role', 'Status', 'Created At'];
+    const csvHeader = ['ID', 'First Name', 'Last Name', 'Email', 'Country Code', 'Mobile', 'Company Name', 'Licence Status', 'Risk Level', 'Role', 'Status', 'Created At'];
     const csvRows = sponsors.map(sponsor => [
       sponsor.id,
       sponsor.first_name,
@@ -665,6 +847,9 @@ export const exportSponsors = async (req, res) => {
       sponsor.email,
       sponsor.country_code,
       sponsor.mobile,
+      sponsor.sponsorProfile?.companyName || '',
+      sponsor.sponsorProfile?.licenceStatus || '',
+      sponsor.sponsorProfile?.riskLevel || '',
       sponsor.role?.name || 'N/A',
       sponsor.status,
       sponsor.createdAt.toISOString()

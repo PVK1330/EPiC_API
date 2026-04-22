@@ -8,6 +8,14 @@ import { notifyUserCreated } from "../../services/notification.service.js";
 const User = db.User;
 const Role = db.Role;
 const CandidateApplication = db.CandidateApplication;
+const CandidateAccountSettings = db.CandidateAccountSettings;
+const CandidateFeedback = db.CandidateFeedback;
+const Document = db.Document;
+const Case = db.Case;
+const VisaType = db.VisaType;
+const PetitionType = db.PetitionType;
+const CasePayment = db.CasePayment;
+const Notification = db.Notification;
 
 // Multer configuration for file upload
 const upload = multer({ storage: multer.memoryStorage() });
@@ -268,6 +276,21 @@ export const getAllCandidates = async (req, res) => {
         attributes: [],
       });
     }
+    const includeClause = [
+      {
+        model: Role,
+        as: "role",
+        attributes: ["id", "name"],
+      },
+      {
+        model: CandidateApplication,
+        as: "application",
+        required: false,
+      },
+    ];
+
+    // Filtering by visa type and payment status temporarily disabled to fix 500 error
+    // TODO: Re-enable after Case associations are properly configured
 
     const { count, rows: candidates } = await User.findAndCountAll({
       where: whereClause,
@@ -758,6 +781,21 @@ export const exportCandidates = async (req, res) => {
         attributes: [],
       });
     }
+    const includeClause = [
+      {
+        model: Role,
+        as: "role",
+        attributes: ["id", "name"],
+      },
+      {
+        model: CandidateApplication,
+        as: "application",
+        required: false,
+      },
+    ];
+
+    // Filtering by visa type and payment status temporarily disabled to fix 500 error
+    // TODO: Re-enable after Case associations are properly configured
 
     const candidates = await User.findAll({
       where: whereClause,
@@ -798,6 +836,74 @@ export const exportCandidates = async (req, res) => {
       candidate.status,
       candidate.createdAt.toISOString(),
     ]);
+    // Generate CSV with application fields
+    const csvHeader = [
+      "ID",
+      "First Name",
+      "Last Name",
+      "Email",
+      "Country Code",
+      "Mobile",
+      "Role",
+      "Status",
+      "Created At",
+      "Application Type",
+      "Gender",
+      "Relationship Status",
+      "Address",
+      "Nationality",
+      "Birth Country",
+      "Place of Birth",
+      "DOB",
+      "Passport Number",
+      "Issuing Authority",
+      "Issue Date",
+      "Expiry Date",
+      "Visa Type",
+      "BRP Number",
+      "Visa Expiry Date",
+      "NI Number",
+      "Sponsored",
+      "English Proof",
+    ];
+    const csvRows = candidates.map((candidate) => {
+      const app = candidate.application || {};
+      return [
+        candidate.id,
+        candidate.first_name,
+        candidate.last_name,
+        candidate.email,
+        candidate.country_code,
+        candidate.mobile,
+        candidate.Role?.name || "N/A",
+        candidate.status,
+        candidate.createdAt.toISOString(),
+        app.applicationType || "",
+        app.gender || "",
+        app.relationshipStatus || "",
+        app.address || "",
+        app.nationality || "",
+        app.birthCountry || "",
+        app.placeOfBirth || "",
+        app.dob ? new Date(app.dob).toISOString().split("T")[0] : "",
+        app.passportNumber || "",
+        app.issuingAuthority || "",
+        app.issueDate
+          ? new Date(app.issueDate).toISOString().split("T")[0]
+          : "",
+        app.expiryDate
+          ? new Date(app.expiryDate).toISOString().split("T")[0]
+          : "",
+        app.visaType || "",
+        app.brpNumber || "",
+        app.visaEndDate
+          ? new Date(app.visaEndDate).toISOString().split("T")[0]
+          : "",
+        app.niNumber || "",
+        app.sponsored || "",
+        app.englishProof || "",
+      ];
+    });
 
     const csvContent = [
       csvHeader.join(","),
@@ -878,6 +984,44 @@ export const bulkImportCandidates = async (req, res) => {
           is_otp_verified: true,
           status: "active",
         });
+
+        // Create CandidateApplication record if application data exists
+        if (
+          rowData["Application Type"] ||
+          rowData.gender ||
+          rowData.nationality ||
+          rowData.dob
+        ) {
+          await CandidateApplication.create({
+            userId: candidate.id,
+            applicationType: rowData["Application Type"] || "Single",
+            gender: rowData.gender || null,
+            relationshipStatus: rowData["Relationship Status"] || null,
+            address: rowData.Address || null,
+            nationality: rowData.Nationality || null,
+            birthCountry: rowData["Birth Country"] || null,
+            placeOfBirth: rowData["Place of Birth"] || null,
+            dob: rowData.dob ? new Date(rowData.dob) : null,
+            passportNumber: rowData["Passport Number"] || null,
+            issuingAuthority: rowData["Issuing Authority"] || null,
+            issueDate: rowData["Issue Date"]
+              ? new Date(rowData["Issue Date"])
+              : null,
+            expiryDate: rowData["Expiry Date"]
+              ? new Date(rowData["Expiry Date"])
+              : null,
+            visaType: rowData["Visa Type"] || null,
+            brpNumber: rowData["BRP Number"] || null,
+            visaEndDate: rowData["Visa Expiry Date"]
+              ? new Date(rowData["Visa Expiry Date"])
+              : null,
+            niNumber: rowData["NI Number"] || null,
+            sponsored: rowData.Sponsored || null,
+            englishProof: rowData["English Proof"] || null,
+            status: "submitted",
+            submittedAt: new Date(),
+          });
+        }
 
         results.success.push({
           row: i + 1,
