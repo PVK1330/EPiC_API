@@ -7,6 +7,7 @@ import { notifyUserCreated } from "../../services/notification.service.js";
 
 const User = db.User;
 const Role = db.Role;
+const CandidateApplication = db.CandidateApplication;
 
 // Multer configuration for file upload
 const upload = multer({ storage: multer.memoryStorage() });
@@ -24,7 +25,24 @@ export const createCandidate = async (req, res) => {
       mobile,
       role_id = 3, // Default to Candidate role
       password,
-      confirm_password
+      confirm_password,
+      application, // Application data for child table
+      applicationData, // Legacy application data backup
+      // Legacy fields for compatibility
+      phone,
+      passportExpiry,
+      visaExpiry,
+      countryOfBirth,
+      caseStatus,
+      rightToWork,
+      jobTitle,
+      linkedBusiness,
+      employmentStart,
+      paymentStatus,
+      feeAmount,
+      city,
+      postcode,
+      country
     } = req.body;
 
     // Validate required fields
@@ -94,31 +112,61 @@ export const createCandidate = async (req, res) => {
     // Hash password
     const hashedPassword = await bcrypt.hash(generatedPassword, 12);
 
-    // Create candidate
-    const candidate = await User.create({
-      first_name,
-      last_name,
-      email,
-      country_code,
-      mobile,
-      role_id: 3, // Always set to Candidate role
-      password: hashedPassword,
-      is_email_verified: true, // Auto-verify for admin-created accounts
-      is_otp_verified: true, // Auto-verify for candidate login
-      status: 'active'
+    // Create candidate with transaction
+    const result = await db.sequelize.transaction(async (t) => {
+      // Create user record
+      const candidate = await User.create({
+        first_name,
+        last_name,
+        email,
+        country_code,
+        mobile,
+        role_id: 3, // Always set to Candidate role
+        password: hashedPassword,
+        is_email_verified: true, // Auto-verify for admin-created accounts
+        is_otp_verified: true, // Auto-verify for candidate login
+        status: 'active',
+        // Legacy fields for compatibility
+        phone,
+        passportExpiry,
+        visaExpiry,
+        countryOfBirth,
+        caseStatus,
+        rightToWork,
+        jobTitle,
+        linkedBusiness,
+        employmentStart,
+        paymentStatus,
+        feeAmount,
+        city,
+        postcode,
+        country,
+        // Store complete application data as backup
+        applicationData
+      }, { transaction: t });
+
+      // Create application record if application data is provided
+      if (application && typeof application === 'object') {
+        await CandidateApplication.create({
+          userId: candidate.id,
+          ...application
+        }, { transaction: t });
+      }
+
+      return candidate;
     });
 
     // Remove password from response
-    const { password: _, ...candidateData } = candidate.toJSON();
+    const { password: _, ...candidateData } = result.toJSON();
 
     // Send notification to all admins about new candidate creation
     try {
       await notifyUserCreated(ROLES.ADMIN, {
-        id: candidate.id,
-        email: candidate.email,
+        id: result.id,
+        email: result.email,
         role: 'candidate',
-        first_name: candidate.first_name,
-        last_name: candidate.last_name,
+        first_name: result.first_name,
+        last_name: result.last_name,
       });
     } catch (notifError) {
       console.error('Failed to send user creation notification:', notifError);
@@ -252,6 +300,10 @@ export const getCandidateById = async (req, res) => {
         model: Role,
         as: 'role',
         attributes: ['id', 'name']
+      }, {
+        model: CandidateApplication,
+        as: 'application',
+        required: false
       }]
     });
 
@@ -291,7 +343,24 @@ export const updateCandidate = async (req, res) => {
       country_code,
       mobile,
       role_id,
-      status
+      status,
+      application, // Application data for child table
+      applicationData, // Legacy application data backup
+      // Legacy fields for compatibility
+      phone,
+      passportExpiry,
+      visaExpiry,
+      countryOfBirth,
+      caseStatus,
+      rightToWork,
+      jobTitle,
+      linkedBusiness,
+      employmentStart,
+      paymentStatus,
+      feeAmount,
+      city,
+      postcode,
+      country
     } = req.body;
 
     // Find candidate
@@ -353,20 +422,62 @@ export const updateCandidate = async (req, res) => {
       }
     }
 
-    // Update candidate
-    const updateData = {
-      first_name: first_name || candidate.first_name,
-      last_name: last_name || candidate.last_name,
-      email: email || candidate.email,
-      country_code: country_code || candidate.country_code,
-      mobile: mobile || candidate.mobile,
-      role_id: role_id || candidate.role_id,
-      status: status || candidate.status
-    };
+    // Update candidate with transaction
+    await db.sequelize.transaction(async (t) => {
+      // Update user record
+      const updateData = {
+        first_name: first_name || candidate.first_name,
+        last_name: last_name || candidate.last_name,
+        email: email || candidate.email,
+        country_code: country_code || candidate.country_code,
+        mobile: mobile || candidate.mobile,
+        role_id: role_id || candidate.role_id,
+        status: status || candidate.status,
+        // Legacy fields for compatibility
+        phone,
+        passportExpiry,
+        visaExpiry,
+        countryOfBirth,
+        caseStatus,
+        rightToWork,
+        jobTitle,
+        linkedBusiness,
+        employmentStart,
+        paymentStatus,
+        feeAmount,
+        city,
+        postcode,
+        country,
+        // Store complete application data as backup
+        applicationData
+      };
 
-    await candidate.update(updateData);
+      await candidate.update(updateData, { transaction: t });
 
-    // Get updated candidate with role
+      // Update or create application record if application data is provided
+      if (application && typeof application === 'object') {
+        const existingApplication = await CandidateApplication.findOne({
+          where: { userId: id },
+          transaction: t
+        });
+
+        if (existingApplication) {
+          // Update existing application record but preserve status and timestamps
+          const { status, submittedAt, reviewedAt, reviewedBy, ...updateData } = application;
+          await existingApplication.update(updateData, { transaction: t });
+          console.log("Updated existing application record for user:", id);
+        } else {
+          // Create new application record
+          await CandidateApplication.create({
+            userId: candidate.id,
+            ...application
+          }, { transaction: t });
+          console.log("Created new application record for user:", id);
+        }
+      }
+    });
+
+    // Get updated candidate with role and application
     const updatedCandidate = await User.findOne({
       where: { id },
       attributes: { 
@@ -376,6 +487,10 @@ export const updateCandidate = async (req, res) => {
         model: Role,
         as: 'role',
         attributes: ['id', 'name']
+      }, {
+        model: CandidateApplication,
+        as: 'application',
+        required: false
       }]
     });
 

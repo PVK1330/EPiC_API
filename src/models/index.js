@@ -56,6 +56,8 @@ import CandidateAccountSettingsModel from './candidateAccountSettings.model.js';
 
 import CandidateFeedbackModel from './candidateFeedback.model.js';
 
+import CandidateApplicationModel from './candidateApplication.model.js';
+
 const env = process.env.NODE_ENV || 'development';
 
 const dbConfig = config[env];
@@ -119,6 +121,8 @@ db.Department = DepartmentModel(sequelize, Sequelize.DataTypes);
 db.CandidateAccountSettings = CandidateAccountSettingsModel(sequelize, Sequelize.DataTypes);
 
 db.CandidateFeedback = CandidateFeedbackModel(sequelize, Sequelize.DataTypes);
+
+db.CandidateApplication = CandidateApplicationModel(sequelize, Sequelize.DataTypes);
 
 // Associations
 
@@ -244,5 +248,9 @@ db.CandidateAccountSettings.belongsTo(db.User, { foreignKey: 'user_id', as: 'use
 
 db.User.hasMany(db.CandidateFeedback, { foreignKey: 'user_id', as: 'candidateFeedbacks' });
 db.CandidateFeedback.belongsTo(db.User, { foreignKey: 'user_id', as: 'user' });
+
+// Candidate Application associations
+db.User.hasOne(db.CandidateApplication, { foreignKey: 'userId', as: 'application' });
+db.CandidateApplication.belongsTo(db.User, { foreignKey: 'userId', as: 'user' });
 
 export default db;
