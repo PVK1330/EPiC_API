@@ -12,6 +12,7 @@ import caseworkerCaseRoutes from './routes/CaseworkerRoutes/caseworkerCase.route
 import sponsorsRoutes from './routes/sponsors.routes.js';
 import candidateRoutes from './routes/candidate.routes.js';
 import candidateAccountRoutes from './routes/candidateAccount.routes.js';
+import candidateApplicationRoutes from './routes/candidateApplication.routes.js';
 import stripeRoutes from './routes/stripe.routes.js';
 import caseRoutes from './routes/case.routes.js';
 import escalationRoutes from './routes/escalation.routes.js';
@@ -54,6 +55,7 @@ app.use('/api/caseworker', caseworkerRoutes);
 app.use('/api/sponsors', sponsorsRoutes);
 app.use('/api/candidate', candidateRoutes);
 app.use('/api/candidate-account', candidateAccountRoutes);
+app.use('/api/candidate-application', candidateApplicationRoutes);
 app.use('/api/stripe', stripeRoutes);
 app.use('/api/cases', caseRoutes);
 app.use('/api/escalations', escalationRoutes);

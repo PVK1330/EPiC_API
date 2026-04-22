@@ -8,8 +8,6 @@ const router = Router();
 // Require authentication for all routes
 router.use(verifyToken);
 
-// Apply role-based access control if needed (Admins, Caseworkers, etc. can manage cases)
-// Adjust as per business logic, allowing Admin and Caseworker. Let's allow ADMIN initially, or both.
 router.use(checkRole([ROLES.ADMIN, ROLES.CASEWORKER]));
 
 // Custom Pipeline & Metrics routes MUST come before /:id routes
