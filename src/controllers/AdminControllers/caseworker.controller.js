@@ -5,6 +5,7 @@ import multer from "multer";
 import { ROLES } from "../../middlewares/role.middleware.js";
 import { sendCaseworkerWelcomeEmail } from "../../services/email.service.js";
 import { generateCaseworkerCredentialsTemplate } from "../../utils/emailTemplate.js";
+import { generateStrongPassword } from "../../utils/passwordGenerator.js";
 
 const User = db.User;
 const Role = db.Role;
@@ -377,8 +378,7 @@ export const createCaseworker = async (req, res) => {
 
     let generatedPassword = password;
     if (!password) {
-      generatedPassword =
-        Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-4);
+      generatedPassword = generateStrongPassword(12);
     }
 
     const hashedPassword = await bcrypt.hash(generatedPassword, 12);
@@ -524,7 +524,7 @@ export const getAllCaseworkers = async (req, res) => {
     const caseworkersWithMetrics = await Promise.all(
       caseworkers.map(async (caseworker) => {
         const cases = await db.Case.findAll({
-          where: { assignedToId: caseworker.id }
+          where: { assignedcaseworkerId: { [Op.contains]: [caseworker.id] } }
         });
 
         const totalCases = cases.length;

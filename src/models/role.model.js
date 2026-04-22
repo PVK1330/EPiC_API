@@ -16,11 +16,16 @@ export default (sequelize, DataTypes) => {
         type: DataTypes.TEXT,
         allowNull: true,
       },
+      status: {
+        type: DataTypes.ENUM("active", "inactive"),
+        allowNull: false,
+        defaultValue: "active",
+      },
     },
     {
       tableName: "roles",
       timestamps: true,
-    }
+    },
   );
 
   return Role;
