@@ -26,12 +26,13 @@ import dashboardRoutes from './routes/admin.dashboard.routes.js';
 import workloadRoutes from './routes/admin.workload.routes.js';
 import messageRoutes from './routes/message.routes.js';
 import rescheduleRoutes from './routes/CaseworkerRoutes/reschedule.routes.js';
+import { getFrontendOrigins } from './config/frontendOrigins.js';
 
 const app = express();
 
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-  credentials: true,           
+  origin: getFrontendOrigins(),
+  credentials: true,
 }));
 
 // Stripe webhooks must use raw body for signature verification.

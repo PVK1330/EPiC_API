@@ -1,5 +1,11 @@
 import db from "../models/index.js";
 import { Op } from "sequelize";
+import {
+  emitMessageNewAndConversationUpdated,
+  emitAfterMarkRead,
+  getUnreadCountForUserInConversation,
+} from "../realtime/messagingRealtime.js";
+import { getIO } from "../realtime/ioRegistry.js";
 
 export const getMessages = async (req, res) => {
   try {
@@ -127,11 +133,12 @@ export const sendMessage = async (req, res) => {
       ]
     });
 
-    if (req.app.get('io')) {
-      const io = req.app.get('io');
-      io.to(receiverId.toString()).emit("newMessage", messageInfo);
-      io.to(senderId.toString()).emit("newMessage", messageInfo);
-    }
+    await conversation.reload();
+    const io = getIO() ?? req.app.get("io");
+    await emitMessageNewAndConversationUpdated(io, {
+      conversation,
+      messageRow: messageInfo,
+    });
 
     res.status(201).json({ status: "success", message: "Message sent successfully", data: messageInfo });
   } catch (error) {
@@ -165,20 +172,29 @@ export const getRecentConversations = async (req, res) => {
       ]
     });
 
-    const formattedConversations = conversations.map(conv => {
-      const otherUser = conv.participantOneId === userId ? conv.participantTwo : conv.participantOne;
-      return {
-        id: conv.id,
-        user: otherUser,
-        case: conv.case,
-        lastMessage: {
-          content: conv.lastMessage,
-          createdAt: conv.lastMessageAt
-        }
-      };
-    });
+    const formattedConversations = await Promise.all(
+      conversations.map(async (conv) => {
+        const otherUser =
+          conv.participantOneId === userId ? conv.participantTwo : conv.participantOne;
+        const unreadCount = await getUnreadCountForUserInConversation(userId, conv.id);
+        return {
+          id: conv.id,
+          user: otherUser,
+          case: conv.case,
+          unreadCount,
+          lastMessage: {
+            content: conv.lastMessage,
+            createdAt: conv.lastMessageAt,
+          },
+        };
+      }),
+    );
 
-    res.status(200).json({ status: "success", message: "Conversations retrieved successfully", data: { count: formattedConversations.length, conversations: formattedConversations } });
+    res.status(200).json({
+      status: "success",
+      message: "Conversations retrieved successfully",
+      data: { count: formattedConversations.length, conversations: formattedConversations },
+    });
   } catch (error) {
     res.status(500).json({ status: "error", message: "Error retrieving conversations", error: error.message });
   }
@@ -217,10 +233,28 @@ export const markAsRead = async (req, res) => {
     const { senderId } = req.body;
     const receiverId = req.user.userId;
 
+    if (senderId == null) {
+      return res.status(400).json({ status: "error", message: "senderId is required." });
+    }
+
+    const pending = await db.Message.findAll({
+      where: { senderId, receiverId, isRead: false },
+      attributes: ["conversationId"],
+      raw: true,
+    });
+    const conversationIds = [...new Set(pending.map((r) => r.conversationId))];
+
     await db.Message.update(
       { isRead: true },
       { where: { senderId, receiverId, isRead: false } }
     );
+
+    const io = getIO() ?? req.app.get("io");
+    await emitAfterMarkRead(io, {
+      senderId,
+      readerUserId: receiverId,
+      conversationIds,
+    });
 
     res.status(200).json({ status: "success", message: "Messages marked as read" });
   } catch (error) {
