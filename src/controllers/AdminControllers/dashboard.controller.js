@@ -46,15 +46,15 @@ export const getDashboardStats = async (req, res) => {
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
     const recentCases = await Case.count({
-      where: { createdAt: { [Op.gte]: sevenDaysAgo } }
+      where: { created_at: { [Op.gte]: sevenDaysAgo } }
     });
 
     const recentNotes = await CaseNote.count({
-      where: { createdAt: { [Op.gte]: sevenDaysAgo } }
+      where: { created_at: { [Op.gte]: sevenDaysAgo } }
     });
 
     const recentTasks = await Task.count({
-      where: { createdAt: { [Op.gte]: sevenDaysAgo } }
+      where: { created_at: { [Op.gte]: sevenDaysAgo } }
     });
 
     // Get case status breakdown
@@ -147,11 +147,11 @@ export const getRecentCases = async (req, res) => {
     const { count, rows: cases } = await Case.findAndCountAll({
       limit: parseInt(limit),
       offset: parseInt(offset),
-      order: [["createdAt", "DESC"]],
+      order: [["created_at", "DESC"]],
       include: [
         {
           model: User,
-          as: 'assignedTo',
+          as: 'candidate',
           attributes: ['id', 'first_name', 'last_name', 'email']
         }
       ]
@@ -206,7 +206,7 @@ export const getRecentTasks = async (req, res) => {
       where: whereClause,
       limit: parseInt(limit),
       offset: parseInt(offset),
-      order: [["createdAt", "DESC"]],
+      order: [["created_at", "DESC"]],
       include: [
         {
           model: User,
@@ -215,6 +215,7 @@ export const getRecentTasks = async (req, res) => {
         },
         {
           model: Case,
+          as: 'case',
           attributes: ['id', 'caseNumber', 'title']
         }
       ]
@@ -262,7 +263,7 @@ export const getRecentActivities = async (req, res) => {
     // Get recent case notes
     const recentNotes = await CaseNote.findAll({
       limit: Math.ceil(parseInt(limit) / 3),
-      order: [["createdAt", "DESC"]],
+      order: [["created_at", "DESC"]],
       include: [
         {
           model: User,
@@ -271,6 +272,7 @@ export const getRecentActivities = async (req, res) => {
         },
         {
           model: Case,
+          as: 'case',
           attributes: ['id', 'caseNumber', 'title']
         }
       ]
@@ -279,7 +281,7 @@ export const getRecentActivities = async (req, res) => {
     // Get recent tasks
     const recentTasks = await Task.findAll({
       limit: Math.ceil(parseInt(limit) / 3),
-      order: [["createdAt", "DESC"]],
+      order: [["created_at", "DESC"]],
       include: [
         {
           model: User,
@@ -288,6 +290,7 @@ export const getRecentActivities = async (req, res) => {
         },
         {
           model: Case,
+          as: 'case',
           attributes: ['id', 'caseNumber', 'title']
         }
       ]
@@ -296,11 +299,11 @@ export const getRecentActivities = async (req, res) => {
     // Get recent cases
     const recentCases = await Case.findAll({
       limit: Math.ceil(parseInt(limit) / 3),
-      order: [["createdAt", "DESC"]],
+      order: [["created_at", "DESC"]],
       include: [
         {
           model: User,
-          as: 'assignedTo',
+          as: 'candidate',
           attributes: ['id', 'first_name', 'last_name']
         }
       ]
@@ -313,7 +316,7 @@ export const getRecentActivities = async (req, res) => {
         id: note.id,
         title: `Case Note: ${note.title || 'Untitled'}`,
         description: note.content?.substring(0, 100) + '...',
-        createdAt: note.createdAt,
+        createdAt: note.created_at,
         user: note.author,
         relatedCase: note.case
       })),
@@ -322,7 +325,7 @@ export const getRecentActivities = async (req, res) => {
         id: task.id,
         title: `Task: ${task.title}`,
         description: task.description?.substring(0, 100) + '...',
-        createdAt: task.createdAt,
+        createdAt: task.created_at,
         user: task.assignedUser,
         relatedCase: task.case
       })),
@@ -331,7 +334,7 @@ export const getRecentActivities = async (req, res) => {
         id: case_.id,
         title: `Case: ${case_.title}`,
         description: case_.description?.substring(0, 100) + '...',
-        createdAt: case_.createdAt,
+        createdAt: case_.created_at,
         user: case_.assignedUser,
         relatedCase: case_
       }))

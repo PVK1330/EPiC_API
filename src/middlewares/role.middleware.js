@@ -126,7 +126,7 @@ export const checkPermission = (permissionName) => {
         });
       }
 
-      req.userPermissions = role.permissions;
+      req.userPermissions = permissions;
 
       next();
     } catch (err) {

@@ -52,6 +52,10 @@ const CaseModel = (sequelize, DataTypes) => {
       type: DataTypes.ENUM(
         'Lead',
         'Pending',
+        'Docs Pending',
+        'Drafting',
+        'Submitted',
+        'Decision',
         'In Progress',
         'Completed',
         'On Hold',
@@ -142,11 +146,18 @@ const CaseModel = (sequelize, DataTypes) => {
       defaultValue: "Initial",
       comment: "Current stage of the case"
     },
+    deleted_at: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      comment: "Soft delete timestamp"
+    }
   }, {
     tableName: 'cases',
     timestamps: true,
     createdAt: 'created_at',
-    updatedAt: 'updated_at'
+    updatedAt: 'updated_at',
+    paranoid: true,
+    deletedAt: 'deleted_at'
   });
 
   return Case;

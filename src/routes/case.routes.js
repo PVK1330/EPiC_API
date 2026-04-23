@@ -15,7 +15,7 @@ router.get("/pipeline", caseController.getPipelineCases);
 router.get("/capacity", caseController.getTeamCapacity);
 router.patch("/:id/assign", caseController.assignCase);
 router.patch("/:id/stage", caseController.updatePipelineStage);
-
+router.get("/export", caseController.exportCases);
 // CRUD Operations
 router.post("/", caseController.createCase);
 router.get("/filtered", caseController.getCasesWithFilters);
