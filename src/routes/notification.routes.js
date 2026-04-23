@@ -36,6 +36,9 @@ const adminRouter = Router();
 // Apply role-based access control - Admin only
 adminRouter.use(checkRole([ROLES.ADMIN]));
 
+// Get all notifications in the system (admin view)
+adminRouter.get('/all', notificationController.getAllNotifications);
+
 // Create manual notification (broadcast)
 adminRouter.post('/create', checkPermission('admin.notifications.manage'), notificationController.createManualNotification);
 

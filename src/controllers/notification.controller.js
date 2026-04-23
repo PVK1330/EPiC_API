@@ -32,6 +32,94 @@ const internalServerError = (res) =>
     data: null,
   });
 
+// Admin: Get all notifications in the system
+export const getAllNotifications = async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({
+        status: 'error',
+        message: 'Authentication required',
+        data: null,
+      });
+    }
+
+    const {
+      page = 1,
+      limit = 50,
+      unreadOnly = false,
+      type = null,
+      priority = null,
+      userId: specificUserId = null,
+      roleId = null,
+    } = req.query;
+    const parsedPage = Math.max(1, Number.parseInt(page, 10) || 1);
+    const parsedLimit = Math.min(100, Math.max(1, Number.parseInt(limit, 10) || 50));
+
+    if (type && !validNotificationTypes.has(type)) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Invalid notification type',
+        data: null,
+      });
+    }
+
+    if (priority && !validPriorities.has(priority)) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Invalid notification priority',
+        data: null,
+      });
+    }
+
+    const whereClause = {
+      ...(unreadOnly === 'true' && { isRead: false }),
+      ...(type && { type }),
+      ...(priority && { priority }),
+      ...(specificUserId && { userId: specificUserId }),
+      ...(roleId && { roleId }),
+    };
+
+    const { count, rows: notifications } = await Notification.findAndCountAll({
+      where: whereClause,
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['id', 'first_name', 'last_name', 'email'],
+          required: false,
+        },
+        {
+          model: Role,
+          as: 'role',
+          attributes: ['id', 'name'],
+          required: false,
+        },
+      ],
+      order: [['createdAt', 'DESC']],
+      limit: parsedLimit,
+      offset: (parsedPage - 1) * parsedLimit,
+    });
+
+    res.status(200).json({
+      status: 'success',
+      message: 'All notifications retrieved successfully',
+      data: {
+        notifications,
+        pagination: {
+          total: count,
+          page: parsedPage,
+          limit: parsedLimit,
+          pages: Math.ceil(count / parsedLimit),
+        },
+      },
+    });
+  } catch (error) {
+    console.error('Get all notifications error:', error);
+    return internalServerError(res);
+  }
+};
+
 // Get all notifications for the authenticated user
 export const getNotifications = async (req, res) => {
   try {
