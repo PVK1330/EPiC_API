@@ -262,6 +262,31 @@
       ]
     },
     {
+      "name": "Reports",
+      "item": [
+        {
+          "name": "Case Type Report",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": "{{baseUrl}}/api/workload/reports/case-types"
+          }
+        },
+        {
+          "name": "Workload Report",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": "{{baseUrl}}/api/workload/reports/workload"
+          }
+        }
+      ]
+    },
+    {
       "name": "User",
       "item": [
         {

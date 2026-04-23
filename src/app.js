@@ -23,6 +23,7 @@ import applicationFieldsRoutes from './routes/applicationFields.routes.js';
 import dashboardRoutes from './routes/admin.dashboard.routes.js';
 import messageRoutes from './routes/message.routes.js';
 import workloadRoutes from './routes/workload.routes.js';
+import reportAndAnalysisRoutes from './routes/reportandanalysis.router.js';
 
 const app = express();
 
@@ -57,5 +58,6 @@ app.use('/api/case-details', caseDetailRoutes);
 app.use('/api/case-notes', caseNoteRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/workload', workloadRoutes);
+app.use('/api/workload', reportAndAnalysisRoutes);
 
 export default app;

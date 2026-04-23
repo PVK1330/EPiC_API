@@ -2,6 +2,7 @@ import { Router } from "express";
 import * as workloadController from "../controllers/AdminControllers/workload.controller.js";
 import { verifyToken } from "../middlewares/auth.middleware.js";
 import { checkRole, ROLES } from "../middlewares/role.middleware.js";
+import * as reportsController from "../controllers/AdminControllers/reports.controller.js";
 
 const router = Router();
 
@@ -32,5 +33,7 @@ router.get(
   checkRole([ROLES.ADMIN, ROLES.CASEWORKER]),
   workloadController.getCaseworkerPerformance
 );
+
+
 
 export default router;
