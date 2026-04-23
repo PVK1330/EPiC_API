@@ -18,14 +18,30 @@ export default (sequelize, DataTypes) => {
                 onDelete: "CASCADE",
             },
             
-            // Personal Information
+            // Personal Information — core identity fields mirrored from the form
+            firstName: {
+                type: DataTypes.STRING(100),
+                allowNull: true,
+            },
+            lastName: {
+                type: DataTypes.STRING(100),
+                allowNull: true,
+            },
+            email: {
+                type: DataTypes.STRING(255),
+                allowNull: true,
+            },
+            contactNumber: {
+                type: DataTypes.STRING(50),
+                allowNull: true,
+            },
             applicationType: {
                 type: DataTypes.ENUM('Single', 'Family'),
                 allowNull: true,
                 defaultValue: 'Single',
             },
             gender: {
-                type: DataTypes.ENUM('Male', 'Female', 'Prefer not to say'),
+                type: DataTypes.STRING(30),
                 allowNull: true,
             },
             relationshipStatus: {
