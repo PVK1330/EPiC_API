@@ -3,6 +3,7 @@ import app from './app.js';
 import db from './models/index.js';
 import seedRoles from './seeders/role.seeder.js';
 import seedAdmin from './seeders/admin.seeder.js';
+
 import { initializeFieldSettings } from './controllers/AdminControllers/applicationFields.controller.js';
 import http from 'http';
 import { Server } from 'socket.io';
@@ -21,7 +22,7 @@ db.sequelize.sync().then(async () => {
   const server = http.createServer(app);
   const io = new Server(server, {
     cors: {
-      origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+      origin: process.env.FRONTEND_URL || 'http://localhost:5000',
       methods: ["GET", "POST"],
       credentials: true
     }
@@ -54,7 +55,7 @@ db.sequelize.sync().then(async () => {
   });
 
   server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+    console.log(`Server running on port 5000`);
   });
 }).catch((err) => {
   console.error('Failed to connect to database:', err);

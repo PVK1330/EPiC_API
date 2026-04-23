@@ -22,6 +22,7 @@ import { taskRoutes, documentRoutes } from './routes/index.js';
 import applicationFieldsRoutes from './routes/applicationFields.routes.js';
 import dashboardRoutes from './routes/admin.dashboard.routes.js';
 import messageRoutes from './routes/message.routes.js';
+import workloadRoutes from './routes/workload.routes.js';
 
 const app = express();
 
@@ -55,5 +56,6 @@ app.use('/api/messages', messageRoutes);
 app.use('/api/case-details', caseDetailRoutes);
 app.use('/api/case-notes', caseNoteRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/workload', workloadRoutes);
 
 export default app;
