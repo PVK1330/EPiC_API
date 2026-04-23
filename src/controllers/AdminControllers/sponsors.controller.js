@@ -9,6 +9,7 @@ import { notifyUserCreated } from "../../services/notification.service.js";
 const upload = multer({ storage: multer.memoryStorage() });
 
 export const uploadMiddleware = upload.single('file');
+import { generateStrongPassword } from "../../utils/passwordGenerator.js";
 
 const User = db.User;
 const Role = db.Role;
@@ -97,7 +98,7 @@ export const createSponsor = async (req, res) => {
     // Generate password if not provided
     let generatedPassword = password;
     if (!password) {
-      generatedPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-4);
+      generatedPassword = generateStrongPassword(12);
     }
 
     // Validate password confirmation

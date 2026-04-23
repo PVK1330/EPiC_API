@@ -1,5 +1,11 @@
 import db from "../models/index.js";
 import { Op } from "sequelize";
+import {
+  emitMessageNewAndConversationUpdated,
+  emitAfterMarkRead,
+  getUnreadCountForUserInConversation,
+} from "../realtime/messagingRealtime.js";
+import { getIO } from "../realtime/ioRegistry.js";
 
 export const getMessages = async (req, res) => {
   try {
@@ -10,11 +16,11 @@ export const getMessages = async (req, res) => {
 
     const receiver = await db.User.findByPk(receiverId);
     if (!receiver) {
-      return res.status(404).json({ success: false, message: "User not found." });
+      return res.status(404).json({ status: "error", message: "User not found." });
     }
 
     if ((userRole === 3 || userRole === 4) && ![1, 2].includes(receiver.role_id)) {
-      return res.status(403).json({ success: false, message: "You are not authorized to view messages with this user role." });
+      return res.status(403).json({ status: "error", message: "You are not authorized to view messages with this user role." });
     }
 
     // Find the conversation
@@ -29,7 +35,7 @@ export const getMessages = async (req, res) => {
     });
 
     if (!conversation) {
-      return res.status(200).json({ success: true, count: 0, data: [] });
+      return res.status(200).json({ status: "success", message: "No messages found", data: { count: 0, messages: [] } });
     }
 
     const messages = await db.Message.findAll({
@@ -51,9 +57,9 @@ export const getMessages = async (req, res) => {
       ]
     });
 
-    res.status(200).json({ success: true, count: messages.length, data: messages });
+    res.status(200).json({ status: "success", message: "Messages retrieved successfully", data: { count: messages.length, messages } });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Error retrieving messages", error: error.message });
+    res.status(500).json({ status: "error", message: "Error retrieving messages", error: error.message });
   }
 };
 
@@ -63,17 +69,17 @@ export const sendMessage = async (req, res) => {
     const senderId = req.user.userId;
 
     if (!receiverId || !content) {
-      return res.status(400).json({ success: false, message: "Receiver ID and content are required." });
+      return res.status(400).json({ status: "error", message: "Receiver ID and content are required." });
     }
 
     const receiver = await db.User.findByPk(receiverId);
     if (!receiver) {
-      return res.status(404).json({ success: false, message: "Receiver not found." });
+      return res.status(404).json({ status: "error", message: "Receiver not found." });
     }
 
     const userRole = req.user.role_id;
     if ((userRole === 3 || userRole === 4) && ![1, 2].includes(receiver.role_id)) {
-      return res.status(403).json({ success: false, message: "You are not authorized to message this user role." });
+      return res.status(403).json({ status: "error", message: "You are not authorized to message this user role." });
     }
 
     // Find or create conversation
@@ -127,15 +133,16 @@ export const sendMessage = async (req, res) => {
       ]
     });
 
-    if (req.app.get('io')) {
-      const io = req.app.get('io');
-      io.to(receiverId.toString()).emit("newMessage", messageInfo);
-      io.to(senderId.toString()).emit("newMessage", messageInfo);
-    }
+    await conversation.reload();
+    const io = getIO() ?? req.app.get("io");
+    await emitMessageNewAndConversationUpdated(io, {
+      conversation,
+      messageRow: messageInfo,
+    });
 
-    res.status(201).json({ success: true, data: messageInfo });
+    res.status(201).json({ status: "success", message: "Message sent successfully", data: messageInfo });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Error sending message", error: error.message });
+    res.status(500).json({ status: "error", message: "Error sending message", error: error.message });
   }
 };
 
@@ -165,22 +172,31 @@ export const getRecentConversations = async (req, res) => {
       ]
     });
 
-    const formattedConversations = conversations.map(conv => {
-      const otherUser = conv.participantOneId === userId ? conv.participantTwo : conv.participantOne;
-      return {
-        id: conv.id,
-        user: otherUser,
-        case: conv.case,
-        lastMessage: {
-          content: conv.lastMessage,
-          createdAt: conv.lastMessageAt
-        }
-      };
-    });
+    const formattedConversations = await Promise.all(
+      conversations.map(async (conv) => {
+        const otherUser =
+          conv.participantOneId === userId ? conv.participantTwo : conv.participantOne;
+        const unreadCount = await getUnreadCountForUserInConversation(userId, conv.id);
+        return {
+          id: conv.id,
+          user: otherUser,
+          case: conv.case,
+          unreadCount,
+          lastMessage: {
+            content: conv.lastMessage,
+            createdAt: conv.lastMessageAt,
+          },
+        };
+      }),
+    );
 
-    res.status(200).json({ success: true, count: formattedConversations.length, data: formattedConversations });
+    res.status(200).json({
+      status: "success",
+      message: "Conversations retrieved successfully",
+      data: { count: formattedConversations.length, conversations: formattedConversations },
+    });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Error retrieving conversations", error: error.message });
+    res.status(500).json({ status: "error", message: "Error retrieving conversations", error: error.message });
   }
 };
 
@@ -206,9 +222,9 @@ export const getChatUsers = async (req, res) => {
       ]
     });
 
-    res.status(200).json({ success: true, count: chatUsers.length, data: chatUsers });
+    res.status(200).json({ status: "success", message: "Chat users retrieved successfully", data: { count: chatUsers.length, users: chatUsers } });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Error retrieving chat users", error: error.message });
+    res.status(500).json({ status: "error", message: "Error retrieving chat users", error: error.message });
   }
 };
 
@@ -217,14 +233,32 @@ export const markAsRead = async (req, res) => {
     const { senderId } = req.body;
     const receiverId = req.user.userId;
 
+    if (senderId == null) {
+      return res.status(400).json({ status: "error", message: "senderId is required." });
+    }
+
+    const pending = await db.Message.findAll({
+      where: { senderId, receiverId, isRead: false },
+      attributes: ["conversationId"],
+      raw: true,
+    });
+    const conversationIds = [...new Set(pending.map((r) => r.conversationId))];
+
     await db.Message.update(
       { isRead: true },
       { where: { senderId, receiverId, isRead: false } }
     );
 
-    res.status(200).json({ success: true, message: "Messages marked as read" });
+    const io = getIO() ?? req.app.get("io");
+    await emitAfterMarkRead(io, {
+      senderId,
+      readerUserId: receiverId,
+      conversationIds,
+    });
+
+    res.status(200).json({ status: "success", message: "Messages marked as read" });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Error updating message status", error: error.message });
+    res.status(500).json({ status: "error", message: "Error updating message status", error: error.message });
   }
 };
 
