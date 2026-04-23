@@ -24,9 +24,12 @@ export const getCaseDetails = async (req, res) => {
       });
     }
 
+    // Support both numeric PK (id) and human-readable case reference (caseId e.g. CAS-000001)
+    const whereClause = isNaN(id) ? { caseId: id } : { id: parseInt(id) };
+
     // Get main case details with all relationships
     const caseData = await Case.findOne({
-      where: { id },
+      where: whereClause,
       include: [
         {
           model: User,
@@ -275,7 +278,9 @@ export const updateCaseStatus = async (req, res) => {
       });
     }
 
-    const caseData = await Case.findByPk(id);
+    // Support both numeric PK (id) and human-readable case reference (caseId e.g. CAS-000001)
+    const whereClause = isNaN(id) ? { caseId: id } : { id: parseInt(id) };
+    const caseData = await Case.findOne({ where: whereClause });
     if (!caseData) {
       return res.status(404).json({
         status: "error",
@@ -301,7 +306,7 @@ export const updateCaseStatus = async (req, res) => {
 
     // Add timeline entry
     await CaseTimeline.create({
-      caseId: id,
+      caseId: caseData.id,
       actionType: 'status_changed',
       description: `Case status/stage updated`,
       performedBy: req.user?.id,
