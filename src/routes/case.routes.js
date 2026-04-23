@@ -20,6 +20,7 @@ router.patch("/:id/stage", caseController.updatePipelineStage);
 router.post("/", caseController.createCase);
 router.get("/filtered", caseController.getCasesWithFilters);
 router.get("/", caseController.getAllCases);
+router.get("/dropdown", caseController.getCasesDropdown);
 router.get("/:id", caseController.getCaseById);
 router.put("/:id", caseController.updateCase);
 router.delete("/:id", caseController.deleteCase);

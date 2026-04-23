@@ -265,7 +265,7 @@ db.CaseNote.belongsTo(db.CaseNote, {
 // Task associations
 db.Task.belongsTo(db.User, { foreignKey: 'assigned_to', as: 'assignee' });
 db.Task.belongsTo(db.User, { foreignKey: 'created_by', as: 'creator' });
-db.Task.belongsTo(db.Case, { foreignKey: 'case_id' });
+db.Task.belongsTo(db.Case, { foreignKey: 'case_id', as: 'case' });
 db.User.hasMany(db.Task, { foreignKey: 'assigned_to', as: 'assignedTasks' });
 db.User.hasMany(db.Task, { foreignKey: 'created_by', as: 'createdTasks' });
 db.Case.hasMany(db.Task, { foreignKey: 'case_id', as: 'tasks' });

@@ -3,6 +3,7 @@ import { Op } from "sequelize";
 import { notifyCaseAssigned, notifyCaseStatusChanged } from "../../services/notification.service.js";
 
 const Case = db.Case;
+const User = db.User;
 
 // Helper function to generate next case ID like #CAS-001 securely
 const generateCaseId = async () => {
@@ -683,6 +684,36 @@ export const assignCase = async (req, res) => {
       status: "success",
       message: "Case reassigned successfully",
       data: { case: caseData }
+    });
+  } catch (error) {
+    res.status(500).json({ status: "error", message: "Internal server error", error: error.message });
+  }
+};
+
+//Cases Dropdown 
+export const getCasesDropdown = async (req, res) => {
+  try {
+    const cases = await Case.findAll({
+      attributes: ['id', 'caseId', 'candidateId', 'sponsorId'],
+      include: [
+        {
+          model: User,
+          as: 'candidate',
+          attributes: ['id', 'first_name', 'last_name']
+        }
+      ]
+    });
+
+    const casesDropdown = cases.map(c => ({
+      id: c.id,
+      caseId: c.caseId,
+      candidateName: c.candidate ? `${c.candidate.first_name} ${c.candidate.last_name}` : null
+    }));
+
+    res.status(200).json({
+      status: "success",
+      message: "Cases dropdown retrieved successfully",
+      data: casesDropdown
     });
   } catch (error) {
     res.status(500).json({ status: "error", message: "Internal server error", error: error.message });
