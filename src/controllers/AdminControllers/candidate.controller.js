@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import multer from "multer";
 import { ROLES } from "../../middlewares/role.middleware.js";
 import { notifyUserCreated } from "../../services/notification.service.js";
+import { generateStrongPassword } from "../../utils/passwordGenerator.js";
 
 const User = db.User;
 const Role = db.Role;
