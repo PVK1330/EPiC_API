@@ -583,3 +583,34 @@ export const deleteTask = async (req, res) => {
     });
   }
 };
+
+export const getTasksByUserId = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = parseInt(id, 10);
+    if (Number.isNaN(userId)) {
+      return res.status(400).json({
+        status: "error",
+        message: "Invalid user id",
+        data: null,
+      });
+    }
+    const tasks = await Task.findAll({
+      where: { assigned_to: userId },
+      include: [userInclude("assignee"), userInclude("creator")],
+    });
+    res.status(200).json({
+      status: "success",
+      message: "Tasks retrieved successfully",
+      data: { tasks: tasks.map(mapTask) },
+    });
+  } catch (error) {
+    console.error("Get Tasks by User ID Error:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error",
+      data: null,
+      error: error.message,
+    });
+  }
+};
