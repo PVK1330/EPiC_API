@@ -98,7 +98,7 @@ const CaseModel = (sequelize, DataTypes) => {
     },
 
     assignedcaseworkerId: {
-      type: DataTypes.JSON,
+      type: DataTypes.JSONB,
       allowNull: true,
       field: '"assignedcaseworkerId"',
       comment: "Array of caseworker IDs assigned to this case"

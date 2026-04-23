@@ -250,6 +250,7 @@ export const getAllCandidates = async (req, res) => {
         model: CandidateApplication,
         as: "application",
         required: false,
+        attributes: ["id", "userId", "status", "submittedAt", "visaType"]
       },
     ];
 
@@ -749,6 +750,7 @@ export const exportCandidates = async (req, res) => {
         model: CandidateApplication,
         as: "application",
         required: false,
+        attributes: ["id", "userId", "status", "submittedAt", "visaType"]
       },
     ];
 

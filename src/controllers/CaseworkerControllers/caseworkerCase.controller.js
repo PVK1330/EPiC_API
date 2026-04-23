@@ -5,9 +5,14 @@ import { ROLES } from "../../middlewares/role.middleware.js";
 const Case = db.Case;
 const sequelize = db.sequelize;
 
-// Helper function to check if userId is in assignedToId
+// Helper function to check if userId is in assignedcaseworkerId (JSONB array)
 const buildCaseworkerWhereClause = (userId) => {
-  return { assignedToId: userId };
+  return {
+    [Op.or]: [
+      sequelize.literal(`"assignedcaseworkerId"::jsonb @> '${JSON.stringify([userId])}'::jsonb`),
+      sequelize.literal(`"assignedcaseworkerId"::jsonb ? '${userId}'`)
+    ]
+  };
 };
 
 // Get Cases Assigned to Logged-in Caseworker with Filters

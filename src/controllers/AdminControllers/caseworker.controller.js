@@ -497,7 +497,7 @@ export const getAllCaseworkers = async (req, res) => {
     const includeClause = caseworkerInclude();
     
     if (department) {
-      includeClause[1].where = { department: { [Op.iLike]: `%${department}%` } };
+      includeClause[1].where = { department: { [Op.like]: `%${department}%` } };
       includeClause[1].required = true;
     }
 
@@ -521,29 +521,33 @@ export const getAllCaseworkers = async (req, res) => {
     });
 
     // Add performance metrics to each caseworker
-    const caseworkersWithMetrics = await Promise.all(
-      caseworkers.map(async (caseworker) => {
-        const cases = await db.Case.findAll({
-          where: { assignedcaseworkerId: { [Op.contains]: [caseworker.id] } }
-        });
+    const allCases = await db.Case.findAll({
+      where: { deleted_at: null },
+      attributes: ['id', 'status', 'assignedcaseworkerId']
+    });
 
-        const totalCases = cases.length;
-        const completedCases = cases.filter(c => c.status === 'completed').length;
-        const inProgressCases = cases.filter(c => c.status === 'in_progress').length;
-        const pendingCases = cases.filter(c => c.status === 'pending').length;
+    const caseworkersWithMetrics = caseworkers.map((caseworker) => {
+      const assignedCases = allCases.filter(c => {
+        const assignedIds = Array.isArray(c.assignedcaseworkerId) ? c.assignedcaseworkerId : [];
+        return assignedIds.includes(caseworker.id);
+      });
 
-        const caseworkerData = caseworker.toJSON();
-        caseworkerData.performance = {
-          totalCases,
-          completedCases,
-          inProgressCases,
-          pendingCases,
-          completionRate: totalCases > 0 ? (completedCases / totalCases * 100).toFixed(2) : 0
-        };
+      const totalCases = assignedCases.length;
+      const completedCases = assignedCases.filter(c => c.status === 'completed').length;
+      const inProgressCases = assignedCases.filter(c => c.status === 'in_progress').length;
+      const pendingCases = assignedCases.filter(c => c.status === 'pending').length;
 
-        return caseworkerData;
-      })
-    );
+      const caseworkerData = caseworker.toJSON();
+      caseworkerData.performance = {
+        totalCases,
+        completedCases,
+        inProgressCases,
+        pendingCases,
+        completionRate: totalCases > 0 ? (completedCases / totalCases * 100).toFixed(2) : 0
+      };
+
+      return caseworkerData;
+    });
 
     res.status(200).json({
       status: "success",
@@ -908,7 +912,7 @@ export const exportCaseworkers = async (req, res) => {
     const includeClause = caseworkerInclude();
     
     if (department) {
-      includeClause[1].where = { department: { [Op.iLike]: `%${department}%` } };
+      includeClause[1].where = { department: { [Op.like]: `%${department}%` } };
       includeClause[1].required = true;
     }
 

@@ -216,7 +216,7 @@ export const getRecentTasks = async (req, res) => {
         {
           model: Case,
           as: 'case',
-          attributes: ['id', 'caseNumber', 'title']
+          attributes: ['id', 'caseId']
         }
       ]
     });
@@ -264,6 +264,8 @@ export const getRecentActivities = async (req, res) => {
     const recentNotes = await CaseNote.findAll({
       limit: Math.ceil(parseInt(limit) / 3),
       order: [["created_at", "DESC"]],
+      subQuery: false,
+      attributes: ['id', 'caseId', 'noteType', 'title', 'content', 'authorId', 'created_at'],
       include: [
         {
           model: User,
@@ -273,7 +275,8 @@ export const getRecentActivities = async (req, res) => {
         {
           model: Case,
           as: 'case',
-          attributes: ['id', 'caseNumber', 'title']
+          attributes: ['id', 'caseId'],
+          required: false
         }
       ]
     });
@@ -291,7 +294,7 @@ export const getRecentActivities = async (req, res) => {
         {
           model: Case,
           as: 'case',
-          attributes: ['id', 'caseNumber', 'title']
+          attributes: ['id', 'caseId']
         }
       ]
     });
