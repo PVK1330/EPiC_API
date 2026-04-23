@@ -337,15 +337,4 @@ const seedAll = async () => {
   }
 };
 
-// Run seeder
-seedAll()
-  .then(() => {
-    console.log('Seeder completed successfully');
-    process.exit(0);
-  })
-  .catch((error) => {
-    console.error('Seeder failed:', error);
-    process.exit(1);
-  });
-
 export default seedAll;

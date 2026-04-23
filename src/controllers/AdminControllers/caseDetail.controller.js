@@ -31,22 +31,26 @@ export const getCaseDetails = async (req, res) => {
         {
           model: User,
           as: 'candidate',
-          attributes: ['id', 'first_name', 'last_name', 'email', 'mobile']
+          attributes: ['id', 'first_name', 'last_name', 'email', 'mobile'],
+          required: false
         },
         {
           model: User,
           as: 'sponsor',
-          attributes: ['id', 'first_name', 'last_name', 'email', 'mobile']
+          attributes: ['id', 'first_name', 'last_name', 'email', 'mobile'],
+          required: false
         },
         {
           model: db.VisaType,
           as: 'visaType',
-          attributes: ['id', 'name']
+          attributes: ['id', 'name'],
+          required: false
         },
         {
           model: db.PetitionType,
           as: 'petitionType',
-          attributes: ['id', 'name']
+          attributes: ['id', 'name'],
+          required: false
         },
         {
           model: Document,
@@ -55,15 +59,18 @@ export const getCaseDetails = async (req, res) => {
             {
               model: User,
               as: 'uploader',
-              attributes: ['id', 'first_name', 'last_name']
+              attributes: ['id', 'first_name', 'last_name'],
+              required: false
             },
             {
               model: User,
               as: 'reviewer',
-              attributes: ['id', 'first_name', 'last_name']
+              attributes: ['id', 'first_name', 'last_name'],
+              required: false
             }
           ],
-          order: [['created_at', 'DESC']]
+          order: [['created_at', 'DESC']],
+          required: false
         },
         {
           model: CasePayment,
@@ -72,10 +79,12 @@ export const getCaseDetails = async (req, res) => {
             {
               model: User,
               as: 'receiver',
-              attributes: ['id', 'first_name', 'last_name']
+              attributes: ['id', 'first_name', 'last_name'],
+              required: false
             }
           ],
-          order: [['paymentDate', 'DESC']]
+          order: [['paymentDate', 'DESC']],
+          required: false
         },
         {
           model: CaseTimeline,
@@ -84,10 +93,12 @@ export const getCaseDetails = async (req, res) => {
             {
               model: User,
               as: 'performer',
-              attributes: ['id', 'first_name', 'last_name']
+              attributes: ['id', 'first_name', 'last_name'],
+              required: false
             }
           ],
-          order: [['actionDate', 'DESC']]
+          order: [['actionDate', 'DESC']],
+          required: false
         },
         {
           model: CaseCommunication,
@@ -96,15 +107,18 @@ export const getCaseDetails = async (req, res) => {
             {
               model: User,
               as: 'sender',
-              attributes: ['id', 'first_name', 'last_name']
+              attributes: ['id', 'first_name', 'last_name'],
+              required: false
             },
             {
               model: User,
               as: 'recipient',
-              attributes: ['id', 'first_name', 'last_name']
+              attributes: ['id', 'first_name', 'last_name'],
+              required: false
             }
           ],
-          order: [['created_at', 'DESC']]
+          order: [['created_at', 'DESC']],
+          required: false
         },
         {
           model: CaseNote,
@@ -113,10 +127,12 @@ export const getCaseDetails = async (req, res) => {
             {
               model: User,
               as: 'author',
-              attributes: ['id', 'first_name', 'last_name']
+              attributes: ['id', 'first_name', 'last_name'],
+              required: false
             }
           ],
-          order: [['created_at', 'DESC']]
+          order: [['created_at', 'DESC']],
+          required: false
         }
       ]
     });

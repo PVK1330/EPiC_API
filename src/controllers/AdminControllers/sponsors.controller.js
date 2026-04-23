@@ -47,10 +47,10 @@ export const createSponsor = async (req, res) => {
     } = req.body;
 
     // Validate required fields
-    if (!first_name || !last_name || !email || !country_code || !mobile) {
+    if (!first_name || !last_name || !email || !country_code || !mobile || !companyName) {
       return res.status(400).json({
         status: "error",
-        message: "First name, last name, email, country code, and mobile are required",
+        message: "First name, last name, email, country code, mobile, and company name are required",
         data: null
       });
     }
@@ -374,10 +374,10 @@ export const updateSponsor = async (req, res) => {
     }
 
     // Validate required fields
-    if (!first_name || !last_name || !email || !country_code || !mobile) {
+    if (!first_name || !last_name || !email || !country_code || !mobile || !companyName) {
       return res.status(400).json({
         status: "error",
-        message: "First name, last name, email, country code, and mobile are required",
+        message: "First name, last name, email, country code, mobile, and company name are required",
         data: null
       });
     }
