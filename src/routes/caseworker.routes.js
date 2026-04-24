@@ -7,6 +7,7 @@ const router = Router();
 
 // Apply authentication middleware to all routes
 router.use(verifyToken);
+router.get("/departments/dropdown", checkRole([ROLES.ADMIN, ROLES.CASEWORKER]), caseworkerController.departmentDropdown);
 
 // Apply role-based access control - Only Admin can manage caseworkers
 router.use(checkRole([ROLES.ADMIN]));

@@ -20,7 +20,19 @@ router.get("/dashboard/stats", caseworkerCaseController.getMyDashboardStats);
 // Get pipeline cases for logged-in caseworker
 router.get("/pipeline", caseworkerCaseController.getMyPipelineCases);
 
+// Create new case (caseworker can create cases)
+router.post("/", caseworkerCaseController.createMyCase);
+
+// Update case (caseworker can update their assigned cases)
+router.put("/:id", caseworkerCaseController.updateMyCase);
+
+// Delete case (caseworker can delete their assigned cases)
+router.delete("/:id", caseworkerCaseController.deleteMyCase);
+
 // Update case status (caseworker can update their assigned cases)
 router.patch("/:id/status", caseworkerCaseController.updateMyCaseStatus);
+
+// Get comprehensive case details for single case page
+router.get("/:id/details", caseworkerCaseController.getCaseDetails);
 
 export default router;

@@ -200,6 +200,8 @@ db.Case.belongsTo(db.PetitionType, {
   foreignKey: "petitionTypeId",
   as: "petitionType",
 });
+db.Case.belongsTo(db.Department, { foreignKey: "departmentId", as: "department" });
+db.Department.hasMany(db.Case, { foreignKey: "departmentId", as: "cases" });
 
 // User has many cases (as candidate or sponsor)
 db.User.hasMany(db.Case, { foreignKey: "candidateId", as: "cases" });
