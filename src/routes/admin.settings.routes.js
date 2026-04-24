@@ -4,6 +4,7 @@ import * as visaController from "../controllers/AdminControllers/Settings/visa.c
 import * as petitionTypeController from "../controllers/AdminControllers/Settings/petitionType.controller.js";
 import { verifyToken } from "../middlewares/auth.middleware.js";
 import { checkRole, ROLES } from "../middlewares/role.middleware.js";
+import { handleProfilePicUpload } from "../middlewares/upload.middleware.js";
 
 const router = Router();
 
@@ -16,7 +17,7 @@ router.get("/petition-types/dropdown", checkRole([ROLES.ADMIN, ROLES.CASEWORKER]
 router.use(checkRole([ROLES.ADMIN]));
 
 router.get("/me", adminSettingsController.getMe);
-router.patch("/me", adminSettingsController.patchMe);
+router.patch("/me", handleProfilePicUpload, adminSettingsController.patchMe);
 router.patch("/me/preferences", adminSettingsController.patchMePreferences);
 router.post("/change-password", adminSettingsController.changePassword);
 
