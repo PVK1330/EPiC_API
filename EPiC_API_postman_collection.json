@@ -90,7 +90,7 @@
             "url": "{{baseUrl}}/api/auth/login",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"password123\"\n}",
+              "raw": "{\n  \"email\": \"admin@elitepic.com\",\n  \"password\": \"admin123\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -282,6 +282,69 @@
               { "key": "Authorization", "value": "Bearer {{token}}" }
             ],
             "url": "{{baseUrl}}/api/workload/reports/workload"
+          }
+        },
+        {
+          "name": "Revenue by Visa Type",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": "{{baseUrl}}/api/workload/reports/revenue-by-visa-type"
+          }
+        },
+        {
+          "name": "Revenue by Sponsor",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": "{{baseUrl}}/api/workload/reports/revenue-by-sponsor"
+          }
+        },
+        {
+          "name": "Get All Caseworkers",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": "{{baseUrl}}/api/workload/caseworkers"
+          }
+        },
+        {
+          "name": "Get Caseworker Performance Report",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": "{{baseUrl}}/api/workload/caseworkers/1/report",
+            "description": "Get detailed performance report for a specific caseworker. Replace '1' with the caseworker ID. Optional query parameters: startDate, endDate"
+          }
+        },
+        {
+          "name": "Get Caseworker Report PDF",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": "{{baseUrl}}/api/workload/caseworkers/1/report/pdf",
+            "description": "Generate and download PDF performance report for a specific caseworker. Replace '1' with the caseworker ID"
+          }
+        },
+        {
+          "name": "Filter Caseworkers",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": "{{baseUrl}}/api/workload/caseworkers/filter?search=&department=all&sla_level=all",
+            "description": "Filter caseworkers by department, SLA level, and search query. Query parameters: search (optional), department (optional: 'all', 'immigration', 'compliance'), sla_level (optional: 'all', 'high', 'medium', 'low')"
           }
         }
       ]
@@ -2656,6 +2719,51 @@
               }
             }
           ]
+        }
+      ]
+    },
+    {
+      "name": "Workload",
+      "item": [
+        {
+          "name": "Get Workload Summary",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": "{{baseUrl}}/api/workload/team-workload"
+          }
+        },
+        {
+          "name": "Get Pending Tasks",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": "{{baseUrl}}/api/workload/pending-tasks"
+          }
+        },
+        {
+          "name": "Get Deadline Monitor",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": "{{baseUrl}}/api/workload/deadline-monitor"
+          }
+        },
+        {
+          "name": "Get caseworker performance metrics",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": "{{baseUrl}}/api/workload/caseworker/:id/performance"
+          }
         }
       ]
     }

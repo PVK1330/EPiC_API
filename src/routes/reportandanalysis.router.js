@@ -20,4 +20,40 @@ router.get(
   reportsController.getWorkloadReport
 );
 
+router.get(
+  "/reports/revenue-by-visa-type",
+  checkRole([ROLES.ADMIN, ROLES.CASEWORKER]),
+  reportsController.getRevenueByVisaType
+);
+
+router.get(
+  "/reports/revenue-by-sponsor",
+  checkRole([ROLES.ADMIN, ROLES.CASEWORKER]),
+  reportsController.getRevenueBySponsor
+);
+
+router.get(
+  "/caseworkers",
+  checkRole([ROLES.ADMIN, ROLES.CASEWORKER]),
+  reportsController.getAllCaseworkersReport
+);
+
+router.get(
+  "/caseworkers/:id/report",
+  checkRole([ROLES.ADMIN, ROLES.CASEWORKER]),
+  reportsController.getCaseworkerPerformanceReport
+);
+
+router.get(
+  "/caseworkers/:id/report/pdf",
+  checkRole([ROLES.ADMIN, ROLES.CASEWORKER]),
+  reportsController.getCaseworkerReportPDF
+);
+
+router.get(
+  "/caseworkers/filter",
+  checkRole([ROLES.ADMIN, ROLES.CASEWORKER]),
+  reportsController.filterCaseworkers
+);
+
 export default router;

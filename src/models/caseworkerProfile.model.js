@@ -55,6 +55,16 @@ export default (sequelize, DataTypes) => {
         type: DataTypes.TEXT,
         allowNull: true,
       },
+      sla_percentage: {
+        type: DataTypes.FLOAT,
+        allowNull: true,
+        defaultValue: 0,
+        validate: {
+          min: 0,
+          max: 100,
+        },
+        comment: "SLA compliance percentage (0-100)",
+      },
     },
     {
       tableName: "caseworker_profiles",

@@ -127,7 +127,7 @@ db.UnverifiedUser.belongsTo(db.Role, { foreignKey: 'role_id' });
 
 db.User.hasOne(db.CaseworkerProfile, { foreignKey: 'user_id', as: 'caseworkerProfile' });
 
-db.CaseworkerProfile.belongsTo(db.User, { foreignKey: 'user_id' });
+db.CaseworkerProfile.belongsTo(db.User, { foreignKey: 'user_id', as: 'User' });
 
 
 
