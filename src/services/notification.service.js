@@ -782,6 +782,30 @@ export const notifyMessageReceived = async (receiverId, messageData, senderData)
   });
 };
 
+export const notifyTaskAssigned = async (userId, taskData) => {
+  const safeTitle = taskData?.title || 'Unknown Task';
+  const safeDueDate = taskData?.due_date ? new Date(taskData.due_date).toLocaleDateString() : 'No deadline';
+  const safePriority = taskData?.priority || 'medium';
+
+  return await createNotification({
+    userId,
+    type: NotificationTypes.INFO,
+    priority: safePriority === 'high' ? NotificationPriority.HIGH : NotificationPriority.MEDIUM,
+    title: `New Task Assigned: ${safeTitle}`,
+    message: `You have been assigned a new task "${safeTitle}". Deadline: ${safeDueDate}.`,
+    actionType: 'task_assigned',
+    entityId: taskData?.id || null,
+    entityType: 'task',
+    metadata: {
+      taskId: taskData?.id,
+      title: safeTitle,
+      dueDate: taskData?.due_date,
+      priority: safePriority,
+    },
+    sendEmail: true,
+  });
+};
+
 export default {
   createNotification,
   createBulkNotifications,
@@ -797,6 +821,7 @@ export default {
   NotificationPriority,
   // Event helpers
   notifyCaseAssigned,
+  notifyTaskAssigned,
   notifyCaseStatusChanged,
   notifyPaymentReceived,
   notifyPaymentOverdue,

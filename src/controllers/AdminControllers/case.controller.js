@@ -857,6 +857,25 @@ export const assignCase = async (req, res) => {
       notes: updatedNotes
     });
 
+    // Notify assigned caseworkers
+    if (cwIds && cwIds.length > 0) {
+      const candidate = await db.User.findByPk(caseData.candidateId);
+      const visaType = await db.VisaType.findByPk(caseData.visaTypeId);
+      const notifData = {
+        id: caseData.id,
+        caseId: caseData.caseId,
+        candidateName: candidate ? `${candidate.first_name || ''} ${candidate.last_name || ''}`.trim() : 'Unknown Candidate',
+        visaType: visaType ? visaType.name : 'Not specified',
+      };
+      for (const cwId of cwIds) {
+        try {
+          await notifyCaseAssigned(cwId, notifData);
+        } catch (notifErr) {
+          console.error("Failed to notify caseworker about assignment:", notifErr);
+        }
+      }
+    }
+
     res.status(200).json({
       status: "success",
       message: "Case reassigned successfully",

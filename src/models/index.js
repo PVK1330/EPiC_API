@@ -285,11 +285,7 @@ db.User.hasMany(db.Task, { foreignKey: 'assigned_to', as: 'assignedTasks' });
 db.User.hasMany(db.Task, { foreignKey: 'created_by', as: 'createdTasks' });
 db.Case.hasMany(db.Task, { foreignKey: 'case_id', as: 'tasks' });
 
-db.Case.belongsTo(db.User, { foreignKey: 'assignedToId', as: 'assignedTo' });
-db.User.hasMany(db.Case, { foreignKey: 'assignedToId', as: 'assignedCases' });
-
-db.Case.belongsTo(db.User, { foreignKey: "createdById", as: "createdBy" });
-db.User.hasMany(db.Case, { foreignKey: "createdById", as: "createdCases" });
+// Removed obsolete associations for assignedToId and createdById
 
 // Escalation associations
 db.Escalation.belongsTo(db.User, {

@@ -1,4 +1,5 @@
 import Stripe from "stripe";
+import { notifyPaymentReceived } from "../../services/notification.service.js";
 
 let stripeInstance = null;
 
@@ -262,7 +263,20 @@ export const handleWebhook = async (req, res) => {
     case "payment_intent.succeeded":
       const paymentIntent = event.data.object;
       console.log("PaymentIntent was successful!", paymentIntent.id);
-      // TODO: Update your database, send confirmation email, etc.
+      
+      // Send payment notification if userId is available in metadata
+      if (paymentIntent.metadata?.userId) {
+        try {
+          await notifyPaymentReceived(paymentIntent.metadata.userId, {
+            id: paymentIntent.id,
+            invoiceId: paymentIntent.id,
+            amount: paymentIntent.amount / 100, // Stripe amount is in cents
+            caseId: paymentIntent.metadata.caseId || 'your case'
+          });
+        } catch (notifErr) {
+          console.error("Failed to send payment notification:", notifErr);
+        }
+      }
       break;
 
     case "payment_intent.payment_failed":
