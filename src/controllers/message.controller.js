@@ -6,6 +6,7 @@ import {
   getUnreadCountForUserInConversation,
 } from "../realtime/messagingRealtime.js";
 import { getIO } from "../realtime/ioRegistry.js";
+import { notifyMessageReceived } from "../services/notification.service.js";
 
 export const getMessages = async (req, res) => {
   try {
@@ -139,6 +140,19 @@ export const sendMessage = async (req, res) => {
       conversation,
       messageRow: messageInfo,
     });
+
+    // Create notification for message receiver
+    try {
+      await notifyMessageReceived(receiverId, messageInfo, {
+        id: senderId,
+        first_name: req.user.first_name,
+        last_name: req.user.last_name,
+        email: req.user.email,
+      });
+    } catch (notificationError) {
+      console.error('Failed to create message notification:', notificationError);
+      // Don't fail the message sending if notification fails
+    }
 
     res.status(201).json({ status: "success", message: "Message sent successfully", data: messageInfo });
   } catch (error) {

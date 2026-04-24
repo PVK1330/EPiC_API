@@ -720,6 +720,42 @@ export const notifySystemMaintenance = async (roleId, maintenanceData) => {
   // If no roleId, create for all active users (optional implementation)
 };
 
+/**
+ * Send message received notification
+ * @param {number} receiverId - User ID who received the message
+ * @param {Object} messageData - Message information
+ * @param {Object} senderData - Sender information
+ */
+export const notifyMessageReceived = async (receiverId, messageData, senderData) => {
+  const safeSenderName = senderData?.first_name && senderData?.last_name 
+    ? `${senderData.first_name} ${senderData.last_name}` 
+    : senderData?.email || 'Unknown sender';
+  const safeMessageContent = messageData?.content || 'No content';
+  const safeCaseId = messageData?.caseId || null;
+  const truncatedContent = safeMessageContent.length > 50 
+    ? safeMessageContent.substring(0, 50) + '...' 
+    : safeMessageContent;
+  
+  return await createNotification({
+    userId: receiverId,
+    type: NotificationTypes.MESSAGE_RECEIVED,
+    priority: NotificationPriority.MEDIUM,
+    title: `New Message from ${safeSenderName}`,
+    message: `You have received a new message: "${truncatedContent}"`,
+    actionType: 'message_received',
+    entityId: messageData?.id || null,
+    entityType: 'message',
+    metadata: {
+      senderId: senderData?.id,
+      senderName: safeSenderName,
+      conversationId: messageData?.conversationId,
+      caseId: safeCaseId,
+      messageType: messageData?.messageType || 'text',
+    },
+    sendEmail: false, // Typically don't send emails for messages to avoid spam
+  });
+};
+
 export default {
   createNotification,
   createBulkNotifications,
@@ -745,4 +781,5 @@ export default {
   notifyUserCreated,
   notifySLABreach,
   notifySystemMaintenance,
+  notifyMessageReceived,
 };
