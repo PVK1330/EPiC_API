@@ -733,6 +733,87 @@
           }
         }
       ]
+    },
+    {
+      "name": "Departments",
+      "item": [
+        {
+          "name": "Get Departments",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{caseworkerToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/caseworker/departments"
+          }
+        },
+        {
+          "name": "Create Department",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{caseworkerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"New Department\"\n}"
+            },
+            "url": "{{baseUrl}}/api/caseworker/departments/create"
+          }
+        },
+        {
+          "name": "Update Department",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{caseworkerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"oldName\": \"Old Name\",\n  \"newName\": \"Updated Name\"\n}"
+            },
+            "url": "{{baseUrl}}/api/caseworker/departments/update"
+          }
+        },
+        {
+          "name": "Delete Department",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{caseworkerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Department to Delete\"\n}"
+            },
+            "url": "{{baseUrl}}/api/caseworker/departments/delete"
+          }
+        }
+      ]
     }
   ]
 }

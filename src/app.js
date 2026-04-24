@@ -26,7 +26,9 @@ import applicationFieldsRoutes from './routes/applicationFields.routes.js';
 import dashboardRoutes from './routes/admin.dashboard.routes.js';
 import workloadRoutes from './routes/admin.workload.routes.js';
 import messageRoutes from './routes/message.routes.js';
+import reportingRoutes from './routes/reporting.routes.js';
 import rescheduleRoutes from './routes/CaseworkerRoutes/reschedule.routes.js';
+import auditLogRoutes from './routes/auditLog.routes.js';
 import { getFrontendOrigins } from './config/frontendOrigins.js';
 
 const app = express();
@@ -50,6 +52,7 @@ app.use('/api/settings', adminSettingsRoutes);
 app.use('/api/admin/permissions', permissionsRoutes);
 app.use('/api/admin/rbac', rbacRoutes);
 app.use('/api/admin/roles', roleRoutes);
+app.use('/api/admin/audit-logs', auditLogRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/caseworker/cases', caseworkerCaseRoutes);
 app.use('/api/caseworker', caseworkerRoutes);
@@ -70,5 +73,6 @@ app.use('/api/case-notes', caseNoteRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/cases/reschedule', rescheduleRoutes);
 app.use('/api/workload', workloadRoutes);
+app.use('/api/reports', reportingRoutes);
 
 export default app;

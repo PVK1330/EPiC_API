@@ -20,4 +20,8 @@ router.get("/recent-activities", dashboardController.getRecentActivities);
 // Quick Actions
 router.get("/quick-actions", dashboardController.getQuickActions);
 
+// Export Snapshot
+router.get("/export-snapshot", dashboardController.exportDashboardSnapshot);
+router.get("/export-pdf", dashboardController.exportDashboardPDF);
+
 export default router;

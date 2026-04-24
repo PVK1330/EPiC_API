@@ -1,6 +1,7 @@
 import db from "../../models/index.js";
 import { Op } from "sequelize";
 import { notifyCaseAssigned, notifyCaseStatusChanged } from "../../services/notification.service.js";
+import { recordAuditLog } from "../../services/audit.service.js";
 
 const Case = db.Case;
 const User = db.User;
@@ -139,6 +140,16 @@ export const createCase = async (req, res) => {
         }
       }
     }
+
+    // Record Audit Log
+    await recordAuditLog({
+      userId: req.user?.userId, // Assumes user ID is in req.user from auth middleware
+      action: 'Case Created',
+      resource: `Case ${newCase.caseId}`,
+      status: 'Success',
+      details: `New case created for candidate ${candidate.first_name} ${candidate.last_name}`,
+      req
+    });
 
     res.status(201).json({
       status: "success",
