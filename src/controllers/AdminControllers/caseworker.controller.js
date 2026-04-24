@@ -97,7 +97,35 @@ export const createDepartment = async (req, res) => {
     });
   }
 };
+//department dropdown api
+export const departmentDropdown = async (req, res) => {
+  try {
+    const departments = await Department.findAll({
+      where: { is_active: true },
+      order: [['name', 'ASC']],
+      attributes: ['id', 'name'],
+      raw: true
+    });
 
+    const departmentList = departments
+      .filter(d => d.name && d.name.trim() !== '');
+
+    res.status(200).json({
+      status: "success",
+      message: "Departments retrieved successfully",
+      data: {
+        departments: departmentList
+      }
+    });
+  } catch (error) {
+    console.error("Error fetching departments:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Failed to fetch departments",
+      error: error.message
+    });
+  }
+};
 // Update Department
 export const updateDepartment = async (req, res) => {
   try {

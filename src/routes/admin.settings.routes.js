@@ -8,7 +8,12 @@ import { handleProfilePicUpload } from "../middlewares/upload.middleware.js";
 
 const router = Router();
 
+// Public routes accessible by authenticated users (admin or caseworker)
 router.use(verifyToken);
+router.get("/visa-types/dropdown", checkRole([ROLES.ADMIN, ROLES.CASEWORKER]), visaController.dropdownVisaType);
+router.get("/petition-types/dropdown", checkRole([ROLES.ADMIN, ROLES.CASEWORKER]), petitionTypeController.dropdownPetitionType);
+
+// Admin-only routes
 router.use(checkRole([ROLES.ADMIN]));
 
 router.get("/me", adminSettingsController.getMe);

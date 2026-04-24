@@ -18,4 +18,7 @@ router.put("/profile", handleProfilePicUpload, verifyToken, userController.editP
 // Get all users with role-wise grouping - accessible for all authenticated users
 router.get("/all", verifyToken, userController.getAllUsers);
 
+// Get sponsors dropdown - accessible for all authenticated users
+router.get("/sponsors/dropdown", verifyToken, userController.dropdownSponsors);
+
 export default router;

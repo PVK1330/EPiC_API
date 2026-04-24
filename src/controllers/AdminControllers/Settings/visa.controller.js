@@ -135,3 +135,25 @@ export const deleteVisaType = async (req, res) => {
     res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
   }
 };
+
+// Get visa types for dropdown (no pagination, accessible by authenticated users)
+export const dropdownVisaType = async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    if (!userId) {
+      return res.status(401).json({ status: "error", message: "Authentication required.", data: null });
+    }
+    const rows = await VisaType.findAll({ 
+      order: [["sort_order", "ASC"], ["id", "ASC"]],
+      attributes: ['id', 'name', 'sort_order']
+    });
+    res.status(200).json({
+      status: "success",
+      message: "Visa types retrieved.",
+      data: { visa_types: rows },
+    });
+  } catch (error) {
+    console.error("dropdownVisaType error:", error);
+    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
+  }
+};
