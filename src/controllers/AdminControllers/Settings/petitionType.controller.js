@@ -135,3 +135,25 @@ export const deletePetitionType = async (req, res) => {
     res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
   }
 };
+
+// Get petition types for dropdown (no pagination, accessible by authenticated users)
+export const dropdownPetitionType = async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    if (!userId) {
+      return res.status(401).json({ status: "error", message: "Authentication required.", data: null });
+    }
+    const rows = await PetitionType.findAll({
+      order: [["sort_order", "ASC"], ["id", "ASC"]],
+      attributes: ['id', 'name', 'sort_order']
+    });
+    res.status(200).json({
+      status: "success",
+      message: "Petition types retrieved.",
+      data: { petition_types: rows },
+    });
+  } catch (error) {
+    console.error("dropdownPetitionType error:", error);
+    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
+  }
+};

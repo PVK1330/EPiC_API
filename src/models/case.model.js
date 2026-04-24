@@ -27,6 +27,14 @@ const CaseModel = (sequelize, DataTypes) => {
         key: 'id'
       }
     },
+    businessId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: 'users',
+        key: 'id'
+      }
+    },
 
     visaTypeId: {
       type: DataTypes.INTEGER,
@@ -92,9 +100,13 @@ const CaseModel = (sequelize, DataTypes) => {
       type: DataTypes.STRING,
       allowNull: true,
     },
-    department: {
-      type: DataTypes.STRING,
+    departmentId: {
+      type: DataTypes.INTEGER,
       allowNull: true,
+      references: {
+        model: 'departments',
+        key: 'id'
+      }
     },
 
     assignedcaseworkerId: {

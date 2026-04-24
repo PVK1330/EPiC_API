@@ -11,6 +11,12 @@ router.use(checkRole([ROLES.ADMIN]));
 // CREATE Role
 router.post("/", roleController.createRole);
 
+// Clone Permissions
+router.post("/clone-permissions", roleController.cloneRolePermissions);
+
+// Update user role
+router.patch("/users/:userId/role", roleController.updateUserRole);
+
 // READ Operations
 router.get("/", roleController.getAllRoles);
 router.get("/:id", roleController.getRoleById);
@@ -26,11 +32,5 @@ router.delete("/:id", roleController.deleteRole);
 // Permission Assignment
 router.post("/:id/permissions", roleController.assignPermissionsToRole);
 router.delete("/:id/permissions/:permissionId", roleController.removePermissionFromRole);
-
-// Clone Permissions
-router.post("/clone-permissions", roleController.cloneRolePermissions);
-
-// Update user role
-router.patch("/users/:userId/role", roleController.updateUserRole);
 
 export default router;

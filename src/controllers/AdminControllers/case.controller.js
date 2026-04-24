@@ -1,6 +1,7 @@
 import db from "../../models/index.js";
 import { Op } from "sequelize";
 import { notifyCaseAssigned, notifyCaseStatusChanged } from "../../services/notification.service.js";
+import { recordAuditLog } from "../../services/audit.service.js";
 
 const Case = db.Case;
 const User = db.User;
@@ -38,7 +39,8 @@ export const createCase = async (req, res) => {
 
     const {
       candidateId,              // INTEGER - Foreign key to users table
-      sponsorId,                // INTEGER - Foreign key to users table  
+      sponsorId,                // INTEGER - Foreign key to users table
+      businessId,               // INTEGER - Foreign key to users table (business/sponsor)
       visaTypeId,
       petitionTypeId,
       priority,
@@ -52,7 +54,7 @@ export const createCase = async (req, res) => {
       notes,
       nationality,
       jobTitle,
-      department
+      departmentId
     } = req.body;
 
     const cwIds = Array.isArray(assignedcaseworkerId) ? assignedcaseworkerId : (assignedcaseworkerId ? [assignedcaseworkerId] : []);
@@ -101,6 +103,7 @@ export const createCase = async (req, res) => {
       caseId,
       candidateId,
       sponsorId,
+      businessId,
       visaTypeId,
       petitionTypeId,
       priority: priority || "medium",
@@ -111,7 +114,7 @@ export const createCase = async (req, res) => {
       receiptNumber,
       nationality,
       jobTitle,
-      department,
+      departmentId,
       assignedcaseworkerId: cwIds,
       salaryOffered: salaryOffered || 0,
       totalAmount: totalAmount || 0,
@@ -139,6 +142,16 @@ export const createCase = async (req, res) => {
         }
       }
     }
+
+    // Record Audit Log
+    await recordAuditLog({
+      userId: req.user?.userId, // Assumes user ID is in req.user from auth middleware
+      action: 'Case Created',
+      resource: `Case ${newCase.caseId}`,
+      status: 'Success',
+      details: `New case created for candidate ${candidate.first_name} ${candidate.last_name}`,
+      req
+    });
 
     res.status(201).json({
       status: "success",
@@ -426,6 +439,7 @@ export const updateCase = async (req, res) => {
     const {
       candidateId,
       sponsorId,
+      businessId,
       visaTypeId,
       petitionTypeId,
       priority,
@@ -440,7 +454,7 @@ export const updateCase = async (req, res) => {
       notes,
       nationality,
       jobTitle,
-      department,
+      departmentId,
     } = req.body;
 
     const cwIds = Array.isArray(assignedcaseworkerId) ? assignedcaseworkerId : (assignedcaseworkerId ? [assignedcaseworkerId] : []);
@@ -451,6 +465,7 @@ export const updateCase = async (req, res) => {
     const updateData = {
       candidateId: candidateId !== undefined ? candidateId : caseData.candidateId,
       sponsorId: sponsorId !== undefined ? sponsorId : caseData.sponsorId,
+      businessId: businessId !== undefined ? businessId : caseData.businessId,
       visaTypeId: visaTypeId !== undefined ? visaTypeId : caseData.visaTypeId,
       petitionTypeId: petitionTypeId !== undefined ? petitionTypeId : caseData.petitionTypeId,
       priority: priority || caseData.priority,
@@ -460,7 +475,7 @@ export const updateCase = async (req, res) => {
       receiptNumber: receiptNumber !== undefined ? receiptNumber : caseData.receiptNumber,
       nationality: nationality !== undefined ? nationality : caseData.nationality,
       jobTitle: jobTitle !== undefined ? jobTitle : caseData.jobTitle,
-      department: department !== undefined ? department : caseData.department,
+      departmentId: departmentId !== undefined ? departmentId : caseData.departmentId,
       assignedcaseworkerId: cwIds.length > 0 ? cwIds : caseData.assignedcaseworkerId,
       salaryOffered: salaryOffered !== undefined ? salaryOffered : caseData.salaryOffered,
       totalAmount: totalAmount !== undefined ? totalAmount : caseData.totalAmount,

@@ -4,14 +4,20 @@ import * as visaController from "../controllers/AdminControllers/Settings/visa.c
 import * as petitionTypeController from "../controllers/AdminControllers/Settings/petitionType.controller.js";
 import { verifyToken } from "../middlewares/auth.middleware.js";
 import { checkRole, ROLES } from "../middlewares/role.middleware.js";
+import { handleProfilePicUpload } from "../middlewares/upload.middleware.js";
 
 const router = Router();
 
+// Public routes accessible by authenticated users (admin or caseworker)
 router.use(verifyToken);
+router.get("/visa-types/dropdown", checkRole([ROLES.ADMIN, ROLES.CASEWORKER]), visaController.dropdownVisaType);
+router.get("/petition-types/dropdown", checkRole([ROLES.ADMIN, ROLES.CASEWORKER]), petitionTypeController.dropdownPetitionType);
+
+// Admin-only routes
 router.use(checkRole([ROLES.ADMIN]));
 
 router.get("/me", adminSettingsController.getMe);
-router.patch("/me", adminSettingsController.patchMe);
+router.patch("/me", handleProfilePicUpload, adminSettingsController.patchMe);
 router.patch("/me/preferences", adminSettingsController.patchMePreferences);
 router.post("/change-password", adminSettingsController.changePassword);
 
@@ -30,10 +36,17 @@ router.post("/case-categories", adminSettingsController.createCaseCategory);
 router.delete("/case-categories/:id", adminSettingsController.deleteCaseCategory);
 
 router.get("/email-templates", adminSettingsController.listEmailTemplates);
+router.post("/email-templates", adminSettingsController.createEmailTemplate);
 router.get("/email-templates/:key", adminSettingsController.getEmailTemplateByKey);
 router.put("/email-templates/:key", adminSettingsController.updateEmailTemplate);
+router.delete("/email-templates/:key", adminSettingsController.deleteEmailTemplate);
 
-router.get("/sla", adminSettingsController.getSla);
-router.put("/sla", adminSettingsController.updateSla);
+router.get("/sla-rules", adminSettingsController.listSlaRules);
+router.post("/sla-rules", adminSettingsController.createSlaRule);
+router.patch("/sla-rules/:id", adminSettingsController.updateSlaRule);
+router.delete("/sla-rules/:id", adminSettingsController.deleteSlaRule);
+
+router.get("/payment-settings", adminSettingsController.getPaymentSetting);
+router.put("/payment-settings", adminSettingsController.updatePaymentSetting);
 
 export default router;

@@ -266,6 +266,23 @@
           }
         },
         {
+          "name": "POST /email-templates — create new",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"key\": \"custom_notification\",\n  \"subject\": \"[VisaFlow] Custom Notification\",\n  \"body\": \"Dear {{client_name}},\\n\\nThis is a custom notification.\\n\\nBest regards,\\nVisaFlow Team\"\n}"
+            },
+            "url": "{{baseUrl}}/api/settings/email-templates"
+          }
+        },
+        {
           "name": "GET /email-templates/:key — single (use key var)",
           "request": {
             "method": "GET",
@@ -363,6 +380,14 @@
             },
             "url": "{{baseUrl}}/api/settings/email-templates/doc"
           }
+        },
+        {
+          "name": "DELETE /email-templates/:key — delete template",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/api/settings/email-templates/{{emailTemplateKey}}"
+          }
         }
       ]
     },
@@ -409,6 +434,91 @@
               "raw": "{\n  \"escalation_stuck_days\": 5\n}"
             },
             "url": "{{baseUrl}}/api/settings/sla"
+          }
+        }
+      ]
+    },
+    {
+      "name": "SLA Rules",
+      "item": [
+        {
+          "name": "GET /sla-rules — list all",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/settings/sla-rules"
+          }
+        },
+        {
+          "name": "POST /sla-rules — create new",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Skilled Worker SLA\",\n  \"visa_type_id\": 1,\n  \"days\": 45,\n  \"description\": \"Standard processing time for skilled worker visas\"\n}"
+            },
+            "url": "{{baseUrl}}/api/settings/sla-rules"
+          }
+        },
+        {
+          "name": "PATCH /sla-rules/:id — update",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"days\": 50,\n  \"description\": \"Updated processing time for skilled worker visas\"\n}"
+            },
+            "url": "{{baseUrl}}/api/settings/sla-rules/1"
+          }
+        },
+        {
+          "name": "DELETE /sla-rules/:id — delete",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/api/settings/sla-rules/1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payment Settings",
+      "item": [
+        {
+          "name": "GET /payment-settings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/settings/payment-settings"
+          }
+        },
+        {
+          "name": "PUT /payment-settings — update",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deposit_percentage\": 30,\n  \"deposit_amount\": 1000,\n  \"payment_terms\": \"30 days\",\n  \"late_fee_percentage\": 5,\n  \"currency\": \"USD\"\n}"
+            },
+            "url": "{{baseUrl}}/api/settings/payment-settings"
           }
         }
       ]

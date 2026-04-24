@@ -23,11 +23,14 @@ import CaseCategoryModel from "./caseCategory.model.js";
 import EmailTemplateSettingModel from "./emailTemplateSetting.model.js";
 
 import SlaSettingModel from "./slaSetting.model.js";
+import SlaRuleModel from "./slaRule.model.js";
+import PaymentSettingModel from "./paymentSetting.model.js";
 import EscalationModel from "./escalation.model.js";
 import PermissionModel from "./permission.model.js";
 import RolePermissionModel from "./rolePermission.model.js";
 
 import DocumentModel from "./document.model.js";
+import CaseDocumentModel from "./caseDocument.model.js";
 
 import CasePaymentModel from "./casePayment.model.js";
 
@@ -59,6 +62,8 @@ import CandidateFeedbackModel from "./candidateFeedback.model.js";
 import CandidateApplicationModel from "./candidateApplication.model.js";
 
 import SponsorProfileModel from "./sponsorProfile.model.js";
+
+import AuditLogModel from "./auditLog.model.js";
 
 const env = process.env.NODE_ENV || "development";
 
@@ -92,6 +97,8 @@ db.AdminUserPreference = AdminUserPreferenceModel(
   Sequelize.DataTypes,
 );
 
+db.AuditLog = AuditLogModel(sequelize, Sequelize.DataTypes);
+
 db.VisaType = VisaTypeModel(sequelize, Sequelize.DataTypes);
 
 db.PetitionType = PetitionTypeModel(sequelize, Sequelize.DataTypes);
@@ -104,11 +111,14 @@ db.EmailTemplateSetting = EmailTemplateSettingModel(
 );
 
 db.SlaSetting = SlaSettingModel(sequelize, Sequelize.DataTypes);
+db.SlaRule = SlaRuleModel(sequelize, Sequelize.DataTypes);
+db.PaymentSetting = PaymentSettingModel(sequelize, Sequelize.DataTypes);
 db.Escalation = EscalationModel(sequelize, Sequelize.DataTypes);
 db.Permission = PermissionModel(sequelize, Sequelize.DataTypes);
 db.RolePermission = RolePermissionModel(sequelize, Sequelize.DataTypes);
 
 db.Document = DocumentModel(sequelize, Sequelize.DataTypes);
+db.CaseDocument = CaseDocumentModel(sequelize, Sequelize.DataTypes);
 
 db.CasePayment = CasePaymentModel(sequelize, Sequelize.DataTypes);
 
@@ -200,6 +210,8 @@ db.Case.belongsTo(db.PetitionType, {
   foreignKey: "petitionTypeId",
   as: "petitionType",
 });
+db.Case.belongsTo(db.Department, { foreignKey: "departmentId", as: "department" });
+db.Department.hasMany(db.Case, { foreignKey: "departmentId", as: "cases" });
 
 // User has many cases (as candidate or sponsor)
 db.User.hasMany(db.Case, { foreignKey: "candidateId", as: "cases" });
@@ -365,3 +377,8 @@ db.User.hasOne(db.SponsorProfile, {
 db.SponsorProfile.belongsTo(db.User, { foreignKey: "userId", as: "user" });
 
 export default db;
+
+// Audit Log Associations
+db.User.hasMany(db.AuditLog, { foreignKey: 'user_id', as: 'auditLogs' });
+db.AuditLog.belongsTo(db.User, { foreignKey: 'user_id', as: 'user' });
+

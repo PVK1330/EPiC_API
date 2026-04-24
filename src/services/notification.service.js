@@ -125,15 +125,18 @@ export const createNotification = async (data) => {
     const notification = await Notification.create(notificationData);
 
     // If email sending is enabled, send email immediately for non-scheduled notifications.
+    // We don't 'await' here to avoid blocking the main process (especially for bulk/broadcast)
     if (sendEmail && !scheduledFor) {
-      try {
-        const sent = await sendNotificationEmailToUser(userId, notification);
-        if (sent) {
-          await notification.update({ emailSent: true });
+      (async () => {
+        try {
+          const sent = await sendNotificationEmailToUser(userId, notification);
+          if (sent) {
+            await notification.update({ emailSent: true });
+          }
+        } catch (emailError) {
+          console.error(`Email send failed for notification ${notification.id}:`, emailError);
         }
-      } catch (emailError) {
-        console.error(`Email send failed for notification ${notification.id}:`, emailError);
-      }
+      })();
     }
 
     await notification.reload();
@@ -187,6 +190,29 @@ export const createNotificationForRole = async (roleId, notificationData) => {
     return await createBulkNotifications(userIds, notificationData);
   } catch (error) {
     console.error('Error creating role notification:', error);
+    throw error;
+  }
+};
+
+/**
+ * Create notification for all active users
+ * @param {Object} notificationData - Notification data
+ * @returns {Promise<Array>} Created notifications
+ */
+export const createNotificationForAllUsers = async (notificationData) => {
+  try {
+    const users = await User.findAll({
+      where: { status: 'active' },
+      attributes: ['id'],
+    });
+
+    const userIds = users.map((user) => user.id);
+    if (!userIds.length) {
+      throw new Error('No active users found');
+    }
+    return await createBulkNotifications(userIds, notificationData);
+  } catch (error) {
+    console.error('Error creating broadcast notification:', error);
     throw error;
   }
 };
@@ -782,4 +808,5 @@ export default {
   notifySLABreach,
   notifySystemMaintenance,
   notifyMessageReceived,
+  createNotificationForAllUsers,
 };

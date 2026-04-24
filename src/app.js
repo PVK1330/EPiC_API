@@ -9,6 +9,8 @@ import adminRoutes from './routes/admin.routes.js';
 import adminSettingsRoutes from './routes/admin.settings.routes.js';
 import caseworkerRoutes from './routes/caseworker.routes.js';
 import caseworkerCaseRoutes from './routes/CaseworkerRoutes/caseworkerCase.routes.js';
+import caseworkerDocumentRoutes from './routes/CaseworkerRoutes/caseworkerDocument.routes.js';
+import caseworkerCaseNoteRoutes from './routes/CaseworkerRoutes/caseworkerCaseNote.routes.js';
 import sponsorsRoutes from './routes/sponsors.routes.js';
 import candidateRoutes from './routes/candidate.routes.js';
 import candidateAccountRoutes from './routes/candidateAccount.routes.js';
@@ -26,7 +28,9 @@ import applicationFieldsRoutes from './routes/applicationFields.routes.js';
 import dashboardRoutes from './routes/admin.dashboard.routes.js';
 import workloadRoutes from './routes/admin.workload.routes.js';
 import messageRoutes from './routes/message.routes.js';
+import reportingRoutes from './routes/reporting.routes.js';
 import rescheduleRoutes from './routes/CaseworkerRoutes/reschedule.routes.js';
+import auditLogRoutes from './routes/auditLog.routes.js';
 import { getFrontendOrigins } from './config/frontendOrigins.js';
 
 const app = express();
@@ -41,6 +45,7 @@ app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());       // must be BEFORE any route that reads req.cookies
+app.use('/uploads', express.static('uploads'));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
@@ -50,8 +55,11 @@ app.use('/api/settings', adminSettingsRoutes);
 app.use('/api/admin/permissions', permissionsRoutes);
 app.use('/api/admin/rbac', rbacRoutes);
 app.use('/api/admin/roles', roleRoutes);
+app.use('/api/admin/audit-logs', auditLogRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/caseworker/cases', caseworkerCaseRoutes);
+app.use('/api/caseworker/documents', caseworkerDocumentRoutes);
+app.use('/api/caseworker/case-notes', caseworkerCaseNoteRoutes);
 app.use('/api/caseworker', caseworkerRoutes);
 app.use('/api/sponsors', sponsorsRoutes);
 app.use('/api/candidate', candidateRoutes);
@@ -70,5 +78,6 @@ app.use('/api/case-notes', caseNoteRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/cases/reschedule', rescheduleRoutes);
 app.use('/api/workload', workloadRoutes);
+app.use('/api/reports', reportingRoutes);
 
 export default app;

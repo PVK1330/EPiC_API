@@ -20,6 +20,7 @@
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.1.1",
     "nodemailer": "^8.0.5",
+    "pdfmake": "^0.2.15",
     "pg": "^8.20.0",
     "pg-hstore": "^2.3.4",
     "pm2": "^5.4.2",

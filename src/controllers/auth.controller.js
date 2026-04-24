@@ -61,6 +61,27 @@ export const register = async (req, res) => {
       });
     }
 
+    // Also check unverified_users to avoid unique constraint errors
+    const unverifiedEmailExists = await UnverifiedUser.findOne({ where: { email } });
+    if (unverifiedEmailExists) {
+      return res.status(400).json({
+        status: "error",
+        message: "Registration already in progress. Please verify your OTP or request a new one.",
+        data: { email, pending_verification: true }
+      });
+    }
+
+    const unverifiedMobileExists = await UnverifiedUser.findOne({
+      where: { country_code, mobile },
+    });
+    if (unverifiedMobileExists) {
+      return res.status(400).json({
+        status: "error",
+        message: "Mobile number already registered and pending OTP verification.",
+        data: null
+      });
+    }
+
     const validRoles = [1, 2, 3, 4];
     if (!validRoles.includes(role_id)) {
       return res.status(400).json({

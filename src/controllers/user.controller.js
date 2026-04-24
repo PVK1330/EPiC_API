@@ -117,7 +117,11 @@ export const editProfile = async (req, res) => {
 
     // Add profile_pic if file was uploaded
     if (req.file?.path) {
-      updateData.profile_pic = req.file.path;
+      const userDir = path.join('uploads', 'profile_pics', String(userId));
+      fs.mkdirSync(userDir, { recursive: true });
+      const targetPath = path.join(userDir, req.file.filename);
+      fs.renameSync(req.file.path, targetPath);
+      updateData.profile_pic = targetPath.replace(/\\/g, '/');
     }
 
     await user.update(updateData);
@@ -220,7 +224,6 @@ export const changeOwnPassword = async (req, res) => {
   }
 };
 
-
 // Get all users grouped by roles
 export const getAllUsers = async (req, res) => {
   try {
@@ -241,6 +244,12 @@ export const getAllUsers = async (req, res) => {
           model: db.Role,
           as: 'role',
           attributes: ['id', 'name']
+        },
+        {
+          model: db.SponsorProfile,
+          as: 'sponsorProfile',
+          required: false,
+          attributes: ['id','companyName', 'tradingName']
         }
       ],
       order: [['createdAt', 'DESC']]
@@ -256,12 +265,12 @@ export const getAllUsers = async (req, res) => {
 
     users.forEach(user => {
       const roleName = user.role?.name?.toLowerCase() || 'unknown';
-      
+
       if (roleName === 'admin') {
         usersByRole.admin.push(user);
       } else if (roleName === 'candidate') {
         usersByRole.candidate.push(user);
-      } else if (roleName === 'sponsor') {
+      } else if (roleName === 'sponsor' || roleName === 'business') {
         usersByRole.sponsor.push(user);
       } else if (roleName === 'caseworker') {
         usersByRole.caseworker.push(user);
@@ -280,6 +289,66 @@ export const getAllUsers = async (req, res) => {
     });
 
   } catch (err) {
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error",
+      data: null,
+      error: err.message
+    });
+  }
+};
+
+// Get sponsors and business dropdown API
+export const dropdownSponsors = async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    if (!userId) {
+      return res.status(401).json({ status: "error", message: "Authentication required.", data: null });
+    }
+
+    const sponsors = await User.findAll({
+      where: { role_id: 4 }, // Sponsor/Business role
+      attributes: {
+        exclude: [
+          "password",
+          "otp_code",
+          "otp_expiry",
+          "password_reset_otp",
+          "password_reset_otp_expiry",
+          "temp_password",
+        ],
+      },
+      include: [
+        {
+          model: db.Role,
+          as: 'role',
+          attributes: ['id', 'name']
+        },
+        {
+          model: db.SponsorProfile,
+          as: 'sponsorProfile',
+          required: false,
+          attributes: ['companyName', 'tradingName']
+        }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+
+    // Format for dropdown: id, name (first + last), company name
+    const formattedSponsors = sponsors.map(sponsor => ({
+      id: sponsor.id,
+      name: `${sponsor.first_name} ${sponsor.last_name}`,
+      email: sponsor.email,
+      companyName: sponsor.sponsorProfile?.companyName || sponsor.sponsorProfile?.tradingName || null
+    }));
+
+    res.status(200).json({
+      status: "success",
+      message: "Sponsors retrieved successfully",
+      data: { sponsors: formattedSponsors }
+    });
+  } catch (err) {
+    console.error("dropdownSponsors error:", err);
     res.status(500).json({
       status: "error",
       message: "Internal server error",
