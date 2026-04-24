@@ -117,7 +117,11 @@ export const editProfile = async (req, res) => {
 
     // Add profile_pic if file was uploaded
     if (req.file?.path) {
-      updateData.profile_pic = req.file.path;
+      const userDir = path.join('uploads', 'profile_pics', String(userId));
+      fs.mkdirSync(userDir, { recursive: true });
+      const targetPath = path.join(userDir, req.file.filename);
+      fs.renameSync(req.file.path, targetPath);
+      updateData.profile_pic = targetPath.replace(/\\/g, '/');
     }
 
     await user.update(updateData);

@@ -1,6 +1,8 @@
 import { Op } from "sequelize";
 
 import bcrypt from "bcryptjs";
+import fs from "fs";
+import path from "path";
 
 import db from "../../models/index.js";
 
@@ -141,7 +143,7 @@ export const getMe = async (req, res) => {
 
           phone: buildPhoneDisplay(plain.country_code, plain.mobile),
 
-          avatar_url: prefs.avatar_url || null,
+          avatar_url: prefs.avatar_url ? `${process.env.BASE_URL || ''}/${prefs.avatar_url.replace(/\\/g, '/')}` : null,
 
           role_id: plain.role_id,
 
@@ -294,6 +296,15 @@ export const patchMe = async (req, res) => {
     const prefUpdates = {};
 
     if (avatar_url !== undefined) prefUpdates.avatar_url = avatar_url === null ? null : String(avatar_url).trim() || null;
+    if (req.file?.path) {
+      const userDir = path.join('uploads', 'profile_pics', String(user.id));
+      fs.mkdirSync(userDir, { recursive: true });
+      const targetPath = path.join(userDir, req.file.filename);
+      fs.renameSync(req.file.path, targetPath);
+      const urlPath = targetPath.replace(/\\/g, '/');
+      prefUpdates.avatar_url = urlPath;
+      profileUpdates.profile_pic = urlPath;
+    }
 
     if (two_factor_enabled !== undefined) prefUpdates.two_factor_enabled = Boolean(two_factor_enabled);
 
@@ -375,7 +386,7 @@ export const patchMe = async (req, res) => {
 
           phone: buildPhoneDisplay(plain.country_code, plain.mobile),
 
-          avatar_url: prefs.avatar_url || null,
+          avatar_url: prefs.avatar_url ? `${process.env.BASE_URL || ''}/${prefs.avatar_url.replace(/\\/g, '/')}` : null,
 
           role_id: plain.role_id,
 
@@ -521,7 +532,7 @@ export const patchMePreferences = async (req, res) => {
 
           phone: buildPhoneDisplay(plain.country_code, plain.mobile),
 
-          avatar_url: prefs.avatar_url || null,
+          avatar_url: prefs.avatar_url ? `${process.env.BASE_URL || ''}/${prefs.avatar_url.replace(/\\/g, '/')}` : null,
 
           role_id: plain.role_id,
 
