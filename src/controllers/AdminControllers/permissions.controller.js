@@ -17,8 +17,10 @@ export const getAllPermissions = async (req, res) => {
 
     if (search) {
       whereClause[Op.or] = [
-        { name: { [Op.iLike]: `%${search}%` } },
+        { name:        { [Op.iLike]: `%${search}%` } },
         { description: { [Op.iLike]: `%${search}%` } },
+        { action:      { [Op.iLike]: `%${search}%` } },
+        { module:      { [Op.iLike]: `%${search}%` } },
       ];
     }
 

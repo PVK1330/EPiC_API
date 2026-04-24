@@ -7,6 +7,8 @@ import {
   getUnreadCount,
   createNotification,
   createNotificationForRole,
+  createNotificationForAllUsers,
+  createBulkNotifications,
   processScheduledNotifications,
   deleteExpiredNotifications,
   NotificationTypes,
@@ -14,6 +16,8 @@ import {
 } from '../services/notification.service.js';
 
 const Notification = db.Notification;
+const User = db.User;
+const Role = db.Role;
 const validNotificationTypes = new Set(Object.values(NotificationTypes));
 const validPriorities = new Set(Object.values(NotificationPriority));
 const parseSendEmailFlag = (value) => {
@@ -322,6 +326,7 @@ export const createManualNotification = async (req, res) => {
 
     const {
       recipientUserId,
+      recipientUserIds,
       recipientRoleId,
       userId: legacyUserId,
       type,
@@ -345,19 +350,17 @@ export const createManualNotification = async (req, res) => {
       });
     }
     const finalRecipientUserId = recipientUserId || legacyUserId;
+    const hasRecipient = finalRecipientUserId || recipientRoleId || (recipientUserIds && recipientUserIds.length > 0);
 
-    if (!finalRecipientUserId && !recipientRoleId) {
-      return res.status(400).json({
-        status: 'error',
-        message: 'Either recipientUserId or recipientRoleId must be provided',
-        data: null,
-      });
+    if (!hasRecipient) {
+      // If none provided, we treat it as broadcast to all users
+      // This matches the frontend 'all' recipientType
     }
 
     if (type && !validNotificationTypes.has(type)) {
       return res.status(400).json({
         status: 'error',
-        message: 'Invalid notification type',
+        message: `Invalid notification type: ${type}`,
         data: null,
       });
     }
@@ -365,7 +368,7 @@ export const createManualNotification = async (req, res) => {
     if (priority && !validPriorities.has(priority)) {
       return res.status(400).json({
         status: 'error',
-        message: 'Invalid notification priority',
+        message: `Invalid notification priority: ${priority}`,
         data: null,
       });
     }
@@ -385,7 +388,21 @@ export const createManualNotification = async (req, res) => {
         scheduledFor,
       });
       notification = notifications[0]; // Return first created notification
-    } else {
+    } else if (recipientUserIds && Array.isArray(recipientUserIds) && recipientUserIds.length > 0) {
+      const notifications = await createBulkNotifications(recipientUserIds, {
+        type,
+        priority,
+        title,
+        message,
+        actionType,
+        entityId,
+        entityType,
+        metadata,
+        sendEmail: sendEmailFlag,
+        scheduledFor,
+      });
+      notification = notifications[0];
+    } else if (finalRecipientUserId) {
       notification = await createNotification({
         userId: finalRecipientUserId,
         type,
@@ -399,6 +416,21 @@ export const createManualNotification = async (req, res) => {
         sendEmail: sendEmailFlag,
         scheduledFor,
       });
+    } else {
+      // Broadcast to all
+      const notifications = await createNotificationForAllUsers({
+        type,
+        priority,
+        title,
+        message,
+        actionType,
+        entityId,
+        entityType,
+        metadata,
+        sendEmail: sendEmailFlag,
+        scheduledFor,
+      });
+      notification = notifications[0];
     }
 
     res.status(201).json({

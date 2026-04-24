@@ -35,10 +35,17 @@ router.post("/case-categories", adminSettingsController.createCaseCategory);
 router.delete("/case-categories/:id", adminSettingsController.deleteCaseCategory);
 
 router.get("/email-templates", adminSettingsController.listEmailTemplates);
+router.post("/email-templates", adminSettingsController.createEmailTemplate);
 router.get("/email-templates/:key", adminSettingsController.getEmailTemplateByKey);
 router.put("/email-templates/:key", adminSettingsController.updateEmailTemplate);
+router.delete("/email-templates/:key", adminSettingsController.deleteEmailTemplate);
 
-router.get("/sla", adminSettingsController.getSla);
-router.put("/sla", adminSettingsController.updateSla);
+router.get("/sla-rules", adminSettingsController.listSlaRules);
+router.post("/sla-rules", adminSettingsController.createSlaRule);
+router.patch("/sla-rules/:id", adminSettingsController.updateSlaRule);
+router.delete("/sla-rules/:id", adminSettingsController.deleteSlaRule);
+
+router.get("/payment-settings", adminSettingsController.getPaymentSetting);
+router.put("/payment-settings", adminSettingsController.updatePaymentSetting);
 
 export default router;

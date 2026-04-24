@@ -383,10 +383,12 @@ export const getRolesWithoutPermissions = async (req, res) => {
 
 // Bulk assign permissions to multiple roles
 export const bulkAssignPermissions = async (req, res) => {
+  const t = await db.sequelize.transaction();
   try {
     const { roleIds, permissionIds } = req.body;
 
     if (!roleIds || !Array.isArray(roleIds) || roleIds.length === 0) {
+      await t.rollback();
       return res.status(400).json({
         status: "error",
         message: "roleIds array is required",
@@ -395,6 +397,7 @@ export const bulkAssignPermissions = async (req, res) => {
     }
 
     if (!permissionIds || !Array.isArray(permissionIds) || permissionIds.length === 0) {
+      await t.rollback();
       return res.status(400).json({
         status: "error",
         message: "permissionIds array is required",
@@ -402,11 +405,23 @@ export const bulkAssignPermissions = async (req, res) => {
       });
     }
 
+    // Validate all role IDs are integers
+    if (!roleIds.every((id) => Number.isInteger(Number(id)))) {
+      await t.rollback();
+      return res.status(400).json({
+        status: "error",
+        message: "roleIds must be integers",
+        data: null,
+      });
+    }
+
     const roles = await Role.findAll({
       where: { id: { [Op.in]: roleIds } },
+      transaction: t,
     });
 
     if (roles.length !== roleIds.length) {
+      await t.rollback();
       return res.status(404).json({
         status: "error",
         message: "One or more roles not found",
@@ -416,9 +431,11 @@ export const bulkAssignPermissions = async (req, res) => {
 
     const permissions = await Permission.findAll({
       where: { id: { [Op.in]: permissionIds } },
+      transaction: t,
     });
 
     if (permissions.length !== permissionIds.length) {
+      await t.rollback();
       return res.status(404).json({
         status: "error",
         message: "One or more permissions not found",
@@ -428,19 +445,21 @@ export const bulkAssignPermissions = async (req, res) => {
 
     await RolePermission.destroy({
       where: { role_id: { [Op.in]: roleIds } },
+      transaction: t,
     });
 
     const rolePermissions = [];
     for (const roleId of roleIds) {
       for (const permissionId of permissionIds) {
         rolePermissions.push({
-          role_id: roleId,
-          permission_id: permissionId,
+          role_id: Number(roleId),
+          permission_id: Number(permissionId),
         });
       }
     }
 
-    await RolePermission.bulkCreate(rolePermissions);
+    await RolePermission.bulkCreate(rolePermissions, { transaction: t });
+    await t.commit();
 
     res.status(200).json({
       status: "success",
@@ -452,6 +471,7 @@ export const bulkAssignPermissions = async (req, res) => {
       },
     });
   } catch (error) {
+    await t.rollback();
     console.error("Bulk Assign Permissions Error:", error);
     res.status(500).json({
       status: "error",
