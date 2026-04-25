@@ -128,6 +128,65 @@ export const getDashboardStats = async (req, res) => {
       raw: true
     });
 
+    // Calculate Expiry Alerts (within 30 days)
+    const thirtyDaysFromNow = new Date();
+    thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+    
+    const [visaExpiryAlerts, sponsorExpiryAlerts] = await Promise.all([
+      db.CandidateApplication.count({
+        where: {
+          visaEndDate: {
+            [Op.and]: [
+              { [Op.gte]: new Date() },
+              { [Op.lte]: thirtyDaysFromNow }
+            ]
+          }
+        }
+      }).catch(() => 0),
+      db.SponsorProfile.count({
+        where: {
+          licenceExpiryDate: {
+            [Op.and]: [
+              { [Op.gte]: new Date() },
+              { [Op.lte]: thirtyDaysFromNow }
+            ]
+          }
+        }
+      }).catch(() => 0)
+    ]);
+
+    // Get financial statistics
+    const { CasePayment, VisaType } = db;
+    
+    const [totalRevenue, totalOutstanding, outstandingSponsors] = await Promise.all([
+      CasePayment.findOne({
+        where: { paymentStatus: 'completed' },
+        attributes: [[db.sequelize.fn('SUM', db.sequelize.col('amount')), 'total']],
+        raw: true
+      }).catch(() => ({ total: 0 })),
+      CasePayment.findOne({
+        where: { paymentStatus: 'pending' },
+        attributes: [[db.sequelize.fn('SUM', db.sequelize.col('amount')), 'total']],
+        raw: true
+      }).catch(() => ({ total: 0 })),
+      CasePayment.findAll({
+        where: { paymentStatus: 'pending' },
+        attributes: [
+          [db.sequelize.fn('CONCAT', db.sequelize.col('Case.sponsor.first_name'), ' ', db.sequelize.col('Case.sponsor.last_name')), 'name'],
+          [db.sequelize.fn('SUM', db.sequelize.col('amount')), 'total']
+        ],
+        include: [{
+          model: Case,
+          attributes: [],
+          include: [{ model: User, as: 'sponsor', attributes: [] }]
+        }],
+        group: [db.sequelize.col('Case.sponsor.id'), db.sequelize.col('Case.sponsor.first_name'), db.sequelize.col('Case.sponsor.last_name')],
+        order: [[db.sequelize.literal('"total"'), 'DESC']],
+        limit: 3,
+        raw: true
+      }).catch(() => [])
+    ]);
+
     res.status(200).json({
       status: "success",
       message: "Dashboard statistics retrieved successfully",
@@ -144,6 +203,8 @@ export const getDashboardStats = async (req, res) => {
           activeCases,
           completedCases,
           pendingCases,
+          visaExpiryAlerts,
+          sponsorExpiryAlerts,
           completionRate: totalCases > 0 ? Math.round((completedCases / totalCases) * 100) : 0
         },
         taskStats: {
@@ -155,6 +216,14 @@ export const getDashboardStats = async (req, res) => {
         },
         documentStats: {
           totalDocuments
+        },
+        financeStats: {
+          totalRevenue: parseFloat(totalRevenue?.total || 0),
+          totalOutstanding: parseFloat(totalOutstanding?.total || 0),
+          outstandingSponsors: (outstandingSponsors || []).map(s => ({
+            name: s.name || 'Unknown',
+            amount: parseFloat(s.total || 0)
+          }))
         },
         recentActivity: {
           recentCases,

@@ -316,7 +316,14 @@ export const getFinancialReport = async (req, res) => {
       required: true
     }];
 
-    const [revenueResult, outstandingResult, monthlyRevenue, statusBreakdown] = await Promise.all([
+    const [
+      revenueResult,
+      outstandingResult,
+      monthlyRevenue,
+      statusBreakdown,
+      byVisaType,
+      bySponsor
+    ] = await Promise.all([
       // Completed payments
       CasePayment.findOne({
         where: { paymentStatus: 'completed', ...dateWhere },
@@ -362,6 +369,44 @@ export const getFinancialReport = async (req, res) => {
         group: ['paymentStatus'],
         raw: true,
       }).catch(() => []),
+
+      // Revenue by Visa Type
+      CasePayment.findAll({
+        where: { paymentStatus: 'completed', ...dateWhere },
+        attributes: [
+          [col('Case.visaType.name'), 'name'],
+          [fn('SUM', col('amount')), 'total'],
+        ],
+        include: [{
+          model: Case,
+          attributes: [],
+          where: roleWhere,
+          required: true,
+          include: [{ model: VisaType, as: 'visaType', attributes: [] }]
+        }],
+        group: [col('Case.visaType.id'), col('Case.visaType.name')],
+        order: [[literal('"total"'), 'DESC']],
+        raw: true,
+      }).catch(() => []),
+
+      // Revenue by Sponsor
+      CasePayment.findAll({
+        where: { paymentStatus: 'completed', ...dateWhere },
+        attributes: [
+          [fn('CONCAT', col('Case.sponsor.first_name'), ' ', col('Case.sponsor.last_name')), 'name'],
+          [fn('SUM', col('amount')), 'total'],
+        ],
+        include: [{
+          model: Case,
+          attributes: [],
+          where: roleWhere,
+          required: true,
+          include: [{ model: User, as: 'sponsor', attributes: [] }]
+        }],
+        group: [col('Case.sponsor.id'), col('Case.sponsor.first_name'), col('Case.sponsor.last_name')],
+        order: [[literal('"total"'), 'DESC']],
+        raw: true,
+      }).catch(() => []),
     ]);
 
     res.status(200).json({
@@ -383,6 +428,14 @@ export const getFinancialReport = async (req, res) => {
           count: parseInt(s.count || 0),
           total: parseFloat(s.total || 0),
         })),
+        byVisaType: byVisaType.map(v => ({
+          name: v.name || 'Unknown',
+          total: parseFloat(v.total || 0),
+        })),
+        bySponsor: bySponsor.map(s => ({
+          name: s.name || 'Unknown',
+          total: parseFloat(s.total || 0),
+        })),
       },
     });
   } catch (error) {
@@ -391,7 +444,59 @@ export const getFinancialReport = async (req, res) => {
   }
 };
 
-// ─── 4. Performance / KPI Report ─────────────────────────────────────────────
+// ─── 4. Detailed Financial Transactions ──────────────────────────────────────
+export const getFinancialTransactions = async (req, res) => {
+  try {
+    const { page = 1, limit = 20, status } = req.query;
+    const offset = (page - 1) * limit;
+    const roleWhere = buildRoleWhere(req.user);
+
+    const where = {};
+    if (status && status !== 'all') where.paymentStatus = status;
+
+    const { count, rows } = await CasePayment.findAndCountAll({
+      where,
+      include: [{
+        model: Case,
+        where: roleWhere,
+        attributes: ['caseId', 'status'],
+        include: [{ 
+          model: User, 
+          as: 'candidate', 
+          attributes: ['first_name', 'last_name'] 
+        }]
+      }],
+      order: [['created_at', 'DESC']],
+      limit: parseInt(limit),
+      offset: parseInt(offset)
+    });
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        transactions: rows.map(r => ({
+          id: r.payment_id || `#PAY-${r.id}`,
+          client: r.Case?.candidate ? `${r.Case.candidate.first_name} ${r.Case.candidate.last_name}` : 'Unknown',
+          caseId: r.Case?.caseId || 'N/A',
+          amount: `£${parseFloat(r.amount).toLocaleString()}`,
+          type: r.paymentMethod || 'Invoice',
+          status: r.paymentStatus === 'completed' ? 'Paid' : (r.paymentStatus === 'pending' ? 'Pending' : 'Processed'),
+          date: new Date(r.created_at).toISOString().split('T')[0]
+        })),
+        pagination: {
+          total: count,
+          page: parseInt(page),
+          pages: Math.ceil(count / limit)
+        }
+      }
+    });
+  } catch (error) {
+    console.error('getFinancialTransactions Error:', error);
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+};
+
+// ─── 5. Performance / KPI Report ─────────────────────────────────────────────
 export const getPerformanceReport = async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
