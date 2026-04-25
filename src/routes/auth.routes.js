@@ -14,6 +14,7 @@ router.post("/verify-reset-otp", auth.verifyResetOTP);
 router.post("/set-password", auth.setPassword);
 router.post("/resendOtpUser", auth.resendOtpUser); // user table
 router.post("/verifyOtpUser", auth.verifyOtpUser); // user table
+router.post("/send-password-change-otp", verifyToken, auth.sendPasswordChangeOtp);
 
 // 2FA routes
 router.post("/2fa/setup", verifyToken, auth.setup2FA);

@@ -102,6 +102,11 @@ export default (sequelize, DataTypes) => {
                 type: DataTypes.STRING(500),
                 allowNull: true,
             },
+            gender: {
+                type: DataTypes.ENUM('male', 'female', 'other'),
+                allowNull: true,
+                defaultValue: 'other',
+            },
         },
         {
             tableName: "users",

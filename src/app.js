@@ -68,6 +68,7 @@ app.use('/api/candidate', candidateRoutes);
 app.use('/api/candidate-account', candidateAccountRoutes);
 app.use('/api/candidate-application', candidateApplicationRoutes);
 app.use('/api/stripe', stripeRoutes);
+app.use('/api/cases/reschedule', rescheduleRoutes);
 app.use('/api/cases', caseRoutes);
 app.use('/api/escalations', escalationRoutes);
 app.use('/api/tasks', taskRoutes);
@@ -78,7 +79,6 @@ app.use('/api/messages', messageRoutes);
 app.use('/api/case-details', caseDetailRoutes);
 app.use('/api/case-notes', caseNoteRoutes);
 app.use('/api/dashboard', dashboardRoutes);
-app.use('/api/cases/reschedule', rescheduleRoutes);
 app.use('/api/workload', workloadRoutes);
 app.use('/api/reports', reportingRoutes);
 

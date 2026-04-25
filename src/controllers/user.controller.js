@@ -15,6 +15,7 @@ export const profile = async (req, res) => {
     // Find user by ID
     const user = await User.findOne({
       where: { id: userId },
+      include: [{ model: db.Role, as: 'role', attributes: ['id', 'name'] }],
       attributes: {
         exclude: [
           "password",
@@ -67,7 +68,7 @@ export const editProfile = async (req, res) => {
     
     // Get editable fields from request body
     const body = req.body || {};
-    const { first_name, last_name, country_code, mobile } = body;
+    const { first_name, last_name, country_code, mobile, gender } = body;
 
     // Find user by ID
     const user = await User.findOne({ where: { id: userId } });
@@ -113,6 +114,7 @@ export const editProfile = async (req, res) => {
       last_name: last_name || user.last_name,
       country_code: country_code || user.country_code,
       mobile: mobile || user.mobile,
+      gender: gender || user.gender,
     };
 
     // Add profile_pic if file was uploaded
@@ -129,6 +131,7 @@ export const editProfile = async (req, res) => {
     // Return updated user profile without sensitive fields
     const updatedUser = await User.findOne({
       where: { id: userId },
+      include: [{ model: db.Role, as: 'role', attributes: ['id', 'name'] }],
       attributes: {
         exclude: [
           "password",
@@ -169,12 +172,12 @@ export const editProfile = async (req, res) => {
 export const changeOwnPassword = async (req, res) => {
   try {
     const userId = req.user.userId;
-    const { current_password, new_password } = req.body || {};
+    const { new_password } = req.body || {};
 
-    if (!current_password || !new_password) {
+    if (!new_password) {
       return res.status(400).json({
         status: "error",
-        message: "current_password and new_password are required",
+        message: "new_password is required",
         data: null,
       });
     }
@@ -192,15 +195,6 @@ export const changeOwnPassword = async (req, res) => {
       return res.status(404).json({
         status: "error",
         message: "User not found",
-        data: null,
-      });
-    }
-
-    const ok = await bcrypt.compare(current_password, full.password);
-    if (!ok) {
-      return res.status(400).json({
-        status: "error",
-        message: "Current password is incorrect",
         data: null,
       });
     }

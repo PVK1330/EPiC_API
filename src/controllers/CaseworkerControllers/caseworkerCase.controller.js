@@ -1095,3 +1095,166 @@ export const getCaseDetails = async (req, res) => {
     });
   }
 };
+
+// Export Cases to CSV (Caseworker can export their assigned cases)
+export const exportMyCases = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const userRoleId = req.user.role_id;
+
+    // Verify user is a caseworker
+    if (userRoleId !== ROLES.CASEWORKER) {
+      return res.status(403).json({
+        status: "error",
+        message: "Access denied. Only caseworkers can export their assigned cases.",
+        data: null,
+      });
+    }
+
+    const { search, status, priority, visaTypeId } = req.query;
+
+    // Build where clause - filter by assigned caseworker
+    const whereClause = buildCaseworkerWhereClause(userId);
+
+    // Add search filter
+    if (search) {
+      whereClause[Op.or] = [
+        { caseId: { [Op.iLike]: `%${search}%` } },
+        { '$candidate.first_name$': { [Op.iLike]: `%${search}%` } },
+        { '$candidate.last_name$': { [Op.iLike]: `%${search}%` } },
+        { '$sponsor.first_name$': { [Op.iLike]: `%${search}%` } },
+        { '$sponsor.last_name$': { [Op.iLike]: `%${search}%` } }
+      ];
+    }
+
+    // Add status filter
+    if (status) {
+      const statusMap = {
+        'active': ['Pending', 'In Progress', 'Under Review'],
+        'due_soon': ['Pending', 'In Progress'],
+        'overdue': ['Overdue'],
+        'completed': ['Approved', 'Rejected', 'Closed']
+      };
+      
+      if (statusMap[status]) {
+        whereClause.status = { [Op.in]: statusMap[status] };
+      } else {
+        whereClause.status = status;
+      }
+    }
+
+    // Add priority filter
+    if (priority) {
+      whereClause.priority = priority;
+    }
+
+    // Add visa type filter
+    if (visaTypeId) {
+      whereClause.visaTypeId = visaTypeId;
+    }
+
+    const cases = await Case.findAll({
+      where: whereClause,
+      include: [
+        {
+          model: db.User,
+          as: 'candidate',
+          attributes: ['id', 'first_name', 'last_name', 'email']
+        },
+        {
+          model: db.User,
+          as: 'sponsor',
+          attributes: ['id', 'first_name', 'last_name', 'email'],
+          include: [
+            {
+              model: db.SponsorProfile,
+              as: 'sponsorProfile',
+              attributes: ['id', 'companyName', 'tradingName'],
+              required: false
+            }
+          ]
+        },
+        {
+          model: db.VisaType,
+          as: 'visaType',
+          attributes: ['id', 'name']
+        },
+        {
+          model: db.PetitionType,
+          as: 'petitionType',
+          attributes: ['id', 'name']
+        }
+      ],
+      order: [["created_at", "DESC"]]
+    });
+
+    // Fetch caseworker names for all assigned caseworker IDs
+    const allCaseworkerIds = new Set();
+    cases.forEach(c => {
+      const cwIds = Array.isArray(c.assignedcaseworkerId) ? c.assignedcaseworkerId : (c.assignedcaseworkerId ? [c.assignedcaseworkerId] : []);
+      cwIds.forEach(id => {
+        const numId = parseInt(id);
+        if (!isNaN(numId)) {
+          allCaseworkerIds.add(numId);
+        }
+      });
+    });
+
+    const caseworkers = await User.findAll({
+      where: { id: Array.from(allCaseworkerIds) },
+      attributes: ['id', 'first_name', 'last_name']
+    });
+
+    const caseworkerMap = {};
+    caseworkers.forEach(cw => {
+      caseworkerMap[cw.id] = `${cw.first_name} ${cw.last_name}`;
+    });
+
+    // Generate CSV
+    const csvHeader = ['Case ID', 'Candidate', 'Candidate Email', 'Sponsor', 'Sponsor Email', 'Visa Type', 'Petition Type', 'Priority', 'Status', 'Assigned Caseworkers', 'Submission Date', 'Target Date', 'LCA Number', 'Receipt Number', 'Salary Offered', 'Total Amount', 'Paid Amount', 'Created At'];
+    const csvRows = cases.map(c => {
+      const cwIds = Array.isArray(c.assignedcaseworkerId) ? c.assignedcaseworkerId : (c.assignedcaseworkerId ? [c.assignedcaseworkerId] : []);
+      const cwNames = cwIds.map(id => caseworkerMap[id] || `ID:${id}`).join(', ');
+      const sponsorName = c.sponsor?.sponsorProfile?.companyName || c.sponsor?.sponsorProfile?.tradingName || (c.sponsor ? `${c.sponsor.first_name} ${c.sponsor.last_name}` : 'N/A');
+      
+      return [
+        c.caseId || 'N/A',
+        c.candidate ? `${c.candidate.first_name} ${c.candidate.last_name}` : 'N/A',
+        c.candidate?.email || 'N/A',
+        sponsorName,
+        c.sponsor?.email || 'N/A',
+        c.visaType?.name || 'N/A',
+        c.petitionType?.name || 'N/A',
+        c.priority,
+        c.status,
+        cwNames || 'N/A',
+        c.submissionDate || 'N/A',
+        c.targetSubmissionDate || 'N/A',
+        c.lcaNumber || 'N/A',
+        c.receiptNumber || 'N/A',
+        c.salaryOffered || 0,
+        c.totalAmount || 0,
+        c.paidAmount || 0,
+        c.created_at || 'N/A'
+      ];
+    });
+
+    const csvContent = [
+      csvHeader.join(','),
+      ...csvRows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="cases_export.csv"');
+    res.send(csvContent);
+
+  } catch (error) {
+    console.error("Export My Cases Error:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Failed to export cases",
+      data: null,
+      error: error.message,
+    });
+  }
+};

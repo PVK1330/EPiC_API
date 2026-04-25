@@ -14,6 +14,7 @@ export const uploadDocuments = async (req, res) => {
     const caseId = req.body?.caseId;
     const documentType = req.body?.documentType || 'General';
     const userFileName = req.body?.userFileName;
+    const expiryDate = req.body?.expiryDate || null;
     const uploadedFiles = req.files;
 
     if (!uploadedFiles || uploadedFiles.length === 0) {
@@ -57,6 +58,10 @@ export const uploadDocuments = async (req, res) => {
         const timeStr = now.toISOString().split('T')[1].split('.')[0].replace(/:/g, '');
         return `DOC-${dateStr}-${timeStr}-${index.toString().padStart(4, '0')}.pdf`;
       }
+
+      // Extract original file extension
+      const lastDotIndex = originalName.lastIndexOf('.');
+      const extension = lastDotIndex > 0 ? originalName.substring(lastDotIndex) : '.pdf';
       
       const now = new Date();
       const isoString = now.toISOString();
@@ -81,13 +86,26 @@ export const uploadDocuments = async (req, res) => {
       
       const prefix = prefixes[documentType] || 'DOC';
       
-      return `${prefix}-${dateStr}-${timeStr}-${identifier}.pdf`;
+      return `${prefix}-${dateStr}-${timeStr}-${identifier}${extension}`;
     };
 
     for (const [index, file] of uploadedFiles.entries()) {
       // Move file from temp to correct directory structure
       const sourcePath = file.path;
-      const targetDir = path.join('uploads', documentCategory, userId.toString());
+      
+      // Determine target directory based on upload type
+      let targetDir;
+      let urlPath;
+      
+      if (caseId) {
+        // Case-related upload: uploads/caseimages/caseId/
+        targetDir = path.join('uploads', 'caseimages', caseId.toString());
+        urlPath = `caseimages/${caseId}`;
+      } else {
+        // Profile-related upload: uploads/profileimages/userId/
+        targetDir = path.join('uploads', 'profileimages', userId.toString());
+        urlPath = `profileimages/${userId}`;
+      }
       
       // Generate system document name
       const systemDocumentName = generateSystemDocumentName(file.originalname, documentType, index);
@@ -112,7 +130,8 @@ export const uploadDocuments = async (req, res) => {
         fileSize: file.size,
         uploadedBy: req.user.userId,
         uploadedAt: new Date(),
-        status: 'uploaded'
+        status: 'uploaded',
+        expiryDate: expiryDate || null
       });
 
       uploadedDocuments.push({
@@ -123,7 +142,7 @@ export const uploadDocuments = async (req, res) => {
         fileSize: document.fileSize,
         mimeType: document.mimeType,
         mimeType: document.mimeType,
-        documentUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/uploads/${documentCategory}/${userId}/${systemDocumentName}` 
+        documentUrl: `${process.env.BASE_URL || 'http://localhost:5000'}/uploads/${urlPath}/${systemDocumentName}`
       });
 
       // Send document upload notifications
@@ -267,8 +286,9 @@ export const getCaseDocuments = async (req, res) => {
     // Add documentUrl to each document
     const documentsWithUrls = documents.rows.map(doc => {
       const docData = doc.toJSON();
-      const filename = docData.documentPath.split('\\').pop().split('/').pop();
-      docData.documentUrl = `${process.env.BASE_URL}`;
+      // Use the stored documentPath directly - it contains the relative path from uploads/
+      const relativePath = docData.documentPath.replace(/^uploads[\/\\]/, '');
+      docData.documentUrl = `${process.env.BASE_URL || 'http://localhost:5000'}/uploads/${relativePath}`;
       return docData;
     });
 
@@ -330,14 +350,16 @@ export const getDocumentById = async (req, res) => {
       });
     }
 
+    const docData = document.toJSON();
+    // Use the stored documentPath directly - it contains the relative path from uploads/
+    const relativePath = docData.documentPath.replace(/^uploads[\/\\]/, '');
+    docData.documentUrl = `${process.env.BASE_URL || 'http://localhost:5000'}/uploads/${relativePath}`;
+
     res.status(200).json({
       status: "success",
       message: "Document retrieved successfully",
       data: {
-        document: {
-          ...document.toJSON(),
-          documentUrl: `${process.env.BASE_URL}`
-        }
+        document: docData
       }
     });
 
@@ -441,6 +463,7 @@ export const updateDocumentStatus = async (req, res) => {
     const document = await Document.findByPk(documentId);
     if (!document) {
       return res.status(404).json({
+        
         status: "error",
         message: "Document not found",
         data: null
@@ -507,7 +530,10 @@ export const downloadDocument = async (req, res) => {
       });
     }
 
-    if (!document.documentPath || !fs.existsSync(document.documentPath)) {
+    // Resolve the absolute path from the relative path stored in database
+    const absolutePath = path.resolve(document.documentPath);
+
+    if (!document.documentPath || !fs.existsSync(absolutePath)) {
       return res.status(404).json({
         status: "error",
         message: "File not found on server",
@@ -515,11 +541,11 @@ export const downloadDocument = async (req, res) => {
       });
     }
 
-    const filename = path.basename(document.documentPath);
-    res.setHeader('Content-Disposition', `attachment; filename="${document.documentName}"`);
+    const filename = path.basename(absolutePath);
+    res.setHeader('Content-Disposition', `attachment; filename="${document.userFileName || document.documentName}"`);
     res.setHeader('Content-Type', document.mimeType || 'application/octet-stream');
 
-    const fileStream = fs.createReadStream(document.documentPath);
+    const fileStream = fs.createReadStream(absolutePath);
     fileStream.pipe(res);
 
   } catch (error) {

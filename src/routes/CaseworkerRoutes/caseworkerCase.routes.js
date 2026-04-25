@@ -20,6 +20,9 @@ router.get("/dashboard/stats", caseworkerCaseController.getMyDashboardStats);
 // Get pipeline cases for logged-in caseworker
 router.get("/pipeline", caseworkerCaseController.getMyPipelineCases);
 
+// Export cases to CSV (caseworker can export their assigned cases)
+router.get("/export", caseworkerCaseController.exportMyCases);
+
 // Create new case (caseworker can create cases)
 router.post("/", caseworkerCaseController.createMyCase);
 

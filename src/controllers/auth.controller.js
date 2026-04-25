@@ -697,6 +697,53 @@ export const verifyOtpUser = async (req, res) => {
   }
 };
 
+// Send OTP for password change verification
+export const sendPasswordChangeOtp = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const user = await User.findByPk(userId);
+
+    if (!user) {
+      return res.status(404).json({
+        status: "error",
+        message: "User not found",
+        data: null
+      });
+    }
+
+    // Generate 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+    user.otp_code = otp;
+    user.otp_expiry = otpExpiry;
+    await user.save();
+
+    // Send OTP via email
+    await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: user.email,
+      subject: "Elite Pic - Password Change Verification OTP",
+      html: generateOTPTemplate(otp),
+    });
+
+    res.status(200).json({
+      status: "success",
+      message: "OTP sent to your email for password change verification",
+      data: {
+        expiry: otpExpiry
+      }
+    });
+  } catch (err) {
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error",
+      data: null,
+      error: err.message
+    });
+  }
+};
+
 export const setup2FA = async (req, res) => {
   try {
     const userId = req.user.userId;
