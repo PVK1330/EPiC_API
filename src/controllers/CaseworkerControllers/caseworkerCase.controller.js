@@ -259,6 +259,8 @@ export const getMyDashboardStats = async (req, res) => {
 
     const today = new Date();
     const todayStr = today.toISOString().split('T')[0];
+    const startOfDay = new Date(today.setHours(0, 0, 0, 0));
+    const endOfDay = new Date(today.setHours(23, 59, 59, 999));
 
     // Get all assigned cases
     const myTotal = await Case.count({
@@ -299,6 +301,52 @@ export const getMyDashboardStats = async (req, res) => {
       }
     });
 
+    // Get tasks due today for this caseworker
+    const tasksToday = await db.Task.count({
+      where: {
+        assigned_to: userId,
+        due_date: {
+          [Op.gte]: startOfDay,
+          [Op.lte]: endOfDay
+        },
+        status: { [Op.ne]: 'completed' }
+      }
+    });
+
+    // Calculate performance score based on completion rate and SLA compliance
+    const totalTasks = await db.Task.count({
+      where: { assigned_to: userId }
+    });
+    const completedTasks = await db.Task.count({
+      where: { 
+        assigned_to: userId,
+        status: 'completed'
+      }
+    });
+    const taskCompletionRate = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0;
+
+    // Calculate SLA compliance (cases completed on time)
+    const completedOnTime = await Case.count({
+      where: {
+        ...buildCaseworkerWhereClause(userId),
+        status: { [Op.in]: ['Approved', 'Rejected', 'Closed'] },
+        [Op.or]: [
+          { targetSubmissionDate: null },
+          { decisionDate: { [Op.lte]: db.sequelize.col('targetSubmissionDate') } }
+        ]
+      }
+    });
+    const totalCompleted = await Case.count({
+      where: {
+        ...buildCaseworkerWhereClause(userId),
+        status: { [Op.in]: ['Approved', 'Rejected', 'Closed'] }
+      }
+    });
+    const slaCompliance = totalCompleted > 0 ? (completedOnTime / totalCompleted) * 100 : 0;
+
+    // Performance score: weighted average of task completion (40%) and SLA compliance (60%)
+    const performanceScore = Math.round((taskCompletionRate * 0.4) + (slaCompliance * 0.6));
+
     // Get recent cases (last 5)
     const recentCases = await Case.findAll({
       where: buildCaseworkerWhereClause(userId),
@@ -313,7 +361,15 @@ export const getMyDashboardStats = async (req, res) => {
         {
           model: db.User,
           as: 'sponsor',
-          attributes: ['id', 'first_name', 'last_name']
+          attributes: ['id', 'first_name', 'last_name'],
+          include: [
+            {
+              model: db.SponsorProfile,
+              as: 'sponsorProfile',
+              attributes: ['companyName', 'tradingName'],
+              required: false
+            }
+          ]
         },
         {
           model: db.VisaType,
@@ -321,6 +377,34 @@ export const getMyDashboardStats = async (req, res) => {
           attributes: ['id', 'name']
         }
       ]
+    });
+
+    // Get tasks due today with details
+    const tasksTodayDetails = await db.Task.findAll({
+      where: {
+        assigned_to: userId,
+        due_date: {
+          [Op.gte]: startOfDay,
+          [Op.lte]: endOfDay
+        },
+        status: { [Op.ne]: 'completed' }
+      },
+      include: [
+        {
+          model: db.Case,
+          as: 'case',
+          attributes: ['id', 'caseId'],
+          include: [
+            {
+              model: db.User,
+              as: 'candidate',
+              attributes: ['first_name', 'last_name']
+            }
+          ]
+        }
+      ],
+      order: [['due_date', 'ASC']],
+      limit: 5
     });
 
     res.status(200).json({
@@ -331,10 +415,12 @@ export const getMyDashboardStats = async (req, res) => {
           assigned: myTotal,
           active: myActive,
           overdue: myOverdue,
-          dueToday: myDueToday,
+          tasksToday: tasksToday,
           completedMonth: myCompletedMonth,
+          performanceScore: performanceScore,
         },
         recentCases,
+        tasksToday: tasksTodayDetails,
       },
     });
   } catch (error) {

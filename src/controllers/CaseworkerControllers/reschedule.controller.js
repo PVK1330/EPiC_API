@@ -190,3 +190,73 @@ export const getRescheduleHistory = async (req, res) => {
     });
   }
 };
+
+// Get all reschedule history for caseworker
+export const getAllRescheduleHistory = async (req, res) => {
+  try {
+    const userRoleId = req.user.role_id;
+    const { page = 1, limit = 10 } = req.query;
+    const offset = (page - 1) * limit;
+
+    // Verify user is a caseworker
+    if (userRoleId !== ROLES.CASEWORKER) {
+      return res.status(403).json({
+        status: "error",
+        message: "Access denied. Only caseworkers can view reschedule history.",
+        data: null,
+      });
+    }
+
+    const { count, rows: history } = await RescheduleHistory.findAndCountAll({
+      include: [
+        {
+          model: Case,
+          as: 'case',
+          attributes: ['id', 'caseId', 'candidateId', 'sponsorId'],
+          include: [
+            {
+              model: User,
+              as: 'candidate',
+              attributes: ['id', 'first_name', 'last_name', 'email'],
+            },
+            {
+              model: User,
+              as: 'sponsor',
+              attributes: ['id', 'first_name', 'last_name', 'email'],
+            },
+          ],
+        },
+        {
+          model: User,
+          as: 'createdBy',
+          attributes: ['id', 'first_name', 'last_name', 'email'],
+        },
+      ],
+      order: [['created_at', 'DESC']],
+      limit: parseInt(limit),
+      offset: parseInt(offset),
+    });
+
+    res.status(200).json({
+      status: "success",
+      message: "All reschedule history retrieved successfully",
+      data: {
+        history,
+        pagination: {
+          total: count,
+          page: parseInt(page),
+          limit: parseInt(limit),
+          pages: Math.ceil(count / limit),
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Get All Reschedule History Error:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error",
+      data: null,
+      error: error.message,
+    });
+  }
+};
