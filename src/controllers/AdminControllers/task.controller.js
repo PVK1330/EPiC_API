@@ -1,5 +1,6 @@
 import db from "../../models/index.js";
 import { ROLES } from "../../middlewares/role.middleware.js";
+import { notifyTaskAssigned } from "../../services/notification.service.js";
 
 const Task = db.Task;
 const User = db.User;
@@ -197,6 +198,15 @@ export const createTask = async (req, res) => {
     const withUsers = await Task.findByPk(created.id, {
       include: [userInclude("assignee"), userInclude("creator")],
     });
+
+    // Notify assigned user if assigned to someone else
+    if (assigned_to !== userId) {
+      try {
+        await notifyTaskAssigned(assigned_to, created);
+      } catch (notifErr) {
+        console.error("Failed to notify user about assigned task:", notifErr);
+      }
+    }
 
     res.status(201).json({
       status: "success",

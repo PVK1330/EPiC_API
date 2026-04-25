@@ -746,6 +746,66 @@ export const notifySystemMaintenance = async (roleId, maintenanceData) => {
   // If no roleId, create for all active users (optional implementation)
 };
 
+/**
+ * Send message received notification
+ * @param {number} receiverId - User ID who received the message
+ * @param {Object} messageData - Message information
+ * @param {Object} senderData - Sender information
+ */
+export const notifyMessageReceived = async (receiverId, messageData, senderData) => {
+  const safeSenderName = senderData?.first_name && senderData?.last_name 
+    ? `${senderData.first_name} ${senderData.last_name}` 
+    : senderData?.email || 'Unknown sender';
+  const safeMessageContent = messageData?.content || 'No content';
+  const safeCaseId = messageData?.caseId || null;
+  const truncatedContent = safeMessageContent.length > 50 
+    ? safeMessageContent.substring(0, 50) + '...' 
+    : safeMessageContent;
+  
+  return await createNotification({
+    userId: receiverId,
+    type: NotificationTypes.MESSAGE_RECEIVED,
+    priority: NotificationPriority.MEDIUM,
+    title: `New Message from ${safeSenderName}`,
+    message: `You have received a new message: "${truncatedContent}"`,
+    actionType: 'message_received',
+    entityId: messageData?.id || null,
+    entityType: 'message',
+    metadata: {
+      senderId: senderData?.id,
+      senderName: safeSenderName,
+      conversationId: messageData?.conversationId,
+      caseId: safeCaseId,
+      messageType: messageData?.messageType || 'text',
+    },
+    sendEmail: false, // Typically don't send emails for messages to avoid spam
+  });
+};
+
+export const notifyTaskAssigned = async (userId, taskData) => {
+  const safeTitle = taskData?.title || 'Unknown Task';
+  const safeDueDate = taskData?.due_date ? new Date(taskData.due_date).toLocaleDateString() : 'No deadline';
+  const safePriority = taskData?.priority || 'medium';
+
+  return await createNotification({
+    userId,
+    type: NotificationTypes.INFO,
+    priority: safePriority === 'high' ? NotificationPriority.HIGH : NotificationPriority.MEDIUM,
+    title: `New Task Assigned: ${safeTitle}`,
+    message: `You have been assigned a new task "${safeTitle}". Deadline: ${safeDueDate}.`,
+    actionType: 'task_assigned',
+    entityId: taskData?.id || null,
+    entityType: 'task',
+    metadata: {
+      taskId: taskData?.id,
+      title: safeTitle,
+      dueDate: taskData?.due_date,
+      priority: safePriority,
+    },
+    sendEmail: true,
+  });
+};
+
 export default {
   createNotification,
   createBulkNotifications,
@@ -761,6 +821,7 @@ export default {
   NotificationPriority,
   // Event helpers
   notifyCaseAssigned,
+  notifyTaskAssigned,
   notifyCaseStatusChanged,
   notifyPaymentReceived,
   notifyPaymentOverdue,
@@ -771,5 +832,6 @@ export default {
   notifyUserCreated,
   notifySLABreach,
   notifySystemMaintenance,
+  notifyMessageReceived,
   createNotificationForAllUsers,
 };

@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 
 const { Document, User, Case } = db;
+import { notifyDocumentUploaded, notifyDocumentReviewed } from '../services/notification.service.js';
 
 // Upload documents with system-generated document names
 export const uploadDocuments = async (req, res) => {
@@ -121,8 +122,47 @@ export const uploadDocuments = async (req, res) => {
         documentCategory: document.documentCategory,
         fileSize: document.fileSize,
         mimeType: document.mimeType,
+        mimeType: document.mimeType,
         documentUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/uploads/${documentCategory}/${userId}/${systemDocumentName}` 
       });
+
+      // Send document upload notifications
+      try {
+        const uploaderName = `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() || req.user.email || 'A user';
+        let caseData = null;
+        let caseworkers = [];
+        
+        if (caseId) {
+          caseData = await Case.findByPk(caseId);
+          if (caseData && caseData.assignedcaseworkerId) {
+            caseworkers = Array.isArray(caseData.assignedcaseworkerId) 
+              ? caseData.assignedcaseworkerId 
+              : [caseData.assignedcaseworkerId];
+          }
+        }
+
+        const docNotificationData = {
+          id: document.id,
+          fileName: file.originalname,
+          caseId: caseData ? caseData.caseId : null,
+          uploadedBy: uploaderName
+        };
+
+        // If a case is attached, notify the caseworkers
+        for (const cwId of caseworkers) {
+          // don't notify the person who uploaded it
+          if (cwId !== req.user.userId) {
+             await notifyDocumentUploaded(cwId, docNotificationData);
+          }
+        }
+
+        // If uploaded by someone other than the user, notify the candidate/sponsor user
+        if (userId !== req.user.userId) {
+          await notifyDocumentUploaded(userId, docNotificationData);
+        }
+      } catch (notifErr) {
+        console.error("Failed to send document upload notification:", notifErr);
+      }
     }
 
     res.status(201).json({
@@ -413,6 +453,26 @@ export const updateDocumentStatus = async (req, res) => {
       reviewedBy: req.user.userId,
       reviewedAt: new Date()
     });
+
+    // Notify candidate/user about document review
+    try {
+      let caseData = null;
+      if (document.caseId) {
+        caseData = await Case.findByPk(document.caseId);
+      }
+      const docNotificationData = {
+        id: document.id,
+        fileName: document.userFileName || document.documentName,
+        caseId: caseData ? caseData.caseId : null,
+      };
+      
+      // Notify the owner of the document
+      if (document.userId !== req.user.userId) {
+        await notifyDocumentReviewed(document.userId, docNotificationData, status);
+      }
+    } catch (notifErr) {
+      console.error("Failed to send document review notification:", notifErr);
+    }
 
     res.status(200).json({
       status: "success",
