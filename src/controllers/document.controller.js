@@ -228,7 +228,7 @@ export const getCaseDocuments = async (req, res) => {
     const documentsWithUrls = documents.rows.map(doc => {
       const docData = doc.toJSON();
       const filename = docData.documentPath.split('\\').pop().split('/').pop();
-      docData.documentUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/uploads/${docData.documentCategory}/${docData.userId}/${filename}`;
+      docData.documentUrl = `${process.env.BASE_URL}`;
       return docData;
     });
 
@@ -296,7 +296,7 @@ export const getDocumentById = async (req, res) => {
       data: {
         document: {
           ...document.toJSON(),
-          documentUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/uploads/${document.documentCategory}/${document.userId}/${document.documentName}`
+          documentUrl: `${process.env.BASE_URL}`
         }
       }
     });
