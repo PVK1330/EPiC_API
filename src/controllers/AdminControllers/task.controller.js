@@ -1,12 +1,16 @@
 import db from "../../models/index.js";
 import { ROLES } from "../../middlewares/role.middleware.js";
+import { notifyTaskAssigned } from "../../services/notification.service.js";
 
 const Task = db.Task;
 const User = db.User;
 const Case = db.Case;
 
+// Constants
 const PRIORITIES = ["low", "medium", "high"];
 const STATUSES = ["pending", "in-progress", "completed"];
+const FILTER_OPTIONS = ["all", "today_due", "overdue", "completed"];
+
 
 function fullName(user) {
   if (!user) return null;
@@ -25,16 +29,37 @@ function userInclude(as) {
   };
 }
 
+function caseInclude() {
+  return {
+    model: Case,
+    as: "case",
+    attributes: ["id", "caseId", "candidateId", "sponsorId"],
+    include: [
+      {
+        model: User,
+        as: "candidate",
+        attributes: ["id", "first_name", "last_name"],
+      },
+    ],
+    required: false,
+  };
+}
+
 function mapTask(task) {
   const plain = task.get ? task.get({ plain: true }) : { ...task };
   const assignee = plain.assignee;
   const creator = plain.creator;
+  const caseData = plain.case;
   delete plain.assignee;
   delete plain.creator;
+  delete plain.case;
+  
   return {
     ...plain,
     assigned_to_name: fullName(assignee),
     assigned_by_name: fullName(creator),
+    case_number: caseData?.caseId || null,
+    candidate_name: caseData?.candidate ? fullName(caseData.candidate) : null,
   };
 }
 
@@ -173,6 +198,15 @@ export const createTask = async (req, res) => {
     const withUsers = await Task.findByPk(created.id, {
       include: [userInclude("assignee"), userInclude("creator")],
     });
+
+    // Notify assigned user if assigned to someone else
+    if (assigned_to !== userId) {
+      try {
+        await notifyTaskAssigned(assigned_to, created);
+      } catch (notifErr) {
+        console.error("Failed to notify user about assigned task:", notifErr);
+      }
+    }
 
     res.status(201).json({
       status: "success",
@@ -575,6 +609,121 @@ export const deleteTask = async (req, res) => {
     });
   } catch (error) {
     console.error("Delete Task Error:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error",
+      data: null,
+      error: error.message,
+    });
+  }
+};
+
+
+export const getTasksByUserId = async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({
+        status: "error",
+        message: "User not authenticated",
+        data: null,
+      });
+    }
+
+    const { search, filter = "all", page = 1, limit = 10 } = req.query;
+
+    // Validate filter
+    if (!FILTER_OPTIONS.includes(filter)) {
+      return res.status(400).json({
+        status: "error",
+        message: `filter must be one of: ${FILTER_OPTIONS.join(", ")}`,
+        data: null,
+      });
+    }
+
+    const where = { assigned_to: userId };
+
+    // Search filter
+    if (search && search.trim() !== "") {
+      where.title = {
+        [db.Sequelize.Op.iLike]: `%${search.trim()}%`,
+      };
+    }
+
+    // Date/status based filters
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (filter === "overdue") {
+      // Past due date, not completed
+      where.due_date = { [db.Sequelize.Op.lt]: today };
+      where.status = { [db.Sequelize.Op.ne]: "completed" };
+
+    } else if (filter === "today_due") {
+      // Due today, not completed
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      where.due_date = {
+        [db.Sequelize.Op.gte]: today,
+        [db.Sequelize.Op.lt]: tomorrow,
+      };
+      where.status = { [db.Sequelize.Op.ne]: "completed" };
+
+    } else if (filter === "completed") {
+      // Status-based only
+      where.status = "completed";
+
+    }
+    // filter === "all" → no extra where conditions
+
+    // Pagination validation
+    const pageNum = parseInt(page, 10);
+    const limitNum = parseInt(limit, 10);
+
+    if (Number.isNaN(pageNum) || pageNum < 1) {
+      return res.status(400).json({
+        status: "error",
+        message: "page must be a positive integer",
+        data: null,
+      });
+    }
+
+    if (Number.isNaN(limitNum) || limitNum < 1 || limitNum > 100) {
+      return res.status(400).json({
+        status: "error",
+        message: "limit must be a positive integer between 1 and 100",
+        data: null,
+      });
+    }
+
+    const offset = (pageNum - 1) * limitNum;
+
+    const { count, rows } = await Task.findAndCountAll({
+      where,
+      include: [userInclude("assignee"), userInclude("creator"), caseInclude()],
+      order: [["due_date", "ASC"], ["id", "DESC"]],
+      limit: limitNum,
+      offset,
+    });
+
+    const totalPages = Math.ceil(count / limitNum);
+
+    res.status(200).json({
+      status: "success",
+      message: "Tasks retrieved successfully",
+      data: {
+        tasks: rows.map(mapTask),
+        pagination: {
+          total: count,
+          page: pageNum,
+          limit: limitNum,
+          totalPages,
+        },
+        applied_filter: filter,
+      },
+    });
+  } catch (error) {
+    console.error("Get Tasks by User ID Error:", error);
     res.status(500).json({
       status: "error",
       message: "Internal server error",

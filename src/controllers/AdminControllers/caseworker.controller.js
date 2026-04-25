@@ -10,11 +10,233 @@ import { generateStrongPassword } from "../../utils/passwordGenerator.js";
 const User = db.User;
 const Role = db.Role;
 const CaseworkerProfile = db.CaseworkerProfile;
+const Department = db.Department;
 
 const CASEWORKER_ROLE = ROLES.CASEWORKER;
 
 // Multer configuration for file upload
 const upload = multer({ storage: multer.memoryStorage() });
+
+// Get All Departments
+export const getDepartments = async (req, res) => {
+  try {
+    const departments = await Department.findAll({
+      where: { is_active: true },
+      order: [['name', 'ASC']],
+      attributes: ['name'],
+      raw: true
+    });
+
+    const departmentList = departments
+      .map(d => d.name)
+      .filter(d => d && d.trim() !== '')
+      .sort();
+
+    res.status(200).json({
+      status: "success",
+      message: "Departments retrieved successfully",
+      data: {
+        departments: departmentList
+      }
+    });
+  } catch (error) {
+    console.error("Error fetching departments:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Failed to fetch departments",
+      error: error.message
+    });
+  }
+};
+
+// Create Department
+export const createDepartment = async (req, res) => {
+  try {
+    const { name } = req.body;
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({
+        status: "error",
+        message: "Department name is required"
+      });
+    }
+
+    const trimmedName = name.trim();
+
+    // Check if department already exists
+    const existing = await Department.findOne({
+      where: { name: trimmedName }
+    });
+
+    if (existing) {
+      return res.status(400).json({
+        status: "error",
+        message: "Department already exists"
+      });
+    }
+
+    // Create the department
+    const department = await Department.create({
+      name: trimmedName,
+      is_active: true
+    });
+
+    res.status(201).json({
+      status: "success",
+      message: "Department created successfully",
+      data: {
+        department: department.name
+      }
+    });
+  } catch (error) {
+    console.error("Error creating department:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Failed to create department",
+      error: error.message
+    });
+  }
+};
+//department dropdown api
+export const departmentDropdown = async (req, res) => {
+  try {
+    const departments = await Department.findAll({
+      where: { is_active: true },
+      order: [['name', 'ASC']],
+      attributes: ['id', 'name'],
+      raw: true
+    });
+
+    const departmentList = departments
+      .filter(d => d.name && d.name.trim() !== '');
+
+    res.status(200).json({
+      status: "success",
+      message: "Departments retrieved successfully",
+      data: {
+        departments: departmentList
+      }
+    });
+  } catch (error) {
+    console.error("Error fetching departments:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Failed to fetch departments",
+      error: error.message
+    });
+  }
+};
+// Update Department
+export const updateDepartment = async (req, res) => {
+  try {
+    const { oldName, newName } = req.body;
+
+    if (!oldName || !newName || !oldName.trim() || !newName.trim()) {
+      return res.status(400).json({
+        status: "error",
+        message: "Old name and new name are required"
+      });
+    }
+
+    if (oldName.trim() === newName.trim()) {
+      return res.status(400).json({
+        status: "error",
+        message: "New name must be different from old name"
+      });
+    }
+
+    // Find the department by old name
+    const department = await Department.findOne({
+      where: { name: oldName.trim() }
+    });
+
+    if (!department) {
+      return res.status(404).json({
+        status: "error",
+        message: "Department not found"
+      });
+    }
+
+    // Update the department name
+    await department.update({ name: newName.trim() });
+
+    // Update all caseworker profiles with the old department name
+    const updated = await CaseworkerProfile.update(
+      { department: newName.trim() },
+      { where: { department: oldName.trim() } }
+    );
+
+    res.status(200).json({
+      status: "success",
+      message: "Department updated successfully",
+      data: {
+        oldName: oldName.trim(),
+        newName: newName.trim(),
+        affectedCaseworkers: updated[0]
+      }
+    });
+  } catch (error) {
+    console.error("Error updating department:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Failed to update department",
+      error: error.message
+    });
+  }
+};
+
+// Delete Department
+export const deleteDepartment = async (req, res) => {
+  try {
+    const { name } = req.body;
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({
+        status: "error",
+        message: "Department name is required"
+      });
+    }
+
+    // Check if any caseworkers have this department
+    const count = await CaseworkerProfile.count({
+      where: { department: name.trim() }
+    });
+
+    if (count > 0) {
+      return res.status(400).json({
+        status: "error",
+        message: `Cannot delete department. ${count} caseworker(s) are assigned to this department.`
+      });
+    }
+
+    // Find the department
+    const department = await Department.findOne({
+      where: { name: name.trim() }
+    });
+
+    if (!department) {
+      return res.status(404).json({
+        status: "error",
+        message: "Department not found"
+      });
+    }
+
+    // Delete the department (soft delete by setting is_active to false)
+    await department.update({ is_active: false });
+
+    res.status(200).json({
+      status: "success",
+      message: "Department deleted successfully"
+    });
+  } catch (error) {
+    console.error("Error deleting department:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Failed to delete department",
+      error: error.message
+    });
+  }
+};
 
 export const uploadMiddleware = upload.single('file');
 
@@ -303,7 +525,7 @@ export const getAllCaseworkers = async (req, res) => {
     const includeClause = caseworkerInclude();
     
     if (department) {
-      includeClause[1].where = { department: { [Op.iLike]: `%${department}%` } };
+      includeClause[1].where = { department: { [Op.like]: `%${department}%` } };
       includeClause[1].required = true;
     }
 
@@ -327,29 +549,33 @@ export const getAllCaseworkers = async (req, res) => {
     });
 
     // Add performance metrics to each caseworker
-    const caseworkersWithMetrics = await Promise.all(
-      caseworkers.map(async (caseworker) => {
-        const cases = await db.Case.findAll({
-          where: { assignedcaseworkerId: { [Op.contains]: [caseworker.id] } }
-        });
+    const allCases = await db.Case.findAll({
+      where: { deleted_at: null },
+      attributes: ['id', 'status', 'assignedcaseworkerId']
+    });
 
-        const totalCases = cases.length;
-        const completedCases = cases.filter(c => c.status === 'completed').length;
-        const inProgressCases = cases.filter(c => c.status === 'in_progress').length;
-        const pendingCases = cases.filter(c => c.status === 'pending').length;
+    const caseworkersWithMetrics = caseworkers.map((caseworker) => {
+      const assignedCases = allCases.filter(c => {
+        const assignedIds = Array.isArray(c.assignedcaseworkerId) ? c.assignedcaseworkerId : [];
+        return assignedIds.includes(caseworker.id);
+      });
 
-        const caseworkerData = caseworker.toJSON();
-        caseworkerData.performance = {
-          totalCases,
-          completedCases,
-          inProgressCases,
-          pendingCases,
-          completionRate: totalCases > 0 ? (completedCases / totalCases * 100).toFixed(2) : 0
-        };
+      const totalCases = assignedCases.length;
+      const completedCases = assignedCases.filter(c => c.status === 'completed').length;
+      const inProgressCases = assignedCases.filter(c => c.status === 'in_progress').length;
+      const pendingCases = assignedCases.filter(c => c.status === 'pending').length;
 
-        return caseworkerData;
-      })
-    );
+      const caseworkerData = caseworker.toJSON();
+      caseworkerData.performance = {
+        totalCases,
+        completedCases,
+        inProgressCases,
+        pendingCases,
+        completionRate: totalCases > 0 ? (completedCases / totalCases * 100).toFixed(2) : 0
+      };
+
+      return caseworkerData;
+    });
 
     res.status(200).json({
       status: "success",
@@ -714,7 +940,7 @@ export const exportCaseworkers = async (req, res) => {
     const includeClause = caseworkerInclude();
     
     if (department) {
-      includeClause[1].where = { department: { [Op.iLike]: `%${department}%` } };
+      includeClause[1].where = { department: { [Op.like]: `%${department}%` } };
       includeClause[1].required = true;
     }
 
@@ -735,7 +961,7 @@ export const exportCaseworkers = async (req, res) => {
     });
 
     // Generate CSV
-    const csvHeader = ['ID', 'First Name', 'Last Name', 'Email', 'Country Code', 'Mobile', 'Department', 'Status', 'Created At'];
+    const csvHeader = ['ID', 'First Name', 'Last Name', 'Email', 'Country Code', 'Mobile', 'Role', 'Department', 'Status', 'Created At'];
     const csvRows = caseworkers.map(caseworker => [
       caseworker.id,
       caseworker.first_name,
@@ -743,7 +969,8 @@ export const exportCaseworkers = async (req, res) => {
       caseworker.email,
       caseworker.country_code,
       caseworker.mobile,
-      caseworker.CaseworkerProfile?.department || 'N/A',
+      caseworker.role?.name || 'N/A',
+      caseworker.caseworkerProfile?.department || 'N/A',
       caseworker.status,
       caseworker.createdAt.toISOString()
     ]);

@@ -10,8 +10,9 @@ router.use(checkRole([ROLES.ADMIN, ROLES.CASEWORKER]));
 
 router.post("/", taskController.createTask);
 router.get("/", taskController.getTasks);
-router.get("/:id", taskController.getTaskById);
 router.get("/case/:id", taskController.getTaskByCaseId);
+router.get("/assign", taskController.getTasksByUserId);
+router.get("/:id", taskController.getTaskById);
 router.put("/:id", taskController.updateTask);
 router.delete("/:id", taskController.deleteTask);
 

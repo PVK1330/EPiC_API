@@ -1,5 +1,6 @@
 import db from "../../models/index.js";
 import { Op } from "sequelize";
+import { notifyEscalationCreated, notifyEscalationResolved } from "../../services/notification.service.js";
 
 const { Escalation, User, Case } = db;
 
@@ -43,6 +44,20 @@ export const createEscalation = async (req, res) => {
       notes,
       relatedCaseId,
     });
+
+    // Send notification to assigned admin
+    if (assignedAdminId) {
+      try {
+        await notifyEscalationCreated(assignedAdminId, {
+          id: escalation.id,
+          title: trigger,
+          caseId: caseId,
+          priority: severity,
+        });
+      } catch (notifError) {
+        console.error('Failed to send escalation notification:', notifError);
+      }
+    }
 
     res.status(201).json({
       status: "success",
@@ -198,6 +213,8 @@ export const updateEscalation = async (req, res) => {
       }
     }
 
+    const oldStatus = escalation.status;
+
     const updateData = {
       severity: severity || escalation.severity,
       trigger: trigger || escalation.trigger,
@@ -216,6 +233,29 @@ export const updateEscalation = async (req, res) => {
     }
 
     await escalation.update(updateData);
+
+    // Send notification when escalation is resolved
+    if (status && (status === "Resolved" || status === "Closed") && oldStatus !== status) {
+      const userIdsToNotify = [];
+      if (escalation.assignedAdminId) userIdsToNotify.push(escalation.assignedAdminId);
+      // Also notify the admin who resolved it
+      if (req.user.userId && !userIdsToNotify.includes(req.user.userId)) {
+        userIdsToNotify.push(req.user.userId);
+      }
+      
+      if (userIdsToNotify.length > 0) {
+        try {
+          await notifyEscalationResolved(userIdsToNotify, {
+            id: escalation.id,
+            title: escalation.trigger,
+            caseId: escalation.caseId,
+            resolution: notes || 'Escalation resolved',
+          });
+        } catch (notifError) {
+          console.error('Failed to send escalation resolved notification:', notifError);
+        }
+      }
+    }
 
     const updatedEscalation = await Escalation.findByPk(id, {
       include: [

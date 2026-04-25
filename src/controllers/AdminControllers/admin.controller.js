@@ -18,6 +18,7 @@ export const createAdmin = async (req, res) => {
       country_code,
       mobile,
       role_id = 1, // Default to Admin role
+      status = 'active',
       password,
       confirm_password
     } = req.body;
@@ -96,11 +97,11 @@ export const createAdmin = async (req, res) => {
       email,
       country_code,
       mobile,
-      role_id:1,
+      role_id: role_id || 1,
       password: hashedPassword,
       is_email_verified: true, // Auto-verify for admin-created accounts
       is_otp_verified: true, // Auto-verify for admin login
-      status: 'active'
+      status: status || 'active'
     });
 
     let emailSent = false;
@@ -548,7 +549,7 @@ export const exportAdmins = async (req, res) => {
       admin.email,
       admin.country_code,
       admin.mobile,
-      admin.Role?.name || 'N/A',
+      admin.role?.name || 'N/A',
       admin.status,
       admin.createdAt.toISOString()
     ]);

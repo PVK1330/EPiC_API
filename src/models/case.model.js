@@ -27,6 +27,14 @@ const CaseModel = (sequelize, DataTypes) => {
         key: 'id'
       }
     },
+    businessId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: 'users',
+        key: 'id'
+      }
+    },
 
     visaTypeId: {
       type: DataTypes.INTEGER,
@@ -49,7 +57,23 @@ const CaseModel = (sequelize, DataTypes) => {
       defaultValue: "medium",
     },
     status: {
-      type: DataTypes.ENUM('Lead', 'Pending', 'In Progress', 'Completed', 'On Hold', 'Cancelled'),
+      type: DataTypes.ENUM(
+        'Lead',
+        'Pending',
+        'Docs Pending',
+        'Drafting',
+        'Submitted',
+        'Decision',
+        'In Progress',
+        'Completed',
+        'On Hold',
+        'Cancelled',
+        'Under Review',
+        'Overdue',
+        'Approved',
+        'Rejected',
+        'Closed'
+      ),
       defaultValue: "Lead",
     },
     submitted: {
@@ -76,14 +100,19 @@ const CaseModel = (sequelize, DataTypes) => {
       type: DataTypes.STRING,
       allowNull: true,
     },
-    department: {
-      type: DataTypes.STRING,
+    departmentId: {
+      type: DataTypes.INTEGER,
       allowNull: true,
+      references: {
+        model: 'departments',
+        key: 'id'
+      }
     },
 
     assignedcaseworkerId: {
-      type: DataTypes.JSON,
+      type: DataTypes.JSONB,
       allowNull: true,
+      field: '"assignedcaseworkerId"',
       comment: "Array of caseworker IDs assigned to this case"
     },
     salaryOffered: {
@@ -129,11 +158,18 @@ const CaseModel = (sequelize, DataTypes) => {
       defaultValue: "Initial",
       comment: "Current stage of the case"
     },
+    deleted_at: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      comment: "Soft delete timestamp"
+    }
   }, {
     tableName: 'cases',
     timestamps: true,
     createdAt: 'created_at',
-    updatedAt: 'updated_at'
+    updatedAt: 'updated_at',
+    paranoid: true,
+    deletedAt: 'deleted_at'
   });
 
   return Case;

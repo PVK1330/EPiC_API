@@ -15,20 +15,27 @@ export const getRbacOverview = async (req, res) => {
     const usersCount = await User.count();
 
     // Get users by role
-    const usersByRole = await Role.findAll({
-      attributes: ["id", "name"],
+    const usersByRole = await User.findAll({
+      attributes: [
+        [db.sequelize.col('role.id'), 'roleId'],
+        [db.sequelize.col('role.name'), 'roleName'],
+        [db.sequelize.fn('COUNT', db.sequelize.col('User.id')), 'userCount']
+      ],
       include: [
         {
-          model: User,
-          attributes: ["id"],
-        },
+          model: Role,
+          as: 'role',
+          attributes: []
+        }
       ],
+      group: ['role.id', 'role.name'],
+      raw: true
     });
 
     const usersByRoleData = usersByRole.map((role) => ({
-      roleId: role.id,
-      roleName: role.name,
-      userCount: role.Users?.length || 0,
+      roleId: role.roleId,
+      roleName: role.roleName,
+      userCount: parseInt(role.userCount) || 0,
     }));
 
     // Get permissions by module
@@ -43,7 +50,7 @@ export const getRbacOverview = async (req, res) => {
       count: parseInt(p.dataValues.count),
     }));
 
-    // Get role permissions count
+    // Get role permission counts
     const rolePermissionsCountData = await Role.findAll({
       attributes: ["id", "name"],
       include: [
@@ -51,6 +58,7 @@ export const getRbacOverview = async (req, res) => {
           model: Permission,
           as: "permissions",
           attributes: ["id"],
+          through: { attributes: [] },
         },
       ],
     });
@@ -98,10 +106,8 @@ export const getRbacMatrix = async (req, res) => {
       order: [["module", "ASC"], ["action", "ASC"]],
     });
 
-    // Get all role permissions
     const rolePermissions = await RolePermission.findAll();
 
-    // Build matrix
     const matrix = roles.map((role) => {
       const rolePermIds = rolePermissions
         .filter((rp) => rp.role_id === role.id)
@@ -112,6 +118,7 @@ export const getRbacMatrix = async (req, res) => {
         permissionName: perm.name,
         module: perm.module,
         action: perm.action,
+        resource: perm.resource,
         hasPermission: rolePermIds.includes(perm.id),
       }));
 
@@ -122,7 +129,6 @@ export const getRbacMatrix = async (req, res) => {
       };
     });
 
-    // Group permissions by module
     const modules = [...new Set(permissions.map((p) => p.module))];
 
     res.status(200).json({
@@ -172,11 +178,12 @@ export const getUsersWithRolesAndPermissions = async (req, res) => {
       include: [
         {
           model: Role,
-          attributes: ["id", "name"],
+          as: "role",    // ← correct lowercase alias
           include: [
             {
               model: Permission,
               as: "permissions",
+              through: { attributes: [] },
             },
           ],
         },
@@ -185,7 +192,7 @@ export const getUsersWithRolesAndPermissions = async (req, res) => {
     });
 
     const usersData = users.map((user) => {
-      const groupedPermissions = user.Role?.permissions?.reduce((acc, perm) => {
+      const groupedPermissions = user.role?.permissions?.reduce((acc, perm) => {
         if (!acc[perm.module]) {
           acc[perm.module] = [];
         }
@@ -200,12 +207,12 @@ export const getUsersWithRolesAndPermissions = async (req, res) => {
         email: user.email,
         status: user.status,
         role: {
-          id: user.Role?.id,
-          name: user.Role?.name,
+          id: user.role?.id,
+          name: user.role?.name,
         },
         permissions: groupedPermissions,
         permissionModules: Object.keys(groupedPermissions),
-        totalPermissions: user.Role?.permissions?.length || 0,
+        totalPermissions: user.role?.permissions?.length || 0,
       };
     });
 
@@ -221,14 +228,14 @@ export const getUsersWithRolesAndPermissions = async (req, res) => {
     console.error("Get Users with Roles and Permissions Error:", error);
     res.status(500).json({
       status: "error",
-      message: "Internal server error",
+      message: "Failed to fetch users with roles and permissions",
       data: null,
       error: error.message,
     });
   }
 };
 
-// Get permission audit trail - who has what permissions
+// Get permission audit trail
 export const getPermissionAudit = async (req, res) => {
   try {
     const { permissionId } = req.params;
@@ -238,10 +245,11 @@ export const getPermissionAudit = async (req, res) => {
         {
           model: Role,
           as: "roles",
+          through: { attributes: [] },
           include: [
             {
               model: User,
-              as: 'role',
+              as: "users",
               attributes: ["id", "first_name", "last_name", "email", "status"],
             },
           ],
@@ -260,13 +268,13 @@ export const getPermissionAudit = async (req, res) => {
     const auditData = permission.roles.map((role) => ({
       roleId: role.id,
       roleName: role.name,
-      userCount: role.Users?.length || 0,
-      users: role.Users?.map((user) => ({
+      userCount: role.users?.length || 0,
+      users: role.users?.map((user) => ({
         id: user.id,
         name: `${user.first_name} ${user.last_name}`,
         email: user.email,
         status: user.status,
-      })),
+      })) || [],
     }));
 
     res.status(200).json({
@@ -305,12 +313,12 @@ export const getOrphanPermissions = async (req, res) => {
 
     const assignedIds = assignedPermissionIds.map((rp) => rp.permission_id);
 
+    const whereClause = assignedIds.length > 0
+      ? { id: { [Op.notIn]: assignedIds } }
+      : {};
+
     const orphanPermissions = await Permission.findAll({
-      where: {
-        id: {
-          [Op.notIn]: assignedIds,
-        },
-      },
+      where: whereClause,
       order: [["module", "ASC"], ["action", "ASC"]],
     });
 
@@ -341,6 +349,7 @@ export const getRolesWithoutPermissions = async (req, res) => {
         {
           model: Permission,
           as: "permissions",
+          through: { attributes: [] },
         },
       ],
     });
@@ -374,10 +383,12 @@ export const getRolesWithoutPermissions = async (req, res) => {
 
 // Bulk assign permissions to multiple roles
 export const bulkAssignPermissions = async (req, res) => {
+  const t = await db.sequelize.transaction();
   try {
     const { roleIds, permissionIds } = req.body;
 
     if (!roleIds || !Array.isArray(roleIds) || roleIds.length === 0) {
+      await t.rollback();
       return res.status(400).json({
         status: "error",
         message: "roleIds array is required",
@@ -386,6 +397,7 @@ export const bulkAssignPermissions = async (req, res) => {
     }
 
     if (!permissionIds || !Array.isArray(permissionIds) || permissionIds.length === 0) {
+      await t.rollback();
       return res.status(400).json({
         status: "error",
         message: "permissionIds array is required",
@@ -393,12 +405,23 @@ export const bulkAssignPermissions = async (req, res) => {
       });
     }
 
-    // Verify all roles exist
+    // Validate all role IDs are integers
+    if (!roleIds.every((id) => Number.isInteger(Number(id)))) {
+      await t.rollback();
+      return res.status(400).json({
+        status: "error",
+        message: "roleIds must be integers",
+        data: null,
+      });
+    }
+
     const roles = await Role.findAll({
       where: { id: { [Op.in]: roleIds } },
+      transaction: t,
     });
 
     if (roles.length !== roleIds.length) {
+      await t.rollback();
       return res.status(404).json({
         status: "error",
         message: "One or more roles not found",
@@ -406,12 +429,13 @@ export const bulkAssignPermissions = async (req, res) => {
       });
     }
 
-    // Verify all permissions exist
     const permissions = await Permission.findAll({
       where: { id: { [Op.in]: permissionIds } },
+      transaction: t,
     });
 
     if (permissions.length !== permissionIds.length) {
+      await t.rollback();
       return res.status(404).json({
         status: "error",
         message: "One or more permissions not found",
@@ -419,23 +443,23 @@ export const bulkAssignPermissions = async (req, res) => {
       });
     }
 
-    // Remove existing role permissions for these roles
     await RolePermission.destroy({
       where: { role_id: { [Op.in]: roleIds } },
+      transaction: t,
     });
 
-    // Create new role permissions
     const rolePermissions = [];
     for (const roleId of roleIds) {
       for (const permissionId of permissionIds) {
         rolePermissions.push({
-          role_id: roleId,
-          permission_id: permissionId,
+          role_id: Number(roleId),
+          permission_id: Number(permissionId),
         });
       }
     }
 
-    await RolePermission.bulkCreate(rolePermissions);
+    await RolePermission.bulkCreate(rolePermissions, { transaction: t });
+    await t.commit();
 
     res.status(200).json({
       status: "success",
@@ -447,6 +471,7 @@ export const bulkAssignPermissions = async (req, res) => {
       },
     });
   } catch (error) {
+    await t.rollback();
     console.error("Bulk Assign Permissions Error:", error);
     res.status(500).json({
       status: "error",
@@ -456,4 +481,3 @@ export const bulkAssignPermissions = async (req, res) => {
     });
   }
 };
-

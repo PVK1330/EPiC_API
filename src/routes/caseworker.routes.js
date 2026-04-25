@@ -7,6 +7,7 @@ const router = Router();
 
 // Apply authentication middleware to all routes
 router.use(verifyToken);
+router.get("/departments/dropdown", checkRole([ROLES.ADMIN, ROLES.CASEWORKER]), caseworkerController.departmentDropdown);
 
 // Apply role-based access control - Only Admin can manage caseworkers
 router.use(checkRole([ROLES.ADMIN]));
@@ -16,9 +17,15 @@ router.post("/", checkPermission('admin.caseworkers.create'), caseworkerControll
 
 // READ Operations
 router.get("/", checkPermission('admin.caseworkers.view'), caseworkerController.getAllCaseworkers);
+router.get("/departments", checkPermission('admin.caseworkers.view'), caseworkerController.getDepartments);
 router.get("/export", checkPermission('admin.caseworkers.view'), caseworkerController.exportCaseworkers);
 router.get("/:id", checkPermission('admin.caseworkers.view'), caseworkerController.getCaseworkerById);
 router.get("/:id/performance-report", checkPermission('admin.caseworkers.view'), caseworkerController.getPerformanceReport);
+
+// Department Management
+router.post("/departments/create", checkPermission('admin.caseworkers.update'), caseworkerController.createDepartment);
+router.put("/departments/update", checkPermission('admin.caseworkers.update'), caseworkerController.updateDepartment);
+router.post("/departments/delete", checkPermission('admin.caseworkers.delete'), caseworkerController.deleteDepartment);
 
 // UPDATE Operations
 router.put("/:id", checkPermission('admin.caseworkers.update'), caseworkerController.updateCaseworker);

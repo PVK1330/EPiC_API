@@ -12,16 +12,20 @@ export default (sequelize, DataTypes) => {
         allowNull: false,
         unique: true,
       },
+      description: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
       status: {
-        type: DataTypes.ENUM('active', 'inactive'),
+        type: DataTypes.ENUM("active", "inactive"),
         allowNull: false,
-        defaultValue: 'active',
+        defaultValue: "active",
       },
     },
     {
       tableName: "roles",
       timestamps: true,
-    }
+    },
   );
 
   return Role;

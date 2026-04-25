@@ -8,8 +8,6 @@ const router = Router();
 // Require authentication for all routes
 router.use(verifyToken);
 
-// Apply role-based access control if needed (Admins, Caseworkers, etc. can manage cases)
-// Adjust as per business logic, allowing Admin and Caseworker. Let's allow ADMIN initially, or both.
 router.use(checkRole([ROLES.ADMIN, ROLES.CASEWORKER]));
 
 // Custom Pipeline & Metrics routes MUST come before /:id routes
@@ -17,11 +15,12 @@ router.get("/pipeline", caseController.getPipelineCases);
 router.get("/capacity", caseController.getTeamCapacity);
 router.patch("/:id/assign", caseController.assignCase);
 router.patch("/:id/stage", caseController.updatePipelineStage);
-
+router.get("/export", caseController.exportCases);
 // CRUD Operations
 router.post("/", caseController.createCase);
 router.get("/filtered", caseController.getCasesWithFilters);
 router.get("/", caseController.getAllCases);
+router.get("/dropdown", caseController.getCasesDropdown);
 router.get("/:id", caseController.getCaseById);
 router.put("/:id", caseController.updateCase);
 router.delete("/:id", caseController.deleteCase);

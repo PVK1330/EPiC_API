@@ -1,7 +1,10 @@
 import db from "../../models/index.js";
 import { Op } from "sequelize";
+import { notifyCaseAssigned, notifyCaseStatusChanged } from "../../services/notification.service.js";
+import { recordAuditLog } from "../../services/audit.service.js";
 
 const Case = db.Case;
+const User = db.User;
 
 // Helper function to generate next case ID like #CAS-001 securely
 const generateCaseId = async () => {
@@ -36,7 +39,8 @@ export const createCase = async (req, res) => {
 
     const {
       candidateId,              // INTEGER - Foreign key to users table
-      sponsorId,                // INTEGER - Foreign key to users table  
+      sponsorId,                // INTEGER - Foreign key to users table
+      businessId,               // INTEGER - Foreign key to users table (business/sponsor)
       visaTypeId,
       petitionTypeId,
       priority,
@@ -50,7 +54,7 @@ export const createCase = async (req, res) => {
       notes,
       nationality,
       jobTitle,
-      department
+      departmentId
     } = req.body;
 
     const cwIds = Array.isArray(assignedcaseworkerId) ? assignedcaseworkerId : (assignedcaseworkerId ? [assignedcaseworkerId] : []);
@@ -99,6 +103,7 @@ export const createCase = async (req, res) => {
       caseId,
       candidateId,
       sponsorId,
+      businessId,
       visaTypeId,
       petitionTypeId,
       priority: priority || "medium",
@@ -109,12 +114,43 @@ export const createCase = async (req, res) => {
       receiptNumber,
       nationality,
       jobTitle,
-      department,
+      departmentId,
       assignedcaseworkerId: cwIds,
       salaryOffered: salaryOffered || 0,
       totalAmount: totalAmount || 0,
       paidAmount: paidAmount || 0,
       notes,
+    });
+
+    // Send notifications to assigned caseworkers
+    if (cwIds.length > 0) {
+      // Fetch visa type name for notification
+      const visaType = await db.VisaType.findByPk(visaTypeId);
+      const visaTypeName = visaType ? visaType.name : 'Not specified';
+      
+      const caseData = {
+        id: newCase.id,
+        caseId: newCase.caseId,
+        candidateName: `${candidate.first_name} ${candidate.last_name}`,
+        visaType: visaTypeName,
+      };
+      for (const caseworkerId of cwIds) {
+        try {
+          await notifyCaseAssigned(caseworkerId, caseData);
+        } catch (notifError) {
+          console.error('Failed to send notification to caseworker:', caseworkerId, notifError);
+        }
+      }
+    }
+
+    // Record Audit Log
+    await recordAuditLog({
+      userId: req.user?.userId, // Assumes user ID is in req.user from auth middleware
+      action: 'Case Created',
+      resource: `Case ${newCase.caseId}`,
+      status: 'Success',
+      details: `New case created for candidate ${candidate.first_name} ${candidate.last_name}`,
+      req
     });
 
     res.status(201).json({
@@ -387,8 +423,10 @@ export const getCaseById = async (req, res) => {
 export const updateCase = async (req, res) => {
   try {
     const { id } = req.params;
+    console.log("Update Case - Request received for ID:", id);
     
     const caseData = await Case.findOne({ where: { caseId: id } }) || await Case.findByPk(id);
+    console.log("Update Case - Found case:", caseData?.caseId);
 
     if (!caseData) {
       return res.status(404).json({
@@ -401,6 +439,7 @@ export const updateCase = async (req, res) => {
     const {
       candidateId,
       sponsorId,
+      businessId,
       visaTypeId,
       petitionTypeId,
       priority,
@@ -415,14 +454,18 @@ export const updateCase = async (req, res) => {
       notes,
       nationality,
       jobTitle,
-      department
+      departmentId,
     } = req.body;
 
     const cwIds = Array.isArray(assignedcaseworkerId) ? assignedcaseworkerId : (assignedcaseworkerId ? [assignedcaseworkerId] : []);
 
-    await caseData.update({
+    const oldStatus = caseData.status;
+    console.log("Update Case - Old status:", oldStatus, "New status:", status);
+
+    const updateData = {
       candidateId: candidateId !== undefined ? candidateId : caseData.candidateId,
       sponsorId: sponsorId !== undefined ? sponsorId : caseData.sponsorId,
+      businessId: businessId !== undefined ? businessId : caseData.businessId,
       visaTypeId: visaTypeId !== undefined ? visaTypeId : caseData.visaTypeId,
       petitionTypeId: petitionTypeId !== undefined ? petitionTypeId : caseData.petitionTypeId,
       priority: priority || caseData.priority,
@@ -432,13 +475,49 @@ export const updateCase = async (req, res) => {
       receiptNumber: receiptNumber !== undefined ? receiptNumber : caseData.receiptNumber,
       nationality: nationality !== undefined ? nationality : caseData.nationality,
       jobTitle: jobTitle !== undefined ? jobTitle : caseData.jobTitle,
-      department: department !== undefined ? department : caseData.department,
+      departmentId: departmentId !== undefined ? departmentId : caseData.departmentId,
       assignedcaseworkerId: cwIds.length > 0 ? cwIds : caseData.assignedcaseworkerId,
       salaryOffered: salaryOffered !== undefined ? salaryOffered : caseData.salaryOffered,
       totalAmount: totalAmount !== undefined ? totalAmount : caseData.totalAmount,
       paidAmount: paidAmount !== undefined ? paidAmount : caseData.paidAmount,
       notes: notes !== undefined ? notes : caseData.notes,
-    });
+    };
+    console.log("Update Case - Update data:", updateData);
+
+    await caseData.update(updateData);
+    console.log("Update Case - Update successful");
+
+    // Send status change notification if status changed
+    if (status && status !== oldStatus) {
+      try {
+        const candidate = await db.User.findByPk(caseData.candidateId);
+        const sponsor = await db.User.findByPk(caseData.sponsorId);
+        const userIdsToNotify = [];
+        
+        // Notify candidate
+        if (candidate) userIdsToNotify.push(candidate.id);
+        // Notify sponsor
+        if (sponsor) userIdsToNotify.push(sponsor.id);
+        // Notify assigned caseworkers
+        if (caseData.assignedcaseworkerId) {
+          userIdsToNotify.push(...caseData.assignedcaseworkerId);
+        }
+
+        if (userIdsToNotify.length > 0) {
+          try {
+            await notifyCaseStatusChanged(userIdsToNotify, {
+              id: caseData.id,
+              caseId: caseData.caseId,
+              candidateName: candidate ? `${candidate.first_name} ${candidate.last_name}` : 'Unknown',
+            }, oldStatus, status);
+          } catch (notifError) {
+            console.error('Failed to send status change notification:', notifError);
+          }
+        }
+      } catch (error) {
+        console.error('Error in notification process:', error);
+      }
+    }
 
     res.status(200).json({
       status: "success",
@@ -493,6 +572,28 @@ export const deleteCase = async (req, res) => {
 export const getPipelineCases = async (req, res) => {
   try {
     const cases = await Case.findAll({
+      include: [
+        {
+          model: db.User,
+          as: 'candidate',
+          attributes: ['id', 'first_name', 'last_name']
+        },
+        {
+          model: db.User,
+          as: 'sponsor',
+          attributes: ['id', 'first_name', 'last_name']
+        },
+        {
+          model: db.VisaType,
+          as: 'visaType',
+          attributes: ['id', 'name']
+        },
+        {
+          model: db.PetitionType,
+          as: 'petitionType',
+          attributes: ['id', 'name']
+        }
+      ],
       order: [["created_at", "DESC"]],
     });
 
@@ -531,11 +632,18 @@ export const updatePipelineStage = async (req, res) => {
     const { id } = req.params;
     const { status } = req.body; 
 
+    console.log(`Update Pipeline Stage - Case ID: ${id}, New Status: ${status}`);
+
     const caseData = await Case.findOne({ where: { caseId: id } }) || await Case.findByPk(id);
 
-    if (!caseData) return res.status(404).json({ status: "error", message: "Case not found" });
+    if (!caseData) {
+      console.log(`Case not found with ID: ${id}`);
+      return res.status(404).json({ status: "error", message: "Case not found" });
+    }
 
+    console.log(`Found case, current status: ${caseData.status}`);
     await caseData.update({ status: status || caseData.status });
+    console.log(`Updated case status to: ${caseData.status}`);
 
     res.status(200).json({
       status: "success",
@@ -543,11 +651,133 @@ export const updatePipelineStage = async (req, res) => {
       data: { case: caseData }
     });
   } catch (error) {
+    console.error("Update Pipeline Stage Error:", error);
     res.status(500).json({ status: "error", message: "Internal server error", error: error.message });
   }
 };
 
-// Get Team Capacity
+// Export Cases to CSV
+export const exportCases = async (req, res) => {
+  try {
+    const { search, status, priority, visaType } = req.query;
+
+    const whereClause = {};
+
+    if (search) {
+      whereClause[Op.or] = [
+        { caseId: { [Op.iLike]: `%${search}%` } },
+      ];
+    }
+
+    if (status) {
+      whereClause.status = status;
+    }
+
+    if (priority) {
+      whereClause.priority = priority;
+    }
+
+    if (visaType) {
+      whereClause.visaTypeId = visaType;
+    }
+
+    const cases = await Case.findAll({
+      where: whereClause,
+      include: [
+        {
+          model: db.User,
+          as: 'candidate',
+          attributes: ['id', 'first_name', 'last_name', 'email']
+        },
+        {
+          model: db.User,
+          as: 'sponsor',
+          attributes: ['id', 'first_name', 'last_name', 'email']
+        },
+        {
+          model: db.VisaType,
+          as: 'visaType',
+          attributes: ['id', 'name']
+        },
+        {
+          model: db.PetitionType,
+          as: 'petitionType',
+          attributes: ['id', 'name']
+        }
+      ],
+      order: [["created_at", "DESC"]]
+    });
+
+    // Fetch caseworker names for all assigned caseworker IDs
+    const allCaseworkerIds = new Set();
+    cases.forEach(c => {
+      const cwIds = Array.isArray(c.assignedcaseworkerId) ? c.assignedcaseworkerId : (c.assignedcaseworkerId ? [c.assignedcaseworkerId] : []);
+      cwIds.forEach(id => {
+        // Convert to integer if it's a numeric string, otherwise skip
+        const numId = parseInt(id);
+        if (!isNaN(numId)) {
+          allCaseworkerIds.add(numId);
+        }
+      });
+    });
+
+    const caseworkers = await db.User.findAll({
+      where: { id: Array.from(allCaseworkerIds) },
+      attributes: ['id', 'first_name', 'last_name']
+    });
+
+    const caseworkerMap = {};
+    caseworkers.forEach(cw => {
+      caseworkerMap[cw.id] = `${cw.first_name} ${cw.last_name}`;
+    });
+
+    // Generate CSV
+    const csvHeader = ['Case ID', 'Candidate', 'Candidate Email', 'Sponsor', 'Sponsor Email', 'Visa Type', 'Petition Type', 'Priority', 'Status', 'Assigned Caseworkers', 'Submission Date', 'Target Date', 'LCA Number', 'Receipt Number', 'Salary Offered', 'Total Amount', 'Paid Amount', 'Created At'];
+    const csvRows = cases.map(c => {
+      const cwIds = Array.isArray(c.assignedcaseworkerId) ? c.assignedcaseworkerId : (c.assignedcaseworkerId ? [c.assignedcaseworkerId] : []);
+      const cwNames = cwIds.map(id => caseworkerMap[id] || `ID:${id}`).join(', ');
+      
+      return [
+        c.caseId || 'N/A',
+        c.candidate ? `${c.candidate.first_name} ${c.candidate.last_name}` : 'N/A',
+        c.candidate?.email || 'N/A',
+        c.sponsor ? `${c.sponsor.first_name} ${c.sponsor.last_name}` : 'N/A',
+        c.sponsor?.email || 'N/A',
+        c.visaType?.name || 'N/A',
+        c.petitionType?.name || 'N/A',
+        c.priority,
+        c.status,
+        cwNames || 'N/A',
+        c.submissionDate || 'N/A',
+        c.targetSubmissionDate || 'N/A',
+        c.lcaNumber || 'N/A',
+        c.receiptNumber || 'N/A',
+        c.salaryOffered || 0,
+        c.totalAmount || 0,
+        c.paidAmount || 0,
+        c.created_at || 'N/A'
+      ];
+    });
+
+    const csvContent = [
+      csvHeader.join(','),
+      ...csvRows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="cases_export.csv"');
+    res.send(csvContent);
+
+  } catch (error) {
+    console.error("Export Cases Error:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error",
+      data: null,
+      error: error.message
+    });
+  }
+};
 export const getTeamCapacity = async (req, res) => {
   try {
     const cases = await Case.findAll({
@@ -627,10 +857,59 @@ export const assignCase = async (req, res) => {
       notes: updatedNotes
     });
 
+    // Notify assigned caseworkers
+    if (cwIds && cwIds.length > 0) {
+      const candidate = await db.User.findByPk(caseData.candidateId);
+      const visaType = await db.VisaType.findByPk(caseData.visaTypeId);
+      const notifData = {
+        id: caseData.id,
+        caseId: caseData.caseId,
+        candidateName: candidate ? `${candidate.first_name || ''} ${candidate.last_name || ''}`.trim() : 'Unknown Candidate',
+        visaType: visaType ? visaType.name : 'Not specified',
+      };
+      for (const cwId of cwIds) {
+        try {
+          await notifyCaseAssigned(cwId, notifData);
+        } catch (notifErr) {
+          console.error("Failed to notify caseworker about assignment:", notifErr);
+        }
+      }
+    }
+
     res.status(200).json({
       status: "success",
       message: "Case reassigned successfully",
       data: { case: caseData }
+    });
+  } catch (error) {
+    res.status(500).json({ status: "error", message: "Internal server error", error: error.message });
+  }
+};
+
+//Cases Dropdown 
+export const getCasesDropdown = async (req, res) => {
+  try {
+    const cases = await Case.findAll({
+      attributes: ['id', 'caseId', 'candidateId', 'sponsorId'],
+      include: [
+        {
+          model: User,
+          as: 'candidate',
+          attributes: ['id', 'first_name', 'last_name']
+        }
+      ]
+    });
+
+    const casesDropdown = cases.map(c => ({
+      id: c.id,
+      caseId: c.caseId,
+      candidateName: c.candidate ? `${c.candidate.first_name} ${c.candidate.last_name}` : null
+    }));
+
+    res.status(200).json({
+      status: "success",
+      message: "Cases dropdown retrieved successfully",
+      data: casesDropdown
     });
   } catch (error) {
     res.status(500).json({ status: "error", message: "Internal server error", error: error.message });

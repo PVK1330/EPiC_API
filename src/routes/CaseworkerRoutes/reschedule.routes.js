@@ -17,4 +17,7 @@ router.patch('/:id', rescheduleController.rescheduleCase);
 // Get reschedule history for a case
 router.get('/:id/history', rescheduleController.getRescheduleHistory);
 
+// Get all reschedule history
+router.get('/', rescheduleController.getAllRescheduleHistory);
+
 export default router;

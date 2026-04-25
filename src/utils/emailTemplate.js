@@ -858,3 +858,132 @@ export const generateRescheduleEmailTemplate = (caseData, rescheduleDetails, rec
     </html>
   `;
 };
+
+const escapeHtml = (value = "") =>
+  String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
+export const generateNotificationEmailTemplate = ({
+  recipientName = 'User',
+  title,
+  message,
+  priority = 'medium',
+  notificationType = 'info',
+  actionUrl = null,
+} = {}) => {
+  const safeName = escapeHtml(recipientName);
+  const safeTitle = escapeHtml(title || 'New Notification');
+  const safeMessage = escapeHtml(message || '');
+  const safePriority = escapeHtml(priority);
+  const safeType = escapeHtml(notificationType);
+  const safeActionUrl = actionUrl ? escapeHtml(actionUrl) : null;
+
+  return `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Elite Pic - Notification</title>
+        <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #eef2f7; padding: 30px 16px; }
+            .wrapper { max-width: 580px; margin: 0 auto; }
+            .header {
+                background-color: #004ca5;
+                border-radius: 12px 12px 0 0;
+                padding: 28px 32px;
+                display: flex; align-items: center; gap: 14px;
+            }
+            .logo-mark {
+                width: 48px; height: 48px;
+                background-color: #ffffff;
+                border-radius: 10px;
+                display: flex; align-items: center; justify-content: center;
+            }
+            .logo-mark svg { width: 32px; height: 32px; }
+            .brand-name { font-size: 22px; font-weight: 700; color: #ffffff; letter-spacing: -0.4px; }
+            .brand-name span { color: #f5a623; }
+            .brand-sub { font-size: 10px; color: rgba(255,255,255,0.65); letter-spacing: 2px; text-transform: uppercase; margin-top: 2px; }
+            .accent-stripe { height: 4px; background: linear-gradient(90deg, #c8102e 0%, #f5a623 50%, #004ca5 100%); }
+            .card { background: #ffffff; padding: 36px; border-left: 1px solid #dde4ef; border-right: 1px solid #dde4ef; }
+            .title { font-size: 22px; font-weight: 700; color: #004ca5; margin-bottom: 10px; }
+            .message { font-size: 15px; color: #556070; line-height: 1.7; margin-bottom: 22px; }
+            .meta {
+                background: #f5f8ff;
+                border: 1.5px solid #c2d0e8;
+                border-radius: 10px;
+                padding: 16px;
+                margin-bottom: 24px;
+            }
+            .meta p { font-size: 13px; color: #334155; margin-bottom: 8px; }
+            .meta p:last-child { margin-bottom: 0; }
+            .action-wrap { text-align: center; margin-bottom: 22px; }
+            .action-btn {
+                display: inline-block;
+                background-color: #004ca5;
+                color: #ffffff;
+                text-decoration: none;
+                font-size: 14px;
+                font-weight: 600;
+                padding: 12px 26px;
+                border-radius: 8px;
+            }
+            .note-box {
+                background: #fff8f0;
+                border-left: 3px solid #f5a623;
+                border-radius: 0 6px 6px 0;
+                padding: 12px 16px;
+                font-size: 13px; color: #7a5c20; line-height: 1.6;
+            }
+            .footer { background-color: #004ca5; border-radius: 0 0 12px 12px; padding: 20px 32px; text-align: center; }
+            .footer p { font-size: 12px; color: rgba(255,255,255,0.6); line-height: 1.8; }
+            .footer .highlight { color: #f5a623; font-weight: 600; }
+        </style>
+    </head>
+    <body>
+        <div class="wrapper">
+            <div class="header">
+                <div class="logo-mark">
+                    <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <ellipse cx="13" cy="16" rx="7" ry="7" fill="none" stroke="#004ca5" stroke-width="2.2"/>
+                        <circle cx="10.5" cy="16" r="2.2" fill="#c8102e"/>
+                        <path d="M18 16 Q22 10 27 14 Q32 18 27 22 Q22 26 18 20" fill="#f5a623" opacity="0.85"/>
+                        <circle cx="25" cy="16" r="2" fill="#004ca5"/>
+                    </svg>
+                </div>
+                <div>
+                    <div class="brand-name">elite<span>pic</span></div>
+                    <div class="brand-sub">Customer Relationship Management</div>
+                </div>
+            </div>
+            <div class="accent-stripe"></div>
+            <div class="card">
+                <h1 class="title">${safeTitle}</h1>
+                <p class="message">Hi ${safeName},<br/><br/>${safeMessage}</p>
+                <div class="meta">
+                    <p><strong>Priority:</strong> ${safePriority}</p>
+                    <p><strong>Type:</strong> ${safeType}</p>
+                </div>
+                ${
+                  safeActionUrl
+                    ? `<div class="action-wrap"><a href="${safeActionUrl}" class="action-btn">Open in EPiC</a></div>`
+                    : ''
+                }
+                <div class="note-box">
+                    This is an automated notification from EPiC. If you were not expecting this message, please contact your administrator.
+                </div>
+            </div>
+            <div class="footer">
+                <p>© 2026 <span class="highlight">Elite Pic</span>. All rights reserved.</p>
+                <p>This is an automated message. Please do not reply to this email.</p>
+            </div>
+        </div>
+    </body>
+    </html>
+  `;
+};

@@ -27,4 +27,7 @@ router.patch("/:id/reset-password", checkPermission('admin.users.reset_password'
 // DELETE Operations
 router.delete("/:id", checkPermission('admin.sponsors.delete'), sponsorsController.deleteSponsor);
 
+// BULK IMPORT Operations
+router.post("/bulk-import", sponsorsController.uploadMiddleware, checkPermission('admin.sponsors.create'), sponsorsController.bulkImportSponsors);
+
 export default router;

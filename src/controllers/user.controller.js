@@ -1,5 +1,8 @@
 import db from '../models/index.js';
 import { Op } from 'sequelize';
+import bcrypt from 'bcryptjs';
+import path from 'path';
+import fs from 'fs';
 
 const User = db.User;
 
@@ -12,9 +15,16 @@ export const profile = async (req, res) => {
     // Find user by ID
     const user = await User.findOne({
       where: { id: userId },
-      attributes: { 
-        exclude: ['password', 'otp_code', 'otp_expiry', 'password_reset_otp', 'password_reset_otp_expiry', 'temp_password'] 
-      }
+      attributes: {
+        exclude: [
+          "password",
+          "otp_code",
+          "otp_expiry",
+          "password_reset_otp",
+          "password_reset_otp_expiry",
+          "temp_password",
+        ],
+      },
     });
 
     if (!user) {
@@ -23,6 +33,12 @@ export const profile = async (req, res) => {
         message: "User not found",
         data: null
       });
+    }
+
+    // Convert profile_pic path to URL-friendly format and add base URL
+    if (user.profile_pic) {
+      const normalizedPath = user.profile_pic.replace(/\\/g, '/');
+      user.profile_pic = `${process.env.BASE_URL}/${normalizedPath}`;
     }
 
     res.status(200).json({
@@ -50,7 +66,8 @@ export const editProfile = async (req, res) => {
     const userId = req.user.userId;
     
     // Get editable fields from request body
-    const { first_name, last_name, country_code, mobile } = req.body;
+    const body = req.body || {};
+    const { first_name, last_name, country_code, mobile } = body;
 
     // Find user by ID
     const user = await User.findOne({ where: { id: userId } });
@@ -91,23 +108,44 @@ export const editProfile = async (req, res) => {
       }
     }
 
-    // Update user profile
     const updateData = {
       first_name: first_name || user.first_name,
       last_name: last_name || user.last_name,
       country_code: country_code || user.country_code,
-      mobile: mobile || user.mobile
+      mobile: mobile || user.mobile,
     };
+
+    // Add profile_pic if file was uploaded
+    if (req.file?.path) {
+      const userDir = path.join('uploads', 'profile_pics', String(userId));
+      fs.mkdirSync(userDir, { recursive: true });
+      const targetPath = path.join(userDir, req.file.filename);
+      fs.renameSync(req.file.path, targetPath);
+      updateData.profile_pic = targetPath.replace(/\\/g, '/');
+    }
 
     await user.update(updateData);
 
     // Return updated user profile without sensitive fields
     const updatedUser = await User.findOne({
       where: { id: userId },
-      attributes: { 
-        exclude: ['password', 'otp_code', 'otp_expiry', 'password_reset_otp', 'password_reset_otp_expiry', 'temp_password'] 
-      }
+      attributes: {
+        exclude: [
+          "password",
+          "otp_code",
+          "otp_expiry",
+          "password_reset_otp",
+          "password_reset_otp_expiry",
+          "temp_password",
+        ],
+      },
     });
+
+    // Convert profile_pic path to URL-friendly format and add base URL
+    if (updatedUser.profile_pic) {
+      const normalizedPath = updatedUser.profile_pic.replace(/\\/g, '/');
+      updatedUser.profile_pic = `${process.env.BASE_URL}/${normalizedPath}`;
+    }
 
     res.status(200).json({
       status: "success",
@@ -127,20 +165,91 @@ export const editProfile = async (req, res) => {
   }
 };
 
+/** POST /api/user/change-password — authenticated user updates own password */
+export const changeOwnPassword = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { current_password, new_password } = req.body || {};
+
+    if (!current_password || !new_password) {
+      return res.status(400).json({
+        status: "error",
+        message: "current_password and new_password are required",
+        data: null,
+      });
+    }
+
+    if (new_password.length < 8) {
+      return res.status(400).json({
+        status: "error",
+        message: "New password must be at least 8 characters",
+        data: null,
+      });
+    }
+
+    const full = await User.findOne({ where: { id: userId } });
+    if (!full) {
+      return res.status(404).json({
+        status: "error",
+        message: "User not found",
+        data: null,
+      });
+    }
+
+    const ok = await bcrypt.compare(current_password, full.password);
+    if (!ok) {
+      return res.status(400).json({
+        status: "error",
+        message: "Current password is incorrect",
+        data: null,
+      });
+    }
+
+    const hashed = await bcrypt.hash(new_password, 12);
+    await full.update({ password: hashed });
+
+    res.status(200).json({
+      status: "success",
+      message: "Password updated successfully.",
+      data: null,
+    });
+  } catch (err) {
+    console.error("changeOwnPassword error:", err);
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error",
+      data: null,
+      error: err.message,
+    });
+  }
+};
 
 // Get all users grouped by roles
 export const getAllUsers = async (req, res) => {
   try {
     // Get all users with their roles
     const users = await User.findAll({
-      attributes: { 
-        exclude: ['password', 'otp_code', 'otp_expiry', 'password_reset_otp', 'password_reset_otp_expiry', 'temp_password'] 
+      attributes: {
+        exclude: [
+          "password",
+          "otp_code",
+          "otp_expiry",
+          "password_reset_otp",
+          "password_reset_otp_expiry",
+          "temp_password",
+        ],
       },
       include: [
         {
           model: db.Role,
           as: 'role',
           attributes: ['id', 'name']
+        },
+        {
+          model: db.SponsorProfile,
+          as: 'sponsorProfile',
+          required: false,
+          attributes: ['id','companyName', 'tradingName']
         }
       ],
       order: [['createdAt', 'DESC']]
@@ -156,12 +265,12 @@ export const getAllUsers = async (req, res) => {
 
     users.forEach(user => {
       const roleName = user.role?.name?.toLowerCase() || 'unknown';
-      
+
       if (roleName === 'admin') {
         usersByRole.admin.push(user);
       } else if (roleName === 'candidate') {
         usersByRole.candidate.push(user);
-      } else if (roleName === 'sponsor') {
+      } else if (roleName === 'sponsor' || roleName === 'business') {
         usersByRole.sponsor.push(user);
       } else if (roleName === 'caseworker') {
         usersByRole.caseworker.push(user);
@@ -180,6 +289,66 @@ export const getAllUsers = async (req, res) => {
     });
 
   } catch (err) {
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error",
+      data: null,
+      error: err.message
+    });
+  }
+};
+
+// Get sponsors and business dropdown API
+export const dropdownSponsors = async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    if (!userId) {
+      return res.status(401).json({ status: "error", message: "Authentication required.", data: null });
+    }
+
+    const sponsors = await User.findAll({
+      where: { role_id: 4 }, // Sponsor/Business role
+      attributes: {
+        exclude: [
+          "password",
+          "otp_code",
+          "otp_expiry",
+          "password_reset_otp",
+          "password_reset_otp_expiry",
+          "temp_password",
+        ],
+      },
+      include: [
+        {
+          model: db.Role,
+          as: 'role',
+          attributes: ['id', 'name']
+        },
+        {
+          model: db.SponsorProfile,
+          as: 'sponsorProfile',
+          required: false,
+          attributes: ['companyName', 'tradingName']
+        }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+
+    // Format for dropdown: id, name (first + last), company name
+    const formattedSponsors = sponsors.map(sponsor => ({
+      id: sponsor.id,
+      name: `${sponsor.first_name} ${sponsor.last_name}`,
+      email: sponsor.email,
+      companyName: sponsor.sponsorProfile?.companyName || sponsor.sponsorProfile?.tradingName || null
+    }));
+
+    res.status(200).json({
+      status: "success",
+      message: "Sponsors retrieved successfully",
+      data: { sponsors: formattedSponsors }
+    });
+  } catch (err) {
+    console.error("dropdownSponsors error:", err);
     res.status(500).json({
       status: "error",
       message: "Internal server error",

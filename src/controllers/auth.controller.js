@@ -8,6 +8,9 @@ import { generateOTPTemplate, generateCredentialsTemplate } from '../utils/email
 
 const User = db.User;
 const UnverifiedUser = db.UnverifiedUser;
+const AdminUserPreference = db.AdminUserPreference;
+const RESET_TOKEN_EXPIRY = '10m';
+const RESET_TOKEN_PURPOSE = 'password_reset';
 
 export const register = async (req, res) => {
   try {
@@ -58,6 +61,27 @@ export const register = async (req, res) => {
       });
     }
 
+    // Also check unverified_users to avoid unique constraint errors
+    const unverifiedEmailExists = await UnverifiedUser.findOne({ where: { email } });
+    if (unverifiedEmailExists) {
+      return res.status(400).json({
+        status: "error",
+        message: "Registration already in progress. Please verify your OTP or request a new one.",
+        data: { email, pending_verification: true }
+      });
+    }
+
+    const unverifiedMobileExists = await UnverifiedUser.findOne({
+      where: { country_code, mobile },
+    });
+    if (unverifiedMobileExists) {
+      return res.status(400).json({
+        status: "error",
+        message: "Mobile number already registered and pending OTP verification.",
+        data: null
+      });
+    }
+
     const validRoles = [1, 2, 3, 4];
     if (!validRoles.includes(role_id)) {
       return res.status(400).json({
@@ -81,7 +105,7 @@ export const register = async (req, res) => {
       role_id,
       otp_code: otp,
       otp_expiry: otpExpiry,
-      temp_password: password,
+      temp_password: null,
     });
 
     await transporter.sendMail({
@@ -139,7 +163,7 @@ export const verifyOTP = async (req, res) => {
     }
 
     const loginUrl = `${process.env.FRONTEND_URL}`;
-    const originalPassword = unverifiedUser.temp_password;
+    const originalPassword = 'Use the password you set during registration';
     
     await transporter.sendMail({
       from: process.env.EMAIL_USER,
@@ -273,8 +297,10 @@ export const login = async (req, res) => {
       });
     }
 
+    const emailNorm = String(email).trim().toLowerCase();
+
     const user = await db.User.findOne({
-      where: { email },
+      where: { email: emailNorm },
       include: [{ model: db.Role, as: 'role', attributes: ['id', 'name'] }],
     });
 
@@ -319,7 +345,7 @@ export const login = async (req, res) => {
       userId: user.id,
       email: user.email,
       role_id: user.role_id,
-      role_name: user.Role?.name || null,
+      role_name: user.role?.name || null,
     };
 
     const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '7d' });
@@ -336,7 +362,7 @@ export const login = async (req, res) => {
           last_name: user.last_name,
           email: user.email,
           role_id: user.role_id,
-          role_name: user.Role?.name,
+          role_name: user.role?.name,
           status: user.status,
           two_factor_enabled: user.two_factor_enabled,
         },
@@ -345,10 +371,12 @@ export const login = async (req, res) => {
     });
   } catch (err) {
     console.error('Login error:', err);
+    const isProd = process.env.NODE_ENV === 'production';
     return res.status(500).json({
       status: 'error',
-      message: 'Login failed. Please try again.',
+      message: isProd ? 'Login failed. Please try again.' : err.message,
       data: null,
+      ...(!isProd && { error: err.message }),
     });
   }
 };
@@ -441,13 +469,20 @@ export const verifyResetOTP = async (req, res) => {
       });
     }
 
+    const resetToken = jwt.sign(
+      { email: user.email, purpose: RESET_TOKEN_PURPOSE },
+      process.env.JWT_SECRET,
+      { expiresIn: RESET_TOKEN_EXPIRY }
+    );
+
     res.status(200).json({
       status: "success",
       message: "OTP verified successfully",
       data: {
         email: email,
         otp_verified: true,
-        next_step: "set_password"
+        next_step: "set_password",
+        reset_token: resetToken
       }
     });
   } catch (err) {
@@ -462,13 +497,43 @@ export const verifyResetOTP = async (req, res) => {
 
 export const setPassword = async (req, res) => {
   try {
-    const { email, password, confirmPassword } = req.body;
+    const { email, password, confirmPassword, resetToken } = req.body;
     const user = await User.findOne({ where: { email } });
 
     if (!user) {
       return res.status(404).json({
         status: "error",
         message: "User not found",
+        data: null
+      });
+    }
+
+    if (!resetToken) {
+      return res.status(400).json({
+        status: "error",
+        message: "Reset token is required",
+        data: null
+      });
+    }
+
+    let decodedResetToken;
+    try {
+      decodedResetToken = jwt.verify(resetToken, process.env.JWT_SECRET);
+    } catch {
+      return res.status(401).json({
+        status: "error",
+        message: "Invalid or expired reset token",
+        data: null
+      });
+    }
+
+    if (
+      decodedResetToken?.purpose !== RESET_TOKEN_PURPOSE ||
+      decodedResetToken?.email !== email
+    ) {
+      return res.status(401).json({
+        status: "error",
+        message: "Invalid reset token",
         data: null
       });
     }
@@ -516,7 +581,7 @@ export const setPassword = async (req, res) => {
       from: process.env.EMAIL_USER,
       to: email,
       subject: "Elite Pic - Password Updated Successfully",
-      html: generateCredentialsTemplate(email, password, loginUrl),
+      html: `<p>Your password was updated successfully.</p><p>You can now log in at <a href="${loginUrl}">${loginUrl}</a>.</p>`,
     });
 
     res.status(200).json({
@@ -723,6 +788,16 @@ export const verify2FASetup = async (req, res) => {
     user.two_factor_backup_codes = backupCodes || generateBackupCodes();
     await user.save();
 
+    try {
+      const [prefs] = await AdminUserPreference.findOrCreate({
+        where: { user_id: userId },
+        defaults: { user_id: userId },
+      });
+      await prefs.update({ two_factor_enabled: true });
+    } catch (prefErr) {
+      console.error('Admin preferences sync after 2FA enable:', prefErr);
+    }
+
     res.status(200).json({
       status: 'success',
       message: '2FA enabled successfully',
@@ -756,7 +831,7 @@ export const verify2FA = async (req, res) => {
 
     const user = await db.User.findOne({
       where: { email },
-      include: [{ model: db.Role, attributes: ['id', 'name'] }],
+      include: [{ model: db.Role, as: 'role', attributes: ['id', 'name'] }],
     });
 
     if (!user) {
@@ -810,7 +885,7 @@ export const verify2FA = async (req, res) => {
       userId: user.id,
       email: user.email,
       role_id: user.role_id,
-      role_name: user.Role?.name || null,
+      role_name: user.role?.name || null,
     };
 
     const jwtToken = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '7d' });
@@ -832,7 +907,7 @@ export const verify2FA = async (req, res) => {
           last_name: user.last_name,
           email: user.email,
           role_id: user.role_id,
-          role_name: user.Role?.name,
+          role_name: user.role?.name,
           status: user.status,
           two_factor_enabled: true,
         },
@@ -884,6 +959,16 @@ export const disable2FA = async (req, res) => {
     user.two_factor_secret = null;
     user.two_factor_backup_codes = null;
     await user.save();
+
+    try {
+      const [prefs] = await AdminUserPreference.findOrCreate({
+        where: { user_id: userId },
+        defaults: { user_id: userId },
+      });
+      await prefs.update({ two_factor_enabled: false });
+    } catch (prefErr) {
+      console.error('Admin preferences sync after 2FA disable:', prefErr);
+    }
 
     res.status(200).json({
       status: 'success',

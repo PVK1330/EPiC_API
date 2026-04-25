@@ -1,6 +1,8 @@
 import { Op } from "sequelize";
 
 import bcrypt from "bcryptjs";
+import fs from "fs";
+import path from "path";
 
 import db from "../../models/index.js";
 
@@ -14,17 +16,18 @@ const Role = db.Role;
 
 const AdminUserPreference = db.AdminUserPreference;
 
+const PaymentSetting = db.PaymentSetting;
 const VisaType = db.VisaType;
 
 const CaseCategory = db.CaseCategory;
 
 const EmailTemplateSetting = db.EmailTemplateSetting;
-
 const SlaSetting = db.SlaSetting;
+const SlaRule = db.SlaRule;
 
 
 
-const EMAIL_TEMPLATE_KEYS = ["payment", "doc", "opened", "expiry", "welcome"];
+// Static array removed to make templates fully dynamic
 
 
 
@@ -140,7 +143,7 @@ export const getMe = async (req, res) => {
 
           phone: buildPhoneDisplay(plain.country_code, plain.mobile),
 
-          avatar_url: prefs.avatar_url || null,
+          avatar_url: prefs.avatar_url ? `${process.env.BASE_URL || ''}/${prefs.avatar_url.replace(/\\/g, '/')}` : null,
 
           role_id: plain.role_id,
 
@@ -254,7 +257,11 @@ export const patchMe = async (req, res) => {
 
       if (nextEmail !== user.email) {
 
-        const taken = await User.findOne({ where: { email: nextEmail, id: { [Op.ne]: user.id } } });
+        const taken = await User.findOne({
+
+          where: { email: nextEmail, id: { [Op.ne]: user.id } },
+
+        });
 
         if (taken) {
 
@@ -268,27 +275,19 @@ export const patchMe = async (req, res) => {
 
     }
 
-    if (country_code !== undefined) profileUpdates.country_code = String(country_code).trim();
+    if (country_code !== undefined) {
 
-    if (mobile !== undefined) profileUpdates.mobile = String(mobile).trim();
+      const cc = String(country_code).trim();
 
+      if (cc !== "") profileUpdates.country_code = cc;
 
+    }
 
-    if (Object.keys(profileUpdates).length > 0) {
+    if (mobile !== undefined) {
 
-      if (profileUpdates.first_name === "" || profileUpdates.last_name === "") {
+      const mob = String(mobile).trim();
 
-        return res.status(400).json({ status: "error", message: "First name and last name cannot be empty", data: null });
-
-      }
-
-      if (profileUpdates.country_code === "" || profileUpdates.mobile === "") {
-
-        return res.status(400).json({ status: "error", message: "Country code and mobile are required", data: null });
-
-      }
-
-      await user.update(profileUpdates);
+      if (mob !== "") profileUpdates.mobile = mob;
 
     }
 
@@ -297,6 +296,15 @@ export const patchMe = async (req, res) => {
     const prefUpdates = {};
 
     if (avatar_url !== undefined) prefUpdates.avatar_url = avatar_url === null ? null : String(avatar_url).trim() || null;
+    if (req.file?.path) {
+      const userDir = path.join('uploads', 'profile_pics', String(user.id));
+      fs.mkdirSync(userDir, { recursive: true });
+      const targetPath = path.join(userDir, req.file.filename);
+      fs.renameSync(req.file.path, targetPath);
+      const urlPath = targetPath.replace(/\\/g, '/');
+      prefUpdates.avatar_url = urlPath;
+      profileUpdates.profile_pic = urlPath;
+    }
 
     if (two_factor_enabled !== undefined) prefUpdates.two_factor_enabled = Boolean(two_factor_enabled);
 
@@ -319,6 +327,30 @@ export const patchMe = async (req, res) => {
     if (Object.keys(prefUpdates).length > 0) {
 
       await prefs.update(prefUpdates);
+
+    }
+
+
+
+    if (Object.keys(profileUpdates).length > 0) {
+
+      if (profileUpdates.first_name === "" || profileUpdates.last_name === "") {
+
+        return res.status(400).json({ status: "error", message: "First name and last name cannot be empty", data: null });
+
+      }
+
+      const mergedCc = profileUpdates.country_code !== undefined ? profileUpdates.country_code : user.country_code;
+
+      const mergedMob = profileUpdates.mobile !== undefined ? profileUpdates.mobile : user.mobile;
+
+      if (!String(mergedCc || "").trim() || !String(mergedMob || "").trim()) {
+
+        return res.status(400).json({ status: "error", message: "Country code and mobile are required", data: null });
+
+      }
+
+      await user.update(profileUpdates);
 
     }
 
@@ -354,7 +386,7 @@ export const patchMe = async (req, res) => {
 
           phone: buildPhoneDisplay(plain.country_code, plain.mobile),
 
-          avatar_url: prefs.avatar_url || null,
+          avatar_url: prefs.avatar_url ? `${process.env.BASE_URL || ''}/${prefs.avatar_url.replace(/\\/g, '/')}` : null,
 
           role_id: plain.role_id,
 
@@ -389,6 +421,152 @@ export const patchMe = async (req, res) => {
   } catch (error) {
 
     console.error("patchMe settings error:", error);
+
+    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
+
+  }
+
+};
+
+
+
+export const patchMePreferences = async (req, res) => {
+
+  try {
+
+    const user = await requireAdmin(req, res);
+
+    if (!user) return;
+
+
+
+    const prefs = await getOrCreatePreferences(user.id);
+
+
+
+    const {
+
+      avatar_url,
+
+      two_factor_enabled,
+
+      email_notifications,
+
+      case_updates,
+
+      payment_alerts,
+
+      timezone,
+
+      language,
+
+      date_format,
+
+      data_collection,
+
+    } = req.body || {};
+
+
+
+    const prefUpdates = {};
+
+    if (avatar_url !== undefined) prefUpdates.avatar_url = avatar_url === null ? null : String(avatar_url).trim() || null;
+
+    if (two_factor_enabled !== undefined) prefUpdates.two_factor_enabled = Boolean(two_factor_enabled);
+
+    if (email_notifications !== undefined) prefUpdates.email_notifications = Boolean(email_notifications);
+
+    if (case_updates !== undefined) prefUpdates.case_updates = Boolean(case_updates);
+
+    if (payment_alerts !== undefined) prefUpdates.payment_alerts = Boolean(payment_alerts);
+
+    if (timezone !== undefined) prefUpdates.timezone = String(timezone);
+
+    if (language !== undefined) prefUpdates.language = String(language);
+
+    if (date_format !== undefined) prefUpdates.date_format = String(date_format);
+
+    if (data_collection !== undefined) prefUpdates.data_collection = Boolean(data_collection);
+
+
+
+    if (Object.keys(prefUpdates).length === 0) {
+
+      return res.status(400).json({ status: "error", message: "No preference fields to update", data: null });
+
+    }
+
+
+
+    await prefs.update(prefUpdates);
+
+    await prefs.reload();
+
+    await user.reload({ include: [{ model: Role, as: "role", attributes: ["id", "name"] }] });
+
+
+
+    const plain = user.toJSON();
+
+
+
+    res.status(200).json({
+
+      status: "success",
+
+      message: "Preferences updated.",
+
+      data: {
+
+        profile: {
+
+          first_name: plain.first_name,
+
+          last_name: plain.last_name,
+
+          email: plain.email,
+
+          country_code: plain.country_code,
+
+          mobile: plain.mobile,
+
+          phone: buildPhoneDisplay(plain.country_code, plain.mobile),
+
+          avatar_url: prefs.avatar_url ? `${process.env.BASE_URL || ''}/${prefs.avatar_url.replace(/\\/g, '/')}` : null,
+
+          role_id: plain.role_id,
+
+          role_name: plain.role?.name || null,
+
+        },
+
+        preferences: {
+
+          two_factor_enabled: prefs.two_factor_enabled,
+
+          email_notifications: prefs.email_notifications,
+
+          case_updates: prefs.case_updates,
+
+          payment_alerts: prefs.payment_alerts,
+
+          timezone: prefs.timezone,
+
+          language: prefs.language,
+
+          date_format: prefs.date_format,
+
+          data_collection: prefs.data_collection,
+
+        },
+
+      },
+
+    });
+
+  } catch (error) {
+
+    console.error("patchMePreferences error:", error);
 
     res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
 
@@ -844,7 +1022,7 @@ export const listEmailTemplates = async (req, res) => {
 
         templates: rows.map((r) => ({
 
-          key: r.template_key,
+          template_key: r.template_key,
 
           subject: r.subject,
 
@@ -876,11 +1054,7 @@ export const getEmailTemplateByKey = async (req, res) => {
 
     const key = String(req.params.key || "").trim();
 
-    if (!EMAIL_TEMPLATE_KEYS.includes(key)) {
 
-      return res.status(400).json({ status: "error", message: "Invalid template key", data: null });
-
-    }
 
     const row = await EmailTemplateSetting.findOne({ where: { template_key: key } });
 
@@ -920,11 +1094,7 @@ export const updateEmailTemplate = async (req, res) => {
 
     const key = String(req.params.key || "").trim();
 
-    if (!EMAIL_TEMPLATE_KEYS.includes(key)) {
 
-      return res.status(400).json({ status: "error", message: "Invalid template key", data: null });
-
-    }
 
     const { subject, body } = req.body;
 
@@ -956,203 +1126,199 @@ export const updateEmailTemplate = async (req, res) => {
 
       message: "Email template updated.",
 
-      data: { template: { key: row.template_key, subject: row.subject, body: row.body } },
+      data: { template: { template_key: row.template_key, subject: row.subject, body: row.body } },
 
     });
 
   } catch (error) {
-
     console.error("updateEmailTemplate error:", error);
-
     res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
-
   }
-
 };
 
-
-
-/** SLA */
-
-async function getSlaRow() {
-
-  let row = await SlaSetting.findByPk(1);
-
-  if (!row) {
-
-    row = await SlaSetting.findOne({ order: [["id", "ASC"]] });
-
-  }
-
-  if (!row) {
-
-    row = await SlaSetting.create({
-
-      skilled_worker_days: 45,
-
-      ilr_days: 30,
-
-      student_visa_days: 60,
-
-      escalation_stuck_days: 3,
-
-      missing_docs_escalation_days: 7,
-
-    });
-
-  }
-
-  return row;
-
-}
-
-
-
-export const getSla = async (req, res) => {
-
+export const createEmailTemplate = async (req, res) => {
   try {
-
     if (!(await requireAdmin(req, res))) return;
+    const { template_key, subject, body } = req.body;
+    
+    if (!template_key || !String(template_key).trim()) {
+      return res.status(400).json({ status: "error", message: "Template key is required" });
+    }
 
-    const row = await getSlaRow();
+    const existing = await EmailTemplateSetting.findOne({ where: { template_key: String(template_key).trim() } });
+    if (existing) {
+      return res.status(400).json({ status: "error", message: "A template with this key already exists" });
+    }
 
-    res.status(200).json({
-
-      status: "success",
-
-      message: "SLA settings retrieved.",
-
-      data: {
-
-        sla: {
-
-          skilled_worker_days: row.skilled_worker_days,
-
-          ilr_days: row.ilr_days,
-
-          student_visa_days: row.student_visa_days,
-
-          escalation_stuck_days: row.escalation_stuck_days,
-
-          missing_docs_escalation_days: row.missing_docs_escalation_days,
-
-        },
-
-      },
-
+    const row = await EmailTemplateSetting.create({ 
+      template_key: String(template_key).trim(), 
+      subject: subject || "", 
+      body: body || "" 
     });
 
+    res.status(201).json({ status: "success", message: "Email template created.", data: { template: row } });
   } catch (error) {
-
-    console.error("getSla error:", error);
-
-    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
-
+    console.error("createEmailTemplate error:", error);
+    res.status(500).json({ status: "error", message: "Internal server error" });
   }
-
 };
 
-
-
-export const updateSla = async (req, res) => {
-
+export const deleteEmailTemplate = async (req, res) => {
   try {
-
     if (!(await requireAdmin(req, res))) return;
+    const key = String(req.params.key || "").trim();
+    
+    const row = await EmailTemplateSetting.findOne({ where: { template_key: key } });
+    if (!row) {
+      return res.status(404).json({ status: "error", message: "Template not found" });
+    }
 
-    const row = await getSlaRow();
+    await row.destroy();
+    res.status(200).json({ status: "success", message: "Email template deleted." });
+  } catch (error) {
+    console.error("deleteEmailTemplate error:", error);
+    res.status(500).json({ status: "error", message: "Internal server error" });
+  }
+};
+
+export const getPaymentSetting = async (req, res) => {
+  try {
+    if (!(await requireAdmin(req, res))) return;
+    let setting = await PaymentSetting.findOne();
+    if (!setting) {
+      setting = await PaymentSetting.create({});
+    }
+    res.status(200).json({ status: "success", data: { setting } });
+  } catch (error) {
+    console.error("getPaymentSetting error:", error);
+    res.status(500).json({ status: "error", message: "Internal server error" });
+  }
+};
+
+export const updatePaymentSetting = async (req, res) => {
+  try {
+    if (!(await requireAdmin(req, res))) return;
+    let setting = await PaymentSetting.findOne();
+    if (!setting) {
+      setting = await PaymentSetting.create({});
+    }
 
     const {
-
-      skilled_worker_days,
-
-      ilr_days,
-
-      student_visa_days,
-
-      escalation_stuck_days,
-
-      missing_docs_escalation_days,
-
+      currency,
+      pay_bank,
+      pay_card,
+      pay_cheque,
+      invoice_prefix,
+      stripe_public_key,
+      stripe_secret_key,
+      paypal_client_id,
+      paypal_secret,
+      razorpay_key_id,
+      razorpay_key_secret,
+      active_gateway,
     } = req.body;
 
-
-
-    const updates = {};
-
-    const nums = [
-
-      ["skilled_worker_days", skilled_worker_days],
-
-      ["ilr_days", ilr_days],
-
-      ["student_visa_days", student_visa_days],
-
-      ["escalation_stuck_days", escalation_stuck_days],
-
-      ["missing_docs_escalation_days", missing_docs_escalation_days],
-
-    ];
-
-    for (const [field, val] of nums) {
-
-      if (val !== undefined) {
-
-        const n = parseInt(String(val), 10);
-
-        if (Number.isNaN(n) || n < 0) {
-
-          return res.status(400).json({ status: "error", message: `${field} must be a non-negative integer`, data: null });
-
-        }
-
-        updates[field] = n;
-
-      }
-
-    }
-
-    if (Object.keys(updates).length === 0) {
-
-      return res.status(400).json({ status: "error", message: "No valid fields to update", data: null });
-
-    }
-
-    await row.update(updates);
-
-    res.status(200).json({
-
-      status: "success",
-
-      message: "SLA settings updated.",
-
-      data: {
-
-        sla: {
-
-          skilled_worker_days: row.skilled_worker_days,
-
-          ilr_days: row.ilr_days,
-
-          student_visa_days: row.student_visa_days,
-
-          escalation_stuck_days: row.escalation_stuck_days,
-
-          missing_docs_escalation_days: row.missing_docs_escalation_days,
-
-        },
-
-      },
-
+    await setting.update({
+      currency: currency !== undefined ? currency : setting.currency,
+      pay_bank: pay_bank !== undefined ? pay_bank : setting.pay_bank,
+      pay_card: pay_card !== undefined ? pay_card : setting.pay_card,
+      pay_cheque: pay_cheque !== undefined ? pay_cheque : setting.pay_cheque,
+      invoice_prefix: invoice_prefix !== undefined ? invoice_prefix : setting.invoice_prefix,
+      stripe_public_key: stripe_public_key !== undefined ? stripe_public_key : setting.stripe_public_key,
+      stripe_secret_key: stripe_secret_key !== undefined ? stripe_secret_key : setting.stripe_secret_key,
+      paypal_client_id: paypal_client_id !== undefined ? paypal_client_id : setting.paypal_client_id,
+      paypal_secret: paypal_secret !== undefined ? paypal_secret : setting.paypal_secret,
+      razorpay_key_id: razorpay_key_id !== undefined ? razorpay_key_id : setting.razorpay_key_id,
+      razorpay_key_secret: razorpay_key_secret !== undefined ? razorpay_key_secret : setting.razorpay_key_secret,
+      active_gateway: active_gateway !== undefined ? active_gateway : setting.active_gateway,
     });
 
+    res.status(200).json({ status: "success", message: "Payment settings updated", data: { setting } });
   } catch (error) {
-
-    console.error("updateSla error:", error);
-
-    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
-
+    console.error("updatePaymentSetting error:", error);
+    res.status(500).json({ status: "error", message: "Internal server error" });
   }
+};
 
+
+
+/** SLA Rules (Dynamic CRUD) */
+export const listSlaRules = async (req, res) => {
+  try {
+    if (!(await requireAdmin(req, res))) return;
+    const rules = await SlaRule.findAll({ order: [["id", "ASC"]] });
+    res.status(200).json({
+      status: "success",
+      message: "SLA rules retrieved.",
+      data: { rules },
+    });
+  } catch (error) {
+    console.error("listSlaRules error:", error);
+    res.status(500).json({ status: "error", message: "Internal server error", data: null });
+  }
+};
+
+export const createSlaRule = async (req, res) => {
+  try {
+    if (!(await requireAdmin(req, res))) return;
+    const { name, days, rule_type } = req.body;
+    
+    if (!name || !String(name).trim()) return res.status(400).json({ status: "error", message: "Name is required" });
+    if (days === undefined || isNaN(parseInt(days))) return res.status(400).json({ status: "error", message: "Days must be a valid number" });
+
+    const rule = await SlaRule.create({ 
+      name: String(name).trim(), 
+      days: parseInt(days), 
+      rule_type: rule_type === "Global" ? "Global" : "Visa" 
+    });
+
+    res.status(201).json({ status: "success", message: "SLA rule created.", data: { rule } });
+  } catch (error) {
+    console.error("createSlaRule error:", error);
+    if (error.name === "SequelizeUniqueConstraintError") {
+      return res.status(400).json({ status: "error", message: "A rule with this name already exists" });
+    }
+    res.status(500).json({ status: "error", message: "Internal server error" });
+  }
+};
+
+export const updateSlaRule = async (req, res) => {
+  try {
+    if (!(await requireAdmin(req, res))) return;
+    const { id } = req.params;
+    const { name, days, rule_type } = req.body;
+
+    const rule = await SlaRule.findByPk(id);
+    if (!rule) return res.status(404).json({ status: "error", message: "Rule not found" });
+
+    const updates = {};
+    if (name) updates.name = String(name).trim();
+    if (days !== undefined && !isNaN(parseInt(days))) updates.days = parseInt(days);
+    if (rule_type) updates.rule_type = rule_type === "Global" ? "Global" : "Visa";
+
+    await rule.update(updates);
+    res.status(200).json({ status: "success", message: "SLA rule updated.", data: { rule } });
+  } catch (error) {
+    console.error("updateSlaRule error:", error);
+    if (error.name === "SequelizeUniqueConstraintError") {
+      return res.status(400).json({ status: "error", message: "A rule with this name already exists" });
+    }
+    res.status(500).json({ status: "error", message: "Internal server error" });
+  }
+};
+
+export const deleteSlaRule = async (req, res) => {
+  try {
+    if (!(await requireAdmin(req, res))) return;
+    const { id } = req.params;
+    const rule = await SlaRule.findByPk(id);
+    if (!rule) return res.status(404).json({ status: "error", message: "Rule not found" });
+
+    await rule.destroy();
+    res.status(200).json({ status: "success", message: "SLA rule deleted." });
+  } catch (error) {
+    console.error("deleteSlaRule error:", error);
+    res.status(500).json({ status: "error", message: "Internal server error" });
+  }
 };
 

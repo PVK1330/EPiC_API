@@ -12,7 +12,7 @@ router.use(verifyToken);
 router.use(checkRole([ROLES.ADMIN]));
 
 // User permission check - must come before /:id to avoid route conflict
-router.get("/check/permission", permissionsController.checkUserPermission);
+router.get("/check", permissionsController.checkUserPermission);
 
 // Permission CRUD operations
 router.get("/", permissionsController.getAllPermissions);

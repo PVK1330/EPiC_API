@@ -55,3 +55,6 @@ const upload = multer({
 });
 
 export const handleDocumentUpload = upload.array('documents', 5);
+
+// Profile picture upload middleware
+export const handleProfilePicUpload = upload.single('profile_pic');
