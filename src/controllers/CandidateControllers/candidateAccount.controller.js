@@ -1,4 +1,8 @@
-import db from '../models/index.js';
+import db from '../../models/index.js';
+import bcrypt from 'bcryptjs';
+import path from 'path';
+import fs from 'fs';
+import { Op } from 'sequelize';
 
 const User = db.User;
 const Case = db.Case;
@@ -93,6 +97,8 @@ export const getAccount = async (req, res) => {
           country_code: user.country_code,
           mobile: user.mobile,
           role_id: user.role_id,
+          gender: user.gender,
+          profile_pic: user.profile_pic ? `${process.env.BASE_URL}/${user.profile_pic.replace(/\\/g, '/')}` : null,
           two_factor_enabled: !!user.two_factor_enabled,
         },
         settings: {
@@ -105,7 +111,14 @@ export const getAccount = async (req, res) => {
           data_deletion_requested_at: settings.data_deletion_requested_at,
         },
         case: latestCase?.caseId
-          ? { caseId: latestCase.caseId, id: latestCase.id }
+          ? { 
+              caseId: latestCase.caseId, 
+              id: latestCase.id,
+              assignedStaff: await db.User.findAll({
+                where: { id: { [Op.in]: Array.isArray(latestCase.assignedcaseworkerId) ? latestCase.assignedcaseworkerId.map(id => Number(id)) : [] } },
+                attributes: ['id', 'first_name', 'last_name']
+              })
+            }
           : null,
         lastFeedback: lastFeedback
           ? {
@@ -197,8 +210,8 @@ export const postFeedback = async (req, res) => {
     if (!ids) {
       return res.status(401).json({ status: 'error', message: 'Invalid session', data: null });
     }
-    const { idNum } = ids;
-    const { rating, experience_tags, comments } = req.body || {};
+    const { idNum, idStr } = ids;
+    const { rating, experience_tags, comments, caseworker_id } = req.body || {};
 
     const r = Number(rating);
     if (!Number.isInteger(r) || r < 1 || r > 5) {
@@ -212,11 +225,20 @@ export const postFeedback = async (req, res) => {
     const tags = sanitizeTags(experience_tags);
     const text = typeof comments === 'string' ? comments.trim().slice(0, 8000) : '';
 
+    // Find latest case to link feedback to caseworker/admin
+    const latestCase = await Case.findOne({
+      where: { candidateId: idStr },
+      order: [['created_at', 'DESC']],
+      attributes: ['id']
+    });
+
     const row = await CandidateFeedback.create({
       user_id: idNum,
       rating: r,
       experience_tags: tags,
       comments: text || null,
+      case_id: latestCase?.id || null,
+      caseworker_id: caseworker_id ? Number(caseworker_id) : null,
     });
 
     res.status(201).json({
@@ -339,6 +361,159 @@ export const postDataDeletionRequest = async (req, res) => {
       message: 'Internal server error',
       data: null,
       error: err.message,
+    });
+  }
+};
+
+/**
+ * Update candidate profile information
+ */
+export const updateProfile = async (req, res) => {
+  console.log('updateProfile request received', {
+    body: req.body,
+    file: req.file ? req.file.originalname : 'no file',
+    user: req.user
+  });
+  try {
+    const ids = resolveUserIds(req);
+    if (!ids) {
+      return res.status(401).json({ status: 'error', message: 'Invalid session', data: null });
+    }
+    const { idNum } = ids;
+    
+    const body = req.body || {};
+    const { first_name, last_name, country_code, mobile, gender } = body;
+
+    const user = await User.findOne({ where: { id: idNum } });
+    if (!user) {
+      return res.status(404).json({ status: 'error', message: 'User not found', data: null });
+    }
+
+    // Validate required fields
+    if (!first_name || !last_name) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'First name and last name are required',
+        data: null
+      });
+    }
+
+    // Mobile uniqueness check
+    if (mobile && country_code) {
+      const mobileExists = await User.findOne({
+        where: { 
+          country_code, 
+          mobile,
+          id: { [Op.ne]: idNum }
+        }
+      });
+      if (mobileExists) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Mobile number already exists',
+          data: null
+        });
+      }
+    }
+
+    const updateData = {
+      first_name: first_name || user.first_name,
+      last_name: last_name || user.last_name,
+      country_code: country_code || user.country_code,
+      mobile: mobile || user.mobile,
+      gender: gender || user.gender,
+    };
+
+    // Handle profile pic if uploaded
+    if (req.file) {
+      console.log('File detected in request:', req.file.originalname);
+      const userDir = path.join('uploads', 'profile_pics', String(idNum));
+      if (!fs.existsSync(userDir)) {
+        console.log('Creating user directory:', userDir);
+        fs.mkdirSync(userDir, { recursive: true });
+      }
+      const targetPath = path.join(userDir, req.file.filename);
+      console.log('Moving file from', req.file.path, 'to', targetPath);
+      fs.renameSync(req.file.path, targetPath);
+      updateData.profile_pic = targetPath.replace(/\\/g, '/');
+      console.log('Profile pic updated in data:', updateData.profile_pic);
+    } else {
+      console.log('No file detected in req.file');
+    }
+
+    await user.update(updateData);
+
+    // Reload with role info for the response
+    const updatedUser = await User.findOne({
+      where: { id: idNum },
+      attributes: excludeSensitiveUserAttrs(),
+      include: [{ model: db.Role, as: 'role', attributes: ['id', 'name'] }]
+    });
+
+    if (updatedUser.profile_pic) {
+      const normalizedPath = updatedUser.profile_pic.replace(/\\/g, '/');
+      updatedUser.profile_pic = `${process.env.BASE_URL}/${normalizedPath}`;
+    }
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Profile updated successfully',
+      data: { user: updatedUser }
+    });
+  } catch (err) {
+    console.error('updateProfile error:', err);
+    res.status(500).json({
+      status: 'error',
+      message: 'Internal server error',
+      data: null,
+      error: err.message
+    });
+  }
+};
+
+/**
+ * Change own password
+ */
+export const changePassword = async (req, res) => {
+  try {
+    const ids = resolveUserIds(req);
+    if (!ids) {
+      return res.status(401).json({ status: 'error', message: 'Invalid session', data: null });
+    }
+    const { idNum } = ids;
+    const { current_password, new_password } = req.body || {};
+
+    if (!new_password) {
+      return res.status(400).json({ status: 'error', message: 'New password is required', data: null });
+    }
+
+    const user = await User.findOne({ where: { id: idNum } });
+    
+    // If user has a password set, require and verify the old one
+    if (user.password) {
+      if (!current_password) {
+        return res.status(400).json({ status: 'error', message: 'Current password is required to set a new one', data: null });
+      }
+      const isMatch = await bcrypt.compare(current_password, user.password);
+      if (!isMatch) {
+        return res.status(400).json({ status: 'error', message: 'Current password incorrect', data: null });
+      }
+    }
+
+    const hashed = await bcrypt.hash(new_password, 12);
+    await user.update({ password: hashed });
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Password updated successfully'
+    });
+  } catch (err) {
+    console.error('changePassword error:', err);
+    res.status(500).json({
+      status: 'error',
+      message: 'Internal server error',
+      data: null,
+      error: err.message
     });
   }
 };

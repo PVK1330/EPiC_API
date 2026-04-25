@@ -169,6 +169,31 @@ export const createCandidate = async (req, res) => {
           },
           { transaction: t },
         );
+
+        // Also create a Case for this candidate
+        let visaTypeId = null;
+        if (application.visaType) {
+          const vt = await db.VisaType.findOne({ 
+            where: { name: { [Op.iLike]: `%${application.visaType}%` } },
+            transaction: t
+          });
+          if (vt) visaTypeId = vt.id;
+        }
+
+        const caseworkerId = application.caseworkerId;
+        const assignedcaseworkerId = caseworkerId ? [Number(caseworkerId)] : null;
+
+        await Case.create({
+          caseId: `CAS-${Math.floor(100000 + Math.random() * 900000)}`,
+          candidateId: candidate.id,
+          visaTypeId,
+          status: 'Lead',
+          priority: 'medium',
+          targetSubmissionDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+          nationality: application.nationality || null,
+          jobTitle: jobTitle || 'Candidate',
+          assignedcaseworkerId,
+        }, { transaction: t });
       }
 
       return candidate;
@@ -535,6 +560,44 @@ export const updateCandidate = async (req, res) => {
             { transaction: t },
           );
           console.log("Created new application record for user:", id);
+        }
+
+        // Synchronize Case record
+        const existingCase = await Case.findOne({ 
+          where: { candidateId: id },
+          transaction: t
+        });
+
+        let visaTypeId = null;
+        if (application.visaType) {
+          const vt = await db.VisaType.findOne({ 
+            where: { name: { [Op.iLike]: `%${application.visaType}%` } },
+            transaction: t
+          });
+          if (vt) visaTypeId = vt.id;
+        }
+
+        const caseworkerId = application.caseworkerId;
+        const assignedcaseworkerId = caseworkerId ? [Number(caseworkerId)] : null;
+
+        if (existingCase) {
+          await existingCase.update({
+            visaTypeId: visaTypeId || existingCase.visaTypeId,
+            nationality: application.nationality || existingCase.nationality,
+            assignedcaseworkerId: assignedcaseworkerId || existingCase.assignedcaseworkerId,
+          }, { transaction: t });
+        } else {
+          await Case.create({
+            caseId: `CAS-${Math.floor(100000 + Math.random() * 900000)}`,
+            candidateId: candidate.id,
+            visaTypeId,
+            status: 'Lead',
+            priority: 'medium',
+            targetSubmissionDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+            nationality: application.nationality || null,
+            jobTitle: jobTitle || 'Candidate',
+            assignedcaseworkerId,
+          }, { transaction: t });
         }
       }
     });

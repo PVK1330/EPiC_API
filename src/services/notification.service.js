@@ -125,7 +125,6 @@ export const createNotification = async (data) => {
     const notification = await Notification.create(notificationData);
 
     // If email sending is enabled, send email immediately for non-scheduled notifications.
-    // We don't 'await' here to avoid blocking the main process (especially for bulk/broadcast)
     if (sendEmail && !scheduledFor) {
       (async () => {
         try {
@@ -135,6 +134,38 @@ export const createNotification = async (data) => {
           }
         } catch (emailError) {
           console.error(`Email send failed for notification ${notification.id}:`, emailError);
+        }
+      })();
+    }
+
+    // BROADCAST TO ADMINS: If this is NOT already an admin notification, notify admins too.
+    if (!data.isInternalAdminOnly && !scheduledFor) {
+      (async () => {
+        try {
+          const adminRole = await db.Role.findOne({ where: { name: 'admin' } });
+          if (adminRole) {
+            // Find all admin users EXCEPT the one who might already be the recipient
+            const admins = await db.User.findAll({
+              where: {
+                role_id: adminRole.id,
+                id: { [db.Sequelize.Op.ne]: userId },
+                status: 'active'
+              },
+              attributes: ['id']
+            });
+
+            for (const admin of admins) {
+              await Notification.create({
+                ...notificationData,
+                userId: admin.id,
+                emailSent: false, // Don't spam admin emails for every single user notification
+                sendEmail: false, // Internal feed only by default
+                sentAt: new Date(),
+              });
+            }
+          }
+        } catch (err) {
+          console.error('Error sending copy to admins:', err);
         }
       })();
     }
@@ -459,6 +490,39 @@ export const notifyCaseAssigned = async (caseworkerId, caseData) => {
     },
     sendEmail: true,
   });
+};
+
+/**
+ * Send notification when a new case is created
+ * @param {Object} caseData - Case information
+ */
+export const notifyCaseCreated = async (caseData) => {
+  const safeCaseId = caseData?.caseId || 'Unknown';
+  const safeCandidateName = caseData?.candidateName || 'a candidate';
+  
+  // Notify all Admins
+  try {
+    const adminRole = await db.Role.findOne({ where: { name: 'admin' } });
+    if (adminRole) {
+      await createNotificationForRole(adminRole.id, {
+        type: NotificationTypes.CASE_CREATED,
+        priority: NotificationPriority.HIGH,
+        title: `New Case Created: ${safeCaseId}`,
+        message: `A new case ${safeCaseId} has been created for ${safeCandidateName}.`,
+        actionType: 'case_creation',
+        entityId: caseData?.id || null,
+        entityType: 'case',
+        metadata: {
+          caseId: safeCaseId,
+          candidateName: safeCandidateName,
+        },
+        sendEmail: true,
+        isInternalAdminOnly: true,
+      });
+    }
+  } catch (err) {
+    console.error('Error in notifyCaseCreated:', err);
+  }
 };
 
 /**

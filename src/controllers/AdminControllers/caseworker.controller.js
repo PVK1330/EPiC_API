@@ -551,7 +551,7 @@ export const getAllCaseworkers = async (req, res) => {
     // Add performance metrics to each caseworker
     const allCases = await db.Case.findAll({
       where: { deleted_at: null },
-      attributes: ['id', 'status', 'assignedcaseworkerId']
+      attributes: ['id', 'status', 'assignedcaseworkerId', 'targetSubmissionDate']
     });
 
     const caseworkersWithMetrics = caseworkers.map((caseworker) => {
@@ -560,10 +560,27 @@ export const getAllCaseworkers = async (req, res) => {
         return assignedIds.includes(caseworker.id);
       });
 
+      const now = new Date();
       const totalCases = assignedCases.length;
-      const completedCases = assignedCases.filter(c => c.status === 'completed').length;
-      const inProgressCases = assignedCases.filter(c => c.status === 'in_progress').length;
-      const pendingCases = assignedCases.filter(c => c.status === 'pending').length;
+      
+      const completedCases = assignedCases.filter(c => 
+        ['Completed', 'Approved', 'Closed'].includes(c.status)
+      ).length;
+
+      const overdueCases = assignedCases.filter(c => {
+        // A case is overdue if it's not completed/closed and the deadline has passed
+        const isNotFinished = !['Completed', 'Approved', 'Closed', 'Cancelled'].includes(c.status);
+        const isPastDeadline = c.targetSubmissionDate && new Date(c.targetSubmissionDate) < now;
+        return isNotFinished && isPastDeadline;
+      }).length;
+
+      const inProgressCases = assignedCases.filter(c => 
+        ['In Progress', 'Drafting', 'Under Review', 'Submitted'].includes(c.status)
+      ).length;
+
+      const pendingCases = assignedCases.filter(c => 
+        ['Pending', 'Docs Pending', 'Lead'].includes(c.status)
+      ).length;
 
       const caseworkerData = caseworker.toJSON();
       caseworkerData.performance = {
@@ -571,7 +588,8 @@ export const getAllCaseworkers = async (req, res) => {
         completedCases,
         inProgressCases,
         pendingCases,
-        completionRate: totalCases > 0 ? (completedCases / totalCases * 100).toFixed(2) : 0
+        overdueCases,
+        completionRate: totalCases > 0 ? ((completedCases / totalCases) * 100).toFixed(1) : 0
       };
 
       return caseworkerData;

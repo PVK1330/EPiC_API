@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import * as stripeController from '../controllers/CandidateControllers/stripepayment.controller.js';
-import { verifyToken } from '../middlewares/auth.middleware.js';
+import * as stripeController from '../../controllers/CandidateControllers/stripepayment.controller.js';
+import { verifyToken } from '../../middlewares/auth.middleware.js';
 
 const router = Router();
 

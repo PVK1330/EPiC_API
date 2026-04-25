@@ -355,6 +355,8 @@ db.User.hasMany(db.CandidateFeedback, {
   as: "candidateFeedbacks",
 });
 db.CandidateFeedback.belongsTo(db.User, { foreignKey: "user_id", as: "user" });
+db.CandidateFeedback.belongsTo(db.Case, { foreignKey: "case_id", as: "case" });
+db.Case.hasMany(db.CandidateFeedback, { foreignKey: "case_id", as: "feedbacks" });
 
 // Candidate Application associations
 db.User.hasOne(db.CandidateApplication, {

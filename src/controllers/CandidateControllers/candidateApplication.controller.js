@@ -1,4 +1,6 @@
-import db from '../models/index.js';
+import db from '../../models/index.js';
+import { notifyCaseCreated } from '../../services/notification.service.js';
+import { addTimelineEntry } from '../../services/timeline.service.js';
 
 const CandidateApplication = db.CandidateApplication;
 
@@ -50,6 +52,25 @@ function resolveUserId(req) {
   if (!Number.isFinite(num) || num <= 0) return null;
   return Math.trunc(num);
 }
+
+const generateCaseId = async () => {
+  const lastCase = await db.Case.findOne({
+    order: [["created_at", "DESC"]],
+  });
+
+  let nextId = 1;
+  if (lastCase && lastCase.caseId) {
+    const parts = lastCase.caseId.split("-");
+    if (parts.length === 2 && !isNaN(parseInt(parts[1], 10))) {
+      nextId = parseInt(parts[1], 10) + 1;
+    } else {
+      const count = await db.Case.count();
+      nextId = count + 1;
+    }
+  }
+  
+  return `CAS-${String(nextId).padStart(6, "0")}`;
+};
 
 /** Every field that maps to a DATE / TIMESTAMPTZ column in the model. */
 const DATE_FIELDS = new Set([
@@ -131,12 +152,70 @@ export const getMyApplication = async (req, res) => {
       return res.status(401).json({ status: 'error', message: 'Invalid session', data: null });
     }
 
-    const application = await CandidateApplication.findOne({ where: { userId } });
+    const application = await CandidateApplication.findOne({ 
+      where: { userId },
+      include: [
+        {
+          model: db.User,
+          as: 'user',
+          attributes: ['id', 'first_name', 'last_name', 'email']
+        }
+      ]
+    });
+
+    let relatedData = {
+      cases: [],
+      documents: []
+    };
+
+    if (application) {
+      // Fetch cases with timeline
+      const cases = await db.Case.findAll({
+        where: { candidateId: userId },
+        include: [
+          {
+            model: db.VisaType,
+            as: 'visaType',
+            attributes: ['id', 'name']
+          },
+          {
+            model: db.CaseTimeline,
+            as: 'timeline',
+            where: { visibility: 'public' },
+            required: false,
+            order: [['actionDate', 'DESC']]
+          }
+        ],
+        order: [['created_at', 'DESC']]
+      });
+
+      // Fetch documents
+      const documents = await db.Document.findAll({
+        where: { userId },
+        order: [['created_at', 'DESC']]
+      });
+
+      // Fetch required document types
+      const documentSettings = await db.ApplicationFieldSetting.findAll({
+        where: { field_type: 'file', is_visible: true },
+        attributes: ['id', 'field_key', 'field_label', 'is_required']
+      });
+
+      relatedData.cases = cases;
+      relatedData.documents = documents;
+      relatedData.documentSettings = documentSettings;
+      relatedData.documents = documents;
+    }
 
     res.status(200).json({
       status: 'success',
       message: 'Application loaded',
-      data: { application: application || null },
+      data: { 
+        application: application ? {
+          ...application.toJSON(),
+          _relatedData: relatedData
+        } : null 
+      },
     });
   } catch (err) {
     console.error('getMyApplication error:', err);
@@ -159,25 +238,105 @@ export const submitApplication = async (req, res) => {
 
     const payload = pickFields(req.body || {});
 
-    const existing = await CandidateApplication.findOne({ where: { userId } });
+    const application = await db.sequelize.transaction(async (t) => {
+      const existing = await CandidateApplication.findOne({ 
+        where: { userId },
+        transaction: t 
+      });
 
-    let application;
-    if (existing) {
-      await existing.update({
-        ...payload,
-        status: 'submitted',
-        submittedAt: new Date(),
+      let app;
+      if (existing) {
+        await existing.update({
+          ...payload,
+          status: 'submitted',
+          submittedAt: new Date(),
+        }, { transaction: t });
+        await existing.reload({ transaction: t });
+        app = existing;
+      } else {
+        app = await CandidateApplication.create({
+          userId,
+          ...payload,
+          status: 'submitted',
+          submittedAt: new Date(),
+        }, { transaction: t });
+      }
+
+      // ── 3. Handle Case creation/update ─────────────────────────────────────────
+      let visaTypeId = null;
+      if (payload.visaType) {
+        const vt = await db.VisaType.findOne({ 
+          where: { name: { [db.Sequelize.Op.iLike]: `%${payload.visaType}%` } },
+          transaction: t
+        });
+        if (vt) visaTypeId = vt.id;
+      }
+
+      const caseworkerId = req.body.caseworkerId;
+      const assignedcaseworkerId = caseworkerId ? [Number(caseworkerId)] : null;
+
+      const existingCase = await db.Case.findOne({ 
+        where: { candidateId: userId },
+        transaction: t 
       });
-      await existing.reload();
-      application = existing;
-    } else {
-      application = await CandidateApplication.create({
-        userId,
-        ...payload,
-        status: 'submitted',
-        submittedAt: new Date(),
-      });
-    }
+
+      if (existingCase) {
+        // Update existing case
+        await existingCase.update({
+          visaTypeId: visaTypeId || existingCase.visaTypeId,
+          nationality: app.nationality || existingCase.nationality,
+          assignedcaseworkerId: assignedcaseworkerId || existingCase.assignedcaseworkerId,
+          status: 'Lead', // Ensure it moves to Lead upon submission
+        }, { transaction: t });
+      } else {
+        // Create new case
+        const caseIdStr = await generateCaseId();
+        const caseRecord = await db.Case.create({
+          caseId: caseIdStr,
+          candidateId: userId,
+          visaTypeId,
+          status: 'Lead',
+          priority: 'medium',
+          targetSubmissionDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+          nationality: app.nationality || null,
+          jobTitle: 'Candidate',
+          totalAmount: 0,
+          paidAmount: 0,
+          assignedcaseworkerId,
+        }, { transaction: t });
+
+        // Notify admins about the new case
+        await notifyCaseCreated({
+          id: caseRecord.id,
+          caseId: caseRecord.caseId,
+          candidateName: `${app.firstName} ${app.lastName}`,
+        });
+
+        // Add timeline entry
+        await addTimelineEntry({
+          caseId: caseRecord.id,
+          actionType: 'case_created',
+          description: `Case ${caseRecord.caseId} created for ${app.firstName} ${app.lastName}`,
+          performedBy: userId,
+          visibility: 'public'
+        });
+      }
+
+      // Add timeline entry for application submission
+      const targetCase = existingCase || (await db.Case.findOne({ where: { candidateId: userId }, transaction: t }));
+      if (targetCase) {
+        await addTimelineEntry({
+          caseId: targetCase.id,
+          actionType: 'status_changed',
+          description: `Application submitted by ${app.firstName} ${app.lastName}`,
+          performedBy: userId,
+          visibility: 'public',
+          newValue: 'Lead'
+        });
+      }
+
+      return app;
+    });
 
     res.status(200).json({
       status: 'success',

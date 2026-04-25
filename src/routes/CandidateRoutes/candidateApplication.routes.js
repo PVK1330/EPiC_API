@@ -1,7 +1,7 @@
 import { Router } from 'express';
-import { verifyToken } from '../middlewares/auth.middleware.js';
-import { requireCandidate } from '../middlewares/requireCandidate.middleware.js';
-import * as candidateApplicationController from '../controllers/candidateApplication.controller.js';
+import { verifyToken } from '../../middlewares/auth.middleware.js';
+import { requireCandidate } from '../../middlewares/requireCandidate.middleware.js';
+import * as candidateApplicationController from '../../controllers/CandidateControllers/candidateApplication.controller.js';
 
 const router = Router();
 
