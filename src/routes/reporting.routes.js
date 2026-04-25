@@ -3,6 +3,7 @@ import {
   getCaseAnalytics,
   getWorkloadReport,
   getFinancialReport,
+  getFinancialTransactions,
   getPerformanceReport,
   getReportingSummary,
 } from '../controllers/AdminControllers/reporting.controller.js';
@@ -21,6 +22,7 @@ router.get('/summary', getReportingSummary);
 router.get('/cases',       getCaseAnalytics);
 router.get('/workload',    getWorkloadReport);
 router.get('/financial',   getFinancialReport);
+router.get('/financial-transactions', getFinancialTransactions);
 router.get('/performance', getPerformanceReport);
 
 export default router;

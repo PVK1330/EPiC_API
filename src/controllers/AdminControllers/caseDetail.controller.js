@@ -11,6 +11,79 @@ const User = db.User;
 const VisaType = db.VisaType;
 const PetitionType = db.PetitionType;
 
+// Reusable function to get full case data with all relationships
+const fetchFullCaseData = async (id) => {
+  const whereClause = isNaN(id) ? { caseId: id } : { id: parseInt(id) };
+  return await Case.findOne({
+    where: whereClause,
+    include: [
+      {
+        model: User,
+        as: 'candidate',
+        attributes: ['id', 'first_name', 'last_name', 'email', 'mobile'],
+        required: false
+      },
+      {
+        model: User,
+        as: 'sponsor',
+        attributes: ['id', 'first_name', 'last_name', 'email', 'mobile'],
+        required: false
+      },
+      {
+        model: db.VisaType,
+        as: 'visaType',
+        attributes: ['id', 'name'],
+        required: false
+      },
+      {
+        model: db.Department,
+        as: 'department',
+        attributes: ['id', 'name'],
+        required: false
+      },
+      {
+        model: Document,
+        as: 'documents',
+        include: [{ model: User, as: 'uploader', attributes: ['first_name', 'last_name'] }],
+        required: false
+      },
+      {
+        model: CasePayment,
+        as: 'payments',
+        include: [{ model: User, as: 'receiver', attributes: ['first_name', 'last_name'] }],
+        required: false
+      },
+      {
+        model: CaseTimeline,
+        as: 'timeline',
+        include: [{ model: User, as: 'performer', attributes: ['first_name', 'last_name'] }],
+        required: false
+      },
+      {
+        model: CaseCommunication,
+        as: 'communications',
+        include: [
+          { model: User, as: 'sender', attributes: ['first_name', 'last_name'] },
+          { model: User, as: 'recipient', attributes: ['first_name', 'last_name'] }
+        ],
+        required: false
+      },
+      {
+        model: CaseNote,
+        as: 'caseNotes',
+        include: [{ model: User, as: 'author', attributes: ['first_name', 'last_name'] }],
+        required: false
+      },
+      {
+        model: db.Task,
+        as: 'tasks',
+        include: [{ model: User, as: 'assignee', attributes: ['first_name', 'last_name'] }],
+        required: false
+      }
+    ]
+  });
+};
+
 // Get comprehensive case details for single case page
 export const getCaseDetails = async (req, res) => {
   try {
@@ -335,5 +408,185 @@ export const updateCaseStatus = async (req, res) => {
       data: null,
       error: error.message,
     });
+  }
+};
+
+// Export Case Details to CSV
+export const exportCaseCSV = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const caseData = await fetchFullCaseData(id);
+
+    if (!caseData) return res.status(404).json({ status: "error", message: "Case not found" });
+
+    let csv = "\uFEFF"; // BOM for Excel
+    const esc = (v) => `"${String(v || "").replace(/"/g, '""')}"`;
+
+    // Section 1: Overview
+    csv += "SECTION,FIELD,VALUE\n";
+    csv += `INFO,Case ID,${esc(caseData.caseId)}\n`;
+    csv += `INFO,Status,${esc(caseData.status)}\n`;
+    csv += `INFO,Candidate,${esc(caseData.candidate?.first_name + " " + caseData.candidate?.last_name)}\n`;
+    csv += `INFO,Sponsor,${esc(caseData.sponsor?.first_name + " " + caseData.sponsor?.last_name)}\n`;
+    csv += `INFO,Department,${esc(caseData.department?.name)}\n`;
+    csv += `INFO,Visa Type,${esc(caseData.visaType?.name)}\n`;
+    csv += `INFO,Job Title,${esc(caseData.jobTitle)}\n`;
+    csv += `INFO,Target Date,${esc(caseData.targetSubmissionDate)}\n\n`;
+
+    // Section 2: Tasks
+    csv += "SECTION,TASK NAME,PRIORITY,STATUS,ASSIGNED TO,DUE DATE\n";
+    (caseData.tasks || []).forEach(t => {
+      csv += `TASK,${esc(t.title)},${esc(t.priority)},${esc(t.status)},${esc(t.assignee?.first_name)},${esc(t.due_date)}\n`;
+    });
+    csv += "\n";
+
+    // Section 3: Financials
+    csv += "SECTION,DATE,AMOUNT,METHOD,STATUS,INVOICE,RECORDED BY\n";
+    (caseData.payments || []).forEach(p => {
+      csv += `PAYMENT,${esc(p.paymentDate)},${esc(p.amount)},${esc(p.paymentMethod)},${esc(p.paymentStatus)},${esc(p.invoiceNumber)},${esc(p.receiver?.first_name)}\n`;
+    });
+    csv += "\n";
+
+    // Section 4: Documents
+    csv += "SECTION,DOC NAME,STATUS,UPLOADED AT,UPLOADED BY\n";
+    (caseData.documents || []).forEach(d => {
+      csv += `DOCUMENT,${esc(d.documentName)},${esc(d.status)},${esc(d.uploadedAt)},${esc(d.uploader?.first_name)}\n`;
+    });
+    csv += "\n";
+
+    // Section 5: Communication
+    csv += "SECTION,SENDER,RECIPIENT,SUBJECT,DATE\n";
+    (caseData.communications || []).forEach(c => {
+      csv += `COMM,${esc(c.sender?.first_name)},${esc(c.recipient?.first_name || c.recipientEmail)},${esc(c.subject)},${esc(c.created_at)}\n`;
+    });
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename=Case_Full_Report_${caseData.caseId}.csv`);
+    return res.status(200).send(csv);
+  } catch (error) {
+    res.status(500).json({ status: "error", message: error.message });
+  }
+};
+
+import PdfPrinter from 'pdfmake';
+
+export const exportCasePDF = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const caseData = await fetchFullCaseData(id);
+    if (!caseData) return res.status(404).json({ status: "error", message: "Case not found" });
+
+    const fonts = {
+      Roboto: {
+        normal: 'Helvetica',
+        bold: 'Helvetica-Bold',
+        italics: 'Helvetica-Oblique',
+        bolditalics: 'Helvetica-BoldOblique'
+      }
+    };
+    const printer = new PdfPrinter(fonts);
+
+    const docDefinition = {
+      pageMargins: [40, 40, 40, 40],
+      content: [
+        { text: `OFFICIAL CASE REPORT: ${caseData.caseId}`, style: 'header' },
+        { 
+          columns: [
+            { text: `Candidate: ${caseData.candidate?.first_name} ${caseData.candidate?.last_name}`, bold: true },
+            { text: `Export Date: ${new Date().toLocaleDateString()}`, alignment: 'right' }
+          ]
+        },
+        { text: `Status: ${caseData.status} | Visa: ${caseData.visaType?.name || 'N/A'}`, margin: [0, 5, 0, 20] },
+        
+        { text: '1. Employment & Sponsorship', style: 'sectionHeader' },
+        {
+          table: {
+            widths: ['30%', '70%'],
+            body: [
+              ['Sponsor Entity', caseData.sponsor?.first_name || 'N/A'],
+              ['Department', caseData.department?.name || 'N/A'],
+              ['Job Title', caseData.jobTitle || 'N/A'],
+              ['Salary Offered', caseData.salaryOffered || 'N/A'],
+              ['Target Submission', caseData.targetSubmissionDate || 'N/A']
+            ]
+          },
+          margin: [0, 0, 0, 15]
+        },
+
+        { text: '2. Tasks & Action Items', style: 'sectionHeader' },
+        {
+          table: {
+            headerRows: 1,
+            widths: ['*', 'auto', 'auto', 'auto'],
+            body: [
+              [{text: 'Task', style: 'tableHeader'}, {text: 'Priority', style: 'tableHeader'}, {text: 'Status', style: 'tableHeader'}, {text: 'Due', style: 'tableHeader'}],
+              ...(caseData.tasks || []).map(t => [t.title, t.priority, t.status, t.due_date || 'N/A'])
+            ]
+          },
+          margin: [0, 0, 0, 15]
+        },
+
+        { text: '3. Financial Summary', style: 'sectionHeader' },
+        {
+          table: {
+            headerRows: 1,
+            widths: ['auto', '*', 'auto', 'auto'],
+            body: [
+              [{text: 'Date', style: 'tableHeader'}, {text: 'Ref / Invoice', style: 'tableHeader'}, {text: 'Amount', style: 'tableHeader'}, {text: 'Status', style: 'tableHeader'}],
+              ...(caseData.payments || []).map(p => [p.paymentDate || 'N/A', p.invoiceNumber || 'N/A', p.amount, p.paymentStatus])
+            ]
+          },
+          margin: [0, 0, 0, 15]
+        },
+
+        { text: '4. Documentation Status', style: 'sectionHeader' },
+        {
+          table: {
+            headerRows: 1,
+            widths: ['*', 'auto', 'auto'],
+            body: [
+              [{text: 'Document Name', style: 'tableHeader'}, {text: 'Status', style: 'tableHeader'}, {text: 'Upload Date', style: 'tableHeader'}],
+              ...(caseData.documents || []).map(d => [d.documentName, d.status, d.uploadedAt ? new Date(d.uploadedAt).toLocaleDateString() : 'N/A'])
+            ]
+          },
+          margin: [0, 0, 0, 15]
+        },
+
+        { text: '5. Recent Activity Log', style: 'sectionHeader' },
+        {
+          table: {
+            headerRows: 1,
+            widths: ['auto', '*', 'auto'],
+            body: [
+              [{text: 'Date', style: 'tableHeader'}, {text: 'Action', style: 'tableHeader'}, {text: 'User', style: 'tableHeader'}],
+              ...(caseData.timeline || []).slice(0, 20).map(tl => [new Date(tl.actionDate).toLocaleDateString(), tl.description, tl.performer?.first_name || 'System'])
+            ]
+          },
+          margin: [0, 0, 0, 15]
+        },
+
+        { text: '6. Internal Case Notes', style: 'sectionHeader' },
+        ...(caseData.caseNotes || []).map(n => ({
+          text: `[${new Date(n.created_at).toLocaleDateString()}] ${n.author?.first_name}: ${n.content}`,
+          margin: [0, 2, 0, 2],
+          fontSize: 9
+        }))
+      ],
+      styles: {
+        header: { fontSize: 24, bold: true, color: '#2563eb', margin: [0, 0, 0, 10] },
+        sectionHeader: { fontSize: 14, bold: true, color: '#1e293b', margin: [0, 10, 0, 8], decoration: 'underline' },
+        tableHeader: { bold: true, fontSize: 10, color: '#475569', fillColor: '#f8fafc' }
+      },
+      defaultStyle: { fontSize: 10 }
+    };
+
+    const pdfDoc = printer.createPdfKitDocument(docDefinition);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=Official_Case_Report_${caseData.caseId}.pdf`);
+    pdfDoc.pipe(res);
+    pdfDoc.end();
+  } catch (error) {
+    console.error("PDF Export Error:", error);
+    res.status(500).json({ status: "error", message: error.message });
   }
 };

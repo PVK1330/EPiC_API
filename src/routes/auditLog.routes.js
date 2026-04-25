@@ -9,5 +9,7 @@ router.use(verifyToken);
 router.use(checkRole([ROLES.ADMIN]));
 
 router.get("/", auditLogController.getAuditLogs);
+router.get("/actions", auditLogController.getAuditActionTypes);
+router.get("/export", auditLogController.exportAuditLogs);
 
 export default router;

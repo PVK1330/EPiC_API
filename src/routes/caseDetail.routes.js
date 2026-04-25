@@ -15,4 +15,8 @@ router.use(checkRole([ROLES.ADMIN, ROLES.CASEWORKER]));
 router.get("/:id", caseDetailController.getCaseDetails);
 router.patch("/:id/status", caseDetailController.updateCaseStatus);
 
+// Export Routes
+router.get("/:id/export/csv", caseDetailController.exportCaseCSV);
+router.get("/:id/export/pdf", caseDetailController.exportCasePDF);
+
 export default router;

@@ -170,3 +170,57 @@ export const getAuditLogs = async (req, res) => {
     });
   }
 };
+
+// Get unique action types for filtering
+export const getAuditActionTypes = async (req, res) => {
+  try {
+    const actions = await AuditLog.findAll({
+      attributes: [[db.Sequelize.fn('DISTINCT', db.Sequelize.col('action')), 'action']],
+      order: [['action', 'ASC']]
+    });
+    
+    res.status(200).json({
+      status: "success",
+      data: actions.map(a => a.action)
+    });
+  } catch (error) {
+    res.status(500).json({ status: "error", message: error.message });
+  }
+};
+
+// Export Audit Logs to CSV
+export const exportAuditLogs = async (req, res) => {
+  try {
+    const { dateRange = "all", status = "all" } = req.query;
+    const whereClause = {};
+
+    if (dateRange !== 'all') {
+      const today = new Date();
+      const startDate = new Date();
+      if (dateRange === 'last7') startDate.setDate(today.getDate() - 7);
+      else if (dateRange === 'last30') startDate.setDate(today.getDate() - 30);
+      whereClause.created_at = { [Op.gte]: startDate };
+    }
+    if (status !== "all") whereClause.status = status;
+
+    const logs = await AuditLog.findAll({
+      where: whereClause,
+      include: [{ model: User, as: 'user', attributes: ['first_name', 'last_name'] }],
+      order: [["created_at", "DESC"]]
+    });
+
+    let csv = "\uFEFFTimestamp,User,Action,Resource,IP Address,Status,Details\n";
+    const esc = (v) => `"${String(v || "").replace(/"/g, '""')}"`;
+
+    logs.forEach(log => {
+      const userName = log.user ? `${log.user.first_name} ${log.user.last_name}` : "System";
+      csv += `${esc(new Date(log.created_at).toLocaleString())},${esc(userName)},${esc(log.action)},${esc(log.resource)},${esc(log.ip_address)},${esc(log.status)},${esc(log.details)}\n`;
+    });
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename=Audit_Export_${new Date().toISOString().slice(0,10)}.csv`);
+    return res.status(200).send(csv);
+  } catch (error) {
+    res.status(500).json({ status: "error", message: error.message });
+  }
+};
