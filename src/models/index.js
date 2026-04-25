@@ -47,6 +47,8 @@ import MessageModel from './message.model.js';
 
 import ConversationModel from './conversation.model.js';
 
+import AuditLogModel from './auditLog.model.js';
+
 const env = process.env.NODE_ENV || 'development';
 
 
@@ -103,6 +105,7 @@ db.ApplicationFieldSetting = ApplicationFieldSettingModel(sequelize, Sequelize.D
 db.ApplicationCustomField = ApplicationCustomFieldModel(sequelize, Sequelize.DataTypes);
 db.Message = MessageModel(sequelize, Sequelize.DataTypes);
 db.Conversation = ConversationModel(sequelize, Sequelize.DataTypes);
+db.AuditLog = AuditLogModel(sequelize, Sequelize.DataTypes);
 
 // Associations
 
@@ -212,5 +215,9 @@ db.Permission.belongsToMany(db.Role, {
   otherKey: 'role_id',
   as: 'roles'
 });
+
+// AuditLog associations
+db.AuditLog.belongsTo(db.User, { foreignKey: 'user_id', as: 'user' });
+db.User.hasMany(db.AuditLog, { foreignKey: 'user_id', as: 'auditLogs' });
 
 export default db;

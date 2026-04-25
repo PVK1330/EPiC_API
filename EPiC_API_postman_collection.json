@@ -346,6 +346,17 @@
             "url": "{{baseUrl}}/api/workload/caseworkers/filter?search=&department=all&sla_level=all",
             "description": "Filter caseworkers by department, SLA level, and search query. Query parameters: search (optional), department (optional: 'all', 'immigration', 'compliance'), sla_level (optional: 'all', 'high', 'medium', 'low')"
           }
+        },
+        {
+          "name": "Export Combined PDF Report",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": "{{baseUrl}}/api/workload/reports/export-pdf?startDate=2024-01-01&endDate=2024-12-31",
+            "description": "Export a combined PDF report with all system reports (Case, Workload, Financial, Performance) for a given date range. Query parameters: startDate (required, format: YYYY-MM-DD), endDate (required, format: YYYY-MM-DD)"
+          }
         }
       ]
     },
@@ -2763,6 +2774,465 @@
               { "key": "Authorization", "value": "Bearer {{token}}" }
             ],
             "url": "{{baseUrl}}/api/workload/caseworker/:id/performance"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Audit Logs",
+      "item": [
+        {
+          "name": "Get Audit Logs (Filter)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/audit-logs?date_range=7d&action=ALL&user_id=ALL&status=ALL&page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "audit-logs"],
+              "query": [
+                {
+                  "key": "date_range",
+                  "value": "7d",
+                  "description": "Time range: 7d, 30d, 3m, 1y"
+                },
+                {
+                  "key": "action",
+                  "value": "ALL",
+                  "description": "Filter by action: ALL, LOGIN, LOGOUT, CASE_CREATED, CASE_UPDATED, PAYMENT_PROCESSED, USER_CREATED, USER_UPDATED, USER_MANAGEMENT"
+                },
+                {
+                  "key": "user_id",
+                  "value": "ALL",
+                  "description": "Filter by user ID or ALL"
+                },
+                {
+                  "key": "status",
+                  "value": "ALL",
+                  "description": "Filter by status: ALL, SUCCESS, FAILED, PENDING"
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Pagination page (default: 1)"
+                },
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Items per page (default: 20)"
+                }
+              ]
+            },
+            "description": "Get audit logs with optional filters and pagination"
+          }
+        },
+        {
+          "name": "Get Audit Logs - Login Actions",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/audit-logs?date_range=7d&action=LOGIN&user_id=ALL&status=ALL&page=1&limit=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "audit-logs"],
+              "query": [
+                {
+                  "key": "date_range",
+                  "value": "7d"
+                },
+                {
+                  "key": "action",
+                  "value": "LOGIN"
+                },
+                {
+                  "key": "user_id",
+                  "value": "ALL"
+                },
+                {
+                  "key": "status",
+                  "value": "ALL"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "Get all login activities"
+          }
+        },
+        {
+          "name": "Get Audit Logs - Failed Actions",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/audit-logs?date_range=30d&action=ALL&user_id=ALL&status=FAILED&page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "audit-logs"],
+              "query": [
+                {
+                  "key": "date_range",
+                  "value": "30d"
+                },
+                {
+                  "key": "action",
+                  "value": "ALL"
+                },
+                {
+                  "key": "user_id",
+                  "value": "ALL"
+                },
+                {
+                  "key": "status",
+                  "value": "FAILED"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Get all failed activities"
+          }
+        },
+        {
+          "name": "Get Audit Logs - User Management",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/audit-logs?date_range=30d&action=USER_MANAGEMENT&user_id=ALL&status=ALL&page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "audit-logs"],
+              "query": [
+                {
+                  "key": "date_range",
+                  "value": "30d"
+                },
+                {
+                  "key": "action",
+                  "value": "USER_MANAGEMENT"
+                },
+                {
+                  "key": "user_id",
+                  "value": "ALL"
+                },
+                {
+                  "key": "status",
+                  "value": "ALL"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Get all user management activities (USER_CREATED + USER_UPDATED)"
+          }
+        },
+        {
+          "name": "Get Audit Logs - By Specific User",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/audit-logs?date_range=30d&action=ALL&user_id=1&status=ALL&page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "audit-logs"],
+              "query": [
+                {
+                  "key": "date_range",
+                  "value": "30d"
+                },
+                {
+                  "key": "action",
+                  "value": "ALL"
+                },
+                {
+                  "key": "user_id",
+                  "value": "1",
+                  "description": "Replace 1 with actual user ID"
+                },
+                {
+                  "key": "status",
+                  "value": "ALL"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Get audit logs for a specific user"
+          }
+        },
+        {
+          "name": "Get Audit Log Statistics",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/audit-logs/stats?date_range=7d",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "audit-logs", "stats"],
+              "query": [
+                {
+                  "key": "date_range",
+                  "value": "7d",
+                  "description": "Time range: 7d, 30d, 3m, 1y"
+                }
+              ]
+            },
+            "description": "Get audit log statistics (cards data: total, successful, failed, pending, today count)"
+          }
+        },
+        {
+          "name": "Export Audit Logs as CSV",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "text/csv"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/audit-logs/export?date_range=7d&action=ALL&user_id=ALL&status=ALL",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "audit-logs", "export"],
+              "query": [
+                {
+                  "key": "date_range",
+                  "value": "7d",
+                  "description": "Time range: 7d, 30d, 3m, 1y"
+                },
+                {
+                  "key": "action",
+                  "value": "ALL",
+                  "description": "Filter by action: ALL, LOGIN, LOGOUT, CASE_CREATED, CASE_UPDATED, PAYMENT_PROCESSED, USER_CREATED, USER_UPDATED, USER_MANAGEMENT"
+                },
+                {
+                  "key": "user_id",
+                  "value": "ALL",
+                  "description": "Filter by user ID or ALL"
+                },
+                {
+                  "key": "status",
+                  "value": "ALL",
+                  "description": "Filter by status: ALL, SUCCESS, FAILED, PENDING"
+                }
+              ]
+            },
+            "description": "Export filtered audit logs as CSV file"
+          }
+        },
+        {
+          "name": "Export Audit Logs CSV - Last 30 Days Failed",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "text/csv"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/audit-logs/export?date_range=30d&action=ALL&user_id=ALL&status=FAILED",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "audit-logs", "export"],
+              "query": [
+                {
+                  "key": "date_range",
+                  "value": "30d"
+                },
+                {
+                  "key": "action",
+                  "value": "ALL"
+                },
+                {
+                  "key": "user_id",
+                  "value": "ALL"
+                },
+                {
+                  "key": "status",
+                  "value": "FAILED"
+                }
+              ]
+            },
+            "description": "Export failed activities from last 30 days as CSV"
+          }
+        },
+        {
+          "name": "Export Audit Logs CSV - Case Operations",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "text/csv"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/audit-logs/export?date_range=3m&action=CASE_CREATED&user_id=ALL&status=SUCCESS",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "audit-logs", "export"],
+              "query": [
+                {
+                  "key": "date_range",
+                  "value": "3m"
+                },
+                {
+                  "key": "action",
+                  "value": "CASE_CREATED"
+                },
+                {
+                  "key": "user_id",
+                  "value": "ALL"
+                },
+                {
+                  "key": "status",
+                  "value": "SUCCESS"
+                }
+              ]
+            },
+            "description": "Export case creation activities from last 3 months as CSV"
           }
         }
       ]

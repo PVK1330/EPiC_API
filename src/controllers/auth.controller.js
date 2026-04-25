@@ -5,6 +5,7 @@ import QRCode from 'qrcode';
 import db from '../models/index.js';
 import transporter from '../config/mail.js';
 import { generateOTPTemplate, generateCredentialsTemplate } from '../utils/emailTemplate.js';
+import { createAuditLog } from '../services/auditLog.service.js';
 
 const User = db.User;
 const UnverifiedUser = db.UnverifiedUser;
@@ -280,6 +281,18 @@ export const login = async (req, res) => {
 
 
     if (!user) {
+      // Log failed login attempt
+      await createAuditLog({
+        user_id: null,
+        user_name: email || 'UNKNOWN',
+        action: 'LOGIN',
+        resource_type: 'SYSTEM',
+        resource_id: 'SYSTEM',
+        status: 'FAILED',
+        details: 'User not found',
+        req,
+      });
+
       return res.status(401).json({
         status: 'error',
         message: 'Invalid credentials.',
@@ -288,6 +301,18 @@ export const login = async (req, res) => {
     }
 
     if (user.status !== 'active') {
+      // Log failed login attempt - inactive account
+      await createAuditLog({
+        user_id: user.id,
+        user_name: user.first_name + ' ' + user.last_name,
+        action: 'LOGIN',
+        resource_type: 'SYSTEM',
+        resource_id: 'SYSTEM',
+        status: 'FAILED',
+        details: 'Account is inactive or suspended',
+        req,
+      });
+
       return res.status(403).json({
         status: 'error',
         message: 'Account is inactive or suspended.',
@@ -297,6 +322,18 @@ export const login = async (req, res) => {
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
+      // Log failed login attempt - wrong password
+      await createAuditLog({
+        user_id: user.id,
+        user_name: user.first_name + ' ' + user.last_name,
+        action: 'LOGIN',
+        resource_type: 'SYSTEM',
+        resource_id: 'SYSTEM',
+        status: 'FAILED',
+        details: 'Invalid password',
+        req,
+      });
+
       return res.status(401).json({
         status: 'error',
         message: 'Invalid credentials.',
@@ -324,7 +361,17 @@ export const login = async (req, res) => {
 
     const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '7d' });
 
-
+    // Log successful login
+    await createAuditLog({
+      user_id: user.id,
+      user_name: user.first_name + ' ' + user.last_name,
+      action: 'LOGIN',
+      resource_type: 'SYSTEM',
+      resource_id: 'SYSTEM',
+      status: 'SUCCESS',
+      details: `Logged in with role: ${user.Role?.name}`,
+      req,
+    });
 
     return res.status(200).json({
       status: 'success',
@@ -345,6 +392,18 @@ export const login = async (req, res) => {
     });
   } catch (err) {
     console.error('Login error:', err);
+    // Log system error during login
+    await createAuditLog({
+      user_id: null,
+      user_name: 'SYSTEM',
+      action: 'LOGIN',
+      resource_type: 'SYSTEM',
+      resource_id: 'SYSTEM',
+      status: 'FAILED',
+      details: `System error: ${err.message}`,
+      req,
+    });
+
     return res.status(500).json({
       status: 'error',
       message: 'Login failed. Please try again.',
@@ -353,17 +412,40 @@ export const login = async (req, res) => {
   }
 };
 
-export const logout = (req, res) => {
-  res.clearCookie('token', {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
-  });
-  return res.status(200).json({
-    status: 'success',
-    message: 'Logged out successfully.',
-    data: null,
-  });
+export const logout = async (req, res) => {
+  try {
+    // Log logout action if user is authenticated
+    if (req.user) {
+      await createAuditLog({
+        user_id: req.user.userId,
+        user_name: req.user.email,
+        action: 'LOGOUT',
+        resource_type: 'SYSTEM',
+        resource_id: 'SYSTEM',
+        status: 'SUCCESS',
+        details: 'User logged out',
+        req,
+      });
+    }
+
+    res.clearCookie('token', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+    });
+    return res.status(200).json({
+      status: 'success',
+      message: 'Logged out successfully.',
+      data: null,
+    });
+  } catch (error) {
+    console.error('Logout error:', error);
+    return res.status(500).json({
+      status: 'error',
+      message: 'Logout failed',
+      data: null,
+    });
+  }
 };
 
 export const forgotPassword = async (req, res) => {

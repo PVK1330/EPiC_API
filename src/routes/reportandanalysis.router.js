@@ -15,6 +15,12 @@ router.get(
 );
 
 router.get(
+  "/reports/export-pdf",
+  checkRole([ROLES.ADMIN, ROLES.CASEWORKER]),
+  reportsController.exportCombinedPDFReport
+);
+
+router.get(
   "/reports/workload",
   checkRole([ROLES.ADMIN, ROLES.CASEWORKER]),
   reportsController.getWorkloadReport
