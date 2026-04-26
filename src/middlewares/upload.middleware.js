@@ -58,3 +58,6 @@ export const handleDocumentUpload = upload.array('documents', 5);
 
 // Profile picture upload middleware
 export const handleProfilePicUpload = upload.single('profile_pic');
+
+// Message file upload middleware
+export const handleMessageFileUpload = upload.single('file');
