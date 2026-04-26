@@ -68,7 +68,7 @@ const generateCaseId = async () => {
       nextId = count + 1;
     }
   }
-  
+
   return `CAS-${String(nextId).padStart(6, "0")}`;
 };
 
@@ -152,7 +152,7 @@ export const getMyApplication = async (req, res) => {
       return res.status(401).json({ status: 'error', message: 'Invalid session', data: null });
     }
 
-    const application = await CandidateApplication.findOne({ 
+    const application = await CandidateApplication.findOne({
       where: { userId },
       include: [
         {
@@ -210,11 +210,11 @@ export const getMyApplication = async (req, res) => {
     res.status(200).json({
       status: 'success',
       message: 'Application loaded',
-      data: { 
+      data: {
         application: application ? {
           ...application.toJSON(),
           _relatedData: relatedData
-        } : null 
+        } : null
       },
     });
   } catch (err) {
@@ -239,9 +239,9 @@ export const submitApplication = async (req, res) => {
     const payload = pickFields(req.body || {});
 
     const application = await db.sequelize.transaction(async (t) => {
-      const existing = await CandidateApplication.findOne({ 
+      const existing = await CandidateApplication.findOne({
         where: { userId },
-        transaction: t 
+        transaction: t
       });
 
       let app;
@@ -265,7 +265,7 @@ export const submitApplication = async (req, res) => {
       // ── 3. Handle Case creation/update ─────────────────────────────────────────
       let visaTypeId = null;
       if (payload.visaType) {
-        const vt = await db.VisaType.findOne({ 
+        const vt = await db.VisaType.findOne({
           where: { name: { [db.Sequelize.Op.iLike]: `%${payload.visaType}%` } },
           transaction: t
         });
@@ -275,9 +275,9 @@ export const submitApplication = async (req, res) => {
       const caseworkerId = req.body.caseworkerId;
       const assignedcaseworkerId = caseworkerId ? [Number(caseworkerId)] : null;
 
-      const existingCase = await db.Case.findOne({ 
+      const existingCase = await db.Case.findOne({
         where: { candidateId: userId },
-        transaction: t 
+        transaction: t
       });
 
       if (existingCase) {

@@ -124,11 +124,11 @@ export const register = async (req, res) => {
       }
     });
   } catch (err) {
-    res.status(500).json({ 
+    res.status(500).json({
       status: "error",
       message: "Internal server error",
       data: null,
-      error: err.message 
+      error: err.message
     });
   }
 };
@@ -139,32 +139,32 @@ export const verifyOTP = async (req, res) => {
     const unverifiedUser = await UnverifiedUser.findOne({ where: { email } });
 
     if (!unverifiedUser) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         status: "error",
         message: "User not found or already verified",
-        data: null 
+        data: null
       });
     }
 
     if (unverifiedUser.otp_code !== otp) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         status: "error",
         message: "Invalid OTP",
-        data: null 
+        data: null
       });
     }
 
     if (new Date() > unverifiedUser.otp_expiry) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         status: "error",
         message: "OTP expired",
-        data: null 
+        data: null
       });
     }
 
     const loginUrl = `${process.env.FRONTEND_URL}`;
     const originalPassword = 'Use the password you set during registration';
-    
+
     await transporter.sendMail({
       from: process.env.EMAIL_USER,
       to: email,
@@ -223,11 +223,11 @@ export const verifyOTP = async (req, res) => {
       }
     });
   } catch (err) {
-    res.status(500).json({ 
+    res.status(500).json({
       status: "error",
       message: "Internal server error",
       data: null,
-      error: err.message 
+      error: err.message
     });
   }
 };
@@ -237,19 +237,19 @@ export const resendOTP = async (req, res) => {
     const { email } = req.body;
     const verifiedUser = await User.findOne({ where: { email } });
     if (verifiedUser) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         status: "error",
         message: "User already verified. Please login instead.",
-        data: null 
+        data: null
       });
     }
 
     const unverifiedUser = await UnverifiedUser.findOne({ where: { email } });
     if (!unverifiedUser) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         status: "error",
         message: "User not found. Please register first.",
-        data: null 
+        data: null
       });
     }
 
@@ -276,11 +276,11 @@ export const resendOTP = async (req, res) => {
       }
     });
   } catch (err) {
-    res.status(500).json({ 
+    res.status(500).json({
       status: "error",
       message: "Internal server error",
       data: null,
-      error: err.message 
+      error: err.message
     });
   }
 };
@@ -400,10 +400,10 @@ export const forgotPassword = async (req, res) => {
     const user = await User.findOne({ where: { email } });
 
     if (!user) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         status: "error",
         message: "User not found",
-        data: null 
+        data: null
       });
     }
 
@@ -431,11 +431,11 @@ export const forgotPassword = async (req, res) => {
       }
     });
   } catch (err) {
-    res.status(500).json({ 
+    res.status(500).json({
       status: "error",
       message: "Internal server error",
       data: null,
-      error: err.message 
+      error: err.message
     });
   }
 };

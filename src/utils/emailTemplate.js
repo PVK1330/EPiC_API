@@ -1,5 +1,5 @@
 export const generateOTPTemplate = (otp) => {
-  return `
+    return `
     <!DOCTYPE html>
     <html lang="en">
     <head>
@@ -206,7 +206,7 @@ export const generateOTPTemplate = (otp) => {
 
 
 export const generateCredentialsTemplate = (email, password, loginUrl) => {
-  return `
+    return `
     <!DOCTYPE html>
     <html lang="en">
     <head>
@@ -377,7 +377,7 @@ export const generateCredentialsTemplate = (email, password, loginUrl) => {
 
 
 export const generateAdminCredentialsTemplate = (email, password, loginUrl) => {
-  return `
+    return `
     <!DOCTYPE html>
     <html lang="en">
     <head>
@@ -574,13 +574,13 @@ export const generateAdminCredentialsTemplate = (email, password, loginUrl) => {
     </body>
     </html>
   `;
-  
+
 };
 
 /** Caseworker account — same credential layout as generic template, distinct copy for role. */
 export const generateCaseworkerCredentialsTemplate = (email, password, loginUrl, firstName = "") => {
-  const greeting = firstName ? `Hi ${firstName},` : "Hello,";
-  return `
+    const greeting = firstName ? `Hi ${firstName},` : "Hello,";
+    return `
     <!DOCTYPE html>
     <html lang="en">
     <head>
@@ -719,16 +719,16 @@ export const generateCaseworkerCredentialsTemplate = (email, password, loginUrl,
 };
 
 export const generateRescheduleEmailTemplate = (caseData, rescheduleDetails, recipientName) => {
-  const formatDate = (date) => {
-    if (!date) return 'N/A';
-    return new Date(date).toLocaleDateString('en-US', { 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
-    });
-  };
+    const formatDate = (date) => {
+        if (!date) return 'N/A';
+        return new Date(date).toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        });
+    };
 
-  return `
+    return `
     <!DOCTYPE html>
     <html lang="en">
     <head>
@@ -860,29 +860,29 @@ export const generateRescheduleEmailTemplate = (caseData, rescheduleDetails, rec
 };
 
 const escapeHtml = (value = "") =>
-  String(value)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
+    String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
 
 export const generateNotificationEmailTemplate = ({
-  recipientName = 'User',
-  title,
-  message,
-  priority = 'medium',
-  notificationType = 'info',
-  actionUrl = null,
+    recipientName = 'User',
+    title,
+    message,
+    priority = 'medium',
+    notificationType = 'info',
+    actionUrl = null,
 } = {}) => {
-  const safeName = escapeHtml(recipientName);
-  const safeTitle = escapeHtml(title || 'New Notification');
-  const safeMessage = escapeHtml(message || '');
-  const safePriority = escapeHtml(priority);
-  const safeType = escapeHtml(notificationType);
-  const safeActionUrl = actionUrl ? escapeHtml(actionUrl) : null;
+    const safeName = escapeHtml(recipientName);
+    const safeTitle = escapeHtml(title || 'New Notification');
+    const safeMessage = escapeHtml(message || '');
+    const safePriority = escapeHtml(priority);
+    const safeType = escapeHtml(notificationType);
+    const safeActionUrl = actionUrl ? escapeHtml(actionUrl) : null;
 
-  return `
+    return `
     <!DOCTYPE html>
     <html lang="en">
     <head>
@@ -969,11 +969,10 @@ export const generateNotificationEmailTemplate = ({
                     <p><strong>Priority:</strong> ${safePriority}</p>
                     <p><strong>Type:</strong> ${safeType}</p>
                 </div>
-                ${
-                  safeActionUrl
-                    ? `<div class="action-wrap"><a href="${safeActionUrl}" class="action-btn">Open in EPiC</a></div>`
-                    : ''
-                }
+                ${safeActionUrl
+            ? `<div class="action-wrap"><a href="${safeActionUrl}" class="action-btn">Open in EPiC</a></div>`
+            : ''
+        }
                 <div class="note-box">
                     This is an automated notification from EPiC. If you were not expecting this message, please contact your administrator.
                 </div>
