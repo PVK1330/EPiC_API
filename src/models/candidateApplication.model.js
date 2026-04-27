@@ -22,22 +22,18 @@ export default (sequelize, DataTypes) => {
             firstName: {
                 type: DataTypes.STRING(100),
                 allowNull: true,
-                field: "first_name",
             },
             lastName: {
                 type: DataTypes.STRING(100),
                 allowNull: true,
-                field: "last_name",
             },
             email: {
                 type: DataTypes.STRING(255),
                 allowNull: true,
-                field: "email",
             },
             contactNumber: {
                 type: DataTypes.STRING(50),
                 allowNull: true,
-                field: "contact_number",
             },
             applicationType: {
                 type: DataTypes.ENUM('Single', 'Family'),

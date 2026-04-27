@@ -816,7 +816,7 @@ export const notifySystemMaintenance = async (roleId, maintenanceData) => {
  * @param {Object} messageData - Message information
  * @param {Object} senderData - Sender information
  */
-export const notifyMessageReceived = async (receiverId, messageData, senderData) => {
+export const notifyMessageReceived = async (receiverId, messageData, senderData, skipAdminBroadcast = false) => {
   const safeSenderName = senderData?.first_name && senderData?.last_name 
     ? `${senderData.first_name} ${senderData.last_name}` 
     : senderData?.email || 'Unknown sender';
@@ -843,6 +843,7 @@ export const notifyMessageReceived = async (receiverId, messageData, senderData)
       messageType: messageData?.messageType || 'text',
     },
     sendEmail: false, // Typically don't send emails for messages to avoid spam
+    isInternalAdminOnly: skipAdminBroadcast, // Prevent admin fanout for message notifications
   });
 };
 

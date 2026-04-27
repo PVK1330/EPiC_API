@@ -154,14 +154,14 @@ export const sendMessage = async (req, res) => {
       messageRow: messageInfo,
     });
 
-    // Create notification for message receiver
+    // Create notification for message receiver only — skip admin broadcast
     try {
       await notifyMessageReceived(receiverId, messageInfo, {
         id: senderId,
         first_name: req.user.first_name,
         last_name: req.user.last_name,
         email: req.user.email,
-      });
+      }, true /* skipAdminBroadcast */);
     } catch (notificationError) {
       console.error('Failed to create message notification:', notificationError);
       // Don't fail the message sending if notification fails
