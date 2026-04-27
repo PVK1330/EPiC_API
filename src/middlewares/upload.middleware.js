@@ -50,7 +50,7 @@ const upload = multer({
   fileFilter: fileFilter,
   limits: {
     fileSize: 10 * 1024 * 1024, // 10MB limit
-    files: 5 // Maximum 5 files at once
+    files: 10 // Maximum 10 files at once (needed for sponsor registration)
   }
 });
 
@@ -61,3 +61,13 @@ export const handleProfilePicUpload = upload.single('profile_pic');
 
 // Message file upload middleware
 export const handleMessageFileUpload = upload.single('file');
+
+// Sponsor registration documents upload middleware
+export const handleSponsorRegistrationUpload = upload.fields([
+  { name: 'profile_pic', maxCount: 1 },
+  { name: 'sponsorLetter', maxCount: 1 },
+  { name: 'insuranceCertificate', maxCount: 1 },
+  { name: 'hrPolicies', maxCount: 1 },
+  { name: 'organisationalChart', maxCount: 1 },
+  { name: 'recruitmentDocs', maxCount: 1 }
+]);

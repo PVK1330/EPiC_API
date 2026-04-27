@@ -86,6 +86,11 @@ export default (sequelize, DataTypes) => {
                 type: DataTypes.STRING(255),
                 allowNull: true,
             },
+            authorisingJobTitle: {
+                type: DataTypes.STRING(255),
+                allowNull: true,
+                field: 'authorising_job_title'
+            },
             keyContactName: {
                 type: DataTypes.STRING(255),
                 allowNull: true,
@@ -98,6 +103,11 @@ export default (sequelize, DataTypes) => {
                 type: DataTypes.STRING(255),
                 allowNull: true,
             },
+            keyContactDepartment: {
+                type: DataTypes.STRING(255),
+                allowNull: true,
+                field: 'key_contact_department'
+            },
             hrName: {
                 type: DataTypes.STRING(255),
                 allowNull: true,
@@ -109,6 +119,11 @@ export default (sequelize, DataTypes) => {
             hrPhone: {
                 type: DataTypes.STRING(20),
                 allowNull: true,
+            },
+            hrJobTitle: {
+                type: DataTypes.STRING(255),
+                allowNull: true,
+                field: 'hr_job_title'
             },
             licenceIssueDate: {
                 type: DataTypes.DATE,

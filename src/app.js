@@ -31,6 +31,7 @@ import reportingRoutes from './routes/reporting.routes.js';
 import rescheduleRoutes from './routes/CaseworkerRoutes/reschedule.routes.js';
 import auditLogRoutes from './routes/auditLog.routes.js';
 import appointmentRoutes from './routes/appointment.routes.js';
+import sponsorPanelRoutes from './routes/SponsorRoutes/index.js';
 import { getFrontendOrigins } from './config/frontendOrigins.js';
 
 const app = express();
@@ -64,6 +65,7 @@ app.use('/api/caseworker/case-notes', caseworkerCaseNoteRoutes);
 app.use('/api/caseworker/sponsors', caseworkerSponsorRoutes);
 app.use('/api/caseworker', caseworkerRoutes);
 app.use('/api/sponsors', sponsorsRoutes);
+app.use('/api/business', sponsorPanelRoutes);
 app.use('/api/candidate', candidatePanelRoutes);
 app.use('/api/appointments', appointmentRoutes);
 app.use('/api/cases/reschedule', rescheduleRoutes);
