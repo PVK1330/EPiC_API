@@ -18,50 +18,50 @@ const router = express.Router();
 // Routes
 router.post('/upload', 
   verifyToken, 
-  checkPermission('document_upload'), 
+  checkPermission('caseworker.documents.upload'), 
   handleDocumentUpload, 
   uploadDocuments
 );
 
 router.get('/category/:category/user/:userId', 
   verifyToken, 
-  checkPermission('document_view'), 
+  checkPermission('caseworker.documents.view'), 
   getUserDocumentsByCategory
 );
 
 router.get('/case/:caseId', 
   verifyToken, 
-  checkPermission('document_view'), 
+  checkPermission('caseworker.documents.view'), 
   getCaseDocuments
 );
 
 router.get('/:documentId', 
   verifyToken, 
-  checkPermission('document_view'), 
+  checkPermission('caseworker.documents.view'), 
   getDocumentById
 );
 
 router.put('/:documentId', 
   verifyToken, 
-  checkPermission('document_update'), 
+  checkPermission('caseworker.documents.view'), 
   updateDocument
 );
 
 router.delete('/:documentId', 
   verifyToken, 
-  checkPermission('document_delete'), 
+  checkPermission('caseworker.documents.view'), 
   deleteDocument
 );
 
 router.patch('/status/:documentId', 
   verifyToken, 
-  checkPermission('document_review'), 
+  checkPermission('caseworker.documents.view'), 
   updateDocumentStatus
 );
 
 router.get('/download/:documentId', 
   verifyToken, 
-  checkPermission('document_download'), 
+  checkPermission('caseworker.documents.view'), 
   downloadDocument
 );
 

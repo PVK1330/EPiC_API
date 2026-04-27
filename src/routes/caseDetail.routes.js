@@ -1,5 +1,6 @@
 import { Router } from "express";
 import * as caseDetailController from "../controllers/AdminControllers/caseDetail.controller.js";
+import * as timelineController from "../controllers/timeline.controller.js";
 import { verifyToken } from "../middlewares/auth.middleware.js";
 import { checkRole, ROLES } from "../middlewares/role.middleware.js";
 
@@ -14,6 +15,12 @@ router.use(checkRole([ROLES.ADMIN, ROLES.CASEWORKER]));
 // Case Detail Routes
 router.get("/:id", caseDetailController.getCaseDetails);
 router.patch("/:id/status", caseDetailController.updateCaseStatus);
+
+// Timeline Routes
+router.get("/:id/timeline", timelineController.getCaseTimeline);
+router.post("/timeline", timelineController.createTimelineEntry);
+router.put("/timeline/:id", timelineController.updateTimelineEntry);
+router.delete("/timeline/:id", timelineController.deleteTimelineEntry);
 
 // Export Routes
 router.get("/:id/export/csv", caseDetailController.exportCaseCSV);
