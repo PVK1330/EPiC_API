@@ -19,7 +19,9 @@ export const getMyAppointments = async (req, res) => {
       where: {
         [Op.or]: [
           { candidate_id: userId },
-          { caseworker_id: userId }
+          { caseworker_id: userId },
+          // Check if userId is in the invited_staff JSON array using Postgres @> operator
+          db.sequelize.literal(`invited_staff::jsonb @> '[${userId}]'`)
         ]
       },
       include: [
