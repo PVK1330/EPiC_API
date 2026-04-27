@@ -12,6 +12,7 @@ export const rescheduleCase = async (req, res) => {
   try {
     const { id } = req.params;
     const userRoleId = req.user.role_id;
+    const userId = req.user.userId;
 
     // Verify user is a caseworker
     if (userRoleId !== ROLES.CASEWORKER) {
@@ -35,6 +36,19 @@ export const rescheduleCase = async (req, res) => {
       return res.status(404).json({
         status: "error",
         message: "Case not found",
+        data: null,
+      });
+    }
+
+    // Check if case is assigned to this caseworker or created by this caseworker
+    const assignedCaseworkerIds = caseData.assignedcaseworkerId || [];
+    const isAssigned = assignedCaseworkerIds.includes(userId);
+    const isCreatedByUser = caseData.createdById === userId;
+
+    if (!isAssigned && !isCreatedByUser) {
+      return res.status(403).json({
+        status: "error",
+        message: "Access denied. You can only reschedule cases assigned to you or created by you.",
         data: null,
       });
     }
@@ -153,12 +167,35 @@ export const getRescheduleHistory = async (req, res) => {
   try {
     const { id } = req.params;
     const userRoleId = req.user.role_id;
+    const userId = req.user.userId;
 
     // Verify user is a caseworker
     if (userRoleId !== ROLES.CASEWORKER) {
       return res.status(403).json({
         status: "error",
         message: "Access denied. Only caseworkers can view reschedule history.",
+        data: null,
+      });
+    }
+
+    // Check if case is assigned to this caseworker or created by this caseworker
+    const caseData = await Case.findByPk(id);
+    if (!caseData) {
+      return res.status(404).json({
+        status: "error",
+        message: "Case not found",
+        data: null,
+      });
+    }
+
+    const assignedCaseworkerIds = caseData.assignedcaseworkerId || [];
+    const isAssigned = assignedCaseworkerIds.includes(userId);
+    const isCreatedByUser = caseData.createdById === userId;
+
+    if (!isAssigned && !isCreatedByUser) {
+      return res.status(403).json({
+        status: "error",
+        message: "Access denied. You can only view reschedule history for cases assigned to you or created by you.",
         data: null,
       });
     }
@@ -195,6 +232,7 @@ export const getRescheduleHistory = async (req, res) => {
 export const getAllRescheduleHistory = async (req, res) => {
   try {
     const userRoleId = req.user.role_id;
+    const userId = req.user.userId;
     const { page = 1, limit = 10 } = req.query;
     const offset = (page - 1) * limit;
 
@@ -207,7 +245,47 @@ export const getAllRescheduleHistory = async (req, res) => {
       });
     }
 
+    // Get all cases assigned to this caseworker or created by this caseworker
+    const assignedCases = await Case.findAll({
+      where: {
+        [db.Sequelize.Op.or]: [
+          {
+            assignedcaseworkerId: {
+              [db.Sequelize.Op.contains]: [userId]
+            }
+          },
+          {
+            createdById: userId
+          }
+        ]
+      },
+      attributes: ['id']
+    });
+
+    const caseIds = assignedCases.map(c => c.id);
+
+    if (caseIds.length === 0) {
+      return res.status(200).json({
+        status: "success",
+        message: "No reschedule history found",
+        data: {
+          history: [],
+          pagination: {
+            total: 0,
+            page: parseInt(page),
+            limit: parseInt(limit),
+            pages: 0,
+          },
+        },
+      });
+    }
+
     const { count, rows: history } = await RescheduleHistory.findAndCountAll({
+      where: {
+        caseId: {
+          [db.Sequelize.Op.in]: caseIds
+        }
+      },
       include: [
         {
           model: Case,

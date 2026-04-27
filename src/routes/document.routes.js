@@ -24,52 +24,60 @@ const REVIEW_PERMS = ['caseworker.cases.update', 'admin.cases.update'];
 const DOWNLOAD_PERMS = ['caseworker.documents.view', 'candidate.documents.view', 'business.compliance.documents', 'admin.cases.detail'];
 
 // Routes
-router.post('/upload', 
-  verifyToken, 
-  checkAnyPermission(UPLOAD_PERMS), 
-  handleDocumentUpload, 
+router.post('/upload',
+  verifyToken,
+  checkAnyPermission(UPLOAD_PERMS),
+  checkPermission('caseworker.documents.upload'),
+  handleDocumentUpload,
   uploadDocuments
 );
 
-router.get('/category/:category/user/:userId', 
-  verifyToken, 
-  checkAnyPermission(VIEW_PERMS), 
+router.get('/category/:category/user/:userId',
+  verifyToken,
+  checkAnyPermission(VIEW_PERMS),
+  checkPermission('caseworker.documents.view'),
   getUserDocumentsByCategory
 );
 
-router.get('/case/:caseId', 
-  verifyToken, 
-  checkAnyPermission(VIEW_PERMS), 
+router.get('/case/:caseId',
+  verifyToken,
+  checkAnyPermission(VIEW_PERMS),
+  checkPermission('caseworker.documents.view'),
   getCaseDocuments
 );
 
-router.get('/:documentId', 
-  verifyToken, 
-  checkAnyPermission(VIEW_PERMS), 
+router.get('/:documentId',
+  verifyToken,
+  checkAnyPermission(VIEW_PERMS),
+  checkPermission('caseworker.documents.view'),
   getDocumentById
 );
 
-router.put('/:documentId', 
-  verifyToken, 
-  checkAnyPermission(UPDATE_PERMS), 
+router.put('/:documentId',
+  verifyToken,
+  checkAnyPermission(UPDATE_PERMS),
+  checkPermission('caseworker.documents.view'),
   updateDocument
 );
 
-router.delete('/:documentId', 
-  verifyToken, 
-  checkAnyPermission(DELETE_PERMS), 
+router.delete('/:documentId',
+  verifyToken,
+  checkAnyPermission(DELETE_PERMS),
+  checkPermission('caseworker.documents.view'),
   deleteDocument
 );
 
-router.patch('/status/:documentId', 
-  verifyToken, 
-  checkAnyPermission(REVIEW_PERMS), 
+router.patch('/status/:documentId',
+  verifyToken,
+  checkAnyPermission(REVIEW_PERMS),
+  checkPermission('caseworker.documents.view'),
   updateDocumentStatus
 );
 
-router.get('/download/:documentId', 
-  verifyToken, 
-  checkAnyPermission(DOWNLOAD_PERMS), 
+router.get('/download/:documentId',
+  verifyToken,
+  checkAnyPermission(DOWNLOAD_PERMS),
+  checkPermission('caseworker.documents.view'),
   downloadDocument
 );
 
