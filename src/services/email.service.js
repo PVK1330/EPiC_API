@@ -65,3 +65,14 @@ export async function sendRescheduleEmail({ to, html }) {
     html,
   });
 }
+
+/**
+ * Appointment notification.
+ */
+export async function sendAppointmentEmail({ to, html }) {
+  return sendMail({
+    to,
+    subject: "Elite Pic - Appointment Scheduled",
+    html,
+  });
+}

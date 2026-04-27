@@ -986,3 +986,159 @@ export const generateNotificationEmailTemplate = ({
     </html>
   `;
 };
+
+export const generateAppointmentTemplate = ({
+    title,
+    date,
+    time,
+    platform,
+    meetingUrl,
+    candidateName,
+    staffName,
+    isStaffRecipient = false
+}) => {
+    const greeting = isStaffRecipient ? `Hi ${staffName},` : `Hi ${candidateName},`;
+    const message = isStaffRecipient 
+        ? `A new meeting has been scheduled with you by candidate <strong>${candidateName}</strong>.`
+        : `Your meeting with <strong>${staffName}</strong> has been successfully scheduled.`;
+
+    const platformLabel = {
+        teams: "Microsoft Teams",
+        meet: "Google Meet",
+        zoom: "Zoom",
+        'in-person': "In-person Meeting"
+    }[platform] || platform;
+
+    return `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Elite Pic - Appointment Scheduled</title>
+        <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #eef2f7; padding: 30px 16px; }
+            .wrapper { max-width: 580px; margin: 0 auto; }
+            .header {
+                background-color: #004ca5;
+                border-radius: 12px 12px 0 0;
+                padding: 28px 32px;
+                display: flex; align-items: center; gap: 14px;
+            }
+            .logo-mark {
+                width: 48px; height: 48px;
+                background-color: #ffffff;
+                border-radius: 10px;
+                display: flex; align-items: center; justify-content: center;
+            }
+            .logo-mark svg { width: 32px; height: 32px; }
+            .brand-name { font-size: 22px; font-weight: 700; color: #ffffff; letter-spacing: -0.4px; }
+            .brand-name span { color: #f5a623; }
+            .brand-sub { font-size: 10px; color: rgba(255,255,255,0.65); letter-spacing: 2px; text-transform: uppercase; margin-top: 2px; }
+            .accent-stripe { height: 4px; background: linear-gradient(90deg, #c8102e 0%, #f5a623 50%, #004ca5 100%); }
+            .card { background: #ffffff; padding: 40px 36px; border-left: 1px solid #dde4ef; border-right: 1px solid #dde4ef; }
+            .icon-circle {
+                width: 60px; height: 60px;
+                border-radius: 50%;
+                background-color: #eef2f7;
+                border: 2px solid #004ca5;
+                display: flex; align-items: center; justify-content: center;
+                margin: 0 auto 20px;
+            }
+            .icon-circle svg { width: 28px; height: 28px; }
+            .title { font-size: 22px; font-weight: 700; color: #004ca5; text-align: center; margin-bottom: 12px; }
+            .message { font-size: 15px; color: #556070; line-height: 1.7; margin-bottom: 28px; text-align: center; }
+            .info-box {
+                background: #f5f8ff;
+                border: 1.5px solid #c2d0e8;
+                border-radius: 10px;
+                padding: 20px;
+                margin-bottom: 28px;
+            }
+            .info-item {
+                display: flex;
+                justify-content: space-between;
+                padding: 12px 0;
+                border-bottom: 1px solid #eef2f7;
+            }
+            .info-item:last-child { border-bottom: none; }
+            .info-label { font-size: 13px; font-weight: 700; color: #8a9ab0; text-transform: uppercase; letter-spacing: 0.5px; }
+            .info-value { font-size: 15px; color: #1a2a3a; font-weight: 600; text-align: right; }
+            .btn-wrap { text-align: center; margin-bottom: 28px; }
+            .join-btn {
+                display: inline-block;
+                background-color: #c8102e;
+                color: #ffffff;
+                text-decoration: none;
+                font-size: 15px; font-weight: 600;
+                padding: 14px 36px;
+                border-radius: 8px;
+            }
+            .footer { background-color: #004ca5; border-radius: 0 0 12px 12px; padding: 20px 32px; text-align: center; }
+            .footer p { font-size: 12px; color: rgba(255,255,255,0.6); line-height: 1.8; }
+            .footer .highlight { color: #f5a623; font-weight: 600; }
+        </style>
+    </head>
+    <body>
+        <div class="wrapper">
+            <div class="header">
+                <div class="logo-mark">
+                    <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <ellipse cx="13" cy="16" rx="7" ry="7" fill="none" stroke="#004ca5" stroke-width="2.2"/>
+                        <circle cx="10.5" cy="16" r="2.2" fill="#c8102e"/>
+                        <path d="M18 16 Q22 10 27 14 Q32 18 27 22 Q22 26 18 20" fill="#f5a623" opacity="0.85"/>
+                        <circle cx="25" cy="16" r="2" fill="#004ca5"/>
+                    </svg>
+                </div>
+                <div>
+                    <div class="brand-name">elite<span>pic</span></div>
+                    <div class="brand-sub">Customer Relationship Management</div>
+                </div>
+            </div>
+            <div class="accent-stripe"></div>
+            <div class="card">
+                <div class="icon-circle">
+                    <svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect x="3" y="4" width="22" height="20" rx="2" stroke="#004ca5" stroke-width="2"/>
+                        <path d="M3 10h22M8 2v4M20 2v4" stroke="#004ca5" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                </div>
+                <h1 class="title">Appointment Scheduled</h1>
+                <p class="message">
+                    ${greeting}<br/><br/>
+                    ${message}
+                </p>
+                <div class="info-box">
+                    <div class="info-item">
+                        <span class="info-label">Title</span>
+                        <span class="info-value">${title}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Date</span>
+                        <span class="info-value">${date}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Time</span>
+                        <span class="info-value">${time}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Platform</span>
+                        <span class="info-value">${platformLabel}</span>
+                    </div>
+                </div>
+                ${meetingUrl ? `
+                <div class="btn-wrap">
+                    <a href="${meetingUrl}" class="join-btn">Join Meeting</a>
+                </div>
+                ` : ''}
+            </div>
+            <div class="footer">
+                <p>© 2026 <span class="highlight">Elite Pic</span>. All rights reserved.</p>
+                <p>This is an automated message. Please do not reply to this email.</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    `;
+};
