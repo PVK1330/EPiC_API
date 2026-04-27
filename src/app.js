@@ -31,6 +31,8 @@ import reportingRoutes from './routes/reporting.routes.js';
 import rescheduleRoutes from './routes/CaseworkerRoutes/reschedule.routes.js';
 import auditLogRoutes from './routes/auditLog.routes.js';
 import appointmentRoutes from './routes/appointment.routes.js';
+import microsoftRoutes from './routes/microsoft.routes.js';
+import teamsMeetingRoutes from './routes/teamsMeeting.routes.js';
 import sponsorPanelRoutes from './routes/SponsorRoutes/index.js';
 import { getFrontendOrigins } from './config/frontendOrigins.js';
 
@@ -68,6 +70,8 @@ app.use('/api/sponsors', sponsorsRoutes);
 app.use('/api/business', sponsorPanelRoutes);
 app.use('/api/candidate', candidatePanelRoutes);
 app.use('/api/appointments', appointmentRoutes);
+app.use('/api/microsoft', microsoftRoutes);
+app.use('/api/teams-meetings', teamsMeetingRoutes);
 app.use('/api/cases/reschedule', rescheduleRoutes);
 app.use('/api/cases', caseRoutes);
 app.use('/api/escalations', escalationRoutes);
