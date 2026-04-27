@@ -66,10 +66,23 @@ export const getMessages = async (req, res) => {
 
 export const sendMessage = async (req, res) => {
   try {
-    const { receiverId, content, caseId, messageType = 'text' } = req.body;
+    const { receiverId, caseId } = req.body;
+    let { content, messageType = 'text' } = req.body;
     const senderId = req.user.userId;
 
-    if (!receiverId || !content) {
+    // Handle file upload if present
+    if (req.file) {
+      messageType = 'file';
+      const fileUrl = `/uploads/temp/${req.file.filename}`;
+      // Store the file metadata as a JSON string in content
+      content = JSON.stringify({
+        url: fileUrl,
+        originalName: req.file.originalname,
+        content: content || '' // The actual text message sent along with file
+      });
+    }
+
+    if (!receiverId || (!content && !req.file)) {
       return res.status(400).json({ status: "error", message: "Receiver ID and content are required." });
     }
 
