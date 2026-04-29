@@ -20,9 +20,27 @@ export const createCaseNote = async (req, res) => {
       });
     }
 
-    // Validate case exists
-    const caseExists = await Case.findByPk(caseId);
-    if (!caseExists) {
+    // Handle both numeric id and string caseId
+    let caseRecord;
+    let numericCaseId;
+
+    // If caseId is a number (or numeric string), try findByPk first
+    if (!isNaN(parseInt(caseId))) {
+      caseRecord = await Case.findByPk(parseInt(caseId));
+      if (caseRecord) {
+        numericCaseId = caseRecord.id;
+      }
+    }
+
+    // If not found by numeric id, try by string caseId
+    if (!caseRecord) {
+      caseRecord = await Case.findOne({ where: { caseId } });
+      if (caseRecord) {
+        numericCaseId = caseRecord.id;
+      }
+    }
+
+    if (!caseRecord) {
       return res.status(404).json({
         status: "error",
         message: "Case not found",
@@ -43,7 +61,7 @@ export const createCaseNote = async (req, res) => {
     }
 
     const newNote = await CaseNote.create({
-      caseId,
+      caseId: numericCaseId,
       content,
       parentNoteId: parentNoteId || null,
       authorId: userId,
@@ -83,9 +101,27 @@ export const getCaseNotes = async (req, res) => {
       });
     }
 
-    // Validate case exists
-    const caseExists = await Case.findByPk(caseId);
-    if (!caseExists) {
+    // Handle both numeric id and string caseId
+    let caseRecord;
+    let numericCaseId;
+
+    // If caseId is a number (or numeric string), try findByPk first
+    if (!isNaN(parseInt(caseId))) {
+      caseRecord = await Case.findByPk(parseInt(caseId));
+      if (caseRecord) {
+        numericCaseId = caseRecord.id;
+      }
+    }
+
+    // If not found by numeric id, try by string caseId
+    if (!caseRecord) {
+      caseRecord = await Case.findOne({ where: { caseId } });
+      if (caseRecord) {
+        numericCaseId = caseRecord.id;
+      }
+    }
+
+    if (!caseRecord) {
       return res.status(404).json({
         status: "error",
         message: "Case not found",
@@ -94,7 +130,7 @@ export const getCaseNotes = async (req, res) => {
     }
 
     const { count, rows: notes } = await CaseNote.findAndCountAll({
-      where: { caseId },
+      where: { caseId: numericCaseId },
       include: [
         {
           model: User,

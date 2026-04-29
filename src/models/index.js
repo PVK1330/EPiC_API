@@ -63,8 +63,14 @@ import CandidateApplicationModel from "./candidateApplication.model.js";
 
 import SponsorProfileModel from "./sponsorProfile.model.js";
 import AppointmentModel from "./appointment.model.js";
+import CalendarMeetingModel from "./calendarMeeting.model.js";
 
 import AuditLogModel from "./auditLog.model.js";
+import LicenceApplicationModel from "./licenceApplication.model.js";
+import SponsorUserPreferenceModel from "./sponsorUserPreference.model.js";
+import WorkerEventModel from "./workerEvent.model.js";
+
+import DocumentChecklistModel from "./documentChecklist.model.js";
 
 const env = process.env.NODE_ENV || "development";
 
@@ -99,6 +105,8 @@ db.AdminUserPreference = AdminUserPreferenceModel(
 );
 
 db.AuditLog = AuditLogModel(sequelize, Sequelize.DataTypes);
+
+db.DocumentChecklist = DocumentChecklistModel(sequelize, Sequelize.DataTypes);
 
 db.VisaType = VisaTypeModel(sequelize, Sequelize.DataTypes);
 
@@ -162,6 +170,11 @@ db.SponsorProfile = SponsorProfileModel(sequelize, Sequelize.DataTypes);
 
 db.Appointment = AppointmentModel(sequelize, Sequelize.DataTypes);
 
+db.LicenceApplication = LicenceApplicationModel(sequelize, Sequelize.DataTypes);
+db.CalendarMeeting = CalendarMeetingModel(sequelize, Sequelize.DataTypes);
+db.SponsorUserPreference = SponsorUserPreferenceModel(sequelize, Sequelize.DataTypes);
+db.WorkerEvent = WorkerEventModel(sequelize, Sequelize.DataTypes);
+
 // Associations
 
 db.Conversation.belongsTo(db.User, {
@@ -209,6 +222,11 @@ db.AdminUserPreference.belongsTo(db.User, { foreignKey: "user_id" });
 db.Case.belongsTo(db.User, { foreignKey: "candidateId", as: "candidate" });
 db.Case.belongsTo(db.User, { foreignKey: "sponsorId", as: "sponsor" });
 db.Case.belongsTo(db.VisaType, { foreignKey: "visaTypeId", as: "visaType" });
+db.Case.hasOne(db.CandidateApplication, {
+  foreignKey: "userId",
+  sourceKey: "candidateId",
+  as: "application",
+});
 db.Case.belongsTo(db.PetitionType, {
   foreignKey: "petitionTypeId",
   as: "petitionType",
@@ -377,6 +395,18 @@ db.User.hasOne(db.SponsorProfile, {
 });
 db.SponsorProfile.belongsTo(db.User, { foreignKey: "userId", as: "user" });
 
+db.User.hasOne(db.SponsorUserPreference, {
+  foreignKey: "userId",
+  as: "sponsorPreferences",
+});
+db.SponsorUserPreference.belongsTo(db.User, { foreignKey: "userId", as: "user" });
+db.WorkerEvent.belongsTo(db.User, { foreignKey: "workerId", as: "worker" });
+db.WorkerEvent.belongsTo(db.User, { foreignKey: "sponsorId", as: "sponsor" });
+db.WorkerEvent.belongsTo(db.Case, { foreignKey: "caseId", as: "case" });
+db.User.hasMany(db.WorkerEvent, { foreignKey: "workerId", as: "workerEvents" });
+db.User.hasMany(db.WorkerEvent, { foreignKey: "sponsorId", as: "sponsorWorkerEvents" });
+db.Case.hasMany(db.WorkerEvent, { foreignKey: "caseId", as: "workerEvents" });
+
 // Appointment associations
 db.Appointment.belongsTo(db.User, { foreignKey: "candidate_id", as: "candidate" });
 db.Appointment.belongsTo(db.User, { foreignKey: "caseworker_id", as: "caseworker" });
@@ -385,9 +415,22 @@ db.User.hasMany(db.Appointment, { foreignKey: "candidate_id", as: "candidateAppo
 db.User.hasMany(db.Appointment, { foreignKey: "caseworker_id", as: "caseworkerAppointments" });
 db.Case.hasMany(db.Appointment, { foreignKey: "case_id", as: "appointments" });
 
+// Licence Application associations
+db.User.hasMany(db.LicenceApplication, {
+  foreignKey: "userId",
+  as: "licenceApplications",
+});
+db.LicenceApplication.belongsTo(db.User, { foreignKey: "userId", as: "user" });
+db.CalendarMeeting.belongsTo(db.User, { foreignKey: "user_id", as: "user" });
+db.User.hasMany(db.CalendarMeeting, { foreignKey: "user_id", as: "calendarMeetings" });
+
 export default db;
 
 // Audit Log Associations
 db.User.hasMany(db.AuditLog, { foreignKey: 'user_id', as: 'auditLogs' });
 db.AuditLog.belongsTo(db.User, { foreignKey: 'user_id', as: 'user' });
+
+// Document Checklist Associations
+db.VisaType.hasMany(db.DocumentChecklist, { foreignKey: 'visaTypeId', as: 'documentChecklists' });
+db.DocumentChecklist.belongsTo(db.VisaType, { foreignKey: 'visaTypeId', as: 'visaType' });
 

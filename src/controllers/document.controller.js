@@ -15,6 +15,7 @@ export const uploadDocuments = async (req, res) => {
     const documentType = req.body?.documentType || 'General';
     const userFileName = req.body?.userFileName;
     const expiryDate = req.body?.expiryDate || null;
+    const notes = req.body?.notes || null;
     const uploadedFiles = req.files;
 
     if (!uploadedFiles || uploadedFiles.length === 0) {
@@ -35,10 +36,28 @@ export const uploadDocuments = async (req, res) => {
       });
     }
 
-    // Validate case if provided
+    // Validate case if provided - handle both numeric id and string caseId
+    let numericCaseId = null;
     if (caseId) {
-      const caseExists = await Case.findByPk(caseId);
-      if (!caseExists) {
+      let caseRecord;
+
+      // If caseId is a number (or numeric string), try findByPk first
+      if (!isNaN(parseInt(caseId))) {
+        caseRecord = await Case.findByPk(parseInt(caseId));
+        if (caseRecord) {
+          numericCaseId = caseRecord.id;
+        }
+      }
+
+      // If not found by numeric id, try by string caseId
+      if (!caseRecord) {
+        caseRecord = await Case.findOne({ where: { caseId } });
+        if (caseRecord) {
+          numericCaseId = caseRecord.id;
+        }
+      }
+
+      if (!caseRecord) {
         return res.status(404).json({
           status: "error",
           message: "Case not found",
@@ -120,7 +139,7 @@ export const uploadDocuments = async (req, res) => {
       // Create document record with system-generated name
       const document = await Document.create({
         userId,
-        caseId: caseId || null,
+        caseId: numericCaseId || null,
         documentType: documentType || 'General',
         documentName: systemDocumentName,
         userFileName: userFileName || file.originalname, // Keep user's preferred name
@@ -131,7 +150,8 @@ export const uploadDocuments = async (req, res) => {
         uploadedBy: req.user.userId,
         uploadedAt: new Date(),
         status: 'uploaded',
-        expiryDate: expiryDate || null
+        expiryDate: expiryDate || null,
+        notes: notes || null
       });
 
       uploadedDocuments.push({
@@ -154,11 +174,11 @@ export const uploadDocuments = async (req, res) => {
         let caseData = null;
         let caseworkers = [];
         
-        if (caseId) {
-          caseData = await Case.findByPk(caseId);
+        if (numericCaseId) {
+          caseData = await Case.findByPk(numericCaseId);
           if (caseData && caseData.assignedcaseworkerId) {
-            caseworkers = Array.isArray(caseData.assignedcaseworkerId) 
-              ? caseData.assignedcaseworkerId 
+            caseworkers = Array.isArray(caseData.assignedcaseworkerId)
+              ? caseData.assignedcaseworkerId
               : [caseData.assignedcaseworkerId];
           }
         }
@@ -262,7 +282,35 @@ export const getCaseDocuments = async (req, res) => {
     const { caseId } = req.params;
     const { page = 1, limit = 10, status, category } = req.query;
 
-    const whereClause = { caseId };
+    // Handle both numeric id and string caseId
+    let caseRecord;
+    let numericCaseId;
+
+    // If caseId is a number (or numeric string), try findByPk first
+    if (!isNaN(parseInt(caseId))) {
+      caseRecord = await Case.findByPk(parseInt(caseId));
+      if (caseRecord) {
+        numericCaseId = caseRecord.id;
+      }
+    }
+
+    // If not found by numeric id, try by string caseId
+    if (!caseRecord) {
+      caseRecord = await Case.findOne({ where: { caseId } });
+      if (caseRecord) {
+        numericCaseId = caseRecord.id;
+      }
+    }
+
+    if (!caseRecord) {
+      return res.status(404).json({
+        status: "error",
+        message: "Case not found",
+        data: null,
+      });
+    }
+
+    const whereClause = { caseId: numericCaseId };
 
     if (status) whereClause.status = status;
     if (category) whereClause.documentCategory = category;

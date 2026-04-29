@@ -6,6 +6,7 @@ import { Op } from 'sequelize';
 
 const User = db.User;
 const SponsorProfile = db.SponsorProfile;
+const SponsorUserPreference = db.SponsorUserPreference;
 
 /**
  * Resolve user ID from request
@@ -56,6 +57,10 @@ export const getProfile = async (req, res) => {
           model: SponsorProfile,
           as: 'sponsorProfile',
         },
+        {
+          model: SponsorUserPreference,
+          as: 'sponsorPreferences',
+        },
       ],
     });
 
@@ -69,6 +74,12 @@ export const getProfile = async (req, res) => {
       profile = await SponsorProfile.create({ userId });
     }
 
+    // Ensure preferences exist
+    let preferences = user.sponsorPreferences;
+    if (!preferences) {
+      preferences = await SponsorUserPreference.create({ userId });
+    }
+
     res.status(200).json({
       status: 'success',
       message: 'Profile loaded',
@@ -78,6 +89,7 @@ export const getProfile = async (req, res) => {
           profile_pic: user.profile_pic ? `${process.env.BASE_URL}/${user.profile_pic.replace(/\\/g, '/')}` : null,
         },
         profile: profile,
+        preferences: preferences,
       },
     });
   } catch (err) {
@@ -214,11 +226,21 @@ export const updateProfile = async (req, res) => {
       await profile.update(profileUpdate);
     }
 
+    // Update Preferences if provided
+    if (req.body.preferences) {
+      const [pref] = await SponsorUserPreference.findOrCreate({ where: { userId } });
+      const prefData = typeof req.body.preferences === 'string' ? JSON.parse(req.body.preferences) : req.body.preferences;
+      await pref.update(prefData);
+    }
+
     // Fetch updated data
     const updatedUser = await User.findOne({
       where: { id: userId },
       attributes: excludeSensitiveUserAttrs(),
-      include: [{ model: SponsorProfile, as: 'sponsorProfile' }]
+      include: [
+        { model: SponsorProfile, as: 'sponsorProfile' },
+        { model: SponsorUserPreference, as: 'sponsorPreferences' }
+      ]
     });
 
     if (updatedUser.profile_pic) {
@@ -230,7 +252,8 @@ export const updateProfile = async (req, res) => {
       message: 'Profile updated successfully',
       data: {
         user: updatedUser,
-        profile: updatedUser.sponsorProfile
+        profile: updatedUser.sponsorProfile,
+        preferences: updatedUser.sponsorPreferences
       }
     });
   } catch (err) {

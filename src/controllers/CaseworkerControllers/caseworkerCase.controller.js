@@ -262,6 +262,17 @@ export const getMyDashboardStats = async (req, res) => {
     const startOfDay = new Date(today.setHours(0, 0, 0, 0));
     const endOfDay = new Date(today.setHours(23, 59, 59, 999));
 
+    // Get all assigned licence applications
+    const licenceWhere = {
+        assignedcaseworkerId: {
+            [Op.contains]: [userId]
+        }
+    };
+    const myLicences = await db.LicenceApplication.count({ where: licenceWhere });
+    const myPendingLicences = await db.LicenceApplication.count({ 
+        where: { ...licenceWhere, status: { [Op.in]: ['Pending', 'Under Review', 'Information Requested'] } } 
+    });
+
     // Get all assigned cases
     const myTotal = await Case.count({
       where: buildCaseworkerWhereClause(userId)
@@ -418,6 +429,8 @@ export const getMyDashboardStats = async (req, res) => {
           tasksToday: tasksToday,
           completedMonth: myCompletedMonth,
           performanceScore: performanceScore,
+          licences: myLicences,
+          pendingLicences: myPendingLicences
         },
         recentCases,
         tasksToday: tasksTodayDetails,

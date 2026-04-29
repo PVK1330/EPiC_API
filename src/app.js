@@ -12,6 +12,8 @@ import caseworkerCaseRoutes from './routes/CaseworkerRoutes/caseworkerCase.route
 import caseworkerDocumentRoutes from './routes/CaseworkerRoutes/caseworkerDocument.routes.js';
 import caseworkerCaseNoteRoutes from './routes/CaseworkerRoutes/caseworkerCaseNote.routes.js';
 import caseworkerSponsorRoutes from './routes/CaseworkerRoutes/caseworkerSponsor.routes.js';
+import caseworkerAuditRoutes from './routes/CaseworkerRoutes/caseworkerAudit.routes.js';
+import adminDocumentChecklistRoutes from './routes/admin.documentChecklist.routes.js';
 import sponsorsRoutes from './routes/sponsors.routes.js';
 import adminCandidateRoutes from './routes/admin.candidate.routes.js';
 import candidatePanelRoutes from './routes/CandidateRoutes/index.js';
@@ -34,6 +36,8 @@ import appointmentRoutes from './routes/appointment.routes.js';
 import microsoftRoutes from './routes/microsoft.routes.js';
 import teamsMeetingRoutes from './routes/teamsMeeting.routes.js';
 import sponsorPanelRoutes from './routes/SponsorRoutes/index.js';
+import adminLicenceRoutes from './routes/admin.licence.routes.js';
+import caseworkerLicenceRoutes from './routes/caseworker.licence.routes.js';
 import { getFrontendOrigins } from './config/frontendOrigins.js';
 
 const app = express();
@@ -60,11 +64,15 @@ app.use('/api/admin/rbac', rbacRoutes);
 app.use('/api/admin/roles', roleRoutes);
 app.use('/api/admin/audit-logs', auditLogRoutes);
 app.use('/api/admin/candidates', adminCandidateRoutes);
+app.use('/api/admin/document-checklists', adminDocumentChecklistRoutes);
+app.use('/api/admin/licence', adminLicenceRoutes);
+
 app.use('/api/admin', adminRoutes);
 app.use('/api/caseworker/cases', caseworkerCaseRoutes);
 app.use('/api/caseworker/documents', caseworkerDocumentRoutes);
 app.use('/api/caseworker/case-notes', caseworkerCaseNoteRoutes);
 app.use('/api/caseworker/sponsors', caseworkerSponsorRoutes);
+app.use('/api/caseworker/audit', caseworkerAuditRoutes);
 app.use('/api/caseworker', caseworkerRoutes);
 app.use('/api/sponsors', sponsorsRoutes);
 app.use('/api/business', sponsorPanelRoutes);

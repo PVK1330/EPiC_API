@@ -125,6 +125,12 @@ export const createCase = async (req, res) => {
           console.error('Failed to send notification to caseworker:', caseworkerId, notifError);
         }
       }
+      // Notify Client (Candidate & Sponsor)
+      try {
+          await notifyCaseStatusChanged([candidateId, sponsorId], caseData, 'None', 'Assigned');
+      } catch (notifError) {
+          console.error('Failed to notify client of assignment:', notifError);
+      }
     }
 
     // Record Audit Log
@@ -443,6 +449,7 @@ export const updateCase = async (req, res) => {
     } = req.body;
 
     const cwIds = Array.isArray(assignedcaseworkerId) ? assignedcaseworkerId : (assignedcaseworkerId ? [assignedcaseworkerId] : []);
+    const oldCwIds = caseData.assignedcaseworkerId || [];
 
     const oldStatus = caseData.status;
     console.log("Update Case - Old status:", oldStatus, "New status:", status);
@@ -506,10 +513,32 @@ export const updateCase = async (req, res) => {
       }
     }
 
+    // Send Assignment Notifications if caseworkers changed
+    const newCwIds = cwIds.filter(id => !oldCwIds.includes(id));
+    if (newCwIds.length > 0) {
+        try {
+            const visaType = await db.VisaType.findByPk(caseData.visaTypeId);
+            const candidate = await db.User.findByPk(caseData.candidateId);
+            const caseInfo = {
+                id: caseData.id,
+                caseId: caseData.caseId,
+                candidateName: candidate ? `${candidate.first_name} ${candidate.last_name}` : 'Unknown',
+                visaType: visaType ? visaType.name : 'Not specified',
+            };
+            for (const cwId of newCwIds) {
+                await notifyCaseAssigned(cwId, caseInfo);
+            }
+            // Also notify client that new caseworkers are assigned
+            await notifyCaseStatusChanged([caseData.candidateId, caseData.sponsorId], caseInfo, 'Previous', 'New Caseworker Assigned');
+        } catch (error) {
+            console.error('Error sending assignment notifications:', error);
+        }
+    }
+
     res.status(200).json({
-      status: "success",
-      message: "Case updated successfully",
-      data: { case: caseData },
+        status: "success",
+        message: "Case updated successfully",
+        data: { case: caseData },
     });
   } catch (error) {
     console.error("Update Case Error:", error);
