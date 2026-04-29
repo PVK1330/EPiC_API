@@ -1,30 +1,14 @@
 import db from "../../models/index.js";
 import { Op } from "sequelize";
 import { notifyCaseAssigned, notifyCaseStatusChanged } from "../../services/notification.service.js";
+import { generateCaseId } from "../../utils/case.utils.js";
 import { recordAuditLog } from "../../services/audit.service.js";
 
 const Case = db.Case;
 const User = db.User;
 
 // Helper function to generate next case ID like #CAS-001 securely
-const generateCaseId = async () => {
-  const lastCase = await Case.findOne({
-    order: [["created_at", "DESC"]],
-  });
-
-  let nextId = 1;
-  if (lastCase && lastCase.caseId) {
-    const parts = lastCase.caseId.split("-");
-    if (parts.length === 2 && !isNaN(parseInt(parts[1], 10))) {
-      nextId = parseInt(parts[1], 10) + 1;
-    } else {
-      const count = await Case.count();
-      nextId = count + 1;
-    }
-  }
-  
-  return `CAS-${String(nextId).padStart(6, "0")}`;
-};
+// (Now using shared utility from ../../utils/case.utils.js)
 
 // Create Case
 export const createCase = async (req, res) => {
@@ -103,23 +87,23 @@ export const createCase = async (req, res) => {
       caseId,
       candidateId,
       sponsorId,
-      businessId,
       visaTypeId,
-      petitionTypeId,
+      petitionTypeId: petitionTypeId || null,
       priority: priority || "medium",
       status: "Pending",
       submitted: new Date(),
       targetSubmissionDate,
-      lcaNumber,
-      receiptNumber,
-      nationality,
-      jobTitle,
-      departmentId,
+      lcaNumber: lcaNumber || null,
+      receiptNumber: receiptNumber || null,
+      nationality: nationality || null,
+      jobTitle: jobTitle || null,
+      departmentId: departmentId || null,
       assignedcaseworkerId: cwIds,
       salaryOffered: salaryOffered || 0,
       totalAmount: totalAmount || 0,
       paidAmount: paidAmount || 0,
-      notes,
+      notes: notes || "",
+      businessId: businessId || sponsorId, // Ensure businessId is set
     });
 
     // Send notifications to assigned caseworkers
@@ -140,6 +124,12 @@ export const createCase = async (req, res) => {
         } catch (notifError) {
           console.error('Failed to send notification to caseworker:', caseworkerId, notifError);
         }
+      }
+      // Notify Client (Candidate & Sponsor)
+      try {
+          await notifyCaseStatusChanged([candidateId, sponsorId], caseData, 'None', 'Assigned');
+      } catch (notifError) {
+          console.error('Failed to notify client of assignment:', notifError);
       }
     }
 
@@ -346,7 +336,7 @@ export const getCaseById = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const caseData = await Case.findOne({ 
+    const caseData = (await Case.findOne({ 
       where: { caseId: id },
       include: [
         {
@@ -370,7 +360,7 @@ export const getCaseById = async (req, res) => {
           attributes: ['id', 'name']
         }
       ]
-    }) || await Case.findByPk(id, {
+    })) || (!isNaN(parseInt(id)) ? await Case.findByPk(id, {
       include: [
         {
           model: db.User,
@@ -393,7 +383,7 @@ export const getCaseById = async (req, res) => {
           attributes: ['id', 'name']
         }
       ]
-    });
+    }) : null);
 
     if (!caseData) {
       return res.status(404).json({
@@ -425,7 +415,8 @@ export const updateCase = async (req, res) => {
     const { id } = req.params;
     console.log("Update Case - Request received for ID:", id);
     
-    const caseData = await Case.findOne({ where: { caseId: id } }) || await Case.findByPk(id);
+    const caseData = (await Case.findOne({ where: { caseId: id } })) || 
+                     (!isNaN(parseInt(id)) ? await Case.findByPk(id) : null);
     console.log("Update Case - Found case:", caseData?.caseId);
 
     if (!caseData) {
@@ -458,6 +449,7 @@ export const updateCase = async (req, res) => {
     } = req.body;
 
     const cwIds = Array.isArray(assignedcaseworkerId) ? assignedcaseworkerId : (assignedcaseworkerId ? [assignedcaseworkerId] : []);
+    const oldCwIds = caseData.assignedcaseworkerId || [];
 
     const oldStatus = caseData.status;
     console.log("Update Case - Old status:", oldStatus, "New status:", status);
@@ -499,8 +491,10 @@ export const updateCase = async (req, res) => {
         // Notify sponsor
         if (sponsor) userIdsToNotify.push(sponsor.id);
         // Notify assigned caseworkers
-        if (caseData.assignedcaseworkerId) {
-          userIdsToNotify.push(...caseData.assignedcaseworkerId);
+        if (Array.isArray(caseData.assignedcaseworkerId)) {
+          caseData.assignedcaseworkerId.forEach(id => {
+            if (id) userIdsToNotify.push(id);
+          });
         }
 
         if (userIdsToNotify.length > 0) {
@@ -519,10 +513,32 @@ export const updateCase = async (req, res) => {
       }
     }
 
+    // Send Assignment Notifications if caseworkers changed
+    const newCwIds = cwIds.filter(id => !oldCwIds.includes(id));
+    if (newCwIds.length > 0) {
+        try {
+            const visaType = await db.VisaType.findByPk(caseData.visaTypeId);
+            const candidate = await db.User.findByPk(caseData.candidateId);
+            const caseInfo = {
+                id: caseData.id,
+                caseId: caseData.caseId,
+                candidateName: candidate ? `${candidate.first_name} ${candidate.last_name}` : 'Unknown',
+                visaType: visaType ? visaType.name : 'Not specified',
+            };
+            for (const cwId of newCwIds) {
+                await notifyCaseAssigned(cwId, caseInfo);
+            }
+            // Also notify client that new caseworkers are assigned
+            await notifyCaseStatusChanged([caseData.candidateId, caseData.sponsorId], caseInfo, 'Previous', 'New Caseworker Assigned');
+        } catch (error) {
+            console.error('Error sending assignment notifications:', error);
+        }
+    }
+
     res.status(200).json({
-      status: "success",
-      message: "Case updated successfully",
-      data: { case: caseData },
+        status: "success",
+        message: "Case updated successfully",
+        data: { case: caseData },
     });
   } catch (error) {
     console.error("Update Case Error:", error);
@@ -540,7 +556,8 @@ export const deleteCase = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const caseData = await Case.findOne({ where: { caseId: id } }) || await Case.findByPk(id);
+    const caseData = (await Case.findOne({ where: { caseId: id } })) || 
+                     (!isNaN(parseInt(id)) ? await Case.findByPk(id) : null);
 
     if (!caseData) {
       return res.status(404).json({
@@ -634,7 +651,8 @@ export const updatePipelineStage = async (req, res) => {
 
     console.log(`Update Pipeline Stage - Case ID: ${id}, New Status: ${status}`);
 
-    const caseData = await Case.findOne({ where: { caseId: id } }) || await Case.findByPk(id);
+    const caseData = (await Case.findOne({ where: { caseId: id } })) || 
+                     (!isNaN(parseInt(id)) ? await Case.findByPk(id) : null);
 
     if (!caseData) {
       console.log(`Case not found with ID: ${id}`);
@@ -842,7 +860,8 @@ export const assignCase = async (req, res) => {
     const { id } = req.params;
     const { assignTo, assignToName, reason } = req.body;
 
-    const caseData = await Case.findOne({ where: { caseId: id } }) || await Case.findByPk(id);
+    const caseData = (await Case.findOne({ where: { caseId: id } })) || 
+                     (!isNaN(parseInt(id)) ? await Case.findByPk(id) : null);
 
     if (!caseData) return res.status(404).json({ status: "error", message: "Case not found" });
 

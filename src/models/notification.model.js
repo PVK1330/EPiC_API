@@ -48,7 +48,11 @@ export default (sequelize, DataTypes) => {
           "user_created",
           "user_status_changed",
           "system_maintenance",
-          "sla_breach"
+          "sla_breach",
+          "task_assigned",
+          "licence_assigned",
+          "licence_status_changed",
+          "licence_info_requested"
         ),
         allowNull: false,
         defaultValue: "info",

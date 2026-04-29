@@ -26,6 +26,7 @@ const sendNotificationEmailToUser = async (userId, notification) => {
       message: notification.message,
       priority: notification.priority,
       notificationType: notification.type,
+      metadata: notification.metadata || {},
     }),
   });
 
@@ -46,6 +47,7 @@ export const NotificationTypes = {
   PAYMENT_OVERDUE: 'payment_overdue',
   DOCUMENT_UPLOADED: 'document_uploaded',
   DOCUMENT_REVIEWED: 'document_reviewed',
+  LICENCE_INFO_REQUESTED: 'licence_info_requested',
   MESSAGE_RECEIVED: 'message_received',
   ESCALATION_CREATED: 'escalation_created',
   ESCALATION_RESOLVED: 'escalation_resolved',
@@ -53,6 +55,8 @@ export const NotificationTypes = {
   USER_STATUS_CHANGED: 'user_status_changed',
   SYSTEM_MAINTENANCE: 'system_maintenance',
   SLA_BREACH: 'sla_breach',
+  LICENCE_STATUS_CHANGED: 'licence_status_changed',
+  LICENCE_ASSIGNED: 'licence_assigned',
 };
 
 // Notification priority constants
@@ -175,6 +179,27 @@ export const createNotification = async (data) => {
   } catch (error) {
     console.error('Error creating notification:', error);
     throw error;
+  }
+};
+
+export const notifyAdmins = async (notificationData) => {
+  try {
+    const adminRole = await db.Role.findOne({ where: { name: 'Admin' } });
+    if (!adminRole) return;
+
+    const admins = await db.User.findAll({
+      where: { role_id: adminRole.id, status: 'active' },
+      attributes: ['id']
+    });
+
+    for (const admin of admins) {
+      await createNotification({
+        ...notificationData,
+        userId: admin.id,
+      });
+    }
+  } catch (err) {
+    console.error('Error notifying admins:', err);
   }
 };
 
@@ -785,6 +810,96 @@ export const notifySLABreach = async (userIds, caseData, slaType) => {
  * @param {number} roleId - Role ID (or null for all users)
  * @param {Object} maintenanceData - Maintenance information
  */
+/**
+ * Send licence information requested notification
+ * @param {number} userId - Business user ID to notify
+ * @param {Object} applicationData - Application information
+ */
+export const notifyLicenceInfoRequested = async (userId, applicationData) => {
+  const safeType = applicationData?.type || 'Licence';
+  const safeId = applicationData?.id || 'Unknown';
+  const docs = applicationData?.requestedDocuments;
+  const docsList = Array.isArray(docs) ? docs.join(', ') : (typeof docs === 'string' ? docs : '');
+  
+  let message = `The Admin has requested additional information/documents for your application #LIC-${safeId}.`;
+  if (docsList) {
+    message += `\n\nRequested Evidence: ${docsList}`;
+  }
+  message += `\n\nPlease review and upload the requested evidence through your dashboard.`;
+
+  return await createNotification({
+    userId,
+    type: NotificationTypes.LICENCE_INFO_REQUESTED,
+    priority: NotificationPriority.HIGH,
+    title: `Action Required: Documents Requested for ${safeType} Application`,
+    message: message,
+    actionType: 'licence_info_request',
+    entityId: applicationData?.id || null,
+    entityType: 'licence_application',
+    metadata: {
+      applicationId: safeId,
+      type: safeType,
+      requestedDocs: docsList,
+      adminNotes: applicationData.adminNotes || ''
+    },
+    sendEmail: true,
+  });
+};
+
+export const notifyLicenceStatusChanged = async (userId, applicationData, status, notes = '') => {
+  const safeId = applicationData?.id || 'Unknown';
+  const company = applicationData?.companyName || 'Your business';
+  const type = applicationData?.type || 'Licence';
+  const adminNotes = notes || applicationData?.adminNotes || '';
+
+  let message = `Your ${type} application for ${company} has been ${status.toLowerCase()}.`;
+  if (adminNotes) {
+    message += `\n\nDecision Notes: ${adminNotes}`;
+  }
+
+  return await createNotification({
+    userId,
+    type: NotificationTypes.LICENCE_STATUS_CHANGED,
+    priority: status === 'Approved' ? NotificationPriority.HIGH : NotificationPriority.URGENT,
+    title: `Licence Application ${status}: #LIC-${safeId}`,
+    message: message,
+    actionType: 'licence_status_update',
+    entityId: applicationData?.id,
+    entityType: 'licence_application',
+    metadata: {
+      applicationId: safeId,
+      company: company,
+      status: status,
+      type: type,
+      adminNotes: adminNotes,
+      updatedAt: new Date().toLocaleString()
+    },
+    sendEmail: true,
+  });
+};
+
+export const notifyLicenceAssigned = async (caseworkerId, applicationData) => {
+  const safeId = applicationData?.id || 'Unknown';
+  const company = applicationData?.companyName || 'A business';
+
+  return await createNotification({
+    userId: caseworkerId,
+    type: NotificationTypes.LICENCE_ASSIGNED,
+    priority: NotificationPriority.HIGH,
+    title: `New Assignment: Licence Application #LIC-${safeId}`,
+    message: `You have been assigned to review the licence application for ${company}.`,
+    actionType: 'licence_assignment',
+    entityId: applicationData?.id,
+    entityType: 'licence_application',
+    metadata: {
+      applicationId: safeId,
+      company: company,
+      assignedAt: new Date().toLocaleString()
+    },
+    sendEmail: true,
+  });
+};
+
 export const notifySystemMaintenance = async (roleId, maintenanceData) => {
   if (roleId) {
     const safeTitle = maintenanceData?.title || 'System Maintenance';
@@ -816,7 +931,7 @@ export const notifySystemMaintenance = async (roleId, maintenanceData) => {
  * @param {Object} messageData - Message information
  * @param {Object} senderData - Sender information
  */
-export const notifyMessageReceived = async (receiverId, messageData, senderData) => {
+export const notifyMessageReceived = async (receiverId, messageData, senderData, skipAdminBroadcast = false) => {
   const safeSenderName = senderData?.first_name && senderData?.last_name 
     ? `${senderData.first_name} ${senderData.last_name}` 
     : senderData?.email || 'Unknown sender';
@@ -843,6 +958,7 @@ export const notifyMessageReceived = async (receiverId, messageData, senderData)
       messageType: messageData?.messageType || 'text',
     },
     sendEmail: false, // Typically don't send emails for messages to avoid spam
+    isInternalAdminOnly: skipAdminBroadcast, // Prevent admin fanout for message notifications
   });
 };
 
@@ -898,4 +1014,8 @@ export default {
   notifySystemMaintenance,
   notifyMessageReceived,
   createNotificationForAllUsers,
+  notifyLicenceInfoRequested,
+  notifyLicenceStatusChanged,
+  notifyLicenceAssigned,
+  notifyAdmins,
 };

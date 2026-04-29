@@ -10,20 +10,25 @@ import { sendAppointmentEmail } from "../services/email.service.js";
 import { generateAppointmentTemplate } from "../utils/emailTemplate.js";
 import { ROLES } from "../middlewares/role.middleware.js";
 
-// Get appointments for the current user (Candidate)
+// Get appointments for the current user; admins see all appointments
 export const getMyAppointments = async (req, res) => {
   try {
     const userId = req.user.userId;
+    const isAdmin = req.user.role_name === 'admin';
+
+    const where = isAdmin
+      ? {}
+      : {
+          [Op.or]: [
+            { candidate_id: userId },
+            { caseworker_id: userId },
+            // Check if userId is in the invited_staff JSON array using Postgres @> operator
+            db.sequelize.literal(`invited_staff::jsonb @> '[${userId}]'`)
+          ]
+        };
 
     const appointments = await Appointment.findAll({
-      where: {
-        [Op.or]: [
-          { candidate_id: userId },
-          { caseworker_id: userId },
-          // Check if userId is in the invited_staff JSON array using Postgres @> operator
-          db.sequelize.literal(`invited_staff::jsonb @> '[${userId}]'`)
-        ]
-      },
+      where,
       include: [
         {
           model: User,

@@ -154,14 +154,14 @@ export const sendMessage = async (req, res) => {
       messageRow: messageInfo,
     });
 
-    // Create notification for message receiver
+    // Create notification for message receiver only — skip admin broadcast
     try {
       await notifyMessageReceived(receiverId, messageInfo, {
         id: senderId,
         first_name: req.user.first_name,
         last_name: req.user.last_name,
         email: req.user.email,
-      });
+      }, true /* skipAdminBroadcast */);
     } catch (notificationError) {
       console.error('Failed to create message notification:', notificationError);
       // Don't fail the message sending if notification fails
@@ -231,18 +231,76 @@ export const getChatUsers = async (req, res) => {
   try {
     const userId = req.user.userId;
     const userRole = req.user.role_id;
+    const sequelize = db.sequelize;
 
-    // Role logic:
-    // Admin (1) and Caseworker (2) can chat with anyone.
-    // Candidate (3) and Business (4) can only chat with Admins and Caseworkers.
-    let whereClause = { id: { [Op.ne]: userId } };
+    // Admin can see everyone
+    if (userRole === 1) {
+      const chatUsers = await db.User.findAll({
+        where: { id: { [Op.ne]: userId } },
+        attributes: ['id', 'first_name', 'last_name', 'email', 'role_id'],
+        include: [{ model: db.Role, as: 'role', attributes: ['name'] }]
+      });
+      return res.status(200).json({ status: "success", message: "Chat users retrieved successfully", data: { count: chatUsers.length, users: chatUsers } });
+    }
 
-    if (userRole === 3 || userRole === 4) {
-      whereClause.role_id = { [Op.in]: [1, 2] };
+    let allowedUserIds = new Set();
+
+    // EVERYONE can always talk to Admins (role_id = 1)
+    const admins = await db.User.findAll({
+      where: { role_id: 1, id: { [Op.ne]: userId } },
+      attributes: ['id']
+    });
+    admins.forEach(admin => allowedUserIds.add(admin.id));
+
+    if (userRole === 2) { // Caseworker
+      const myCases = await db.Case.findAll({
+        where: {
+          [Op.or]: [
+            sequelize.literal(`"assignedcaseworkerId"::jsonb @> '${JSON.stringify([userId])}'::jsonb`),
+            sequelize.literal(`"assignedcaseworkerId"::jsonb ? '${userId}'`)
+          ]
+        },
+        attributes: ['candidateId', 'businessId', 'sponsorId']
+      });
+      myCases.forEach(c => {
+        if (c.candidateId) allowedUserIds.add(c.candidateId);
+        if (c.businessId) allowedUserIds.add(c.businessId);
+        if (c.sponsorId) allowedUserIds.add(c.sponsorId);
+      });
+    } else if (userRole === 3) { // Candidate
+      const myCases = await db.Case.findAll({
+        where: { candidateId: userId },
+        attributes: ['businessId', 'sponsorId', 'assignedcaseworkerId']
+      });
+      myCases.forEach(c => {
+        if (c.businessId) allowedUserIds.add(c.businessId);
+        if (c.sponsorId) allowedUserIds.add(c.sponsorId);
+        if (c.assignedcaseworkerId && Array.isArray(c.assignedcaseworkerId)) {
+          c.assignedcaseworkerId.forEach(cwId => allowedUserIds.add(cwId));
+        }
+      });
+    } else if (userRole === 4) { // Business/Sponsor
+      const myCases = await db.Case.findAll({
+        where: {
+          [Op.or]: [
+            { businessId: userId },
+            { sponsorId: userId }
+          ]
+        },
+        attributes: ['candidateId', 'assignedcaseworkerId']
+      });
+      myCases.forEach(c => {
+        if (c.candidateId) allowedUserIds.add(c.candidateId);
+        if (c.assignedcaseworkerId && Array.isArray(c.assignedcaseworkerId)) {
+          c.assignedcaseworkerId.forEach(cwId => allowedUserIds.add(cwId));
+        }
+      });
     }
 
     const chatUsers = await db.User.findAll({
-      where: whereClause,
+      where: {
+        id: { [Op.in]: Array.from(allowedUserIds) }
+      },
       attributes: ['id', 'first_name', 'last_name', 'email', 'role_id'],
       include: [
         { model: db.Role, as: 'role', attributes: ['name'] }

@@ -874,6 +874,7 @@ export const generateNotificationEmailTemplate = ({
     priority = 'medium',
     notificationType = 'info',
     actionUrl = null,
+    metadata = {}
 } = {}) => {
     const safeName = escapeHtml(recipientName);
     const safeTitle = escapeHtml(title || 'New Notification');
@@ -922,6 +923,22 @@ export const generateNotificationEmailTemplate = ({
             }
             .meta p { font-size: 13px; color: #334155; margin-bottom: 8px; }
             .meta p:last-child { margin-bottom: 0; }
+            .details-box {
+                margin: 24px 0;
+                padding: 16px;
+                background: #f8fafc;
+                border: 1px solid #e2e8f0;
+                border-radius: 8px;
+            }
+            .details-row {
+                display: flex;
+                justify-content: space-between;
+                padding: 8px 0;
+                border-bottom: 1px solid #f1f5f9;
+            }
+            .details-row:last-child { border-bottom: none; }
+            .details-label { font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; }
+            .details-value { font-size: 13px; font-weight: 600; color: #1e293b; }
             .action-wrap { text-align: center; margin-bottom: 22px; }
             .action-btn {
                 display: inline-block;
@@ -969,6 +986,16 @@ export const generateNotificationEmailTemplate = ({
                     <p><strong>Priority:</strong> ${safePriority}</p>
                     <p><strong>Type:</strong> ${safeType}</p>
                 </div>
+                ${Object.keys(metadata).length > 0 ? `
+                <div class="details-box">
+                    ${Object.entries(metadata).map(([key, val]) => `
+                        <div class="details-row">
+                            <span class="details-label">${escapeHtml(key.replace(/([A-Z])/g, ' $1').trim())}</span>
+                            <span class="details-value">${escapeHtml(Array.isArray(val) ? val.join(', ') : val)}</span>
+                        </div>
+                    `).join('')}
+                </div>
+                ` : ''}
                 ${safeActionUrl
             ? `<div class="action-wrap"><a href="${safeActionUrl}" class="action-btn">Open in EPiC</a></div>`
             : ''

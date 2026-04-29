@@ -1,6 +1,6 @@
 import express from 'express';
 import { verifyToken } from '../middlewares/auth.middleware.js';
-import { checkPermission } from '../middlewares/role.middleware.js';
+import { checkPermission, checkAnyPermission } from '../middlewares/role.middleware.js';
 import { handleDocumentUpload } from '../middlewares/upload.middleware.js';
 import {
   uploadDocuments,
@@ -15,53 +15,69 @@ import {
 
 const router = express.Router();
 
+// Permissions used in this router:
+const VIEW_PERMS = ['caseworker.documents.view', 'candidate.documents.view', 'business.compliance.documents', 'admin.cases.detail'];
+const UPLOAD_PERMS = ['caseworker.documents.upload', 'candidate.documents.upload', 'business.profile.update', 'admin.cases.update'];
+const UPDATE_PERMS = ['caseworker.cases.update', 'admin.cases.update', 'business.profile.update'];
+const DELETE_PERMS = ['admin.cases.delete'];
+const REVIEW_PERMS = ['caseworker.cases.update', 'admin.cases.update'];
+const DOWNLOAD_PERMS = ['caseworker.documents.view', 'candidate.documents.view', 'business.compliance.documents', 'admin.cases.detail'];
+
 // Routes
-router.post('/upload', 
-  verifyToken, 
-  checkPermission('caseworker.documents.upload'), 
-  handleDocumentUpload, 
+router.post('/upload',
+  verifyToken,
+  checkAnyPermission(UPLOAD_PERMS),
+  checkPermission('caseworker.documents.upload'),
+  handleDocumentUpload,
   uploadDocuments
 );
 
-router.get('/category/:category/user/:userId', 
-  verifyToken, 
-  checkPermission('caseworker.documents.view'), 
+router.get('/category/:category/user/:userId',
+  verifyToken,
+  checkAnyPermission(VIEW_PERMS),
+  checkPermission('caseworker.documents.view'),
   getUserDocumentsByCategory
 );
 
-router.get('/case/:caseId', 
-  verifyToken, 
-  checkPermission('caseworker.documents.view'), 
+router.get('/case/:caseId',
+  verifyToken,
+  checkAnyPermission(VIEW_PERMS),
+  checkPermission('caseworker.documents.view'),
   getCaseDocuments
 );
 
-router.get('/:documentId', 
-  verifyToken, 
-  checkPermission('caseworker.documents.view'), 
+router.get('/:documentId',
+  verifyToken,
+  checkAnyPermission(VIEW_PERMS),
+  checkPermission('caseworker.documents.view'),
   getDocumentById
 );
 
-router.put('/:documentId', 
-  verifyToken, 
-  checkPermission('caseworker.documents.view'), 
+router.put('/:documentId',
+  verifyToken,
+  checkAnyPermission(UPDATE_PERMS),
+  checkPermission('caseworker.documents.view'),
   updateDocument
 );
 
-router.delete('/:documentId', 
-  verifyToken, 
-  checkPermission('caseworker.documents.view'), 
+router.delete('/:documentId',
+  verifyToken,
+  checkAnyPermission(DELETE_PERMS),
+  checkPermission('caseworker.documents.view'),
   deleteDocument
 );
 
-router.patch('/status/:documentId', 
-  verifyToken, 
-  checkPermission('caseworker.documents.view'), 
+router.patch('/status/:documentId',
+  verifyToken,
+  checkAnyPermission(REVIEW_PERMS),
+  checkPermission('caseworker.documents.view'),
   updateDocumentStatus
 );
 
-router.get('/download/:documentId', 
-  verifyToken, 
-  checkPermission('caseworker.documents.view'), 
+router.get('/download/:documentId',
+  verifyToken,
+  checkAnyPermission(DOWNLOAD_PERMS),
+  checkPermission('caseworker.documents.view'),
   downloadDocument
 );
 
