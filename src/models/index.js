@@ -65,6 +65,7 @@ import SponsorProfileModel from "./sponsorProfile.model.js";
 import AppointmentModel from "./appointment.model.js";
 
 import AuditLogModel from "./auditLog.model.js";
+import LicenceApplicationModel from "./licenceApplication.model.js";
 
 const env = process.env.NODE_ENV || "development";
 
@@ -161,6 +162,8 @@ db.CandidateApplication = CandidateApplicationModel(
 db.SponsorProfile = SponsorProfileModel(sequelize, Sequelize.DataTypes);
 
 db.Appointment = AppointmentModel(sequelize, Sequelize.DataTypes);
+
+db.LicenceApplication = LicenceApplicationModel(sequelize, Sequelize.DataTypes);
 
 // Associations
 
@@ -384,6 +387,13 @@ db.Appointment.belongsTo(db.Case, { foreignKey: "case_id", as: "case" });
 db.User.hasMany(db.Appointment, { foreignKey: "candidate_id", as: "candidateAppointments" });
 db.User.hasMany(db.Appointment, { foreignKey: "caseworker_id", as: "caseworkerAppointments" });
 db.Case.hasMany(db.Appointment, { foreignKey: "case_id", as: "appointments" });
+
+// Licence Application associations
+db.User.hasMany(db.LicenceApplication, {
+  foreignKey: "userId",
+  as: "licenceApplications",
+});
+db.LicenceApplication.belongsTo(db.User, { foreignKey: "userId", as: "user" });
 
 export default db;
 
