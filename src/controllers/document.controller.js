@@ -102,9 +102,9 @@ export const uploadDocuments = async (req, res) => {
         targetDir = path.join('uploads', 'caseimages', caseId.toString());
         urlPath = `caseimages/${caseId}`;
       } else {
-        // Profile-related upload: uploads/profileimages/userId/
-        targetDir = path.join('uploads', 'profileimages', userId.toString());
-        urlPath = `profileimages/${userId}`;
+        // Candidate document upload: uploads/documents/userId/
+        targetDir = path.join('uploads', 'documents', userId.toString());
+        urlPath = `documents/${userId}`;
       }
       
       // Generate system document name
@@ -137,11 +137,14 @@ export const uploadDocuments = async (req, res) => {
       uploadedDocuments.push({
         id: document.id,
         documentName: document.documentName,
+        userFileName: document.userFileName,
         documentPath: document.documentPath,
         documentCategory: document.documentCategory,
+        documentType: document.documentType,
         fileSize: document.fileSize,
         mimeType: document.mimeType,
-        mimeType: document.mimeType,
+        status: document.status,
+        uploadedAt: document.uploadedAt,
         documentUrl: `${process.env.BASE_URL || 'http://localhost:5000'}/uploads/${urlPath}/${systemDocumentName}`
       });
 

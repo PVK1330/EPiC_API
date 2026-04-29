@@ -86,9 +86,7 @@ const DATE_FIELDS = new Set([
  * PostgreSQL rejects "" for ENUM — it must be a valid enum value or NULL.
  */
 const ENUM_FIELDS = new Set([
-  // applicationType  → ENUM('Single', 'Family')
   'applicationType',
-  // Yes/No ENUMs
   'passportAvailable',
   'ukLicense',
   'medicalTreatment',
@@ -116,7 +114,6 @@ const ENUM_FIELDS = new Set([
  * Pick only permitted fields from the request body and sanitize:
  *  - DATE fields   : "" or unparseable strings → null
  *  - ENUM fields   : "" (or any string not in the allowed set) → null
- * This prevents PostgreSQL from receiving invalid input for typed columns.
  */
 function pickFields(body) {
   const payload = {};
@@ -133,7 +130,6 @@ function pickFields(body) {
         payload[key] = isNaN(parsed.getTime()) ? null : parsed;
       }
     } else if (ENUM_FIELDS.has(key)) {
-      // Store null for any falsy / blank value so the DB gets NULL not ""
       payload[key] = (v === null || v === undefined || String(v).trim() === '')
         ? null
         : v;
@@ -144,7 +140,92 @@ function pickFields(body) {
   return payload;
 }
 
-/** GET /api/candidate-application — load the logged-in candidate's application */
+// ── Section definitions used for completeness scoring ────────────────────────
+const COMPLETION_SECTIONS = [
+  {
+    key: 'personal',
+    label: 'Personal Information',
+    fields: ['firstName', 'lastName', 'email', 'contactNumber', 'gender',
+             'relationshipStatus', 'address', 'dob', 'applicationType'],
+  },
+  {
+    key: 'identity',
+    label: 'Identity & Passport',
+    fields: ['nationality', 'birthCountry', 'placeOfBirth', 'passportNumber',
+             'issuingAuthority', 'issueDate', 'expiryDate', 'passportAvailable'],
+  },
+  {
+    key: 'immigration',
+    label: 'Immigration History',
+    fields: ['illegalEntry', 'overstayed', 'breach', 'falseInfo', 'otherBreach',
+             'refusedVisa', 'refusedEntry', 'refusedPermission', 'refusedAsylum',
+             'deported', 'removed', 'requiredToLeave', 'banned'],
+  },
+  {
+    key: 'visa',
+    label: 'Current Visa & Employment',
+    fields: ['visaType', 'brpNumber', 'visaEndDate', 'niNumber', 'sponsored', 'englishProof'],
+  },
+  {
+    key: 'parents',
+    label: 'Parent Information',
+    fields: ['parentName', 'parentRelation', 'parentDob', 'parentNationality'],
+  },
+];
+
+/**
+ * Compute completeness scores from a plain application object.
+ * @param {object} app - application.toJSON()
+ * @param {object[]} documents - uploaded document records
+ * @param {object[]} documentSettings - required-field settings (field_type = 'file')
+ */
+function computeCompletionScore(app, documents, documentSettings) {
+  const sectionScores = COMPLETION_SECTIONS.map(section => {
+    const filled = section.fields.filter(f => {
+      const val = app[f];
+      return val !== null && val !== undefined && val !== '';
+    }).length;
+    const pct = section.fields.length > 0
+      ? Math.round((filled / section.fields.length) * 100)
+      : 0;
+    return {
+      key: section.key,
+      label: section.label,
+      filled,
+      total: section.fields.length,
+      pct,
+      complete: filled === section.fields.length,
+    };
+  });
+
+  const totalFields = COMPLETION_SECTIONS.reduce((sum, s) => sum + s.fields.length, 0);
+  const totalFilled = sectionScores.reduce((sum, s) => sum + s.filled, 0);
+  const overallPct = totalFields > 0 ? Math.round((totalFilled / totalFields) * 100) : 0;
+
+  // Document completeness
+  const requiredDocs = documentSettings.filter(s => s.is_required);
+  const uploadedRequiredDocs = requiredDocs.filter(s =>
+    documents.some(d =>
+      d.documentType === s.field_key && ['uploaded', 'approved'].includes(d.status)
+    )
+  );
+  const docPct = requiredDocs.length > 0
+    ? Math.round((uploadedRequiredDocs.length / requiredDocs.length) * 100)
+    : 100;
+
+  return {
+    overall: overallPct,
+    isComplete: overallPct === 100 && docPct === 100,
+    sections: sectionScores,
+    documents: {
+      required: requiredDocs.length,
+      uploaded: uploadedRequiredDocs.length,
+      pct: docPct,
+    },
+  };
+}
+
+/** GET /api/candidate/application — load the logged-in candidate's application */
 export const getMyApplication = async (req, res) => {
   try {
     const userId = resolveUserId(req);
@@ -158,14 +239,16 @@ export const getMyApplication = async (req, res) => {
         {
           model: db.User,
           as: 'user',
-          attributes: ['id', 'first_name', 'last_name', 'email']
-        }
-      ]
+          attributes: ['id', 'first_name', 'last_name', 'email'],
+        },
+      ],
     });
 
-    let relatedData = {
+    const relatedData = {
       cases: [],
-      documents: []
+      documents: [],
+      documentSettings: [],
+      completionScore: null,
     };
 
     if (application) {
@@ -176,45 +259,50 @@ export const getMyApplication = async (req, res) => {
           {
             model: db.VisaType,
             as: 'visaType',
-            attributes: ['id', 'name']
+            attributes: ['id', 'name'],
           },
           {
             model: db.CaseTimeline,
             as: 'timeline',
             where: { visibility: 'public' },
             required: false,
-            order: [['actionDate', 'DESC']]
-          }
+            order: [['actionDate', 'DESC']],
+          },
         ],
-        order: [['created_at', 'DESC']]
+        order: [['created_at', 'DESC']],
       });
 
-      // Fetch documents
+      // Fetch all documents belonging to this user
       const documents = await db.Document.findAll({
         where: { userId },
-        order: [['created_at', 'DESC']]
+        order: [['created_at', 'DESC']],
       });
 
-      // Fetch required document types
+      // Fetch admin-configured required document types
       const documentSettings = await db.ApplicationFieldSetting.findAll({
         where: { field_type: 'file', is_visible: true },
-        attributes: ['id', 'field_key', 'field_label', 'is_required']
+        attributes: ['id', 'field_key', 'field_label', 'is_required'],
       });
+
+      const completionScore = computeCompletionScore(
+        application.toJSON(),
+        documents,
+        documentSettings
+      );
 
       relatedData.cases = cases;
       relatedData.documents = documents;
       relatedData.documentSettings = documentSettings;
-      relatedData.documents = documents;
+      relatedData.completionScore = completionScore;
     }
 
     res.status(200).json({
       status: 'success',
       message: 'Application loaded',
       data: {
-        application: application ? {
-          ...application.toJSON(),
-          _relatedData: relatedData
-        } : null
+        application: application
+          ? { ...application.toJSON(), _relatedData: relatedData }
+          : null,
       },
     });
   } catch (err) {
@@ -228,7 +316,7 @@ export const getMyApplication = async (req, res) => {
   }
 };
 
-/** POST /api/candidate-application — submit the application (creates or updates, marks as submitted) */
+/** POST /api/candidate/application — submit the application (creates or updates, marks as submitted) */
 export const submitApplication = async (req, res) => {
   try {
     const userId = resolveUserId(req);
@@ -241,33 +329,30 @@ export const submitApplication = async (req, res) => {
     const application = await db.sequelize.transaction(async (t) => {
       const existing = await CandidateApplication.findOne({
         where: { userId },
-        transaction: t
+        transaction: t,
       });
 
       let app;
       if (existing) {
-        await existing.update({
-          ...payload,
-          status: 'submitted',
-          submittedAt: new Date(),
-        }, { transaction: t });
+        await existing.update(
+          { ...payload, status: 'submitted', submittedAt: new Date() },
+          { transaction: t }
+        );
         await existing.reload({ transaction: t });
         app = existing;
       } else {
-        app = await CandidateApplication.create({
-          userId,
-          ...payload,
-          status: 'submitted',
-          submittedAt: new Date(),
-        }, { transaction: t });
+        app = await CandidateApplication.create(
+          { userId, ...payload, status: 'submitted', submittedAt: new Date() },
+          { transaction: t }
+        );
       }
 
-      // ── 3. Handle Case creation/update ─────────────────────────────────────────
+      // ── Handle Case creation/update ─────────────────────────────────────
       let visaTypeId = null;
       if (payload.visaType) {
         const vt = await db.VisaType.findOne({
           where: { name: { [db.Sequelize.Op.iLike]: `%${payload.visaType}%` } },
-          transaction: t
+          transaction: t,
         });
         if (vt) visaTypeId = vt.id;
       }
@@ -277,61 +362,74 @@ export const submitApplication = async (req, res) => {
 
       const existingCase = await db.Case.findOne({
         where: { candidateId: userId },
-        transaction: t
+        transaction: t,
       });
 
       if (existingCase) {
-        // Update existing case
-        await existingCase.update({
-          visaTypeId: visaTypeId || existingCase.visaTypeId,
-          nationality: app.nationality || existingCase.nationality,
-          assignedcaseworkerId: assignedcaseworkerId || existingCase.assignedcaseworkerId,
-          status: 'Lead', // Ensure it moves to Lead upon submission
-        }, { transaction: t });
+        await existingCase.update(
+          {
+            visaTypeId: visaTypeId || existingCase.visaTypeId,
+            nationality: app.nationality || existingCase.nationality,
+            assignedcaseworkerId: assignedcaseworkerId || existingCase.assignedcaseworkerId,
+            status: 'Lead',
+          },
+          { transaction: t }
+        );
       } else {
-        // Create new case
         const caseIdStr = await generateCaseId();
-        const caseRecord = await db.Case.create({
-          caseId: caseIdStr,
-          candidateId: userId,
-          visaTypeId,
-          status: 'Lead',
-          priority: 'medium',
-          targetSubmissionDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-          nationality: app.nationality || null,
-          jobTitle: 'Candidate',
-          totalAmount: 0,
-          paidAmount: 0,
-          assignedcaseworkerId,
-        }, { transaction: t });
+        const caseRecord = await db.Case.create(
+          {
+            caseId: caseIdStr,
+            candidateId: userId,
+            visaTypeId,
+            status: 'Lead',
+            priority: 'medium',
+            targetSubmissionDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+            nationality: app.nationality || null,
+            jobTitle: 'Candidate',
+            totalAmount: 0,
+            paidAmount: 0,
+            assignedcaseworkerId,
+          },
+          { transaction: t }
+        );
 
-        // Notify admins about the new case
         await notifyCaseCreated({
           id: caseRecord.id,
           caseId: caseRecord.caseId,
           candidateName: `${app.firstName} ${app.lastName}`,
         });
 
-        // Add timeline entry
         await addTimelineEntry({
           caseId: caseRecord.id,
           actionType: 'case_created',
           description: `Case ${caseRecord.caseId} created for ${app.firstName} ${app.lastName}`,
           performedBy: userId,
-          visibility: 'public'
+          visibility: 'public',
         });
       }
 
-      // Add timeline entry for application submission
-      const targetCase = existingCase || (await db.Case.findOne({ where: { candidateId: userId }, transaction: t }));
+      const targetCase =
+        existingCase ||
+        (await db.Case.findOne({ where: { candidateId: userId }, transaction: t }));
+
       if (targetCase) {
+        // Link any orphaned documents uploaded by this user to this case
+        await db.Document.update(
+          { caseId: targetCase.id },
+          { 
+            where: { userId, caseId: null },
+            transaction: t 
+          }
+        );
+
         await addTimelineEntry({
           caseId: targetCase.id,
           actionType: 'status_changed',
           description: `Application submitted by ${app.firstName} ${app.lastName}`,
           performedBy: userId,
           visibility: 'public',
-          newValue: 'Lead'
+          newValue: 'Lead',
         });
       }
 
@@ -354,7 +452,7 @@ export const submitApplication = async (req, res) => {
   }
 };
 
-/** PUT /api/candidate-application — save a draft without changing submission status */
+/** PUT /api/candidate/application — save a draft without changing submission status */
 export const saveDraft = async (req, res) => {
   try {
     const userId = resolveUserId(req);

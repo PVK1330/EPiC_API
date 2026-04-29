@@ -1,6 +1,6 @@
 import express from 'express';
 import { verifyToken } from '../middlewares/auth.middleware.js';
-import { checkPermission, checkAnyPermission } from '../middlewares/role.middleware.js';
+import { checkAnyPermission } from '../middlewares/role.middleware.js';
 import { handleDocumentUpload } from '../middlewares/upload.middleware.js';
 import {
   uploadDocuments,
@@ -16,69 +16,69 @@ import {
 const router = express.Router();
 
 // Permissions used in this router:
-const VIEW_PERMS = ['caseworker.documents.view', 'candidate.documents.view', 'business.compliance.documents', 'admin.cases.detail'];
+// Candidates have: candidate.documents.view + candidate.documents.upload
+// Caseworkers have: caseworker.documents.view + caseworker.documents.upload
+const VIEW_PERMS   = ['caseworker.documents.view', 'candidate.documents.view', 'business.compliance.documents', 'admin.cases.detail'];
 const UPLOAD_PERMS = ['caseworker.documents.upload', 'candidate.documents.upload', 'business.profile.update', 'admin.cases.update'];
 const UPDATE_PERMS = ['caseworker.cases.update', 'admin.cases.update', 'business.profile.update'];
 const DELETE_PERMS = ['admin.cases.delete'];
 const REVIEW_PERMS = ['caseworker.cases.update', 'admin.cases.update'];
 const DOWNLOAD_PERMS = ['caseworker.documents.view', 'candidate.documents.view', 'business.compliance.documents', 'admin.cases.detail'];
 
-// Routes
+// ── Upload ────────────────────────────────────────────────────────────────────
+// Only checkAnyPermission — candidates have candidate.documents.upload so they pass.
+// The old double-middleware (checkAnyPermission + checkPermission('caseworker…')) was
+// an AND-gate that silently blocked all candidate uploads.
 router.post('/upload',
   verifyToken,
   checkAnyPermission(UPLOAD_PERMS),
-  checkPermission('caseworker.documents.upload'),
   handleDocumentUpload,
   uploadDocuments
 );
 
+// ── Read ──────────────────────────────────────────────────────────────────────
 router.get('/category/:category/user/:userId',
   verifyToken,
   checkAnyPermission(VIEW_PERMS),
-  checkPermission('caseworker.documents.view'),
   getUserDocumentsByCategory
 );
 
 router.get('/case/:caseId',
   verifyToken,
   checkAnyPermission(VIEW_PERMS),
-  checkPermission('caseworker.documents.view'),
   getCaseDocuments
-);
-
-router.get('/:documentId',
-  verifyToken,
-  checkAnyPermission(VIEW_PERMS),
-  checkPermission('caseworker.documents.view'),
-  getDocumentById
-);
-
-router.put('/:documentId',
-  verifyToken,
-  checkAnyPermission(UPDATE_PERMS),
-  checkPermission('caseworker.documents.view'),
-  updateDocument
-);
-
-router.delete('/:documentId',
-  verifyToken,
-  checkAnyPermission(DELETE_PERMS),
-  checkPermission('caseworker.documents.view'),
-  deleteDocument
-);
-
-router.patch('/status/:documentId',
-  verifyToken,
-  checkAnyPermission(REVIEW_PERMS),
-  checkPermission('caseworker.documents.view'),
-  updateDocumentStatus
 );
 
 router.get('/download/:documentId',
   verifyToken,
   checkAnyPermission(DOWNLOAD_PERMS),
-  checkPermission('caseworker.documents.view'),
   downloadDocument
+);
+
+router.get('/:documentId',
+  verifyToken,
+  checkAnyPermission(VIEW_PERMS),
+  getDocumentById
+);
+
+// ── Update ────────────────────────────────────────────────────────────────────
+router.put('/:documentId',
+  verifyToken,
+  checkAnyPermission(UPDATE_PERMS),
+  updateDocument
+);
+
+router.patch('/status/:documentId',
+  verifyToken,
+  checkAnyPermission(REVIEW_PERMS),
+  updateDocumentStatus
+);
+
+// ── Delete ────────────────────────────────────────────────────────────────────
+router.delete('/:documentId',
+  verifyToken,
+  checkAnyPermission(DELETE_PERMS),
+  deleteDocument
 );
 
 export default router;
