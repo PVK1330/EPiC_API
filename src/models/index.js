@@ -70,6 +70,8 @@ import LicenceApplicationModel from "./licenceApplication.model.js";
 import SponsorUserPreferenceModel from "./sponsorUserPreference.model.js";
 import WorkerEventModel from "./workerEvent.model.js";
 
+import DocumentChecklistModel from "./documentChecklist.model.js";
+
 const env = process.env.NODE_ENV || "development";
 
 const dbConfig = config[env];
@@ -103,6 +105,8 @@ db.AdminUserPreference = AdminUserPreferenceModel(
 );
 
 db.AuditLog = AuditLogModel(sequelize, Sequelize.DataTypes);
+
+db.DocumentChecklist = DocumentChecklistModel(sequelize, Sequelize.DataTypes);
 
 db.VisaType = VisaTypeModel(sequelize, Sequelize.DataTypes);
 
@@ -425,4 +429,8 @@ export default db;
 // Audit Log Associations
 db.User.hasMany(db.AuditLog, { foreignKey: 'user_id', as: 'auditLogs' });
 db.AuditLog.belongsTo(db.User, { foreignKey: 'user_id', as: 'user' });
+
+// Document Checklist Associations
+db.VisaType.hasMany(db.DocumentChecklist, { foreignKey: 'visaTypeId', as: 'documentChecklists' });
+db.DocumentChecklist.belongsTo(db.VisaType, { foreignKey: 'visaTypeId', as: 'visaType' });
 

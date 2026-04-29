@@ -1240,15 +1240,17 @@ export const reassignCase = async (req, res) => {
       });
     }
 
-    // Verify case exists
-    const caseData = await db.Case.findByPk(caseId);
-    if (!caseData) {
+    // Find case by string caseId (e.g., "CAS-000001") to get numeric id
+    const caseRecord = await db.Case.findOne({ where: { caseId } });
+    if (!caseRecord) {
       return res.status(404).json({
         status: "error",
         message: "Case not found",
         data: null
       });
     }
+
+    const caseData = caseRecord;
 
     // Verify new caseworker exists and is a caseworker
     const newCaseworker = await User.findOne({

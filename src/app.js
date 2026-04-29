@@ -12,6 +12,8 @@ import caseworkerCaseRoutes from './routes/CaseworkerRoutes/caseworkerCase.route
 import caseworkerDocumentRoutes from './routes/CaseworkerRoutes/caseworkerDocument.routes.js';
 import caseworkerCaseNoteRoutes from './routes/CaseworkerRoutes/caseworkerCaseNote.routes.js';
 import caseworkerSponsorRoutes from './routes/CaseworkerRoutes/caseworkerSponsor.routes.js';
+import caseworkerAuditRoutes from './routes/CaseworkerRoutes/caseworkerAudit.routes.js';
+import adminDocumentChecklistRoutes from './routes/admin.documentChecklist.routes.js';
 import sponsorsRoutes from './routes/sponsors.routes.js';
 import adminCandidateRoutes from './routes/admin.candidate.routes.js';
 import candidatePanelRoutes from './routes/CandidateRoutes/index.js';
@@ -62,13 +64,15 @@ app.use('/api/admin/rbac', rbacRoutes);
 app.use('/api/admin/roles', roleRoutes);
 app.use('/api/admin/audit-logs', auditLogRoutes);
 app.use('/api/admin/candidates', adminCandidateRoutes);
+app.use('/api/admin/document-checklists', adminDocumentChecklistRoutes);
 app.use('/api/admin/licence', adminLicenceRoutes);
+
 app.use('/api/admin', adminRoutes);
 app.use('/api/caseworker/cases', caseworkerCaseRoutes);
 app.use('/api/caseworker/documents', caseworkerDocumentRoutes);
 app.use('/api/caseworker/case-notes', caseworkerCaseNoteRoutes);
 app.use('/api/caseworker/sponsors', caseworkerSponsorRoutes);
-app.use('/api/caseworker/licence', caseworkerLicenceRoutes);
+app.use('/api/caseworker/audit', caseworkerAuditRoutes);
 app.use('/api/caseworker', caseworkerRoutes);
 app.use('/api/sponsors', sponsorsRoutes);
 app.use('/api/business', sponsorPanelRoutes);

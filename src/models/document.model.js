@@ -71,6 +71,11 @@ export default (sequelize, DataTypes) => {
         allowNull: true,
         comment: "Document expiry date for alerts"
       },
+      notes: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        comment: "Additional notes provided during document upload"
+      },
       uploadedBy: {
         type: DataTypes.INTEGER,
         allowNull: true,
