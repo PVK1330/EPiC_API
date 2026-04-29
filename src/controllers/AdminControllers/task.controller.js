@@ -365,17 +365,27 @@ export const getTaskByCaseId = async (req, res) => {
     const roleId = req.user?.role_id;
     const userId = req.user?.userId;
 
-    const caseId = parseInt(id, 10);
-    if (Number.isNaN(caseId)) {
-      return res.status(400).json({
-        status: "error",
-        message: "Invalid case id",
-        data: null,
-      });
+    // Handle both numeric id and string caseId
+    let numericCaseId;
+
+    // If id is a number (or numeric string), use it directly
+    if (!isNaN(parseInt(id))) {
+      numericCaseId = parseInt(id);
+    } else {
+      // Otherwise, find case by string caseId to get numeric id
+      const caseRecord = await db.Case.findOne({ where: { caseId: id } });
+      if (!caseRecord) {
+        return res.status(404).json({
+          status: "error",
+          message: "Case not found",
+          data: null,
+        });
+      }
+      numericCaseId = caseRecord.id;
     }
 
     const rows = await Task.findAll({
-      where: { case_id: caseId },
+      where: { case_id: numericCaseId },
       include: [userInclude("assignee"), userInclude("creator")],
     });
 

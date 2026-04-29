@@ -11,6 +11,10 @@ import {
   updateDocumentStatus,
   downloadDocument
 } from '../../controllers/document.controller.js';
+import {
+  getCaseChecklist,
+  getChecklistByVisaType
+} from '../../Controllers/documentChecklist.controller.js';
 
 const router = express.Router();
 
@@ -46,6 +50,15 @@ router.delete('/:documentId',
 
 router.patch('/status/:documentId',
   updateDocumentStatus
+);
+
+// Document Checklist routes
+router.get('/checklist/case/:caseId',
+  getCaseChecklist
+);
+
+router.get('/checklist/visa/:visaTypeId',
+  getChecklistByVisaType
 );
 
 export default router;
