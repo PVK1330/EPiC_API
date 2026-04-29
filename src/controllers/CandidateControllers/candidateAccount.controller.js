@@ -3,11 +3,17 @@ import bcrypt from 'bcryptjs';
 import path from 'path';
 import fs from 'fs';
 import { Op } from 'sequelize';
+import {
+  createBulkNotifications,
+  NotificationTypes,
+  NotificationPriority,
+} from '../../services/notification.service.js';
 
 const User = db.User;
 const Case = db.Case;
 const CandidateAccountSettings = db.CandidateAccountSettings;
 const CandidateFeedback = db.CandidateFeedback;
+const CandidateIssueReport = db.CandidateIssueReport;
 
 const ALLOWED_EXP_TAG_IDS = new Set(['easy', 'fast', 'support', 'guidance']);
 
@@ -26,6 +32,95 @@ function resolveUserIds(req) {
 function sanitizeTags(tags) {
   if (!Array.isArray(tags)) return [];
   return tags.filter((t) => typeof t === 'string' && ALLOWED_EXP_TAG_IDS.has(t));
+}
+
+/** Allowed issue categories (ITSM-style intake). */
+export const ISSUE_CATEGORY_IDS = [
+  'portal_access',
+  'documents_uploads',
+  'payments_billing',
+  'case_status',
+  'communication',
+  'appointments',
+  'account_profile',
+  'technical_bug',
+  'privacy_security',
+  'other',
+];
+
+const ISSUE_SEVERITY_IDS = ['low', 'medium', 'high', 'urgent'];
+
+function normalizeCaseworkerIds(raw) {
+  if (!raw) return [];
+  if (Array.isArray(raw)) {
+    return raw.map((x) => Number(x)).filter((n) => Number.isFinite(n) && n > 0);
+  }
+  if (typeof raw === 'string') {
+    try {
+      const j = JSON.parse(raw);
+      return Array.isArray(j)
+        ? j.map((x) => Number(x)).filter((n) => Number.isFinite(n) && n > 0)
+        : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+async function notifyStakeholdersOfIssueReport({
+  reportId,
+  candidateId,
+  candidateName,
+  caseRef,
+  category,
+  severity,
+  subject,
+  caseworkerIds,
+}) {
+  const title = `Issue report: ${subject}`;
+  const message = `${candidateName} submitted a ${severity} severity report (${category.replace(/_/g, ' ')}).${caseRef ? ` Case reference: ${caseRef}.` : ''}`;
+  const recipientIds = new Set();
+  caseworkerIds.forEach((id) => recipientIds.add(id));
+
+  const adminRole = await db.Role.findOne({
+    where: { name: { [Op.iLike]: 'admin' } },
+  });
+  if (adminRole) {
+    const admins = await User.findAll({
+      where: { role_id: adminRole.id, status: 'active' },
+      attributes: ['id'],
+    });
+    admins.forEach((a) => recipientIds.add(a.id));
+  }
+
+  const ids = [...recipientIds];
+  if (!ids.length) return;
+
+  const priority =
+    severity === 'urgent'
+      ? NotificationPriority.URGENT
+      : severity === 'high'
+        ? NotificationPriority.HIGH
+        : NotificationPriority.MEDIUM;
+
+  await createBulkNotifications(ids, {
+    type: NotificationTypes.CANDIDATE_ISSUE_REPORT,
+    priority,
+    title,
+    message,
+    entityId: reportId,
+    entityType: 'candidate_issue_report',
+    metadata: {
+      reportId,
+      candidateId,
+      category,
+      severity,
+      caseRef,
+      subject,
+    },
+    sendEmail: true,
+  });
 }
 
 function excludeSensitiveUserAttrs() {
@@ -74,10 +169,26 @@ export const getAccount = async (req, res) => {
     /* "cases"."candidateId" is VARCHAR in some DBs; numeric bind caused: varchar = integer */
     const latestCase = await Case.findOne({
       where: { candidateId: idStr },
-      /* Case model maps createdAt → created_at; ORDER BY must use DB column name */
       order: [['created_at', 'DESC']],
-      attributes: ['id', 'caseId'],
+      attributes: ['id', 'caseId', 'assignedcaseworkerId'],
     });
+
+    const cwIds = normalizeCaseworkerIds(latestCase?.assignedcaseworkerId);
+    const assignedStaff =
+      cwIds.length > 0
+        ? await User.findAll({
+            where: { id: { [Op.in]: cwIds } },
+            attributes: ['id', 'first_name', 'last_name'],
+          })
+        : [];
+
+    const casePayload = latestCase?.caseId
+      ? {
+          caseId: latestCase.caseId,
+          id: latestCase.id,
+          assignedStaff,
+        }
+      : null;
 
     const lastFeedback = await CandidateFeedback.findOne({
       where: { user_id: idNum },
@@ -110,16 +221,8 @@ export const getAccount = async (req, res) => {
           terms_version: settings.terms_version,
           data_deletion_requested_at: settings.data_deletion_requested_at,
         },
-        case: latestCase?.caseId
-          ? { 
-              caseId: latestCase.caseId, 
-              id: latestCase.id,
-              assignedStaff: await db.User.findAll({
-                where: { id: { [Op.in]: Array.isArray(latestCase.assignedcaseworkerId) ? latestCase.assignedcaseworkerId.map(id => Number(id)) : [] } },
-                attributes: ['id', 'first_name', 'last_name']
-              })
-            }
-          : null,
+        case: casePayload,
+        feedbackSubmitted: !!lastFeedback,
         lastFeedback: lastFeedback
           ? {
               id: lastFeedback.id,
@@ -213,6 +316,26 @@ export const postFeedback = async (req, res) => {
     const { idNum, idStr } = ids;
     const { rating, experience_tags, comments, caseworker_id } = req.body || {};
 
+    const existing = await CandidateFeedback.findOne({ where: { user_id: idNum } });
+    if (existing) {
+      return res.status(409).json({
+        status: 'error',
+        message:
+          'You have already submitted feedback. Each candidate may submit feedback only once.',
+        data: {
+          feedback: {
+            id: existing.id,
+            rating: existing.rating,
+            experience_tags: Array.isArray(existing.experience_tags)
+              ? existing.experience_tags
+              : [],
+            comments: existing.comments || '',
+            createdAt: existing.createdAt,
+          },
+        },
+      });
+    }
+
     const r = Number(rating);
     if (!Number.isInteger(r) || r < 1 || r > 5) {
       return res.status(400).json({
@@ -256,6 +379,14 @@ export const postFeedback = async (req, res) => {
     });
   } catch (err) {
     console.error('postFeedback error:', err);
+    if (err.name === 'SequelizeUniqueConstraintError') {
+      return res.status(409).json({
+        status: 'error',
+        message:
+          'You have already submitted feedback. Each candidate may submit feedback only once.',
+        data: null,
+      });
+    }
     res.status(500).json({
       status: 'error',
       message: 'Internal server error',
@@ -356,6 +487,163 @@ export const postDataDeletionRequest = async (req, res) => {
     });
   } catch (err) {
     console.error('postDataDeletionRequest error:', err);
+    res.status(500).json({
+      status: 'error',
+      message: 'Internal server error',
+      data: null,
+      error: err.message,
+    });
+  }
+};
+
+/**
+ * Submit structured issue report with optional screenshots (multipart field `attachments`).
+ * Notifies assigned caseworkers on the candidate's latest case and all active admins.
+ */
+export const postIssueReport = async (req, res) => {
+  try {
+    const ids = resolveUserIds(req);
+    if (!ids) {
+      return res.status(401).json({ status: 'error', message: 'Invalid session', data: null });
+    }
+    const { idNum, idStr } = ids;
+
+    const category = typeof req.body?.category === 'string' ? req.body.category.trim() : '';
+    const severityRaw = typeof req.body?.severity === 'string' ? req.body.severity.trim().toLowerCase() : 'medium';
+    const subject = typeof req.body?.subject === 'string' ? req.body.subject.trim().slice(0, 255) : '';
+    const description = typeof req.body?.description === 'string' ? req.body.description.trim().slice(0, 12000) : '';
+
+    if (!ISSUE_CATEGORY_IDS.includes(category)) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Invalid issue category.',
+        data: null,
+      });
+    }
+    if (!ISSUE_SEVERITY_IDS.includes(severityRaw)) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Invalid severity. Use low, medium, high, or urgent.',
+        data: null,
+      });
+    }
+    if (!subject || subject.length < 3) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Subject is required (at least 3 characters).',
+        data: null,
+      });
+    }
+    if (!description || description.length < 10) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Please describe the issue in at least 10 characters.',
+        data: null,
+      });
+    }
+
+    const latestCase = await Case.findOne({
+      where: { candidateId: idStr },
+      order: [['created_at', 'DESC']],
+      attributes: ['id', 'caseId', 'assignedcaseworkerId'],
+    });
+
+    let effectiveCaseId = latestCase?.id ?? null;
+    if (
+      req.body?.case_id !== undefined &&
+      req.body?.case_id !== null &&
+      String(req.body.case_id).trim() !== ''
+    ) {
+      const cid = Number(req.body.case_id);
+      if (!Number.isFinite(cid)) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Invalid case reference.',
+          data: null,
+        });
+      }
+      const ownsCase = await Case.findOne({
+        where: { id: cid, candidateId: idStr },
+        attributes: ['id'],
+      });
+      if (!ownsCase) {
+        return res.status(403).json({
+          status: 'error',
+          message: 'Invalid case reference for your account.',
+          data: null,
+        });
+      }
+      effectiveCaseId = cid;
+    }
+
+    const destRoot = path.join('uploads', 'candidate_reports', String(idNum));
+    fs.mkdirSync(destRoot, { recursive: true });
+
+    const attachmentUrls = [];
+    const files = req.files || [];
+    for (const f of files) {
+      try {
+        const dest = path.join(destRoot, f.filename);
+        if (f.path && fs.existsSync(f.path)) {
+          fs.renameSync(f.path, dest);
+        }
+        const rel = dest.replace(/\\/g, '/');
+        const baseUrl = (process.env.BASE_URL || '').replace(/\/$/, '');
+        attachmentUrls.push(`${baseUrl}/${rel}`);
+      } catch (e) {
+        console.error('postIssueReport file move error:', e);
+      }
+    }
+
+    const reporter = await User.findByPk(idNum, {
+      attributes: ['id', 'first_name', 'last_name', 'email'],
+    });
+    const candidateName =
+      [reporter?.first_name, reporter?.last_name].filter(Boolean).join(' ') ||
+      reporter?.email ||
+      'Candidate';
+
+    const row = await CandidateIssueReport.create({
+      user_id: idNum,
+      case_id: effectiveCaseId,
+      category,
+      severity: severityRaw,
+      subject,
+      description,
+      attachment_urls: attachmentUrls,
+      status: 'open',
+    });
+
+    const cwIds = normalizeCaseworkerIds(latestCase?.assignedcaseworkerId);
+
+    await notifyStakeholdersOfIssueReport({
+      reportId: row.id,
+      candidateId: idNum,
+      candidateName,
+      caseRef: latestCase?.caseId || null,
+      category,
+      severity: severityRaw,
+      subject,
+      caseworkerIds: cwIds,
+    });
+
+    res.status(201).json({
+      status: 'success',
+      message: 'Your report has been submitted. A caseworker or administrator will review it shortly.',
+      data: {
+        report: {
+          id: row.id,
+          category: row.category,
+          severity: row.severity,
+          subject: row.subject,
+          status: row.status,
+          attachment_urls: row.attachment_urls,
+          createdAt: row.createdAt,
+        },
+      },
+    });
+  } catch (err) {
+    console.error('postIssueReport error:', err);
     res.status(500).json({
       status: 'error',
       message: 'Internal server error',

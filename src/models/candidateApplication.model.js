@@ -301,6 +301,12 @@ export default (sequelize, DataTypes) => {
                 defaultValue: 'draft',
             },
             
+            // Prevents further edits once submitted; admin can unlock
+            isLocked: {
+                type: DataTypes.BOOLEAN,
+                defaultValue: false,
+            },
+
             // Application metadata
             submittedAt: {
                 type: DataTypes.DATE,

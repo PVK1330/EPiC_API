@@ -57,6 +57,8 @@ export const NotificationTypes = {
   SLA_BREACH: 'sla_breach',
   LICENCE_STATUS_CHANGED: 'licence_status_changed',
   LICENCE_ASSIGNED: 'licence_assigned',
+  /** Candidate submitted portal issue / incident report */
+  CANDIDATE_ISSUE_REPORT: 'candidate_issue_report',
 };
 
 // Notification priority constants

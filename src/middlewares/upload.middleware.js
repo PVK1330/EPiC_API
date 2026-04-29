@@ -59,6 +59,27 @@ export const handleDocumentUpload = upload.array('documents', 5);
 // Profile picture upload middleware
 export const handleProfilePicUpload = upload.single('profile_pic');
 
+/** Candidate issue reports: images only (screenshots, photos), max 5 × 5MB */
+const issueReportImageFilter = (req, file, cb) => {
+  const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+  if (allowed.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Only JPEG, PNG, GIF, or WebP images are allowed for issue reports.'), false);
+  }
+};
+
+const uploadIssueImages = multer({
+  storage,
+  fileFilter: issueReportImageFilter,
+  limits: {
+    fileSize: 5 * 1024 * 1024,
+    files: 5,
+  },
+});
+
+export const handleCandidateIssueReportUpload = uploadIssueImages.array('attachments', 5);
+
 // Message file upload middleware
 export const handleMessageFileUpload = upload.single('file');
 
