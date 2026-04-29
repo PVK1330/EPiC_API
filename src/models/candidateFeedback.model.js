@@ -42,6 +42,7 @@ export default (sequelize, DataTypes) => {
     {
       tableName: "candidate_feedbacks",
       timestamps: true,
+      indexes: [{ unique: true, fields: ["user_id"], name: "candidate_feedbacks_user_id_unique" }],
     }
   );
 

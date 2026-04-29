@@ -59,6 +59,8 @@ import CandidateAccountSettingsModel from "./candidateAccountSettings.model.js";
 
 import CandidateFeedbackModel from "./candidateFeedback.model.js";
 
+import CandidateIssueReportModel from "./candidateIssueReport.model.js";
+
 import CandidateApplicationModel from "./candidateApplication.model.js";
 
 import SponsorProfileModel from "./sponsorProfile.model.js";
@@ -160,6 +162,8 @@ db.CandidateAccountSettings = CandidateAccountSettingsModel(
 );
 
 db.CandidateFeedback = CandidateFeedbackModel(sequelize, Sequelize.DataTypes);
+
+db.CandidateIssueReport = CandidateIssueReportModel(sequelize, Sequelize.DataTypes);
 
 db.CandidateApplication = CandidateApplicationModel(
   sequelize,
@@ -378,6 +382,14 @@ db.User.hasMany(db.CandidateFeedback, {
 db.CandidateFeedback.belongsTo(db.User, { foreignKey: "user_id", as: "user" });
 db.CandidateFeedback.belongsTo(db.Case, { foreignKey: "case_id", as: "case" });
 db.Case.hasMany(db.CandidateFeedback, { foreignKey: "case_id", as: "feedbacks" });
+
+db.User.hasMany(db.CandidateIssueReport, {
+  foreignKey: "user_id",
+  as: "candidateIssueReports",
+});
+db.CandidateIssueReport.belongsTo(db.User, { foreignKey: "user_id", as: "user" });
+db.CandidateIssueReport.belongsTo(db.Case, { foreignKey: "case_id", as: "case" });
+db.Case.hasMany(db.CandidateIssueReport, { foreignKey: "case_id", as: "issueReports" });
 
 // Candidate Application associations
 db.User.hasOne(db.CandidateApplication, {

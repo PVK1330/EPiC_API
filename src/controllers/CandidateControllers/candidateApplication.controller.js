@@ -324,6 +324,15 @@ export const submitApplication = async (req, res) => {
       return res.status(401).json({ status: 'error', message: 'Invalid session', data: null });
     }
 
+    // Guard: reject if the application has already been submitted
+    const alreadySubmitted = await CandidateApplication.findOne({ where: { userId } });
+    if (alreadySubmitted && alreadySubmitted.status === 'submitted') {
+      return res.status(409).json({
+        success: false,
+        message: 'Your application has already been submitted and is currently under review.',
+      });
+    }
+
     const payload = pickFields(req.body || {});
 
     const application = await db.sequelize.transaction(async (t) => {
@@ -334,17 +343,22 @@ export const submitApplication = async (req, res) => {
 
       let app;
       if (existing) {
-        await existing.update(
-          { ...payload, status: 'submitted', submittedAt: new Date() },
-          { transaction: t }
-        );
+        await existing.update({
+          ...payload,
+          status: 'submitted',
+          isLocked: true,
+          submittedAt: new Date(),
+        }, { transaction: t });
         await existing.reload({ transaction: t });
         app = existing;
       } else {
-        app = await CandidateApplication.create(
-          { userId, ...payload, status: 'submitted', submittedAt: new Date() },
-          { transaction: t }
-        );
+        app = await CandidateApplication.create({
+          userId,
+          ...payload,
+          status: 'submitted',
+          isLocked: true,
+          submittedAt: new Date(),
+        }, { transaction: t });
       }
 
       // ── Handle Case creation/update ─────────────────────────────────────
@@ -436,9 +450,9 @@ export const submitApplication = async (req, res) => {
       return app;
     });
 
-    res.status(200).json({
-      status: 'success',
-      message: 'Application submitted successfully',
+    res.status(201).json({
+      success: true,
+      message: 'Application submitted successfully.',
       data: { application },
     });
   } catch (err) {
@@ -460,9 +474,17 @@ export const saveDraft = async (req, res) => {
       return res.status(401).json({ status: 'error', message: 'Invalid session', data: null });
     }
 
-    const payload = pickFields(req.body || {});
-
     const existing = await CandidateApplication.findOne({ where: { userId } });
+
+    // Guard: locked applications cannot be edited
+    if (existing && existing.isLocked) {
+      return res.status(403).json({
+        success: false,
+        message: 'Your application is locked and cannot be edited. Contact your caseworker.',
+      });
+    }
+
+    const payload = pickFields(req.body || {});
 
     let application;
     if (existing) {
@@ -478,12 +500,40 @@ export const saveDraft = async (req, res) => {
     }
 
     res.status(200).json({
-      status: 'success',
-      message: 'Draft saved successfully',
+      success: true,
+      message: 'Draft saved.',
       data: { application },
     });
   } catch (err) {
     console.error('saveDraft error:', err);
+    res.status(500).json({
+      status: 'error',
+      message: 'Internal server error',
+      data: null,
+      error: err.message,
+    });
+  }
+};
+
+/** PATCH /api/candidate-application/:candidateId/unlock — admin/caseworker unlocks a submitted application */
+export const unlockApplication = async (req, res) => {
+  try {
+    const candidateId = Number(req.params.candidateId);
+    if (!Number.isFinite(candidateId) || candidateId <= 0) {
+      return res.status(400).json({ success: false, message: 'Invalid candidateId.' });
+    }
+
+    const application = await CandidateApplication.findOne({ where: { userId: candidateId } });
+    if (!application) {
+      return res.status(404).json({ success: false, message: 'Application not found.' });
+    }
+
+    application.isLocked = false;
+    await application.save();
+
+    res.status(200).json({ success: true, message: 'Application unlocked successfully.' });
+  } catch (err) {
+    console.error('unlockApplication error:', err);
     res.status(500).json({
       status: 'error',
       message: 'Internal server error',
