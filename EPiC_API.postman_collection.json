@@ -4410,6 +4410,675 @@
           "response": []
         }
       ]
+    },
+    {
+      "name": "Sponsor Business Panel",
+      "item": [
+        {
+          "name": "Licence Summary",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/business/licence/summary",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "business",
+                "licence",
+                "summary"
+              ]
+            },
+            "description": "curl --location --request GET \"{{baseUrl}}/api/business/licence/summary\" --header \"Authorization: Bearer {{token}}\""
+          },
+          "response": []
+        },
+        {
+          "name": "Request More CoS",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/business/licence/request-more-cos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "business",
+                "licence",
+                "request-more-cos"
+              ]
+            },
+            "description": "curl --location --request PATCH \"{{baseUrl}}/api/business/licence/request-more-cos\" --header \"Authorization: Bearer {{token}}\" --header \"Content-Type: application/json\" --data \"{\"requestedAmount\":10,\"visaType\":\"Skilled Worker Visa\",\"reason\":\"Need additional allocation\"}\"",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"requestedAmount\": 10,\n  \"visaType\": \"Skilled Worker Visa\",\n  \"reason\": \"Need additional allocation for upcoming hires\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Upload Licence Documents",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/business/licence/documents/upload",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "business",
+                "licence",
+                "documents",
+                "upload"
+              ]
+            },
+            "description": "curl --location --request POST \"{{baseUrl}}/api/business/licence/documents/upload\" --header \"Authorization: Bearer {{token}}\" --form \"applicationId=1\" --form \"documentType=company-doc\" --form \"documents=@/path/file.pdf\"",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "applicationId",
+                  "value": "1",
+                  "type": "text"
+                },
+                {
+                  "key": "documentType",
+                  "value": "company-doc",
+                  "type": "text"
+                },
+                {
+                  "key": "notes",
+                  "value": "Uploaded from sponsor panel",
+                  "type": "text"
+                },
+                {
+                  "key": "documents",
+                  "type": "file",
+                  "src": ""
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Licence Document",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/business/licence/documents/1/0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "business",
+                "licence",
+                "documents",
+                "1",
+                "0"
+              ]
+            },
+            "description": "curl --location --request DELETE \"{{baseUrl}}/api/business/licence/documents/1/0\" --header \"Authorization: Bearer {{token}}\""
+          },
+          "response": []
+        },
+        {
+          "name": "CoS Summary",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/business/cos/summary",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "business",
+                "cos",
+                "summary"
+              ]
+            },
+            "description": "curl --location --request GET \"{{baseUrl}}/api/business/cos/summary\" --header \"Authorization: Bearer {{token}}\""
+          },
+          "response": []
+        },
+        {
+          "name": "Request CoS Allocation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/business/cos/request",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "business",
+                "cos",
+                "request"
+              ]
+            },
+            "description": "curl --location --request POST \"{{baseUrl}}/api/business/cos/request\" --header \"Authorization: Bearer {{token}}\" --header \"Content-Type: application/json\" --data \"{\"visaType\":\"Skilled Worker Visa\",\"requestedAmount\":20,\"reason\":\"Q3 demand\"}\"",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"visaType\": \"Skilled Worker Visa\",\n  \"requestedAmount\": 20,\n  \"reason\": \"Q3 candidate pipeline demand\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Sponsored Workers",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/business/workers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "business",
+                "workers"
+              ]
+            },
+            "description": "curl --location --request GET \"{{baseUrl}}/api/business/workers\" --header \"Authorization: Bearer {{token}}\""
+          },
+          "response": []
+        },
+        {
+          "name": "Get Sponsored Worker Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/business/workers/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "business",
+                "workers",
+                "1"
+              ]
+            },
+            "description": "curl --location --request GET \"{{baseUrl}}/api/business/workers/1\" --header \"Authorization: Bearer {{token}}\""
+          },
+          "response": []
+        },
+        {
+          "name": "Add Sponsored Worker",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/business/workers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "business",
+                "workers"
+              ]
+            },
+            "description": "curl --location --request POST \"{{baseUrl}}/api/business/workers\" --header \"Authorization: Bearer {{token}}\" --header \"Content-Type: application/json\" --data \"{...worker payload...}\"",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Alex\",\n  \"lastName\": \"Morgan\",\n  \"dob\": \"1992-07-15\",\n  \"gender\": \"Male\",\n  \"nationality\": \"British\",\n  \"maritalStatus\": \"Single\",\n  \"passportNumber\": \"P1234567\",\n  \"passportIssueDate\": \"2020-01-01\",\n  \"passportExpiryDate\": \"2030-01-01\",\n  \"passportCountry\": \"United Kingdom\",\n  \"email\": \"alex.worker@example.com\",\n  \"phone\": \"+447700000000\",\n  \"address\": \"10 Downing Street\",\n  \"city\": \"London\",\n  \"jobTitle\": \"Software Engineer\",\n  \"department\": \"Engineering\",\n  \"startDate\": \"2026-05-01\",\n  \"salary\": \"65000\",\n  \"visaType\": \"Skilled Worker Visa\",\n  \"visaNumber\": \"\",\n  \"visaExpiryDate\": \"2028-05-01\",\n  \"cosNumber\": \"COS-2026-0001\",\n  \"previousVisa\": \"no\",\n  \"notes\": \"Added via sponsor panel\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Sponsored Worker",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/business/workers/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "business",
+                "workers",
+                "1"
+              ]
+            },
+            "description": "curl --location --request PUT \"{{baseUrl}}/api/business/workers/1\" --header \"Authorization: Bearer {{token}}\" --header \"Content-Type: application/json\" --data \"{...update payload...}\"",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Alex\",\n  \"lastName\": \"Morgan\",\n  \"phone\": \"+447700000001\",\n  \"gender\": \"Male\",\n  \"dob\": \"1992-07-15\",\n  \"nationality\": \"British\",\n  \"passportNumber\": \"P1234567\",\n  \"visaType\": \"Skilled Worker Visa\",\n  \"visaExpiryDate\": \"2028-05-01\",\n  \"address\": \"11 Downing Street\",\n  \"jobTitle\": \"Senior Software Engineer\",\n  \"salary\": \"70000\",\n  \"notes\": \"Updated by sponsor\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Worker Status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/business/workers/1/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "business",
+                "workers",
+                "1",
+                "status"
+              ]
+            },
+            "description": "curl --location --request PATCH \"{{baseUrl}}/api/business/workers/1/status\" --header \"Authorization: Bearer {{token}}\" --header \"Content-Type: application/json\" --data \"{\"status\":\"Approved\",\"note\":\"All checks passed\"}\"",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"Approved\",\n  \"note\": \"All checks passed\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Sponsored Worker",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/business/workers/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "business",
+                "workers",
+                "1"
+              ]
+            },
+            "description": "curl --location --request DELETE \"{{baseUrl}}/api/business/workers/1\" --header \"Authorization: Bearer {{token}}\""
+          },
+          "response": []
+        },
+        {
+          "name": "Worker Events - List",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/business/worker-events",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "business",
+                "worker-events"
+              ]
+            },
+            "description": "List reporting obligations events"
+          },
+          "response": []
+        },
+        {
+          "name": "Worker Events - Create",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/business/worker-events",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "business",
+                "worker-events"
+              ]
+            },
+            "description": "Create worker event and trigger involved notifications",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"workerId\": 1,\n  \"eventType\": \"Role Change\",\n  \"eventDate\": \"2026-04-29\",\n  \"description\": \"Moved to senior role\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Worker Events - Update",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/business/worker-events/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "business",
+                "worker-events",
+                "1"
+              ]
+            },
+            "description": "Update worker event and trigger involved notifications",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"eventType\": \"Salary Change\",\n  \"reportedDate\": \"2026-04-30\",\n  \"description\": \"Updated salary reported\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Worker Events - Delete",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/business/worker-events/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "business",
+                "worker-events",
+                "1"
+              ]
+            },
+            "description": "Delete worker event and trigger involved notifications"
+          },
+          "response": []
+        },
+        {
+          "name": "Verify Notifications - List Mine",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/notifications?page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "notifications"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Use after create/update/delete to verify notification fan-out for current user"
+          },
+          "response": []
+        },
+        {
+          "name": "Verify Notifications - Unread Count",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/notifications/unread-count",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "notifications",
+                "unread-count"
+              ]
+            },
+            "description": "Quick check for newly generated notifications"
+          },
+          "response": []
+        },
+        {
+          "name": "Admin - List CoS Requests",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/licence/cos-requests?status=Pending",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "licence",
+                "cos-requests"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "Pending"
+                }
+              ]
+            },
+            "description": "curl --location --request GET \"{{baseUrl}}/api/admin/licence/cos-requests?status=Pending\" --header \"Authorization: Bearer {{token}}\""
+          },
+          "response": []
+        },
+        {
+          "name": "Admin - Assign CoS Request To Caseworker",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/licence/cos-requests/1/assign-caseworker",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "licence",
+                "cos-requests",
+                "1",
+                "assign-caseworker"
+              ]
+            },
+            "description": "curl --location --request POST \"{{baseUrl}}/api/admin/licence/cos-requests/1/assign-caseworker\" --header \"Authorization: Bearer {{token}}\" --header \"Content-Type: application/json\" --data \"{\"caseworkerIds\":[2],\"adminNotes\":\"Please review\"}\"",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"caseworkerIds\": [\n    2\n  ],\n  \"adminNotes\": \"Please review CoS allocation request urgently.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get CoS Requests",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/business/cos/requests?status=Pending",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "business",
+                "cos",
+                "requests"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "Pending"
+                }
+              ]
+            },
+            "description": "curl --location --request GET \"{{baseUrl}}/api/business/cos/requests?status=Pending\" --header \"Authorization: Bearer {{token}}\""
+          },
+          "response": []
+        }
+      ]
     }
   ],
   "variable": [

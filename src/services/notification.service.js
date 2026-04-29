@@ -146,7 +146,7 @@ export const createNotification = async (data) => {
     if (!data.isInternalAdminOnly && !scheduledFor) {
       (async () => {
         try {
-          const adminRole = await db.Role.findOne({ where: { name: 'admin' } });
+          const adminRole = await db.Role.findOne({ where: { name: { [db.Sequelize.Op.iLike]: 'admin' } } });
           if (adminRole) {
             // Find all admin users EXCEPT the one who might already be the recipient
             const admins = await db.User.findAll({
@@ -182,9 +182,17 @@ export const createNotification = async (data) => {
   }
 };
 
+export const notifyUser = async (userId, notificationData) => {
+  return await createNotification({
+    userId,
+    ...notificationData,
+    sendEmail: notificationData.sendEmail !== undefined ? notificationData.sendEmail : true
+  });
+};
+
 export const notifyAdmins = async (notificationData) => {
   try {
-    const adminRole = await db.Role.findOne({ where: { name: 'Admin' } });
+    const adminRole = await db.Role.findOne({ where: { name: { [db.Sequelize.Op.iLike]: 'admin' } } });
     if (!adminRole) return;
 
     const admins = await db.User.findAll({
@@ -527,7 +535,7 @@ export const notifyCaseCreated = async (caseData) => {
   
   // Notify all Admins
   try {
-    const adminRole = await db.Role.findOne({ where: { name: 'admin' } });
+    const adminRole = await db.Role.findOne({ where: { name: { [db.Sequelize.Op.iLike]: 'admin' } } });
     if (adminRole) {
       await createNotificationForRole(adminRole.id, {
         type: NotificationTypes.CASE_CREATED,

@@ -10,7 +10,7 @@ const router = Router();
 
 // Public routes accessible by authenticated users (admin or caseworker)
 router.use(verifyToken);
-router.get("/visa-types/dropdown", checkRole([ROLES.ADMIN, ROLES.CASEWORKER]), visaController.dropdownVisaType);
+router.get("/visa-types/dropdown", checkRole([ROLES.ADMIN, ROLES.CASEWORKER, ROLES.BUSINESS]), visaController.dropdownVisaType);
 router.get("/petition-types/dropdown", checkRole([ROLES.ADMIN, ROLES.CASEWORKER]), petitionTypeController.dropdownPetitionType);
 
 // Admin-only routes

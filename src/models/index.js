@@ -67,6 +67,8 @@ import CalendarMeetingModel from "./calendarMeeting.model.js";
 
 import AuditLogModel from "./auditLog.model.js";
 import LicenceApplicationModel from "./licenceApplication.model.js";
+import SponsorUserPreferenceModel from "./sponsorUserPreference.model.js";
+import WorkerEventModel from "./workerEvent.model.js";
 
 const env = process.env.NODE_ENV || "development";
 
@@ -166,6 +168,8 @@ db.Appointment = AppointmentModel(sequelize, Sequelize.DataTypes);
 
 db.LicenceApplication = LicenceApplicationModel(sequelize, Sequelize.DataTypes);
 db.CalendarMeeting = CalendarMeetingModel(sequelize, Sequelize.DataTypes);
+db.SponsorUserPreference = SponsorUserPreferenceModel(sequelize, Sequelize.DataTypes);
+db.WorkerEvent = WorkerEventModel(sequelize, Sequelize.DataTypes);
 
 // Associations
 
@@ -214,6 +218,11 @@ db.AdminUserPreference.belongsTo(db.User, { foreignKey: "user_id" });
 db.Case.belongsTo(db.User, { foreignKey: "candidateId", as: "candidate" });
 db.Case.belongsTo(db.User, { foreignKey: "sponsorId", as: "sponsor" });
 db.Case.belongsTo(db.VisaType, { foreignKey: "visaTypeId", as: "visaType" });
+db.Case.hasOne(db.CandidateApplication, {
+  foreignKey: "userId",
+  sourceKey: "candidateId",
+  as: "application",
+});
 db.Case.belongsTo(db.PetitionType, {
   foreignKey: "petitionTypeId",
   as: "petitionType",
@@ -381,6 +390,18 @@ db.User.hasOne(db.SponsorProfile, {
   as: "sponsorProfile",
 });
 db.SponsorProfile.belongsTo(db.User, { foreignKey: "userId", as: "user" });
+
+db.User.hasOne(db.SponsorUserPreference, {
+  foreignKey: "userId",
+  as: "sponsorPreferences",
+});
+db.SponsorUserPreference.belongsTo(db.User, { foreignKey: "userId", as: "user" });
+db.WorkerEvent.belongsTo(db.User, { foreignKey: "workerId", as: "worker" });
+db.WorkerEvent.belongsTo(db.User, { foreignKey: "sponsorId", as: "sponsor" });
+db.WorkerEvent.belongsTo(db.Case, { foreignKey: "caseId", as: "case" });
+db.User.hasMany(db.WorkerEvent, { foreignKey: "workerId", as: "workerEvents" });
+db.User.hasMany(db.WorkerEvent, { foreignKey: "sponsorId", as: "sponsorWorkerEvents" });
+db.Case.hasMany(db.WorkerEvent, { foreignKey: "caseId", as: "workerEvents" });
 
 // Appointment associations
 db.Appointment.belongsTo(db.User, { foreignKey: "candidate_id", as: "candidate" });

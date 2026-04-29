@@ -1,14 +1,35 @@
 import bcrypt from 'bcryptjs';
 import db from '../../models/index.js';
 import transporter from '../../config/mail.js';
-import { generateCredentialsTemplate } from '../../utils/emailTemplate.js';
+import { generateCredentialsTemplate, generateNotificationEmailTemplate } from '../../utils/emailTemplate.js';
 import crypto from 'crypto';
 import { generateCaseId } from '../../utils/case.utils.js';
+import { notifyAdmins, notifyUser, NotificationTypes, NotificationPriority } from '../../services/notification.service.js';
 
 const User = db.User;
 const Case = db.Case;
 const CandidateApplication = db.CandidateApplication;
 const SponsorProfile = db.SponsorProfile;
+const Document = db.Document;
+
+const REQUIRED_DOCUMENT_KEYS = ['passport', 'visaCopy', 'cosCopy', 'contract', 'payslips'];
+
+const getDocumentKeyFromType = (documentType = '') => {
+  const normalized = String(documentType || '').toLowerCase();
+  if (normalized.includes('passport')) return 'passport';
+  if (normalized.includes('visa')) return 'visaCopy';
+  if (normalized.includes('cos') || normalized.includes('certificate of sponsorship')) return 'cosCopy';
+  if (normalized.includes('contract')) return 'contract';
+  if (normalized.includes('payslip') || normalized.includes('salary slip')) return 'payslips';
+  return null;
+};
+
+const toUiDocumentStatus = (statuses = []) => {
+  if (!statuses.length) return 'risk';
+  if (statuses.includes('rejected') || statuses.includes('missing')) return 'risk';
+  if (statuses.includes('under_review')) return 'partial';
+  return 'complete';
+};
 
 /**
  * Add a new sponsored worker (Candidate)
@@ -97,6 +118,16 @@ export const addSponsoredWorker = async (req, res) => {
     await transaction.commit();
 
     // 8. Send Email to Candidate
+    res.status(201).json({
+      status: 'success',
+      message: 'Sponsored worker added successfully',
+      data: {
+        workerId: newUser.id,
+        email: newUser.email,
+        tempPassword // Usually we don't return this, but for testing we can
+      }
+    });
+
     const loginUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
     try {
       await transporter.sendMail({
@@ -107,18 +138,24 @@ export const addSponsoredWorker = async (req, res) => {
       });
     } catch (mailErr) {
       console.error('Failed to send credentials email:', mailErr);
-      // Don't fail the whole request if mail fails
     }
 
-    res.status(201).json({
-      status: 'success',
-      message: 'Sponsored worker added successfully',
-      data: {
-        workerId: newUser.id,
-        email: newUser.email,
-        tempPassword // Usually we don't return this, but for testing we can
-      }
-    });
+    try {
+      const sponsorProfile = await SponsorProfile.findOne({ where: { userId: sponsorId } });
+      const sponsorCompanyName = sponsorProfile?.companyName || 'Sponsor Company';
+      await notifyAdmins({
+        type: NotificationTypes.INFO,
+        priority: NotificationPriority.MEDIUM,
+        title: 'New Sponsored Worker Added',
+        message: `${firstName} ${lastName} has been added as a sponsored worker under ${sponsorCompanyName}. Case ${caseId} created.`,
+        actionType: 'worker_added',
+        entityId: newUser.id,
+        entityType: 'user',
+        metadata: { sponsorId, workerEmail: email, caseRef: caseId }
+      });
+    } catch (err) {
+      console.error('Failed to notify admins for sponsored worker add:', err);
+    }
 
   } catch (err) {
     await transaction.rollback();
@@ -144,15 +181,43 @@ export const getSponsoredWorkers = async (req, res) => {
         {
           model: User,
           as: 'candidate',
-          attributes: ['id', 'first_name', 'last_name', 'email', 'mobile', 'profile_pic']
+          attributes: ['id', 'first_name', 'last_name', 'email', 'mobile', 'profile_pic'],
+          include: [
+            {
+              model: db.CandidateApplication,
+              as: 'application',
+              attributes: ['visaType', 'nationality', 'passportNumber', 'status']
+            }
+          ]
         }
       ],
       order: [['created_at', 'DESC']]
     });
 
+
+    const transformed = workers.map((worker) => ({
+      id: worker.id,
+      caseId: worker.caseId,
+      candidateId: worker.candidateId,
+      candidate: {
+        first_name: worker.candidate?.first_name,
+        last_name: worker.candidate?.last_name,
+        email: worker.candidate?.email,
+        mobile: worker.candidate?.mobile,
+        profile_pic: worker.candidate?.profile_pic
+      },
+      status: worker.status,
+      jobTitle: worker.jobTitle,
+      salaryOffered: worker.salaryOffered,
+      visaType: worker.candidate?.application?.visaType || worker.application?.visaType || null,
+      nationality: worker.candidate?.application?.nationality || null,
+      created_at: worker.created_at
+    }));
+
+
     res.status(200).json({
       status: 'success',
-      data: workers
+      data: transformed
     });
   } catch (err) {
     console.error('getSponsoredWorkers error:', err);
@@ -160,6 +225,200 @@ export const getSponsoredWorkers = async (req, res) => {
       status: 'error',
       message: 'Internal server error',
       error: err.message
+    });
+  }
+};
+
+/**
+ * Get sponsored workers in employee-record shape
+ */
+export const getEmployeeRecords = async (req, res) => {
+  try {
+    const sponsorId = req.user.userId;
+    const sponsorProfile = await SponsorProfile.findOne({ where: { userId: sponsorId } });
+    if (!sponsorProfile) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Business profile not found',
+        data: null
+      });
+    }
+
+    const profile = sponsorProfile.toJSON ? sponsorProfile.toJSON() : sponsorProfile;
+    const level1UsersRaw = Array.isArray(profile.level1Users) ? profile.level1Users : [];
+
+    const internalEmployees = [];
+
+    if (profile.authorisingName || profile.authorisingEmail || profile.authorisingPhone) {
+      internalEmployees.push({
+        id: `ao-${profile.id}`,
+        candidateId: null,
+        name: profile.authorisingName || 'Authorising Officer',
+        email: profile.authorisingEmail || '',
+        phone: profile.authorisingPhone || '',
+        nationality: profile.country || '-',
+        visaType: 'Internal Staff',
+        niNumber: '-',
+        startDate: sponsorProfile.createdAt,
+        status: 'Active',
+        caseStatus: null,
+        role: profile.authorisingJobTitle || 'Authorising Officer',
+        documents: {
+          passport: 'partial',
+          visaCopy: 'partial',
+          cosCopy: 'partial',
+          contract: 'partial',
+          payslips: 'partial'
+        },
+        documentFiles: []
+      });
+    }
+
+    if (profile.keyContactName || profile.keyContactEmail || profile.keyContactPhone) {
+      internalEmployees.push({
+        id: `kc-${profile.id}`,
+        candidateId: null,
+        name: profile.keyContactName || 'Key Contact',
+        email: profile.keyContactEmail || '',
+        phone: profile.keyContactPhone || '',
+        nationality: profile.country || '-',
+        visaType: 'Internal Staff',
+        niNumber: '-',
+        startDate: sponsorProfile.createdAt,
+        status: 'Active',
+        caseStatus: null,
+        role: profile.keyContactDepartment || 'Key Contact',
+        documents: {
+          passport: 'partial',
+          visaCopy: 'partial',
+          cosCopy: 'partial',
+          contract: 'partial',
+          payslips: 'partial'
+        },
+        documentFiles: []
+      });
+    }
+
+    if (profile.hrName || profile.hrEmail || profile.hrPhone) {
+      internalEmployees.push({
+        id: `hr-${profile.id}`,
+        candidateId: null,
+        name: profile.hrName || 'HR Manager',
+        email: profile.hrEmail || '',
+        phone: profile.hrPhone || '',
+        nationality: profile.country || '-',
+        visaType: 'Internal Staff',
+        niNumber: '-',
+        startDate: sponsorProfile.createdAt,
+        status: 'Active',
+        caseStatus: null,
+        role: profile.hrJobTitle || 'HR Manager',
+        documents: {
+          passport: 'partial',
+          visaCopy: 'partial',
+          cosCopy: 'partial',
+          contract: 'partial',
+          payslips: 'partial'
+        },
+        documentFiles: []
+      });
+    }
+
+    level1UsersRaw.forEach((user, idx) => {
+      internalEmployees.push({
+        id: `l1-${profile.id}-${idx + 1}`,
+        candidateId: null,
+        name: user?.name || `Level 1 User ${idx + 1}`,
+        email: user?.email || '',
+        phone: user?.phone || '',
+        nationality: profile.country || '-',
+        visaType: 'Internal Staff',
+        niNumber: '-',
+        startDate: sponsorProfile.createdAt,
+        status: 'Active',
+        caseStatus: null,
+        role: user?.jobTitle || user?.department || 'Level 1 User',
+        documents: {
+          passport: 'partial',
+          visaCopy: 'partial',
+          cosCopy: 'partial',
+          contract: 'partial',
+          payslips: 'partial'
+        },
+        documentFiles: []
+      });
+    });
+
+    // --- 2. Add Sponsored Workers (Candidates) ---
+    const workers = await Case.findAll({
+      where: { sponsorId },
+      include: [
+        {
+          model: User,
+          as: 'candidate',
+          attributes: ['id', 'first_name', 'last_name', 'email', 'mobile']
+        },
+        {
+          model: CandidateApplication,
+          as: 'application',
+          attributes: ['id', 'nationality', 'visaType', 'niNumber', 'startDate']
+        }
+      ]
+    });
+
+    const candidateIds = workers.map(w => w.candidateId);
+    const documents = await Document.findAll({
+      where: { userId: candidateIds }
+    });
+
+    const workerEmployees = workers.map(worker => {
+      const workerDocs = documents.filter(d => d.userId === worker.candidateId);
+      
+      const docStatusMap = {
+        passport: 'risk',
+        visaCopy: 'risk',
+        cosCopy: 'risk',
+        contract: 'risk',
+        payslips: 'risk'
+      };
+
+      REQUIRED_DOCUMENT_KEYS.forEach(key => {
+        const matchingDocs = workerDocs.filter(d => getDocumentKeyFromType(d.documentType) === key);
+        if (matchingDocs.length > 0) {
+          const statuses = matchingDocs.map(d => d.status);
+          docStatusMap[key] = toUiDocumentStatus(statuses);
+        }
+      });
+
+      return {
+        id: `sw-${worker.id}`,
+        candidateId: worker.candidateId,
+        name: `${worker.candidate?.first_name || ''} ${worker.candidate?.last_name || ''}`.trim() || 'Sponsored Worker',
+        email: worker.candidate?.email || '',
+        phone: worker.candidate?.mobile || '',
+        nationality: worker.application?.nationality || '-',
+        visaType: worker.application?.visaType || 'Sponsored',
+        niNumber: worker.application?.niNumber || '-',
+        startDate: worker.application?.startDate || worker.created_at,
+        status: worker.status === 'Approved' ? 'Active' : 'In Progress',
+        caseStatus: worker.status,
+        role: worker.jobTitle || 'Sponsored Worker',
+        documents: docStatusMap,
+        documentFiles: workerDocs.map(d => ({ name: d.documentName, path: d.documentPath }))
+      };
+    });
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Employee records fetched successfully',
+      data: [...internalEmployees, ...workerEmployees]
+    });
+  } catch (err) {
+    console.error('getEmployeeRecords error:', err);
+    res.status(500).json({
+      status: 'error',
+      message: 'Internal server error',
+      data: null
     });
   }
 };
@@ -178,13 +437,11 @@ export const getSponsoredWorkerDetails = async (req, res) => {
         {
           model: User,
           as: 'candidate',
-          attributes: ['id', 'first_name', 'last_name', 'email', 'mobile', 'profile_pic'],
-          include: [
-            {
-              model: db.CandidateApplication,
-              as: 'application'
-            }
-          ]
+          attributes: ['id', 'first_name', 'last_name', 'email', 'mobile', 'profile_pic']
+        },
+        {
+          model: db.VisaType,
+          as: 'visaType'
         }
       ]
     });
@@ -196,11 +453,21 @@ export const getSponsoredWorkerDetails = async (req, res) => {
       });
     }
 
+    const application = await CandidateApplication.findOne({ where: { userId: id } });
+
+    const candidatePlain = workerCase.candidate?.toJSON ? workerCase.candidate.toJSON() : workerCase.candidate;
+    const casePlain = workerCase.toJSON ? workerCase.toJSON() : workerCase;
+    const responseCase = {
+      ...casePlain,
+      candidate: candidatePlain,
+      visaType: casePlain.visaType || null
+    };
+
     res.status(200).json({
       status: 'success',
       data: {
         case: workerCase,
-        application: workerCase.candidate?.application || null
+        application: application
       }
     });
   } catch (err) {
@@ -316,6 +583,56 @@ export const updateWorkerStatus = async (req, res) => {
     }, { where: { candidateId: id, sponsorId } });
 
     res.status(200).json({ status: 'success', message: `Worker status updated to ${status}` });
+
+    try {
+      const candidate = await User.findByPk(id, {
+        attributes: ['id', 'email', 'first_name', 'last_name']
+      });
+      const notifMsg = `Your case status has been updated to: ${status}.${note ? ' Note: ' + note : ''}`;
+
+      // 1. Fire-and-forget in-app notification to candidate
+      notifyUser(id, {
+        type: NotificationTypes.INFO,
+        priority: NotificationPriority.HIGH,
+        title: 'Case Status Updated',
+        message: notifMsg,
+        actionType: 'case_status_change',
+        entityId: workerCase.id,
+        entityType: 'case'
+      }).catch(err => console.error("In-app notif failed:", err));
+
+      // 2. Fire-and-forget notification to admins
+      notifyAdmins({
+        type: NotificationTypes.INFO,
+        priority: NotificationPriority.LOW,
+        title: 'Worker Status Updated',
+        message: `${candidate?.first_name} ${candidate?.last_name} status moved to ${status}`,
+        actionType: 'worker_status_update',
+        entityId: workerCase.id,
+        entityType: 'case'
+      }).catch(err => console.error("Admin notif failed:", err));
+
+      // 3. Email candidate
+      if (candidate?.email) {
+        transporter.sendMail({
+          from: process.env.EMAIL_USER,
+          to: candidate.email,
+          subject: 'Your Case Status Has Been Updated',
+          html: generateNotificationEmailTemplate({
+            recipientName: candidate.first_name,
+            title: 'Case Status Update',
+            message: notifMsg,
+            priority: NotificationPriority.HIGH,
+            notificationType: NotificationTypes.INFO,
+            actionUrl: `${process.env.FRONTEND_URL || '#'}/candidate/status`,
+            actionText: 'View My Case'
+          })
+        }).catch(err => console.error("Email failed:", err));
+      }
+    } catch (notifErr) {
+      console.error('Notification setup failed:', notifErr);
+    }
+
   } catch (err) {
     console.error('updateWorkerStatus error:', err);
     res.status(500).json({ status: 'error', message: 'Internal server error' });
