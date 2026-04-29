@@ -5,6 +5,50 @@ import fs from 'fs';
 const { Document, User, Case } = db;
 import { notifyDocumentUploaded, notifyDocumentReviewed } from '../services/notification.service.js';
 
+let documentsColumnMetadataPromise = null;
+
+const getDocumentAttributes = async () => {
+  if (!documentsColumnMetadataPromise) {
+    documentsColumnMetadataPromise = db.sequelize
+      .getQueryInterface()
+      .describeTable('documents')
+      .catch(() => ({}));
+  }
+
+  const columns = await documentsColumnMetadataPromise;
+  const hasNotesColumn = Boolean(columns?.notes);
+
+  const attributes = [
+    'id',
+    'userId',
+    'caseId',
+    'documentType',
+    'documentName',
+    'userFileName',
+    'documentPath',
+    'documentCategory',
+    'mimeType',
+    'fileSize',
+    'status',
+    'expiryDate',
+    'uploadedBy',
+    'uploadedAt',
+    'reviewedBy',
+    'reviewedAt',
+    'reviewNotes',
+    'isRequired',
+    'tags',
+    'created_at',
+    'updated_at'
+  ];
+
+  if (hasNotesColumn) {
+    attributes.splice(12, 0, 'notes');
+  }
+
+  return { attributes, hasNotesColumn };
+};
+
 // Upload documents with system-generated document names
 export const uploadDocuments = async (req, res) => {
   try {
@@ -108,6 +152,8 @@ export const uploadDocuments = async (req, res) => {
       return `${prefix}-${dateStr}-${timeStr}-${identifier}${extension}`;
     };
 
+    const { hasNotesColumn } = await getDocumentAttributes();
+
     for (const [index, file] of uploadedFiles.entries()) {
       // Move file from temp to correct directory structure
       const sourcePath = file.path;
@@ -137,7 +183,7 @@ export const uploadDocuments = async (req, res) => {
       fs.renameSync(sourcePath, targetPath);
       
       // Create document record with system-generated name
-      const document = await Document.create({
+      const documentPayload = {
         userId,
         caseId: numericCaseId || null,
         documentType: documentType || 'General',
@@ -150,9 +196,14 @@ export const uploadDocuments = async (req, res) => {
         uploadedBy: req.user.userId,
         uploadedAt: new Date(),
         status: 'uploaded',
-        expiryDate: expiryDate || null,
-        notes: notes || null
-      });
+        expiryDate: expiryDate || null
+      };
+
+      if (hasNotesColumn) {
+        documentPayload.notes = notes || null;
+      }
+
+      const document = await Document.create(documentPayload);
 
       uploadedDocuments.push({
         id: document.id,
@@ -233,7 +284,10 @@ export const getUserDocumentsByCategory = async (req, res) => {
     const { page = 1, limit = 10 } = req.query;
     const offset = (page - 1) * limit;
 
+    const { attributes } = await getDocumentAttributes();
+
     const documents = await Document.findAll({
+      attributes,
       where: { userId },
       include: [
         {
@@ -315,7 +369,10 @@ export const getCaseDocuments = async (req, res) => {
     if (status) whereClause.status = status;
     if (category) whereClause.documentCategory = category;
 
+    const { attributes } = await getDocumentAttributes();
+
     const documents = await Document.findAndCountAll({
+      attributes,
       where: whereClause,
       include: [
         {
@@ -338,7 +395,9 @@ export const getCaseDocuments = async (req, res) => {
     const documentsWithUrls = documents.rows.map(doc => {
       const docData = doc.toJSON();
       // Use the stored documentPath directly - it contains the relative path from uploads/
-      const relativePath = docData.documentPath.replace(/^uploads[\/\\]/, '');
+      const relativePath = docData.documentPath
+        .replace(/^uploads[\/\\]/, '')
+        .replace(/\\/g, '/');
       docData.documentUrl = `${process.env.BASE_URL || 'http://localhost:5000'}/uploads/${relativePath}`;
       return docData;
     });
@@ -372,8 +431,10 @@ export const getCaseDocuments = async (req, res) => {
 export const getDocumentById = async (req, res) => {
   try {
     const { documentId } = req.params;
+    const { attributes } = await getDocumentAttributes();
 
     const document = await Document.findByPk(documentId, {
+      attributes,
       include: [
         {
           model: User,
@@ -403,7 +464,9 @@ export const getDocumentById = async (req, res) => {
 
     const docData = document.toJSON();
     // Use the stored documentPath directly - it contains the relative path from uploads/
-    const relativePath = docData.documentPath.replace(/^uploads[\/\\]/, '');
+    const relativePath = docData.documentPath
+      .replace(/^uploads[\/\\]/, '')
+      .replace(/\\/g, '/');
     docData.documentUrl = `${process.env.BASE_URL || 'http://localhost:5000'}/uploads/${relativePath}`;
 
     res.status(200).json({
