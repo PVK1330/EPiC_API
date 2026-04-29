@@ -63,6 +63,7 @@ import CandidateApplicationModel from "./candidateApplication.model.js";
 
 import SponsorProfileModel from "./sponsorProfile.model.js";
 import AppointmentModel from "./appointment.model.js";
+import CalendarMeetingModel from "./calendarMeeting.model.js";
 
 import AuditLogModel from "./auditLog.model.js";
 import LicenceApplicationModel from "./licenceApplication.model.js";
@@ -164,6 +165,7 @@ db.SponsorProfile = SponsorProfileModel(sequelize, Sequelize.DataTypes);
 db.Appointment = AppointmentModel(sequelize, Sequelize.DataTypes);
 
 db.LicenceApplication = LicenceApplicationModel(sequelize, Sequelize.DataTypes);
+db.CalendarMeeting = CalendarMeetingModel(sequelize, Sequelize.DataTypes);
 
 // Associations
 
@@ -394,6 +396,8 @@ db.User.hasMany(db.LicenceApplication, {
   as: "licenceApplications",
 });
 db.LicenceApplication.belongsTo(db.User, { foreignKey: "userId", as: "user" });
+db.CalendarMeeting.belongsTo(db.User, { foreignKey: "user_id", as: "user" });
+db.User.hasMany(db.CalendarMeeting, { foreignKey: "user_id", as: "calendarMeetings" });
 
 export default db;
 
