@@ -16,6 +16,20 @@ router.post('/', verifyToken, requireCandidate, candidateApplicationController.s
 // PUT  /api/candidate-application       — save progress as a draft
 router.put('/', verifyToken, requireCandidate, candidateApplicationController.saveDraft);
 
+router.get(
+  '/filled-application-pdf',
+  verifyToken,
+  requireCandidate,
+  candidateApplicationController.downloadFilledApplicationPdf,
+);
+
+router.get(
+  '/case-summary-pdf',
+  verifyToken,
+  requireCandidate,
+  candidateApplicationController.downloadCaseSummaryPdf,
+);
+
 // ── Admin / caseworker routes ────────────────────────────────────────────────
 // PATCH /api/candidate-application/:candidateId/unlock — unlock a submitted application
 router.patch(

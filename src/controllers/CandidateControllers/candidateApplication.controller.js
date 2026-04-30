@@ -1,6 +1,8 @@
+import path from 'path';
 import db from '../../models/index.js';
 import { notifyCaseCreated } from '../../services/notification.service.js';
 import { addTimelineEntry } from '../../services/timeline.service.js';
+import { streamBrandedPdf } from '../../services/pdfGenerator.service.js';
 
 const CandidateApplication = db.CandidateApplication;
 
@@ -141,6 +143,71 @@ function pickFields(body) {
 }
 
 // ── Section definitions used for completeness scoring ────────────────────────
+const PDF_APPLICATION_SECTIONS = [
+  {
+    title: 'Personal Information',
+    fields: [
+      'firstName', 'lastName', 'email', 'contactNumber', 'contactNumber2',
+      'applicationType', 'gender', 'relationshipStatus', 'address',
+      'previousFullAddress', 'previousAddress', 'startDate', 'endDate',
+    ],
+  },
+  {
+    title: 'Nationality & Birth',
+    fields: ['nationality', 'birthCountry', 'placeOfBirth', 'dob'],
+  },
+  {
+    title: 'Passport & Travel Document',
+    fields: [
+      'passportNumber', 'issuingAuthority', 'issueDate', 'expiryDate',
+      'passportAvailable',
+    ],
+  },
+  {
+    title: 'Identity & Residence',
+    fields: [
+      'nationalIdCardNumber', 'nationalIdNumber',
+      'idIssuingAuthorityCard', 'idIssuingAuthorityNational',
+      'otherNationality', 'ukLicense', 'medicalTreatment', 'ukStayDuration',
+    ],
+  },
+  {
+    title: 'Parent or Legal Guardian (First)',
+    fields: [
+      'parentName', 'parentRelation', 'parentDob', 'parentNationality',
+      'sameNationality',
+    ],
+  },
+  {
+    title: 'Parent or Legal Guardian (Second)',
+    fields: [
+      'parent2Name', 'parent2Relation', 'parent2Dob', 'parent2Nationality',
+      'parent2SameNationality',
+    ],
+  },
+  {
+    title: 'Immigration History',
+    fields: [
+      'illegalEntry', 'overstayed', 'breach', 'falseInfo', 'otherBreach',
+      'refusedVisa', 'refusedEntry', 'refusedPermission', 'refusedAsylum',
+      'deported', 'removed', 'requiredToLeave', 'banned',
+    ],
+  },
+  {
+    title: 'Travel History',
+    fields: [
+      'visitedOther', 'countryVisited', 'visitReason', 'entryDate', 'leaveDate',
+    ],
+  },
+  {
+    title: 'Current Visa Status & English Language',
+    fields: [
+      'visaType', 'brpNumber', 'visaEndDate', 'niNumber', 'sponsored',
+      'englishProof',
+    ],
+  },
+];
+
 const COMPLETION_SECTIONS = [
   {
     key: 'personal',
@@ -540,5 +607,309 @@ export const unlockApplication = async (req, res) => {
       data: null,
       error: err.message,
     });
+  }
+};
+
+function humanizeFieldKey(key) {
+  return key
+    .replace(/([A-Z])/g, ' $1')
+    .replace(/^./, (c) => c.toUpperCase())
+    .trim();
+}
+
+function formatApplicationScalar(fieldKey, raw) {
+  if (raw === null || raw === undefined || raw === '') return '—';
+  if (DATE_FIELDS.has(fieldKey)) {
+    const d = raw instanceof Date ? raw : new Date(raw);
+    if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+    return '—';
+  }
+  if (typeof raw === 'object' && !(raw instanceof Date)) {
+    try {
+      return JSON.stringify(raw);
+    } catch {
+      return '—';
+    }
+  }
+  return String(raw);
+}
+
+function formatCaseDate(raw) {
+  if (raw === null || raw === undefined || raw === '') return '—';
+  const d = raw instanceof Date ? raw : new Date(raw);
+  if (isNaN(d.getTime())) return '—';
+  return d.toISOString().split('T')[0];
+}
+
+async function buildFieldLabelMap() {
+  const settings = await db.ApplicationFieldSetting.findAll({
+    where: {
+      field_type: { [db.Sequelize.Op.ne]: 'file' },
+    },
+    attributes: ['field_key', 'field_label'],
+  });
+  const map = {};
+  for (const s of settings) {
+    map[s.field_key] = s.field_label;
+  }
+  return map;
+}
+
+export const downloadFilledApplicationPdf = async (req, res) => {
+  try {
+    const userId = resolveUserId(req);
+    if (!userId) {
+      return res.status(401).json({ status: 'error', message: 'Invalid session', data: null });
+    }
+
+    const application = await CandidateApplication.findOne({ where: { userId } });
+    if (!application) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Application not found',
+        data: null,
+      });
+    }
+
+    const appJson = application.toJSON();
+    const labelMap = await buildFieldLabelMap();
+    const sections = PDF_APPLICATION_SECTIONS.map((sec) => ({
+      sectionTitle: sec.title,
+      rows: sec.fields.map((fieldKey) => ({
+        label: labelMap[fieldKey] || humanizeFieldKey(fieldKey),
+        value: formatApplicationScalar(fieldKey, appJson[fieldKey]),
+      })),
+    }));
+
+    const customDefs = await db.ApplicationCustomField.findAll({
+      where: { is_active: true },
+      order: [['display_order', 'ASC']],
+    });
+    const responses =
+      appJson.customResponses && typeof appJson.customResponses === 'object'
+        ? appJson.customResponses
+        : {};
+    const customRows = [];
+    const seenKeys = new Set();
+    for (const cf of customDefs) {
+      const key = cf.field_id;
+      seenKeys.add(key);
+      const val = responses[key] ?? responses[String(cf.id)] ?? null;
+      customRows.push({
+        label: cf.label,
+        value: formatApplicationScalar(key, val),
+      });
+    }
+    for (const [k, v] of Object.entries(responses)) {
+      if (seenKeys.has(k)) continue;
+      customRows.push({
+        label: humanizeFieldKey(k),
+        value: formatApplicationScalar(k, v),
+      });
+    }
+    if (customRows.length) {
+      sections.push({
+        sectionTitle: 'Additional Questions',
+        rows: customRows,
+      });
+    }
+
+    const logoPath = path.join(process.cwd(), 'assets', 'elitepic_logo.png');
+    const candidateName =
+      `${appJson.firstName || ''} ${appJson.lastName || ''}`.trim() || 'Candidate';
+
+    streamBrandedPdf(res, 'Filled_Application_Form.pdf', {
+      logoPath,
+      title: 'Filled Application Form',
+      sections,
+      metadata: {
+        subtitle: 'Immigration application summary (candidate record)',
+        reference: appJson.status ? `Application status: ${appJson.status}` : undefined,
+        candidateName,
+      },
+    });
+  } catch (err) {
+    console.error('downloadFilledApplicationPdf error:', err);
+    if (!res.headersSent) {
+      res.status(500).json({
+        status: 'error',
+        message: 'Internal server error',
+        data: null,
+        error: err.message,
+      });
+    }
+  }
+};
+
+export const downloadCaseSummaryPdf = async (req, res) => {
+  try {
+    const userId = resolveUserId(req);
+    if (!userId) {
+      return res.status(401).json({ status: 'error', message: 'Invalid session', data: null });
+    }
+
+    const application = await CandidateApplication.findOne({ where: { userId } });
+    const candidateNameFromApp = application
+      ? `${application.firstName || ''} ${application.lastName || ''}`.trim()
+      : '';
+
+    const userRow = await db.User.findByPk(userId, {
+      attributes: ['first_name', 'last_name', 'email'],
+    });
+    const displayName =
+      candidateNameFromApp ||
+      `${userRow?.first_name || ''} ${userRow?.last_name || ''}`.trim() ||
+      userRow?.email ||
+      'Candidate';
+
+    const caseRecord = await db.Case.findOne({
+      where: { candidateId: userId },
+      order: [['created_at', 'DESC']],
+      include: [
+        { model: db.VisaType, as: 'visaType', attributes: ['id', 'name'] },
+        { model: db.PetitionType, as: 'petitionType', attributes: ['id', 'name'] },
+        { model: db.Department, as: 'department', attributes: ['id', 'name'] },
+      ],
+    });
+
+    let timeline = [];
+    if (caseRecord) {
+      timeline = await db.CaseTimeline.findAll({
+        where: { caseId: caseRecord.id, visibility: 'public' },
+        include: [
+          {
+            model: db.User,
+            as: 'performer',
+            attributes: ['first_name', 'last_name'],
+          },
+        ],
+        order: [['actionDate', 'ASC']],
+      });
+    }
+
+    let assignedLines = '—';
+    if (caseRecord?.assignedcaseworkerId) {
+      const rawIds = Array.isArray(caseRecord.assignedcaseworkerId)
+        ? caseRecord.assignedcaseworkerId
+        : [caseRecord.assignedcaseworkerId];
+      const uniq = [
+        ...new Set(
+          rawIds
+            .map((x) => Number(x))
+            .filter((n) => Number.isFinite(n) && n > 0),
+        ),
+      ];
+      if (uniq.length) {
+        const staff = await db.User.findAll({
+          where: { id: uniq },
+          attributes: ['first_name', 'last_name', 'email'],
+        });
+        assignedLines = staff
+          .map((u) =>
+            `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.email || '',
+          )
+          .filter(Boolean)
+          .join('; ');
+        if (!assignedLines) assignedLines = '—';
+      }
+    }
+
+    const overviewRows = [
+      { label: 'Candidate name', value: displayName },
+      { label: 'Case reference', value: caseRecord?.caseId || '—' },
+      { label: 'Current status', value: caseRecord?.status || '—' },
+      { label: 'Pipeline stage', value: caseRecord?.caseStage || '—' },
+      { label: 'Visa type', value: caseRecord?.visaType?.name || '—' },
+      { label: 'Application category', value: caseRecord?.applicationType || '—' },
+      { label: 'Petition type', value: caseRecord?.petitionType?.name || '—' },
+      { label: 'Department', value: caseRecord?.department?.name || '—' },
+      { label: 'Nationality (case record)', value: caseRecord?.nationality || '—' },
+      { label: 'Priority', value: caseRecord?.priority || '—' },
+      {
+        label: 'Target submission date',
+        value: formatCaseDate(caseRecord?.targetSubmissionDate),
+      },
+      {
+        label: 'Submission date',
+        value: formatCaseDate(caseRecord?.submissionDate),
+      },
+      {
+        label: 'Decision date',
+        value: formatCaseDate(caseRecord?.decisionDate),
+      },
+      {
+        label: 'Biometrics date',
+        value: formatCaseDate(caseRecord?.biometricsDate),
+      },
+      {
+        label: 'Receipt number',
+        value: caseRecord?.receiptNumber || '—',
+      },
+      {
+        label: 'LCA number',
+        value: caseRecord?.lcaNumber || '—',
+      },
+      { label: 'Assigned caseworker(s)', value: assignedLines },
+    ];
+
+    const timelineRows = timeline.map((t) => {
+      const who = t.performer
+        ? `${t.performer.first_name || ''} ${t.performer.last_name || ''}`.trim()
+        : '—';
+      const when = formatCaseDate(t.actionDate);
+      return {
+        label: `${when} · ${t.actionType}`,
+        value: `${t.description || '—'} (${who})`,
+      };
+    });
+
+    const summaryParagraphs = [];
+    if (!caseRecord) {
+      summaryParagraphs.push(
+        'No immigration case record is currently linked to this account. When a case is opened, status and timeline information will appear in this report.',
+      );
+    } else {
+      summaryParagraphs.push(
+        `This report summarises the latest information held for case reference ${caseRecord.caseId || 'N/A'}. The timeline lists publicly visible milestones in chronological order. For formal guidance, rely on correspondence from your caseworker or the relevant authority.`,
+      );
+    }
+
+    const sections = [
+      { sectionTitle: 'Case overview', rows: overviewRows },
+      {
+        sectionTitle: 'Summary',
+        paragraphs: summaryParagraphs,
+        rows: [],
+      },
+      {
+        sectionTitle: 'Timeline (public milestones)',
+        rows: timelineRows.length
+          ? timelineRows
+          : [{ label: '—', value: 'No timeline entries recorded.' }],
+      },
+    ];
+
+    const logoPath = path.join(process.cwd(), 'assets', 'elitepic_logo.png');
+
+    streamBrandedPdf(res, 'Case_Summary_Report.pdf', {
+      logoPath,
+      title: 'Case Summary Report',
+      sections,
+      metadata: {
+        subtitle: 'Candidate case status overview',
+        reference: caseRecord?.caseId ? `Reference: ${caseRecord.caseId}` : undefined,
+        candidateName: displayName,
+      },
+    });
+  } catch (err) {
+    console.error('downloadCaseSummaryPdf error:', err);
+    if (!res.headersSent) {
+      res.status(500).json({
+        status: 'error',
+        message: 'Internal server error',
+        data: null,
+        error: err.message,
+      });
+    }
   }
 };
