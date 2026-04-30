@@ -73,6 +73,7 @@ app.use('/api/caseworker/documents', caseworkerDocumentRoutes);
 app.use('/api/caseworker/case-notes', caseworkerCaseNoteRoutes);
 app.use('/api/caseworker/sponsors', caseworkerSponsorRoutes);
 app.use('/api/caseworker/audit', caseworkerAuditRoutes);
+app.use('/api/caseworker/licence', caseworkerLicenceRoutes);
 app.use('/api/caseworker', caseworkerRoutes);
 app.use('/api/sponsors', sponsorsRoutes);
 app.use('/api/business', sponsorPanelRoutes);
