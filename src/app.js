@@ -38,6 +38,8 @@ import teamsMeetingRoutes from './routes/teamsMeeting.routes.js';
 import sponsorPanelRoutes from './routes/SponsorRoutes/index.js';
 import adminLicenceRoutes from './routes/admin.licence.routes.js';
 import caseworkerLicenceRoutes from './routes/caseworker.licence.routes.js';
+import caseworkerTimelineRoutes from './routes/CaseworkerRoutes/caseTimeline.routes.js';
+import caseworkerPerformanceRoutes from './routes/CaseworkerRoutes/caseworkerPerformance.routes.js';
 import { getFrontendOrigins } from './config/frontendOrigins.js';
 
 const app = express();
@@ -74,6 +76,8 @@ app.use('/api/caseworker/case-notes', caseworkerCaseNoteRoutes);
 app.use('/api/caseworker/sponsors', caseworkerSponsorRoutes);
 app.use('/api/caseworker/audit', caseworkerAuditRoutes);
 app.use('/api/caseworker/licence', caseworkerLicenceRoutes);
+app.use('/api/caseworker', caseworkerTimelineRoutes);
+app.use('/api/caseworker', caseworkerPerformanceRoutes);
 app.use('/api/caseworker', caseworkerRoutes);
 app.use('/api/sponsors', sponsorsRoutes);
 app.use('/api/business', sponsorPanelRoutes);

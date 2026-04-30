@@ -279,7 +279,7 @@ db.User.hasMany(db.Message, {
 db.CasePayment.belongsTo(db.Case, { foreignKey: "caseId" });
 db.CasePayment.belongsTo(db.User, { foreignKey: "receivedBy", as: "receiver" });
 
-db.CaseTimeline.belongsTo(db.Case, { foreignKey: "caseId" });
+db.CaseTimeline.belongsTo(db.Case, { foreignKey: "caseId", as: "case" });
 db.CaseTimeline.belongsTo(db.User, {
   foreignKey: "performedBy",
   as: "performer",

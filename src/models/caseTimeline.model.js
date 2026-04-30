@@ -10,6 +10,7 @@ export default (sequelize, DataTypes) => {
       caseId: {
         type: DataTypes.INTEGER,
         allowNull: false,
+        field: 'case_id',
         references: {
           model: 'cases',
           key: 'id'
@@ -34,6 +35,7 @@ export default (sequelize, DataTypes) => {
           'case_reopened'
         ),
         allowNull: false,
+        field: 'action_type',
         comment: "Type of action performed"
       },
       description: {
@@ -44,6 +46,7 @@ export default (sequelize, DataTypes) => {
       performedBy: {
         type: DataTypes.INTEGER,
         allowNull: true,
+        field: 'performed_by',
         references: {
           model: 'users',
           key: 'id'
@@ -54,16 +57,19 @@ export default (sequelize, DataTypes) => {
         type: DataTypes.DATE,
         allowNull: false,
         defaultValue: DataTypes.NOW,
+        field: 'action_date',
         comment: "Date when the action was performed"
       },
       previousValue: {
         type: DataTypes.TEXT,
         allowNull: true,
+        field: 'previous_value',
         comment: "Previous value before the change"
       },
       newValue: {
         type: DataTypes.TEXT,
         allowNull: true,
+        field: 'new_value',
         comment: "New value after the change"
       },
       metadata: {
@@ -75,12 +81,14 @@ export default (sequelize, DataTypes) => {
         type: DataTypes.BOOLEAN,
         allowNull: false,
         defaultValue: false,
+        field: 'is_system_action',
         comment: "Whether this was a system-generated action"
       },
       visibility: {
         type: DataTypes.ENUM('public', 'internal', 'admin_only'),
         allowNull: false,
         defaultValue: 'public',
+        field: 'visibility',
         comment: "Visibility level of this timeline entry"
       },
     },
