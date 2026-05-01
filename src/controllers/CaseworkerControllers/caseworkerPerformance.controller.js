@@ -25,16 +25,25 @@ export const getCaseworkerPerformance = async (req, res) => {
     const start = startDate ? new Date(startDate) : defaultStart;
     const end = endDate ? new Date(endDate) : defaultEnd;
 
+    // Build where clause for caseworker JSONB array
+    const caseworkerWhereClause = {
+      [Op.or]: [
+        db.sequelize.literal(`"assignedcaseworkerId"::jsonb @> '${JSON.stringify([userId])}'::jsonb`),
+        db.sequelize.literal(`"assignedcaseworkerId"::jsonb ? '${userId.toString()}'`)
+      ]
+    };
+
+    const caseWhere = { ...caseworkerWhereClause };
+    // Only apply date filter to overall stats if explicitly requested
+    if (req.query.startDate || req.query.endDate) {
+      caseWhere.created_at = {
+        [Op.between]: [start, end],
+      };
+    }
+
     // Get cases assigned to the caseworker
     const assignedCases = await Case.findAll({
-      where: {
-        assignedcaseworkerId: {
-          [Op.contains]: [userId],
-        },
-        created_at: {
-          [Op.between]: [start, end],
-        },
-      },
+      where: caseWhere,
     });
 
     const caseIds = assignedCases.map(c => c.id);
@@ -147,7 +156,7 @@ export const getCaseworkerPerformance = async (req, res) => {
       
       const monthCases = await Case.findAll({
         where: {
-          assignedcaseworkerId: { [Op.contains]: [userId] },
+          ...caseworkerWhereClause,
           created_at: { [Op.between]: [monthStart, monthEnd] },
         },
       });
