@@ -1,8 +1,12 @@
 import path from 'path';
+import bcrypt from 'bcryptjs';
+import { Op } from 'sequelize';
 import db from '../../models/index.js';
 import { notifyCaseCreated } from '../../services/notification.service.js';
 import { addTimelineEntry } from '../../services/timeline.service.js';
 import { streamBrandedPdf } from '../../services/pdfGenerator.service.js';
+import { rowsToXlsxBuffer, xlsxBufferToRows } from '../../utils/excelExport.util.js';
+import { generateStrongPassword } from '../../utils/passwordGenerator.js';
 
 const CandidateApplication = db.CandidateApplication;
 
@@ -291,6 +295,63 @@ function computeCompletionScore(app, documents, documentSettings) {
     },
   };
 }
+
+export const getCandidateApplicationFieldSettings = async (req, res) => {
+  try {
+    const userId = resolveUserId(req);
+    if (!userId) {
+      return res.status(401).json({ status: 'error', message: 'Invalid session', data: null });
+    }
+
+    const settings = await db.ApplicationFieldSetting.findAll({
+      where: { field_type: { [Op.ne]: 'file' } },
+      attributes: ['id', 'field_key', 'field_label', 'is_visible', 'field_order', 'field_type'],
+      order: [['field_order', 'ASC']],
+    });
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Field settings loaded',
+      data: settings.map((s) => s.toJSON()),
+    });
+  } catch (err) {
+    console.error('getCandidateApplicationFieldSettings error:', err);
+    res.status(500).json({
+      status: 'error',
+      message: 'Internal server error',
+      data: null,
+      error: err.message,
+    });
+  }
+};
+
+export const getCandidateApplicationCustomFields = async (req, res) => {
+  try {
+    const userId = resolveUserId(req);
+    if (!userId) {
+      return res.status(401).json({ status: 'error', message: 'Invalid session', data: null });
+    }
+
+    const customFields = await db.ApplicationCustomField.findAll({
+      where: { is_active: true },
+      order: [['display_order', 'ASC']],
+    });
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Custom fields loaded',
+      data: customFields.map((f) => f.toJSON()),
+    });
+  } catch (err) {
+    console.error('getCandidateApplicationCustomFields error:', err);
+    res.status(500).json({
+      status: 'error',
+      message: 'Internal server error',
+      data: null,
+      error: err.message,
+    });
+  }
+};
 
 /** GET /api/candidate/application — load the logged-in candidate's application */
 export const getMyApplication = async (req, res) => {
@@ -582,7 +643,6 @@ export const saveDraft = async (req, res) => {
   }
 };
 
-/** PATCH /api/candidate-application/:candidateId/unlock — admin/caseworker unlocks a submitted application */
 export const unlockApplication = async (req, res) => {
   try {
     const candidateId = Number(req.params.candidateId);
@@ -601,6 +661,491 @@ export const unlockApplication = async (req, res) => {
     res.status(200).json({ success: true, message: 'Application unlocked successfully.' });
   } catch (err) {
     console.error('unlockApplication error:', err);
+    res.status(500).json({
+      status: 'error',
+      message: 'Internal server error',
+      data: null,
+      error: err.message,
+    });
+  }
+};
+
+export const adminUpdateCandidateApplication = async (req, res) => {
+  try {
+    const candidateId = Number(req.params.id);
+    if (!Number.isFinite(candidateId) || candidateId <= 0) {
+      return res.status(400).json({ status: 'error', message: 'Invalid candidate id', data: null });
+    }
+
+    const candidate = await db.User.findOne({ where: { id: candidateId, role_id: 3 } });
+    if (!candidate) {
+      return res.status(404).json({ status: 'error', message: 'Candidate not found', data: null });
+    }
+
+    const {
+      first_name,
+      last_name,
+      email,
+      country_code,
+      mobile,
+    } = req.body;
+
+    const payload = pickFields(req.body || {});
+
+    if (email !== undefined && email !== candidate.email) {
+      const existingEmail = await db.User.findOne({
+        where: { email, id: { [Op.ne]: candidateId } },
+      });
+      if (existingEmail) {
+        return res.status(400).json({ status: 'error', message: 'Email already exists', data: null });
+      }
+    }
+
+    const nextCc = country_code !== undefined ? country_code : candidate.country_code;
+    const nextMob = mobile !== undefined ? mobile : candidate.mobile;
+    if (nextCc !== candidate.country_code || nextMob !== candidate.mobile) {
+      const existingMobile = await db.User.findOne({
+        where: { country_code: nextCc, mobile: nextMob, id: { [Op.ne]: candidateId } },
+      });
+      if (existingMobile) {
+        return res.status(400).json({ status: 'error', message: 'Mobile number already exists', data: null });
+      }
+    }
+
+    await db.sequelize.transaction(async (t) => {
+      const userUpdate = {};
+      if (first_name !== undefined) userUpdate.first_name = first_name;
+      if (last_name !== undefined) userUpdate.last_name = last_name;
+      if (email !== undefined) userUpdate.email = email;
+      if (country_code !== undefined) userUpdate.country_code = country_code;
+      if (mobile !== undefined) userUpdate.mobile = mobile;
+      if (payload.contactNumber !== undefined && payload.contactNumber !== null) {
+        userUpdate.phone = payload.contactNumber;
+      }
+      if (Object.keys(userUpdate).length) {
+        await candidate.update(userUpdate, { transaction: t });
+      }
+
+      const existingApplication = await CandidateApplication.findOne({
+        where: { userId: candidateId },
+        transaction: t,
+      });
+
+      if (existingApplication) {
+        await existingApplication.update(payload, { transaction: t });
+      } else {
+        await CandidateApplication.create({
+          userId: candidateId,
+          ...payload,
+          status: 'draft',
+        }, { transaction: t });
+      }
+
+      const existingCase = await db.Case.findOne({
+        where: { candidateId },
+        transaction: t,
+      });
+
+      let visaTypeId = null;
+      if (payload.visaType) {
+        const vt = await db.VisaType.findOne({
+          where: { name: { [db.Sequelize.Op.iLike]: `%${payload.visaType}%` } },
+          transaction: t,
+        });
+        if (vt) visaTypeId = vt.id;
+      }
+
+      const caseworkerId = req.body.caseworkerId;
+      const assignedcaseworkerId = caseworkerId ? [Number(caseworkerId)] : null;
+
+      if (existingCase) {
+        await existingCase.update({
+          visaTypeId: visaTypeId || existingCase.visaTypeId,
+          nationality: payload.nationality || existingCase.nationality,
+          assignedcaseworkerId: assignedcaseworkerId ?? existingCase.assignedcaseworkerId,
+        }, { transaction: t });
+      } else if (payload.nationality || payload.visaType || visaTypeId) {
+        await db.Case.create({
+          caseId: `CAS-${Math.floor(100000 + Math.random() * 900000)}`,
+          candidateId,
+          visaTypeId,
+          status: 'Lead',
+          priority: 'medium',
+          targetSubmissionDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+          nationality: payload.nationality || null,
+          jobTitle: 'Candidate',
+          assignedcaseworkerId,
+        }, { transaction: t });
+      }
+    });
+
+    const updatedCandidate = await db.User.findOne({
+      where: { id: candidateId },
+      attributes: {
+        exclude: [
+          'password',
+          'otp_code',
+          'otp_expiry',
+          'password_reset_otp',
+          'password_reset_otp_expiry',
+          'temp_password',
+        ],
+      },
+      include: [
+        { model: db.Role, as: 'role', attributes: ['id', 'name'] },
+        { model: CandidateApplication, as: 'application', required: false },
+      ],
+    });
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Candidate application updated successfully',
+      data: { candidate: updatedCandidate },
+    });
+  } catch (err) {
+    console.error('adminUpdateCandidateApplication error:', err);
+    res.status(500).json({
+      status: 'error',
+      message: 'Internal server error',
+      data: null,
+      error: err.message,
+    });
+  }
+};
+
+function exportCellValue(fieldKey, raw) {
+  if (raw === null || raw === undefined || raw === '') return '';
+  if (DATE_FIELDS.has(fieldKey)) {
+    const d = raw instanceof Date ? raw : new Date(raw);
+    if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+    return '';
+  }
+  if (typeof raw === 'object' && !(raw instanceof Date)) {
+    try {
+      return JSON.stringify(raw);
+    } catch {
+      return '';
+    }
+  }
+  return String(raw);
+}
+
+export const exportCandidateApplicationsExcel = async (req, res) => {
+  try {
+    const { search, status } = req.query;
+    const whereClause = { role_id: 3 };
+    if (search) {
+      whereClause[Op.or] = [
+        { first_name: { [Op.iLike]: `%${search}%` } },
+        { last_name: { [Op.iLike]: `%${search}%` } },
+        { email: { [Op.iLike]: `%${search}%` } },
+        { mobile: { [Op.iLike]: `%${search}%` } },
+      ];
+    }
+    if (status) {
+      whereClause.status = status;
+    }
+
+    const settings = await db.ApplicationFieldSetting.findAll({
+      order: [['field_order', 'ASC']],
+    });
+    const labelMap = {};
+    for (const s of settings) {
+      labelMap[s.field_key] = s.field_label;
+    }
+
+    const userCols = [
+      { key: 'user_id', header: 'User ID' },
+      { key: 'first_name', header: 'First Name' },
+      { key: 'last_name', header: 'Last Name' },
+      { key: 'email', header: 'Email' },
+      { key: 'country_code', header: 'Country Code' },
+      { key: 'mobile', header: 'Mobile' },
+      { key: 'account_status', header: 'Account Status' },
+    ];
+
+    const appCols = APPLICATION_FIELDS.filter((k) => k !== 'customResponses').map((k) => ({
+      key: `app_${k}`,
+      header: labelMap[k] || humanizeFieldKey(k),
+    }));
+    appCols.push({
+      key: 'app_customResponses',
+      header: labelMap.customResponses || 'Custom responses',
+    });
+
+    const columns = [...userCols, ...appCols];
+
+    const candidates = await db.User.findAll({
+      where: whereClause,
+      attributes: ['id', 'first_name', 'last_name', 'email', 'country_code', 'mobile', 'status'],
+      include: [{ model: CandidateApplication, as: 'application', required: false }],
+      order: [['createdAt', 'DESC']],
+    });
+
+    const rows = candidates.map((u) => {
+      const appJson = u.application ? u.application.toJSON() : {};
+      const row = {
+        user_id: u.id,
+        first_name: u.first_name ?? '',
+        last_name: u.last_name ?? '',
+        email: u.email ?? '',
+        country_code: u.country_code ?? '',
+        mobile: u.mobile ?? '',
+        account_status: u.status ?? '',
+      };
+      for (const k of APPLICATION_FIELDS) {
+        if (k === 'customResponses') continue;
+        const v = appJson[k];
+        row[`app_${k}`] = exportCellValue(k, v);
+      }
+      row.app_customResponses = appJson.customResponses
+        ? JSON.stringify(appJson.customResponses)
+        : '';
+      return row;
+    });
+
+    const buf = rowsToXlsxBuffer(rows, columns);
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename="candidate-applications.xlsx"',
+    );
+    res.status(200).send(buf);
+  } catch (err) {
+    console.error('exportCandidateApplicationsExcel error:', err);
+    res.status(500).json({
+      status: 'error',
+      message: 'Internal server error',
+      data: null,
+      error: err.message,
+    });
+  }
+};
+
+function normalizeImportHeader(h) {
+  return String(h || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+}
+
+async function buildImportHeaderMap() {
+  const settings = await db.ApplicationFieldSetting.findAll();
+  const map = {};
+  map[normalizeImportHeader('User ID')] = 'meta:user_id';
+  map[normalizeImportHeader('First Name')] = 'user:first_name';
+  map[normalizeImportHeader('Last Name')] = 'user:last_name';
+  map[normalizeImportHeader('Email')] = 'user:email';
+  map[normalizeImportHeader('Country Code')] = 'user:country_code';
+  map[normalizeImportHeader('Mobile')] = 'user:mobile';
+  map[normalizeImportHeader('Account Status')] = 'user:status';
+  for (const s of settings) {
+    map[normalizeImportHeader(s.field_label)] = `app:${s.field_key}`;
+  }
+  for (const k of APPLICATION_FIELDS) {
+    map[normalizeImportHeader(humanizeFieldKey(k))] = `app:${k}`;
+  }
+  map[normalizeImportHeader('Custom responses')] = 'app:customResponses';
+  return map;
+}
+
+export const importCandidateApplicationsExcel = async (req, res) => {
+  try {
+    if (!req.file?.buffer) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'No file uploaded',
+        data: null,
+      });
+    }
+
+    const { headers, dataRows } = xlsxBufferToRows(req.file.buffer);
+    if (!headers.length) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Spreadsheet has no headers',
+        data: null,
+      });
+    }
+
+    const headerMap = await buildImportHeaderMap();
+    const results = { success: [], errors: [] };
+
+    let rowNum = 2;
+    for (const line of dataRows) {
+      try {
+        const userPatch = {};
+        const appPatch = {};
+        let metaUserId = null;
+
+        headers.forEach((h, idx) => {
+          const mapped = headerMap[normalizeImportHeader(h)];
+          if (!mapped) return;
+          let cell = line[idx];
+          if (cell === undefined || cell === null) cell = '';
+          if (typeof cell === 'number') cell = String(cell);
+          else cell = String(cell).trim();
+
+          if (mapped.startsWith('meta:')) {
+            const mk = mapped.slice(5);
+            if (mk === 'user_id' && cell) metaUserId = Number(cell);
+            return;
+          }
+          if (mapped.startsWith('user:')) {
+            const uk = mapped.slice(5);
+            if (cell !== '') userPatch[uk] = cell;
+            return;
+          }
+          if (mapped.startsWith('app:')) {
+            const ak = mapped.slice(4);
+            if (ak === 'customResponses' && cell) {
+              try {
+                appPatch.customResponses = JSON.parse(cell);
+              } catch {
+                appPatch.customResponses = {};
+              }
+            } else if (cell !== '') {
+              appPatch[ak] = cell;
+            }
+          }
+        });
+
+        const firstName =
+          userPatch.first_name ||
+          appPatch.firstName ||
+          '';
+        const lastName =
+          userPatch.last_name ||
+          appPatch.lastName ||
+          '';
+        const emailAddr =
+          userPatch.email ||
+          appPatch.email ||
+          '';
+
+        if (!emailAddr || !String(emailAddr).includes('@')) {
+          results.errors.push({ row: rowNum, error: 'Email is required' });
+          rowNum += 1;
+          continue;
+        }
+
+        const sanitized = pickFields(appPatch);
+
+        await db.sequelize.transaction(async (t) => {
+          let userRow = null;
+          if (Number.isFinite(metaUserId) && metaUserId > 0) {
+            userRow = await db.User.findOne({
+              where: { id: metaUserId, role_id: 3 },
+              transaction: t,
+            });
+          }
+          if (!userRow) {
+            userRow = await db.User.findOne({
+              where: { email: emailAddr, role_id: 3 },
+              transaction: t,
+            });
+          }
+
+          if (userRow) {
+            const uUp = {};
+            if (firstName) uUp.first_name = firstName;
+            if (lastName) uUp.last_name = lastName;
+            if (userPatch.email) uUp.email = userPatch.email;
+            if (userPatch.country_code) uUp.country_code = userPatch.country_code;
+            if (userPatch.mobile) uUp.mobile = userPatch.mobile;
+            if (userPatch.status) uUp.status = userPatch.status;
+            if (sanitized.contactNumber) uUp.phone = sanitized.contactNumber;
+            if (Object.keys(uUp).length) {
+              await userRow.update(uUp, { transaction: t });
+            }
+
+            const existingApp = await CandidateApplication.findOne({
+              where: { userId: userRow.id },
+              transaction: t,
+            });
+            if (existingApp) {
+              await existingApp.update(sanitized, { transaction: t });
+            } else {
+              await CandidateApplication.create(
+                {
+                  userId: userRow.id,
+                  ...sanitized,
+                  status: 'draft',
+                },
+                { transaction: t },
+              );
+            }
+          } else {
+            if (!firstName || !lastName) {
+              throw new Error('First name and last name are required for new candidates');
+            }
+            const pwd =
+              generateStrongPassword(12);
+            const hashedPassword = await bcrypt.hash(pwd, 12);
+            userRow = await db.User.create(
+              {
+                first_name: firstName,
+                last_name: lastName,
+                email: emailAddr,
+                country_code: userPatch.country_code || '+44',
+                mobile: userPatch.mobile || '',
+                role_id: 3,
+                password: hashedPassword,
+                is_email_verified: true,
+                is_otp_verified: true,
+                status: userPatch.status || 'active',
+                phone: sanitized.contactNumber || null,
+              },
+              { transaction: t },
+            );
+
+            await CandidateApplication.create(
+              {
+                userId: userRow.id,
+                ...sanitized,
+                status: 'draft',
+              },
+              { transaction: t },
+            );
+
+            results.success.push({
+              row: rowNum,
+              id: userRow.id,
+              email: userRow.email,
+              temporary_password: pwd,
+              created: true,
+            });
+            return;
+          }
+
+          results.success.push({
+            row: rowNum,
+            id: userRow.id,
+            email: userRow.email,
+            updated: true,
+          });
+        });
+      } catch (err) {
+        results.errors.push({ row: rowNum, error: err.message });
+      }
+      rowNum += 1;
+    }
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Import completed',
+      data: {
+        total_processed: dataRows.length,
+        successful: results.success.length,
+        failed: results.errors.length,
+        results,
+      },
+    });
+  } catch (err) {
+    console.error('importCandidateApplicationsExcel error:', err);
     res.status(500).json({
       status: 'error',
       message: 'Internal server error',

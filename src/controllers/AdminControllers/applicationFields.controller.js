@@ -1,46 +1,12 @@
 import db from "../../models/index.js";
+import crypto from "crypto";
+import seedApplicationFieldSettings from "../../seeders/applicationFieldSettings.seeder.js";
 
 const ApplicationFieldSetting = db.ApplicationFieldSetting;
 const ApplicationCustomField = db.ApplicationCustomField;
 
-// Default field definitions for candidate application form
-const DEFAULT_FIELDS = {
-  firstName: { field_key: 'firstName', field_label: 'First Name', is_visible: true, is_required: true, field_order: 1, field_type: 'text' },
-  lastName: { field_key: 'lastName', field_label: 'Last Name', is_visible: true, is_required: true, field_order: 2, field_type: 'text' },
-  email: { field_key: 'email', field_label: 'Email', is_visible: true, is_required: true, field_order: 3, field_type: 'email' },
-  country_code: { field_key: 'country_code', field_label: 'Country Code', is_visible: true, is_required: true, field_order: 4, field_type: 'text' },
-  mobile: { field_key: 'mobile', field_label: 'Mobile Number', is_visible: true, is_required: true, field_order: 5, field_type: 'text' },
-  dateOfBirth: { field_key: 'dateOfBirth', field_label: 'Date of Birth', is_visible: true, is_required: true, field_order: 6, field_type: 'date' },
-  gender: { field_key: 'gender', field_label: 'Gender', is_visible: true, is_required: true, field_order: 7, field_type: 'select', options: ['Male', 'Female', 'Other'] },
-  nationality: { field_key: 'nationality', field_label: 'Nationality', is_visible: true, is_required: true, field_order: 8, field_type: 'text' },
-  address: { field_key: 'address', field_label: 'Address', is_visible: true, is_required: false, field_order: 9, field_type: 'textarea' },
-  city: { field_key: 'city', field_label: 'City', is_visible: true, is_required: false, field_order: 10, field_type: 'text' },
-  state: { field_key: 'state', field_label: 'State', is_visible: true, is_required: false, field_order: 11, field_type: 'text' },
-  zipCode: { field_key: 'zipCode', field_label: 'ZIP Code', is_visible: true, is_required: false, field_order: 12, field_type: 'text' },
-  passportNumber: { field_key: 'passportNumber', field_label: 'Passport Number', is_visible: true, is_required: true, field_order: 13, field_type: 'text' },
-  passportExpiryDate: { field_key: 'passportExpiryDate', field_label: 'Passport Expiry Date', is_visible: true, is_required: true, field_order: 14, field_type: 'date' },
-  educationLevel: { field_key: 'educationLevel', field_label: 'Education Level', is_visible: true, is_required: true, field_order: 15, field_type: 'select', options: ['High School', 'Bachelor', 'Master', 'PhD', 'Other'] },
-  employmentStatus: { field_key: 'employmentStatus', field_label: 'Employment Status', is_visible: true, is_required: true, field_order: 16, field_type: 'select', options: ['Employed', 'Self-Employed', 'Unemployed', 'Student', 'Other'] }
-};
-
-// Initialize field settings with default values
 export const initializeFieldSettings = async () => {
-  try {
-    const existingSettings = await ApplicationFieldSetting.findAll();
-
-    if (existingSettings.length === 0) {
-      // Create default field settings
-      const fieldSettings = Object.values(DEFAULT_FIELDS).map(field => ({
-        ...field,
-        options: field.options ? JSON.stringify(field.options) : null
-      }));
-
-      await ApplicationFieldSetting.bulkCreate(fieldSettings);
-      console.log('Default application field settings initialized');
-    }
-  } catch (error) {
-    console.error('Error initializing field settings:', error);
-  }
+  await seedApplicationFieldSettings();
 };
 
 // Get all field settings
@@ -112,7 +78,75 @@ export const batchUpdateFieldVisibility = async (req, res) => {
   }
 };
 
-// Update single field visibility
+export const updateFieldVisibilityById = async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const { is_visible } = req.body;
+    if (!Number.isFinite(id) || id <= 0) {
+      return res.status(400).json({
+        status: "error",
+        message: "Invalid id",
+        data: null,
+      });
+    }
+    if (typeof is_visible !== "boolean") {
+      return res.status(400).json({
+        status: "error",
+        message: "is_visible must be a boolean",
+        data: null,
+      });
+    }
+    const setting = await ApplicationFieldSetting.findByPk(id);
+    if (!setting) {
+      return res.status(404).json({
+        status: "error",
+        message: "Field setting not found",
+        data: null,
+      });
+    }
+    await setting.update({ is_visible });
+    const raw = setting.toJSON();
+    let optionsParsed = null;
+    let validationParsed = null;
+    try {
+      optionsParsed = raw.options
+        ? typeof raw.options === "string"
+          ? JSON.parse(raw.options)
+          : raw.options
+        : null;
+    } catch {
+      optionsParsed = null;
+    }
+    try {
+      validationParsed = raw.validation_rules
+        ? typeof raw.validation_rules === "string"
+          ? JSON.parse(raw.validation_rules)
+          : raw.validation_rules
+        : null;
+    } catch {
+      validationParsed = null;
+    }
+    const parsed = {
+      ...raw,
+      options: optionsParsed,
+      validation_rules: validationParsed,
+    };
+    res.status(200).json({
+      status: "success",
+      message: "Field visibility updated successfully",
+      data: parsed,
+    });
+  } catch (error) {
+    console.error("Update Field Visibility By Id Error:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error",
+      data: null,
+      error: error.message,
+    });
+  }
+};
+
 export const updateSingleFieldVisibility = async (req, res) => {
   try {
     const { field_key } = req.params;
@@ -188,14 +222,18 @@ export const getCustomFields = async (req, res) => {
 // Create custom field
 export const createCustomField = async (req, res) => {
   try {
-    const { field_id, label, field_type, placeholder, is_required, options, validation_rules, description, display_order } = req.body;
+    let { field_id, label, field_type, placeholder, is_required, options, validation_rules, description, display_order } = req.body;
 
-    if (!field_id || !label || !field_type) {
+    if (!label || !field_type) {
       return res.status(400).json({
         status: "error",
-        message: "field_id, label, and field_type are required",
+        message: "label and field_type are required",
         data: null
       });
+    }
+
+    if (!field_id) {
+      field_id = crypto.randomUUID();
     }
 
     // Check if field_id already exists

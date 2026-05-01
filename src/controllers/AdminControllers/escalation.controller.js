@@ -1,8 +1,61 @@
 import db from "../../models/index.js";
 import { Op } from "sequelize";
 import { notifyEscalationCreated, notifyEscalationResolved } from "../../services/notification.service.js";
+import { rowsToXlsxBuffer, sendXlsxDownload } from "../../utils/excelExport.util.js";
 
 const { Escalation, User, Case } = db;
+
+/** Shared filters for listing and export (DRY). */
+export const buildEscalationWhereClause = (query = {}) => {
+  const { severity, status, triggerType, assignedAdminId, quickTypeFilter } =
+    query;
+
+  const and = [];
+
+  if (severity && severity !== "All") {
+    and.push({ severity });
+  }
+  if (status && status !== "All") {
+    and.push({ status });
+  }
+  if (triggerType && triggerType !== "All") {
+    and.push({ triggerType });
+  }
+  if (assignedAdminId) {
+    and.push({ assignedAdminId });
+  }
+
+  /**
+   * Same heuristics as AdminEscalations.jsx TYPE_FILTER (trigger substring checks).
+   * Only applies when quickTypeFilter is set and not All.
+   */
+  if (quickTypeFilter && quickTypeFilter !== "All") {
+    if (quickTypeFilter === "Deadline Breach") {
+      and.push({ trigger: { [Op.iLike]: "%Deadline%" } });
+    } else if (quickTypeFilter === "Missing Docs") {
+      and.push({ trigger: { [Op.iLike]: "%BRP%" } });
+    } else if (quickTypeFilter === "Stuck Case") {
+      and.push({ trigger: { [Op.iLike]: "%stuck%" } });
+    }
+  }
+
+  if (and.length === 0) return {};
+  if (and.length === 1) return and[0];
+  return { [Op.and]: and };
+};
+
+const escalationListIncludes = [
+  {
+    model: User,
+    as: "assignedAdmin",
+    attributes: ["id", "first_name", "last_name", "email"],
+  },
+  {
+    model: Case,
+    as: "relatedCase",
+    attributes: ["id", "caseId", "status"],
+  },
+];
 
 const calculateDaysOpen = (createdAt) => {
   const created = new Date(createdAt);
@@ -10,6 +63,30 @@ const calculateDaysOpen = (createdAt) => {
   const diffTime = Math.abs(now - created);
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   return diffDays;
+};
+
+/** KPI cards use full dataset so filters do not change headline numbers. */
+const computeEscalationKpiFromRows = (rows) => {
+  const list = rows.map((r) => (typeof r.toJSON === "function" ? r.toJSON() : r));
+  return {
+    critical: list.filter(
+      (e) => e.severity === "Critical" && e.status !== "Resolved" && e.status !== "Closed",
+    ).length,
+    high: list.filter(
+      (e) => e.severity === "High" && e.status !== "Resolved" && e.status !== "Closed",
+    ).length,
+    medium: list.filter(
+      (e) => e.severity === "Medium" && e.status !== "Resolved" && e.status !== "Closed",
+    ).length,
+    resolvedToday: list.filter((e) => {
+      if (e.resolvedAt) {
+        const resolvedDate = new Date(e.resolvedAt).toDateString();
+        const today = new Date().toDateString();
+        return resolvedDate === today;
+      }
+      return false;
+    }).length,
+  };
 };
 
 export const createEscalation = async (req, res) => {
@@ -76,38 +153,18 @@ export const createEscalation = async (req, res) => {
 
 export const getAllEscalations = async (req, res) => {
   try {
-    const { severity, status, triggerType, assignedAdminId } = req.query;
-    const whereClause = {};
+    const whereClause = buildEscalationWhereClause(req.query);
 
-    if (severity && severity !== "All") {
-      whereClause.severity = severity;
-    }
-    if (status && status !== "All") {
-      whereClause.status = status;
-    }
-    if (triggerType && triggerType !== "All") {
-      whereClause.triggerType = triggerType;
-    }
-    if (assignedAdminId) {
-      whereClause.assignedAdminId = assignedAdminId;
-    }
-
-    const escalations = await Escalation.findAll({
-      where: whereClause,
-      order: [["created_at", "DESC"]],
-      include: [
-        {
-          model: User,
-          as: "assignedAdmin",
-          attributes: ["id", "first_name", "last_name", "email"],
-        },
-        {
-          model: Case,
-          as: "relatedCase",
-          attributes: ["id", "caseId", "status"],
-        },
-      ],
-    });
+    const [escalations, kpiSourceRows] = await Promise.all([
+      Escalation.findAll({
+        where: whereClause,
+        order: [["created_at", "DESC"]],
+        include: escalationListIncludes,
+      }),
+      Escalation.findAll({
+        attributes: ["severity", "status", "resolvedAt", "created_at"],
+      }),
+    ]);
 
     const escalationsWithDaysOpen = escalations.map((esc) => {
       const escalationData = esc.toJSON();
@@ -115,19 +172,7 @@ export const getAllEscalations = async (req, res) => {
       return escalationData;
     });
 
-    const kpi = {
-      critical: escalationsWithDaysOpen.filter((e) => e.severity === "Critical" && e.status !== "Resolved" && e.status !== "Closed").length,
-      high: escalationsWithDaysOpen.filter((e) => e.severity === "High" && e.status !== "Resolved" && e.status !== "Closed").length,
-      medium: escalationsWithDaysOpen.filter((e) => e.severity === "Medium" && e.status !== "Resolved" && e.status !== "Closed").length,
-      resolvedToday: escalationsWithDaysOpen.filter((e) => {
-        if (e.resolvedAt) {
-          const resolvedDate = new Date(e.resolvedAt).toDateString();
-          const today = new Date().toDateString();
-          return resolvedDate === today;
-        }
-        return false;
-      }).length,
-    };
+    const kpi = computeEscalationKpiFromRows(kpiSourceRows);
 
     res.status(200).json({
       status: "success",
@@ -357,6 +402,71 @@ export const getEscalationKPI = async (req, res) => {
     res.status(500).json({
       status: "error",
       message: "Failed to fetch KPI",
+      error: error.message,
+    });
+  }
+};
+
+/** XLSX download; uses shared filters with GET / api/escalations (see buildEscalationWhereClause). */
+export const exportEscalationsExcel = async (req, res) => {
+  try {
+    const whereClause = buildEscalationWhereClause(req.query);
+
+    const escalations = await Escalation.findAll({
+      where: whereClause,
+      order: [["created_at", "DESC"]],
+      include: escalationListIncludes,
+    });
+
+    const columns = [
+      { key: "id", header: "ID" },
+      { key: "caseId", header: "Case ID" },
+      { key: "candidate", header: "Candidate" },
+      { key: "severity", header: "Severity" },
+      { key: "triggerType", header: "Trigger Type" },
+      { key: "trigger", header: "Trigger Reason" },
+      { key: "status", header: "Status" },
+      { key: "assignedAdmin", header: "Assigned Admin" },
+      { key: "assignedAdminEmail", header: "Admin Email" },
+      { key: "daysOpen", header: "Days Open" },
+      { key: "relatedCaseRef", header: "Related Case" },
+      { key: "createdAtStr", header: "Created At" },
+      { key: "resolvedAtStr", header: "Resolved At" },
+      { key: "notes", header: "Notes" },
+    ];
+
+    const rows = escalations.map((esc) => {
+      const j = esc.toJSON();
+      const adm = j.assignedAdmin;
+      const createdIso = j.created_at ? new Date(j.created_at).toISOString() : "";
+      const resolvedIso = j.resolvedAt ? new Date(j.resolvedAt).toISOString() : "";
+      return {
+        id: j.id,
+        caseId: j.caseId ?? "",
+        candidate: j.candidate ?? "",
+        severity: j.severity ?? "",
+        triggerType: j.triggerType ?? "",
+        trigger: j.trigger ?? "",
+        status: j.status ?? "",
+        assignedAdmin:
+          adm && adm.first_name != null ? `${adm.first_name} ${adm.last_name ?? ""}` : "",
+        assignedAdminEmail: adm?.email ?? "",
+        daysOpen: calculateDaysOpen(j.created_at),
+        relatedCaseRef: j.relatedCase?.caseId ?? "",
+        createdAtStr: createdIso,
+        resolvedAtStr: resolvedIso,
+        notes: j.notes ?? "",
+      };
+    });
+
+    const buffer = rowsToXlsxBuffer(rows, columns);
+    const day = new Date().toISOString().split("T")[0];
+    sendXlsxDownload(res, buffer, `escalations_${day}`);
+  } catch (error) {
+    console.error("Error exporting escalations:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Failed to export escalations",
       error: error.message,
     });
   }

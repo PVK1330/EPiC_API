@@ -14,6 +14,7 @@ router.use(checkRole([ROLES.ADMIN]));
 // Field Settings Routes
 router.get("/settings", applicationFieldsController.getFieldSettings);
 router.patch("/settings/visibility", applicationFieldsController.batchUpdateFieldVisibility);
+router.patch("/settings/by-id/:id/visibility", applicationFieldsController.updateFieldVisibilityById);
 router.patch("/settings/:field_key/visibility", applicationFieldsController.updateSingleFieldVisibility);
 router.put("/settings/:field_key", applicationFieldsController.updateFieldSetting);
 

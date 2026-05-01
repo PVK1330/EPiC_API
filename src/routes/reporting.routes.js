@@ -6,6 +6,7 @@ import {
   getFinancialTransactions,
   getPerformanceReport,
   getReportingSummary,
+  exportReportingExcel,
 } from '../controllers/AdminControllers/reporting.controller.js';
 import { verifyToken } from '../middlewares/auth.middleware.js';
 import { checkRole, ROLES } from '../middlewares/role.middleware.js';
@@ -17,6 +18,8 @@ router.use(verifyToken);
 
 // Summary KPIs (all-in-one for dashboard header)
 router.get('/summary', getReportingSummary);
+
+router.get('/export/excel', exportReportingExcel);
 
 // Individual report endpoints (all support ?startDate=&endDate= query params)
 router.get('/cases',       getCaseAnalytics);

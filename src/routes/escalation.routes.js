@@ -12,6 +12,8 @@ router.post("/", escalationController.createEscalation);
 
 router.get("/", escalationController.getAllEscalations);
 
+router.get("/export/excel", escalationController.exportEscalationsExcel);
+
 router.get("/kpi", escalationController.getEscalationKPI);
 
 router.get("/:id", escalationController.getEscalationById);

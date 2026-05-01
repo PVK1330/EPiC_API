@@ -6,6 +6,19 @@ import * as candidateApplicationController from '../../controllers/CandidateCont
 
 const router = Router();
 
+router.get(
+  '/field-settings',
+  verifyToken,
+  requireCandidate,
+  candidateApplicationController.getCandidateApplicationFieldSettings,
+);
+router.get(
+  '/custom-fields',
+  verifyToken,
+  requireCandidate,
+  candidateApplicationController.getCandidateApplicationCustomFields,
+);
+
 // ── Candidate-only routes ────────────────────────────────────────────────────
 // GET  /api/candidate-application       — fetch the logged-in candidate's saved application
 router.get('/', verifyToken, requireCandidate, candidateApplicationController.getMyApplication);

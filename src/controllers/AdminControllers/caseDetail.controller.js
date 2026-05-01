@@ -250,6 +250,9 @@ export const getCaseDetails = async (req, res) => {
       status: "success",
       message: "Case details retrieved successfully",
       data: {
+        // DB primary key (for APIs that require numeric case_id, e.g. task create)
+        internalId: caseData.id,
+
         // Overview Tab
         overview: {
           caseId: caseData.caseId,
