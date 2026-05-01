@@ -3,6 +3,7 @@ import { Op } from "sequelize";
 import { notifyCaseAssigned, notifyCaseStatusChanged } from "../../services/notification.service.js";
 import { generateCaseId } from "../../utils/case.utils.js";
 import { recordAuditLog } from "../../services/audit.service.js";
+import { recordCaseCreated, recordStatusChange, recordAssignmentChange } from "../../services/caseTimeline.service.js";
 
 const Case = db.Case;
 const User = db.User;
@@ -141,6 +142,18 @@ export const createCase = async (req, res) => {
       status: 'Success',
       details: `New case created for candidate ${candidate.first_name} ${candidate.last_name}`,
       req
+    });
+
+    // Record Timeline Entry
+    await recordCaseCreated({
+      caseId: newCase.id,
+      performedBy: req.user?.userId,
+      caseDetails: {
+        caseId: newCase.caseId,
+        candidateName: `${candidate.first_name} ${candidate.last_name}`,
+        visaTypeId,
+        priority,
+      },
     });
 
     res.status(201).json({
@@ -478,6 +491,26 @@ export const updateCase = async (req, res) => {
 
     await caseData.update(updateData);
     console.log("Update Case - Update successful");
+
+    // Record Timeline Entry for status change
+    if (status && status !== oldStatus) {
+      await recordStatusChange({
+        caseId: caseData.id,
+        performedBy: req.user?.userId,
+        previousStatus: oldStatus,
+        newStatus: status,
+      });
+    }
+
+    // Record Timeline Entry for assignment change
+    if (JSON.stringify(oldCwIds) !== JSON.stringify(cwIds)) {
+      await recordAssignmentChange({
+        caseId: caseData.id,
+        performedBy: req.user?.userId,
+        previousAssignees: oldCwIds,
+        newAssignees: cwIds,
+      });
+    }
 
     // Send status change notification if status changed
     if (status && status !== oldStatus) {

@@ -21,8 +21,16 @@ export const getCaseAuditLogs = async (req, res) => {
 
     const offset = (page - 1) * limit;
 
-    // Find case by string caseId (e.g., "CAS-000001") to get numeric id
-    const caseRecord = await Case.findOne({ where: { caseId } });
+    // Find case by numeric ID or string caseId (e.g., "CAS-000001")
+    let caseRecord;
+    if (!isNaN(parseInt(caseId))) {
+      // Try numeric ID first
+      caseRecord = await Case.findByPk(parseInt(caseId));
+    } else {
+      // Try string caseId
+      caseRecord = await Case.findOne({ where: { caseId } });
+    }
+
     if (!caseRecord) {
       return res.status(404).json({
         status: "error",

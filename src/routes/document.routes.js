@@ -10,7 +10,8 @@ import {
   updateDocument,
   deleteDocument,
   updateDocumentStatus,
-  downloadDocument
+  downloadDocument,
+  downloadMyDocumentsBundle,
 } from '../controllers/document.controller.js';
 
 const router = express.Router();
@@ -53,6 +54,12 @@ router.get('/download/:documentId',
   verifyToken,
   checkAnyPermission(DOWNLOAD_PERMS),
   downloadDocument
+);
+
+router.get('/bundle/me',
+  verifyToken,
+  checkAnyPermission(DOWNLOAD_PERMS),
+  downloadMyDocumentsBundle
 );
 
 router.get('/:documentId',

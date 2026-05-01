@@ -1,6 +1,7 @@
 import db from '../models/index.js';
 import path from 'path';
 import fs from 'fs';
+import archiver from 'archiver';
 
 const { Document, User, Case } = db;
 import { notifyDocumentUploaded, notifyDocumentReviewed } from '../services/notification.service.js';
@@ -670,5 +671,104 @@ export const downloadDocument = async (req, res) => {
       data: null,
       error: error.message
     });
+  }
+};
+
+function sanitizeZipEntryName(name) {
+  const base = path.basename(name || 'document').replace(/[/\\]/g, '_');
+  return base || 'document';
+}
+
+export const downloadMyDocumentsBundle = async (req, res) => {
+  try {
+    const rawId = req.user?.userId;
+    const userId = typeof rawId === 'string' ? Number(rawId) : rawId;
+    if (!Number.isFinite(userId) || userId <= 0) {
+      return res.status(401).json({
+        status: 'error',
+        message: 'Invalid session',
+        data: null,
+      });
+    }
+
+    const { attributes } = await getDocumentAttributes();
+    const documents = await Document.findAll({
+      attributes,
+      where: { userId },
+      order: [['uploadedAt', 'DESC']],
+    });
+
+    if (!documents.length) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'No documents found',
+        data: null,
+      });
+    }
+
+    const pending = [];
+    const usedNames = new Set();
+
+    for (const doc of documents) {
+      const absolutePath = path.resolve(doc.documentPath);
+      if (!doc.documentPath || !fs.existsSync(absolutePath)) continue;
+
+      let entryName = sanitizeZipEntryName(doc.userFileName || doc.documentName);
+      const ext = path.extname(entryName);
+      const stem = path.basename(entryName, ext);
+      let candidate = entryName;
+      let n = 0;
+      while (usedNames.has(candidate)) {
+        n += 1;
+        candidate = `${stem}_${doc.id}_${n}${ext || ''}`;
+      }
+      usedNames.add(candidate);
+      pending.push({ absolutePath, candidate });
+    }
+
+    if (!pending.length) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'No files available on server',
+        data: null,
+      });
+    }
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename="Supporting_Documents.zip"',
+    );
+
+    const archive = archiver('zip', { zlib: { level: 9 } });
+    archive.on('error', (err) => {
+      console.error('ZIP archive error:', err);
+      if (!res.headersSent) {
+        res.status(500).json({
+          status: 'error',
+          message: 'Failed to create archive',
+          data: null,
+          error: err.message,
+        });
+      }
+    });
+
+    archive.pipe(res);
+
+    for (const item of pending) {
+      archive.file(item.absolutePath, { name: item.candidate });
+    }
+
+    await archive.finalize();
+  } catch (error) {
+    console.error('downloadMyDocumentsBundle error:', error);
+    if (!res.headersSent) {
+      res.status(500).json({
+        status: 'error',
+        message: 'Failed to bundle documents',
+        data: null,
+        error: error.message,
+      });
+    }
   }
 };
