@@ -73,6 +73,7 @@ app.use('/api/caseworker/documents', caseworkerDocumentRoutes);
 app.use('/api/caseworker/case-notes', caseworkerCaseNoteRoutes);
 app.use('/api/caseworker/sponsors', caseworkerSponsorRoutes);
 app.use('/api/caseworker/audit', caseworkerAuditRoutes);
+app.use('/api/caseworker/licence', caseworkerLicenceRoutes);
 app.use('/api/caseworker', caseworkerRoutes);
 app.use('/api/sponsors', sponsorsRoutes);
 app.use('/api/business', sponsorPanelRoutes);
@@ -93,5 +94,22 @@ app.use('/api/case-notes', caseNoteRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/workload', workloadRoutes);
 app.use('/api/reports', reportingRoutes);
+
+// API 404 handler
+app.use('/api', (req, res) => {
+  res.status(404).json({
+    status: 'error',
+    message: 'API route not found',
+  });
+});
+
+// Global error handler
+app.use((err, req, res, _next) => {
+  console.error('Unhandled server error:', err);
+  res.status(err?.status || 500).json({
+    status: 'error',
+    message: err?.message || 'Internal server error',
+  });
+});
 
 export default app;

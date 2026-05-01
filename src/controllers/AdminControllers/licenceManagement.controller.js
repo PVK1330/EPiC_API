@@ -193,6 +193,7 @@ export const assignCaseworker = async (req, res) => {
         }
 
         application.assignedcaseworkerId = caseworkerIds;
+        application.status = 'Under Review';
         await application.save();
 
         // Notify assigned caseworkers & Sponsor

@@ -16,7 +16,7 @@ import { checkRole, ROLES } from "../middlewares/role.middleware.js";
 const router = express.Router();
 
 router.use(verifyToken);
-router.use(checkRole([ROLES.ADMIN, ROLES.SUPER_ADMIN]));
+router.use(checkRole([ROLES.ADMIN]));
 
 router.get("/all", getAllLicenceApplications);
 router.get("/details/:id", getAdminLicenceApplicationDetails);

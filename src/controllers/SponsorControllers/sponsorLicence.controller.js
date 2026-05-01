@@ -402,7 +402,8 @@ export const getLicenceSummary = async (req, res) => {
             status: 'success',
             message: 'Licence summary fetched successfully',
             data: {
-                licenceId: latestApproved ? latestApproved.id : null,
+                licenceId: latestApproved ? `LIC-2026-${latestApproved.id}` : null,
+                licenceNumber: sponsorProfile?.sponsorLicenceNumber || null,
                 status: sponsorProfile?.licenceStatus || latestApproved?.status || 'Pending',
                 licenceType: latestApproved?.licenceType || null,
                 licenceRating: sponsorProfile?.licenceRating || null,
@@ -411,8 +412,16 @@ export const getLicenceSummary = async (req, res) => {
                     used: usedCos,
                     available: availableCos
                 },
+                cos: {
+                    total: totalAllocation,
+                    used: usedCos,
+                    available: availableCos
+                },
                 expiryDate,
-                renewalDue
+                renewalDue,
+                daysRemaining: expiryDate
+                    ? Math.ceil((new Date(expiryDate) - new Date()) / 86400000)
+                    : null
             }
         });
     } catch (error) {

@@ -4,7 +4,7 @@ import transporter from '../../config/mail.js';
 import { generateCredentialsTemplate, generateNotificationEmailTemplate } from '../../utils/emailTemplate.js';
 import crypto from 'crypto';
 import { generateCaseId } from '../../utils/case.utils.js';
-import { notifyAdmins, notifyUser, NotificationTypes, NotificationPriority } from '../../services/notification.service.js';
+import { notifyAdmins, createNotification, NotificationTypes, NotificationPriority } from '../../services/notification.service.js';
 
 const User = db.User;
 const Case = db.Case;
@@ -160,10 +160,23 @@ export const addSponsoredWorker = async (req, res) => {
   } catch (err) {
     await transaction.rollback();
     console.error('addSponsoredWorker error:', err);
+    if (err?.name === 'SequelizeUniqueConstraintError') {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Email already exists. Please use another email address.',
+      });
+    }
+    if (String(err?.message || '').toLowerCase().includes('islocked')) {
+      return res.status(500).json({
+        status: 'error',
+        message: 'Candidate application schema mismatch detected. Please contact admin.',
+        error: err.message,
+      });
+    }
     res.status(500).json({
       status: 'error',
-      message: 'Internal server error',
-      error: err.message
+      message: err?.message || 'Internal server error',
+      error: err?.message,
     });
   }
 };
@@ -437,11 +450,14 @@ export const getSponsoredWorkerDetails = async (req, res) => {
         {
           model: User,
           as: 'candidate',
-          attributes: ['id', 'first_name', 'last_name', 'email', 'mobile', 'profile_pic']
-        },
-        {
-          model: db.VisaType,
-          as: 'visaType'
+          attributes: ['id', 'first_name', 'last_name', 'email', 'mobile', 'profile_pic'],
+          include: [
+            {
+              model: db.CandidateApplication,
+              as: 'application',
+              attributes: ['id', 'gender', 'dob', 'nationality', 'passportNumber', 'visaType', 'visaEndDate', 'address']
+            }
+          ]
         }
       ]
     });
@@ -453,21 +469,49 @@ export const getSponsoredWorkerDetails = async (req, res) => {
       });
     }
 
-    const application = await CandidateApplication.findOne({ where: { userId: id } });
-
-    const candidatePlain = workerCase.candidate?.toJSON ? workerCase.candidate.toJSON() : workerCase.candidate;
     const casePlain = workerCase.toJSON ? workerCase.toJSON() : workerCase;
+    const candidatePlain = casePlain.candidate || null;
+    const application = candidatePlain?.application || null;
     const responseCase = {
       ...casePlain,
-      candidate: candidatePlain,
-      visaType: casePlain.visaType || null
+      candidate: candidatePlain
     };
+
+    // Fetch documents and compute status map
+    const documents = await Document.findAll({
+      where: { userId: id }
+    });
+
+    const docStatusMap = {
+      passport: 'risk',
+      visaCopy: 'risk',
+      cosCopy: 'risk',
+      contract: 'risk',
+      payslips: 'risk'
+    };
+
+    REQUIRED_DOCUMENT_KEYS.forEach(key => {
+      const matchingDocs = documents.filter(d => getDocumentKeyFromType(d.documentType) === key);
+      if (matchingDocs.length > 0) {
+        const statuses = matchingDocs.map(d => d.status);
+        docStatusMap[key] = toUiDocumentStatus(statuses);
+      }
+    });
 
     res.status(200).json({
       status: 'success',
       data: {
-        case: workerCase,
-        application: application
+        case: responseCase,
+        application,
+        documents: docStatusMap,
+        documentFiles: documents.map(d => ({ 
+          id: d.id, 
+          name: d.documentName, 
+          type: d.documentType, 
+          status: d.status, 
+          path: d.documentPath,
+          uploadedAt: d.createdAt 
+        }))
       }
     });
   } catch (err) {
@@ -582,39 +626,47 @@ export const updateWorkerStatus = async (req, res) => {
       notes: note ? `${workerCase.notes || ''}\n[${new Date().toLocaleDateString()}] ${status}: ${note}` : workerCase.notes
     }, { where: { candidateId: id, sponsorId } });
 
+    const candidateIdNum = parseInt(id, 10);
+    const candidate = await User.findByPk(candidateIdNum, {
+      attributes: ['id', 'email', 'first_name', 'last_name']
+    });
+    const notifMsg = `Your case status has been updated to: ${status}.${note ? ' Note: ' + note : ''}`;
+
     res.status(200).json({ status: 'success', message: `Worker status updated to ${status}` });
 
     try {
-      const candidate = await User.findByPk(id, {
-        attributes: ['id', 'email', 'first_name', 'last_name']
-      });
-      const notifMsg = `Your case status has been updated to: ${status}.${note ? ' Note: ' + note : ''}`;
-
-      // 1. Fire-and-forget in-app notification to candidate
-      notifyUser(id, {
+      await createNotification({
+        userId: candidateIdNum,
         type: NotificationTypes.INFO,
         priority: NotificationPriority.HIGH,
         title: 'Case Status Updated',
         message: notifMsg,
         actionType: 'case_status_change',
         entityId: workerCase.id,
-        entityType: 'case'
-      }).catch(err => console.error("In-app notif failed:", err));
+        entityType: 'case',
+        sendEmail: false,
+      });
+    } catch (err) {
+      console.error('createNotification failed:', err);
+    }
 
-      // 2. Fire-and-forget notification to admins
-      notifyAdmins({
+    try {
+      await notifyAdmins({
         type: NotificationTypes.INFO,
         priority: NotificationPriority.LOW,
         title: 'Worker Status Updated',
-        message: `${candidate?.first_name} ${candidate?.last_name} status moved to ${status}`,
+        message: `${candidate?.first_name || ''} ${candidate?.last_name || ''} status moved to ${status}`,
         actionType: 'worker_status_update',
         entityId: workerCase.id,
         entityType: 'case'
-      }).catch(err => console.error("Admin notif failed:", err));
+      });
+    } catch (err) {
+      console.error('notifyAdmins failed:', err);
+    }
 
-      // 3. Email candidate
-      if (candidate?.email) {
-        transporter.sendMail({
+    if (candidate?.email) {
+      try {
+        await transporter.sendMail({
           from: process.env.EMAIL_USER,
           to: candidate.email,
           subject: 'Your Case Status Has Been Updated',
@@ -624,13 +676,12 @@ export const updateWorkerStatus = async (req, res) => {
             message: notifMsg,
             priority: NotificationPriority.HIGH,
             notificationType: NotificationTypes.INFO,
-            actionUrl: `${process.env.FRONTEND_URL || '#'}/candidate/status`,
-            actionText: 'View My Case'
+            actionUrl: `${process.env.FRONTEND_URL || '#'}/candidate/application-status`,
           })
-        }).catch(err => console.error("Email failed:", err));
+        });
+      } catch (err) {
+        console.error('Email failed:', err);
       }
-    } catch (notifErr) {
-      console.error('Notification setup failed:', notifErr);
     }
 
   } catch (err) {

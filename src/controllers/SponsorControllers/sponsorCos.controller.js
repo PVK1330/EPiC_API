@@ -4,7 +4,7 @@ import transporter from '../../config/mail.js';
 import { generateNotificationEmailTemplate } from '../../utils/emailTemplate.js';
 import { notifyAdmins, createNotification, NotificationTypes, NotificationPriority } from '../../services/notification.service.js';
 
-const { User, Case, SponsorProfile, LicenceApplication, CandidateApplication } = db;
+const { User, Case, SponsorProfile, LicenceApplication } = db;
 const INACTIVE = ['Cancelled', 'Closed', 'Rejected'];
 const uid = (req) => { const n = Number(req.user?.userId); return Number.isFinite(n) && n > 0 ? Math.trunc(n) : null; };
 
@@ -85,7 +85,24 @@ export const requestCosAllocation = async (req, res) => {
     try { await notifyAdmins({ type: NotificationTypes.INFO, priority: NotificationPriority.HIGH, title: `CoS Request: ${company}`, message: `${company} requested ${requestedAmount} CoS slots for ${visaType}. Reason: ${reason}`, actionType: 'cos_request', entityId: app.id, entityType: 'licence_application' }); } catch (e) { console.error(e); }
     try { await createNotification({ userId, type: NotificationTypes.INFO, priority: NotificationPriority.MEDIUM, title: 'CoS Request Submitted', message: `Your request for ${requestedAmount} CoS slots (${visaType}) is under review.` }); } catch (e) { console.error(e); }
     if (process.env.ADMIN_EMAIL) {
-      try { await transporter.sendMail({ from: process.env.EMAIL_USER, to: process.env.ADMIN_EMAIL, subject: `CoS Request — ${company}`, html: generateNotificationEmailTemplate({ recipientName: 'Admin', heading: 'New CoS Allocation Request', body: `${company} has requested ${requestedAmount} CoS for ${visaType}.\n\nReason: ${reason}`, actionUrl: `${process.env.FRONTEND_URL}/admin/licences`, actionText: 'Review Request' }) }); } catch (e) { console.error(e); }
+      try {
+        await transporter.sendMail({
+          from: process.env.EMAIL_USER,
+          to: process.env.ADMIN_EMAIL,
+          subject: `CoS Request — ${company}`,
+          html: generateNotificationEmailTemplate({
+            recipientName: 'Admin',
+            title: 'New CoS Allocation Request',
+            message: `${company} has requested ${requestedAmount} CoS for ${visaType}.\n\nReason: ${reason}`,
+            priority: NotificationPriority.HIGH,
+            notificationType: NotificationTypes.INFO,
+            actionUrl: `${process.env.FRONTEND_URL || ''}/admin/licence-requests`,
+            metadata: { applicationId: app.id },
+          }),
+        });
+      } catch (e) {
+        console.error(e);
+      }
     }
   } catch (err) {
     console.error('requestCosAllocation error:', err);

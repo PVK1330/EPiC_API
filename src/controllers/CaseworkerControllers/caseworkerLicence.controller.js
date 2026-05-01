@@ -1,5 +1,6 @@
 import db from "../../models/index.js";
 const LicenceApplication = db.LicenceApplication;
+const SponsorProfile = db.SponsorProfile;
 import { Op } from "sequelize";
 import { 
     notifyLicenceStatusChanged, 
@@ -64,6 +65,22 @@ export const updateLicenceReviewStatus = async (req, res) => {
             application.adminNotes = adminNotes;
         }
         await application.save();
+
+        // If approved and it's a CoS request, update the sponsor's allocation
+        if (status === 'Approved' && String(application.reason || '').startsWith('CoS Request:')) {
+            try {
+                const profile = await SponsorProfile.findOne({ where: { userId: application.userId } });
+                if (profile) {
+                    const currentAlloc = parseInt(profile.cosAllocation || 0);
+                    const requestedAlloc = parseInt(application.cosAllocation || 0);
+                    profile.cosAllocation = currentAlloc + requestedAlloc;
+                    await profile.save();
+                    console.log(`Updated CoS Allocation for user ${application.userId}: ${currentAlloc} -> ${profile.cosAllocation}`);
+                }
+            } catch (err) {
+                console.error('Failed to update SponsorProfile CoS allocation:', err);
+            }
+        }
 
         // Notify Sponsor
         try {

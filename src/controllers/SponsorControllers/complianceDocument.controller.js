@@ -7,17 +7,14 @@ const { Document, User } = db;
 export const getComplianceDocuments = async (req, res) => {
     try {
         const userId = req.user.userId;
-        const { search, type, status } = req.query;
+        const { status } = req.query;
 
+        // 1. Fetch from Document model (manual uploads)
         const where = { 
             userId,
             documentCategory: 'business'
         };
-
         if (status && status !== 'All') {
-            // Map frontend status to backend status if necessary
-            // Frontend: Valid, Under Review, Expiring Soon
-            // Backend: approved, under_review, uploaded, etc.
             if (status === 'Valid') where.status = 'approved';
             else if (status === 'Under Review') where.status = 'under_review';
         }
@@ -25,24 +22,87 @@ export const getComplianceDocuments = async (req, res) => {
         const documents = await Document.findAll({
             where,
             order: [['created_at', 'DESC']]
+        }).catch(err => {
+            console.error('Document.findAll error:', err);
+            return [];
         });
 
-        const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
+        // 2. Fetch from SponsorProfile and LicenceApplications (integrated docs)
+        const [profile, licenceApps] = await Promise.all([
+            db.SponsorProfile.findOne({ where: { userId } }).catch(() => null),
+            db.LicenceApplication.findAll({ where: { userId } }).catch(() => [])
+        ]);
+
+        const mappedDocs = [];
         
-        const mappedDocs = documents.map(doc => {
-            const relativePath = doc.documentPath.replace(/^uploads[\/\\]/, '').replace(/\\/g, '/');
-            return {
-                id: doc.id,
-                name: doc.userFileName || doc.documentName,
-                type: doc.documentType,
-                uploadDate: new Date(doc.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
-                expiry: doc.expiryDate ? new Date(doc.expiryDate).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) : '-',
-                status: doc.status === 'approved' ? 'Approved' : doc.status === 'under_review' ? 'Under Review' : 'Pending',
-                reviewedBy: 'Admin', // Placeholder or fetch from associations
-                fileSize: (doc.fileSize / (1024 * 1024)).toFixed(1) + ' MB',
-                url: `${baseUrl}/uploads/${relativePath}`
-            };
+        // Map Document model docs
+        if (Array.isArray(documents)) {
+            documents.forEach(doc => {
+                const pathStr = doc.documentPath || '';
+                const relativePath = pathStr.replace(/^uploads[\/\\]/, '').replace(/\\/g, '/');
+                mappedDocs.push({
+                    id: doc.id,
+                    name: doc.userFileName || doc.documentName || 'Unnamed Document',
+                    type: doc.documentType || 'General',
+                    uploadDate: doc.created_at ? new Date(doc.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—',
+                    expiry: doc.expiryDate ? new Date(doc.expiryDate).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) : '-',
+                    status: doc.status === 'approved' ? 'Approved' : doc.status === 'under_review' ? 'Under Review' : 'Pending',
+                    reviewedBy: 'Admin',
+                    fileSize: doc.fileSize ? (doc.fileSize / (1024 * 1024)).toFixed(1) + ' MB' : '—',
+                    path: pathStr ? `/uploads/${relativePath}` : '#',
+                    source: 'compliance'
+                });
+            });
+        }
+
+        // Map Profile docs
+        const profileFields = ['sponsorLetter', 'insuranceCertificate', 'hrPolicies', 'organisationalChart', 'recruitmentDocs'];
+        profileFields.forEach((field) => {
+            if (profile?.[field]) {
+                mappedDocs.push({
+                    id: `profile_${field}`,
+                    name: field.replace(/([A-Z])/g, ' $1').trim(),
+                    type: 'Company Document',
+                    uploadDate: profile.updatedAt ? new Date(profile.updatedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—',
+                    expiry: '-',
+                    status: 'Approved',
+                    reviewedBy: 'System',
+                    fileSize: '—',
+                    path: profile[field],
+                    source: 'profile'
+                });
+            }
         });
+
+        // Map Licence docs
+        if (Array.isArray(licenceApps)) {
+            licenceApps.forEach((app) => {
+                let appDocs = [];
+                try {
+                    appDocs = Array.isArray(app.documents) ? app.documents : JSON.parse(app.documents || '[]');
+                } catch (e) {
+                    appDocs = [];
+                }
+
+                if (Array.isArray(appDocs)) {
+                    appDocs.forEach((docPath, i) => {
+                        if (!docPath) return;
+                        mappedDocs.push({
+                            id: `lic_${app.id}_${i}`,
+                            name: String(docPath).split('/').pop().replace(/-\d+\./g, '.'),
+                            type: `${app.type || 'Licence'} Document`,
+                            uploadDate: app.createdAt ? new Date(app.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—',
+                            expiry: '-',
+                            status: app.status === 'Approved' ? 'Approved' : 'Under Review',
+                            reviewedBy: 'Caseworker',
+                            fileSize: '—',
+                            path: docPath,
+                            source: 'licence'
+                        });
+                    });
+                }
+            });
+        }
 
         res.status(200).json({
             status: 'success',
@@ -50,7 +110,7 @@ export const getComplianceDocuments = async (req, res) => {
         });
     } catch (error) {
         console.error('Error fetching compliance documents:', error);
-        res.status(500).json({ status: 'error', message: 'Internal server error' });
+        res.status(500).json({ status: 'error', message: error.message || 'Internal server error' });
     }
 };
 
@@ -72,7 +132,9 @@ export const uploadComplianceDocument = async (req, res) => {
         const fileName = `${Date.now()}-${file.originalname}`;
         const targetPath = path.join(targetDir, fileName);
         
-        fs.renameSync(file.path, targetPath);
+        // Use copy + unlink instead of rename for cross-drive compatibility
+        fs.copyFileSync(file.path, targetPath);
+        fs.unlinkSync(file.path);
 
         const document = await Document.create({
             userId,
@@ -96,7 +158,7 @@ export const uploadComplianceDocument = async (req, res) => {
         });
     } catch (error) {
         console.error('Error uploading compliance document:', error);
-        res.status(500).json({ status: 'error', message: 'Internal server error' });
+        res.status(500).json({ status: 'error', message: error.message || 'Internal server error' });
     }
 };
 
@@ -111,8 +173,12 @@ export const deleteComplianceDocument = async (req, res) => {
             return res.status(404).json({ status: 'error', message: 'Document not found' });
         }
 
-        if (fs.existsSync(document.documentPath)) {
-            fs.unlinkSync(document.documentPath);
+        if (document.documentPath && fs.existsSync(document.documentPath)) {
+            try {
+                fs.unlinkSync(document.documentPath);
+            } catch (e) {
+                console.error('Error deleting file:', e);
+            }
         }
 
         await document.destroy();
@@ -123,6 +189,6 @@ export const deleteComplianceDocument = async (req, res) => {
         });
     } catch (error) {
         console.error('Error deleting compliance document:', error);
-        res.status(500).json({ status: 'error', message: 'Internal server error' });
+        res.status(500).json({ status: 'error', message: error.message || 'Internal server error' });
     }
 };

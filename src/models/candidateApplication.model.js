@@ -301,9 +301,9 @@ export default (sequelize, DataTypes) => {
                 defaultValue: 'draft',
             },
             
-            // Prevents further edits once submitted; admin can unlock
+            // Prevents further edits once submitted; keep as virtual until DB column exists.
             isLocked: {
-                type: DataTypes.BOOLEAN,
+                type: DataTypes.VIRTUAL,
                 defaultValue: false,
             },
 
