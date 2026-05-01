@@ -13,6 +13,7 @@ import {
   downloadDocument,
   downloadMyDocumentsBundle,
 } from '../controllers/document.controller.js';
+import { getChecklistByVisaType } from '../controllers/documentChecklist.controller.js';
 
 const router = express.Router();
 
@@ -66,6 +67,12 @@ router.get('/:documentId',
   verifyToken,
   checkAnyPermission(VIEW_PERMS),
   getDocumentById
+);
+
+router.get('/checklist/visa/:visaTypeId',
+  verifyToken,
+  checkAnyPermission(VIEW_PERMS),
+  getChecklistByVisaType
 );
 
 // ── Update ────────────────────────────────────────────────────────────────────
