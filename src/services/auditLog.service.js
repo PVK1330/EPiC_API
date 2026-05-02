@@ -24,13 +24,20 @@ const getResourceMapping = (action) => {
  * Extract IP address from request
  */
 const getClientIP = (req) => {
-    return (
-        req.headers['x-forwarded-for']?.split(',')[0].trim() ||
-        req.connection.remoteAddress ||
-        req.socket.remoteAddress ||
+    let ip =
+        req.headers?.['x-forwarded-for']?.split(',')[0]?.trim() ||
+        req.connection?.remoteAddress ||
+        req.socket?.remoteAddress ||
         req.ip ||
-        'UNKNOWN'
-    );
+        'UNKNOWN';
+
+    // Normalize common IPv6/IPv4 representations
+    if (ip === '::1') return '127.0.0.1';
+    if (typeof ip === 'string' && ip.startsWith('::ffff:')) {
+        return ip.replace('::ffff:', '');
+    }
+
+    return ip;
 };
 
 /**

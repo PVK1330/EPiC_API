@@ -2775,6 +2775,50 @@
             ],
             "url": "{{baseUrl}}/api/workload/caseworker/:id/performance"
           }
+        },
+        {
+          "name": "Export Team Workload Report (CSV)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": "{{baseUrl}}/api/workload/export/team-workload",
+            "description": "Export team workload report as CSV file. Contains caseworker names, email, job title, department, region, active cases, overdue cases, pending tasks, average completion time, workload percentage, and health status."
+          }
+        },
+        {
+          "name": "Export Pending Tasks Report (CSV)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": "{{baseUrl}}/api/workload/export/pending-tasks",
+            "description": "Export pending tasks report as CSV file. Contains task ID, title, case code, assigned to, assigned email, due date, days remaining, risk status, priority, task status, and created date."
+          }
+        },
+        {
+          "name": "Export Deadline Monitor Report (CSV)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": "{{baseUrl}}/api/workload/export/deadline-monitor",
+            "description": "Export deadline monitoring report as CSV file. Contains case ID, case code, candidate name, caseworker IDs, deadline, days remaining, risk status, case status, priority, nationality, and job title."
+          }
+        },
+        {
+          "name": "Export Combined Report (CSV) - All Reports in One File",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": "{{baseUrl}}/api/workload/export-report",
+            "description": "Export all three reports (Team Workload, Pending Tasks, Deadline Monitor) combined into a single CSV file with section headers. Each section contains relevant data for that report type."
+          }
         }
       ]
     },

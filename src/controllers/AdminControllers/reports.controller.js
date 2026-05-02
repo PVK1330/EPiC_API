@@ -36,15 +36,14 @@ export const getCaseTypeReport = async (req, res) => {
       const count = parseInt(r.count, 10);
       const name = id ? visaTypeMap[id] || `Unknown (${id})` : 'Unspecified';
       const percentage = totalCases > 0 ? Math.round((count / totalCases) * 10000) / 100 : 0;
-      return { visaTypeId: id, visaType: name, count, percentage };
+      return { type: name, count, percentage };
     });
 
     return res.status(200).json({
       status: 'success',
       message: 'Case type report',
       data: {
-        total_cases: totalCases,
-        breakdown: result,
+        cases: result,
       },
     });
   } catch (err) {
@@ -56,40 +55,62 @@ export const getCaseTypeReport = async (req, res) => {
 // GET /api/workload/reports/workload
 export const getWorkloadReport = async (req, res) => {
   try {
-    // retrieve all cases with assignedcaseworkerId
-    const cases = await Case.findAll({ attributes: ['id', 'assignedcaseworkerId'], raw: true });
-
-    const counts = {}; // userId => count
-
-    cases.forEach(c => {
-      let arr = [];
-      try {
-        arr = Array.isArray(c.assignedcaseworkerId) ? c.assignedcaseworkerId : (c.assignedcaseworkerId ? JSON.parse(c.assignedcaseworkerId) : []);
-      } catch (e) {
-        // if stored as string like '[1,2]'
-        try { arr = JSON.parse(c.assignedcaseworkerId); } catch (e2) { arr = []; }
-      }
-      arr.forEach(userId => {
-        if (!userId) return;
-        counts[userId] = (counts[userId] || 0) + 1;
-      });
+    // Get all caseworkers (role_id = 3)
+    const users = await User.findAll({
+      where: { role_id: 3 },
+      attributes: ['id', 'first_name', 'last_name', 'email'],
+      raw: true,
     });
 
-    const userIds = Object.keys(counts).map(id => parseInt(id, 10));
-    const users = userIds.length > 0 ? await User.findAll({ where: { id: userIds }, attributes: ['id', 'first_name', 'last_name'], raw: true }) : [];
+    // Get all cases
+    const allCases = await Case.findAll({
+      attributes: ['id', 'assignedcaseworkerId', 'status', 'targetSubmissionDate', 'created_at'],
+      raw: true,
+    });
 
-    const userMap = {};
-    users.forEach(u => { userMap[u.id] = `${u.first_name} ${u.last_name}`.trim(); });
+    const report = users.map(user => {
+      // Filter cases assigned to this caseworker
+      const userCases = allCases.filter(c => {
+        let arr = [];
+        try {
+          arr = Array.isArray(c.assignedcaseworkerId) ? c.assignedcaseworkerId : (c.assignedcaseworkerId ? JSON.parse(c.assignedcaseworkerId) : []);
+        } catch (e) {
+          try { arr = JSON.parse(c.assignedcaseworkerId); } catch (e2) { arr = []; }
+        }
+        return arr.includes(user.id);
+      });
 
-    const report = userIds.map(id => ({
-      caseworkerId: id,
-      name: userMap[id] || `User ${id}`,
-      cases_assigned: counts[id] || 0,
-    }));
+      const activeCases = userCases.filter(c => c.status !== 'Completed').length;
+      const completedCases = userCases.filter(c => c.status === 'Completed').length;
+      const overdueCases = userCases.filter(c => {
+        const isOverdue = c.targetSubmissionDate && new Date(c.targetSubmissionDate) < new Date() && c.status !== 'Completed';
+        return isOverdue;
+      }).length;
 
-    // also include caseworkers with zero cases? The user asked to return number of cases per caseworker — this returns only those assigned.
+      const workloadPercentage = userCases.length > 0
+        ? Math.round((completedCases / userCases.length) * 100)
+        : 0;
 
-    return res.status(200).json({ status: 'success', message: 'Workload report', data: report });
+      const healthStatus = workloadPercentage >= 80 ? 'healthy' : workloadPercentage >= 60 ? 'moderate' : 'stressed';
+
+      return {
+        caseworker_id: user.id,
+        caseworker_name: `${user.first_name} ${user.last_name}`.trim(),
+        email: user.email,
+        active_cases: activeCases,
+        overdue: overdueCases,
+        tasks_pending: activeCases,
+        workload_percentage: workloadPercentage,
+        health_status: healthStatus,
+        health_color: healthStatus === 'healthy' ? 'green' : healthStatus === 'moderate' ? 'amber' : 'red',
+      };
+    });
+
+    return res.status(200).json({
+      status: 'success',
+      message: 'Workload report',
+      data: { caseworkers: report },
+    });
   } catch (err) {
     console.error('getWorkloadReport error', err);
     return res.status(500).json({ status: 'error', message: 'Failed to generate workload report', data: null, error: err.message });
@@ -122,12 +143,15 @@ export const getRevenueByVisaType = async (req, res) => {
     visaTypes.forEach(v => (visaMap[v.id] = v.name));
 
     const result = rows.map(r => ({
-      visaTypeId: r.visaTypeId,
-      visaType: r.visaTypeId ? (visaMap[r.visaTypeId] || `Unknown (${r.visaTypeId})`) : 'Unspecified',
-      revenue: parseFloat(r.total_amount) || 0,
+      visa_type: r.visaTypeId ? (visaMap[r.visaTypeId] || `Unknown (${r.visaTypeId})`) : 'Unspecified',
+      total_amount: parseFloat(r.total_amount) || 0,
     }));
 
-    return res.status(200).json({ status: 'success', message: 'Revenue by visa type', data: result });
+    return res.status(200).json({
+      status: 'success',
+      message: 'Revenue by visa type',
+      data: { revenue: result },
+    });
   } catch (err) {
     console.error('getRevenueByVisaType error', err);
     return res.status(500).json({ status: 'error', message: 'Failed to generate revenue by visa type', data: null, error: err.message });
@@ -154,12 +178,15 @@ export const getRevenueBySponsor = async (req, res) => {
     sponsors.forEach(s => (sponsorMap[s.id] = `${s.first_name} ${s.last_name}`.trim()));
 
     const result = rows.map(r => ({
-      sponsorId: r.sponsorId,
-      sponsor: r.sponsorId ? (sponsorMap[r.sponsorId] || `User ${r.sponsorId}`) : 'Unspecified',
-      revenue: parseFloat(r.total_amount) || 0,
+      sponsor_name: r.sponsorId ? (sponsorMap[r.sponsorId] || `User ${r.sponsorId}`) : 'Unspecified',
+      total_amount: parseFloat(r.total_amount) || 0,
     }));
 
-    return res.status(200).json({ status: 'success', message: 'Revenue by sponsor', data: result });
+    return res.status(200).json({
+      status: 'success',
+      message: 'Revenue by sponsor',
+      data: { revenue: result },
+    });
   } catch (err) {
     console.error('getRevenueBySponsor error', err);
     return res.status(500).json({ status: 'error', message: 'Failed to generate revenue by sponsor', data: null, error: err.message });
@@ -170,8 +197,8 @@ export const getRevenueBySponsor = async (req, res) => {
 export const getAllCaseworkersReport = async (req, res) => {
   try {
     const users = await User.findAll({
-      where: { role_id: 3 }, // Assuming role_id 3 is caseworker
-      attributes: ['id', 'first_name', 'last_name', 'created_at','email'],
+      where: { role_id: 2 }, // Caseworker role
+      attributes: ['id', 'first_name', 'last_name','email'],
       raw: true,
     });
 
@@ -181,47 +208,41 @@ export const getAllCaseworkersReport = async (req, res) => {
       raw: true,
     });
 
-    const caseworkersData = await Promise.all(
-      users.map(async (user) => {
-        // Filter cases assigned to this caseworker
-        const userCases = allCases.filter(c => {
-          let arr = [];
-          try {
-            arr = Array.isArray(c.assignedcaseworkerId) ? c.assignedcaseworkerId : (c.assignedcaseworkerId ? JSON.parse(c.assignedcaseworkerId) : []);
-          } catch (e) {
-            // if stored as string like '[1,2]'
-            try { arr = JSON.parse(c.assignedcaseworkerId); } catch (e2) { arr = []; }
-          }
-          return arr.includes(user.id);
-        });
+    const caseworkersData = users.map((user) => {
+      // Filter cases assigned to this caseworker
+      const userCases = allCases.filter(c => {
+        let arr = [];
+        try {
+          arr = Array.isArray(c.assignedcaseworkerId) ? c.assignedcaseworkerId : (c.assignedcaseworkerId ? JSON.parse(c.assignedcaseworkerId) : []);
+        } catch (e) {
+          try { arr = JSON.parse(c.assignedcaseworkerId); } catch (e2) { arr = []; }
+        }
+        return arr.includes(user.id);
+      });
 
-        const totalCases = userCases.length;
-        const completedCases = userCases.filter(c => c.status === 'Completed').length;
-        const avgDays = userCases.length > 0
-          ? Math.round(userCases.reduce((acc, c) => {
-              const days = c.targetSubmissionDate ?
-                Math.floor((new Date(c.targetSubmissionDate) - new Date(c.created_at)) / (1000 * 60 * 60 * 24)) : 0;
-              return acc + days;
-            }, 0) / userCases.length)
-          : 0;
+      const activeCases = userCases.filter(c => c.status !== 'Completed').length;
+      const completedCases = userCases.filter(c => c.status === 'Completed').length;
+      const totalCases = userCases.length;
+      
+      const workloadPercentage = totalCases > 0
+        ? Math.round((completedCases / totalCases) * 100)
+        : 0;
 
-        return {
-          id: user.id,
-          name: `${user.first_name} ${user.last_name}`.trim(),
-          initials: `${user.first_name.charAt(0)}${user.last_name.charAt(0)}`.toUpperCase(),
-          role: 'Caseworker',
-          department: 'General',
-          joinedDate: user.created_at,
-          totalCases,
-          slaMet: Math.round((completedCases / totalCases * 100)) || 0,
-          avgDays,
-          escalations: 0,
-          clientSatisfaction: 4.5,
-          rating: 4.5,
-          reviewCount: 12,
-        };
-      })
-    );
+      const healthStatus = workloadPercentage >= 80 ? 'healthy' : workloadPercentage >= 60 ? 'moderate' : 'stressed';
+
+      return {
+        caseworker_id: user.id,
+        id: user.id,
+        name: `${user.first_name} ${user.last_name}`.trim(),
+        email: user.email,
+        department: 'General',
+        active_cases: activeCases,
+        completed_cases: completedCases,
+        workload_percentage: workloadPercentage,
+        health_status: healthStatus,
+        initials: `${user.first_name.charAt(0)}${user.last_name.charAt(0)}`.toUpperCase(),
+      };
+    });
 
     return res.status(200).json({
       status: 'success',
@@ -246,7 +267,7 @@ export const getCaseworkerPerformanceReport = async (req, res) => {
     const { startDate, endDate } = req.query;
 
     const user = await User.findByPk(id, {
-      attributes: ['id', 'first_name', 'last_name', 'email', 'created_at'],
+      attributes: ['id', 'first_name', 'last_name', 'email',],
       raw: true,
     });
 
@@ -273,6 +294,7 @@ export const getCaseworkerPerformanceReport = async (req, res) => {
       include: [
         {
           model: VisaType,
+          as: 'visaType',
           attributes: ['id', 'name'],
         },
       ],
@@ -285,7 +307,6 @@ export const getCaseworkerPerformanceReport = async (req, res) => {
       try {
         arr = Array.isArray(c.assignedcaseworkerId) ? c.assignedcaseworkerId : (c.assignedcaseworkerId ? JSON.parse(c.assignedcaseworkerId) : []);
       } catch (e) {
-        // if stored as string like '[1,2]'
         try { arr = JSON.parse(c.assignedcaseworkerId); } catch (e2) { arr = []; }
       }
       return arr.includes(parseInt(id));
@@ -297,7 +318,9 @@ export const getCaseworkerPerformanceReport = async (req, res) => {
     const inProgressCases = cases.filter(c => c.status === 'In Progress').length;
     const pendingCases = cases.filter(c => c.status === 'Pending').length;
 
-    const avgDays = totalCases > 0 
+    const slaMetPct = totalCases > 0 ? Math.round((completedCases / totalCases) * 100) : 0;
+
+    const avgCompletionDays = totalCases > 0 
       ? Math.round(cases.reduce((acc, c) => {
           const days = c.targetSubmissionDate ? 
             Math.floor((new Date(c.targetSubmissionDate) - new Date(c.created_at)) / (1000 * 60 * 60 * 24)) : 0;
@@ -308,62 +331,68 @@ export const getCaseworkerPerformanceReport = async (req, res) => {
     // Cases by visa type
     const casesByVisaTypeRaw = {};
     cases.forEach(c => {
-      const visaType = c['VisaType.name'] || 'Unspecified';
+      const visaType = c['visaType.name'] || 'Unspecified';
       casesByVisaTypeRaw[visaType] = (casesByVisaTypeRaw[visaType] || 0) + 1;
     });
 
-    const casesByVisaType = Object.entries(casesByVisaTypeRaw).map(([type, count]) => ({
+    const visaBreakdown = Object.entries(casesByVisaTypeRaw).map(([type, count]) => ({
       type,
       count,
-      percentage: Math.round((count / totalCases) * 100),
+      percentage: totalCases > 0 ? Math.round((count / totalCases) * 100) : 0,
     }));
 
     // Recent cases (last 10)
     const recentCases = cases.slice(0, 10).map(c => ({
+      id: c.id,
       caseId: c.caseId || `Case-${c.id}`,
-      client: 'N/A',
-      visaType: c['VisaType.name'] || 'Unspecified',
+      client: 'Client N/A',
+      type: c['visaType.name'] || 'Unspecified',
       status: c.status,
-      date: c.created_at,
-      sla: c.targetSubmissionDate ? Math.floor((new Date(c.targetSubmissionDate) - new Date()) / (1000 * 60 * 60 * 24)) : 0,
+      date: c.created_at ? new Date(c.created_at).toLocaleDateString('en-GB') : 'N/A',
+      sla: c.status === 'Completed' ? 'Met' : (c.targetSubmissionDate && new Date(c.targetSubmissionDate) < new Date() ? 'Breached' : 'On Track'),
     }));
 
-    // 12-month trend (simplified - group by month)
-    const monthlyData = {};
-    cases.forEach(c => {
-      const month = new Date(c.created_at).toISOString().substring(0, 7);
-      monthlyData[month] = (monthlyData[month] || 0) + 1;
-    });
+    // 12-month trend - generate data for last 12 months
+    const monthlyTrend = [];
+    for (let i = 11; i >= 0; i--) {
+      const date = new Date();
+      date.setMonth(date.getMonth() - i);
+      const month = date.toISOString().substring(0, 7);
+      const count = cases.filter(c => new Date(c.created_at).toISOString().substring(0, 7) === month).length;
+      monthlyTrend.push(count);
+    }
 
-    const trend = Object.entries(monthlyData).map(([month, count]) => ({
-      month,
-      cases: count,
-    }));
+    // Avatar color based on performance
+    const avatarColors = ['bg-blue-500', 'bg-purple-500', 'bg-green-500', 'bg-amber-500', 'bg-red-500'];
+    const avatarBg = avatarColors[parseInt(id) % avatarColors.length];
+
+    // Calculate client satisfaction (mock data based on completion rate)
+    const clientSatisfaction = (slaMetPct / 20) + 1; // Scale 1-5
 
     return res.status(200).json({
       status: 'success',
       message: 'Caseworker performance report',
       data: {
-        caseworker: {
-          id: user.id,
-          name: `${user.first_name} ${user.last_name}`.trim(),
-          email: user.email,
-        },
-        stats: {
-          totalCases,
-          completedCases,
-          inProgressCases,
-          pendingCases,
-          completionRate: totalCases > 0 ? Math.round((completedCases / totalCases) * 100) : 0,
-          avgDays,
-          dateRange: {
-            startDate: startDate || 'all time',
-            endDate: endDate || 'now',
-          },
-        },
-        casesByVisaType,
+        id: user.id,
+        name: `${user.first_name} ${user.last_name}`.trim(),
+        initials: `${user.first_name.charAt(0)}${user.last_name.charAt(0)}`.toUpperCase(),
+        email: user.email,
+        department: 'General',
+        joinDate: new Date(user.created_at).toLocaleDateString('en-GB'),
+        avatarBg,
+        
+        // Performance metrics
+        totalCases,
+        completedCases,
+        slaMetPct,
+        avgCompletionDays,
+        escalations: Math.floor(Math.random() * 3), // Mock escalation count
+        clientSatisfaction: Math.min(5, Math.max(1, clientSatisfaction)),
+        
+        // Breakdowns and trends
+        visaBreakdown,
         recentCases,
-        trend,
+        monthlyTrend,
       },
     });
   } catch (err) {
@@ -419,92 +448,65 @@ export const getCaseworkerReportPDF = async (req, res) => {
     const inProgressCases = cases.filter(c => c.status === 'In Progress').length;
     const pendingCases = cases.filter(c => c.status === 'Pending').length;
 
-    // Create HTML content for PDF
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="UTF-8">
-        <title>Caseworker Performance Report</title>
-        <style>
-          body { font-family: Arial, sans-serif; margin: 20px; }
-          h1 { color: #333; border-bottom: 2px solid #0066cc; padding-bottom: 10px; }
-          h2 { color: #0066cc; margin-top: 20px; }
-          .header { background-color: #f5f5f5; padding: 15px; border-radius: 5px; }
-          .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin: 15px 0; }
-          .stat-box { background-color: #e6f0ff; padding: 15px; border-radius: 5px; border-left: 4px solid #0066cc; }
-          .stat-label { color: #666; font-size: 12px; text-transform: uppercase; }
-          .stat-value { color: #0066cc; font-size: 24px; font-weight: bold; }
-          table { width: 100%; border-collapse: collapse; margin: 15px 0; }
-          th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
-          th { background-color: #0066cc; color: white; }
-          tr:hover { background-color: #f5f5f5; }
-          .footer { margin-top: 30px; text-align: center; color: #999; font-size: 12px; }
-        </style>
-      </head>
-      <body>
-        <h1>Caseworker Performance Report</h1>
-        
-        <div class="header">
-          <p><strong>Name:</strong> ${user.first_name} ${user.last_name}</p>
-          <p><strong>Email:</strong> ${user.email}</p>
-          <p><strong>Report Generated:</strong> ${new Date().toLocaleDateString()}</p>
-        </div>
+    // Generate PDF using PDFKit
+    const pdf = new PDFDocument();
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="caseworker_report_${id}_${Date.now()}.pdf"`);
+    pdf.pipe(res);
 
-        <h2>Performance Metrics</h2>
-        <div class="stats">
-          <div class="stat-box">
-            <div class="stat-label">Total Cases</div>
-            <div class="stat-value">${totalCases}</div>
-          </div>
-          <div class="stat-box">
-            <div class="stat-label">Completed</div>
-            <div class="stat-value">${completedCases}</div>
-          </div>
-          <div class="stat-box">
-            <div class="stat-label">In Progress</div>
-            <div class="stat-value">${inProgressCases}</div>
-          </div>
-          <div class="stat-box">
-            <div class="stat-label">Pending</div>
-            <div class="stat-value">${pendingCases}</div>
-          </div>
-        </div>
+    // Add content to PDF
+    pdf.fontSize(20).font('Helvetica-Bold').text('Caseworker Performance Report', { align: 'center' });
+    pdf.moveDown(0.5);
+    pdf.fontSize(10).font('Helvetica').text(`Generated: ${new Date().toLocaleDateString()}`, { align: 'center' });
+    pdf.moveDown(1);
 
-        <h2>Case Completion Rate</h2>
-        <p>${totalCases > 0 ? Math.round((completedCases / totalCases) * 100) : 0}% (${completedCases}/${totalCases})</p>
+    // User Info
+    pdf.fontSize(12).font('Helvetica-Bold').text('Caseworker Information');
+    pdf.fontSize(10).font('Helvetica');
+    pdf.text(`Name: ${user.first_name} ${user.last_name}`);
+    pdf.text(`Email: ${user.email}`);
+    pdf.moveDown(0.5);
 
-        <h2>Recent Cases</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Case ID</th>
-              <th>Status</th>
-              <th>Created Date</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${cases.slice(0, 10).map(c => `
-              <tr>
-                <td>${c.caseId || `Case-${c.id}`}</td>
-                <td>${c.status}</td>
-                <td>${new Date(c.created_at).toLocaleDateString()}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
+    // Performance Metrics
+    pdf.fontSize(12).font('Helvetica-Bold').text('Performance Metrics');
+    pdf.fontSize(10).font('Helvetica');
+    pdf.text(`Total Cases: ${totalCases}`);
+    pdf.text(`Completed Cases: ${completedCases}`);
+    pdf.text(`In Progress: ${inProgressCases}`);
+    pdf.text(`Pending: ${pendingCases}`);
+    pdf.text(`Case Completion Rate: ${totalCases > 0 ? Math.round((completedCases / totalCases) * 100) : 0}%`);
+    pdf.moveDown(0.5);
 
-        <div class="footer">
-          <p>This is an auto-generated report. For more information, please contact the administrator.</p>
-        </div>
-      </body>
-      </html>
-    `;
+    // Recent Cases Table
+    pdf.fontSize(12).font('Helvetica-Bold').text('Recent Cases');
+    pdf.fontSize(9).font('Helvetica');
+    pdf.moveDown(0.3);
+    
+    const tableTop = pdf.y;
+    const col1 = 50;
+    const col2 = 150;
+    const col3 = 300;
+    const rowHeight = 20;
 
-    // Set response headers for PDF download
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="caseworker_report_${id}_${Date.now()}.html"`);
-    res.send(htmlContent);
+    // Table header
+    pdf.font('Helvetica-Bold');
+    pdf.text('Case ID', col1, tableTop);
+    pdf.text('Status', col2, tableTop);
+    pdf.text('Created Date', col3, tableTop);
+    
+    // Table rows
+    pdf.font('Helvetica');
+    cases.slice(0, 10).forEach((c, i) => {
+      const y = tableTop + ((i + 1) * rowHeight);
+      pdf.text(c.caseId || `Case-${c.id}`, col1, y);
+      pdf.text(c.status, col2, y);
+      pdf.text(new Date(c.created_at).toLocaleDateString(), col3, y);
+    });
+
+    pdf.moveDown(2);
+    pdf.fontSize(9).font('Helvetica').text('This is an auto-generated report. For more information, please contact the administrator.', { align: 'center' });
+    
+    pdf.end();
 
   } catch (err) {
     console.error('getCaseworkerReportPDF error', err);
@@ -592,7 +594,6 @@ export const filterCaseworkers = async (req, res) => {
         'timezone',
         'date_of_joining',
         'sla_percentage',
-        'created_at',
         'updatedAt',
       ],
       order: [['sla_percentage', 'DESC']],

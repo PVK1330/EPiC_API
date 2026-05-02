@@ -3,6 +3,7 @@ import app from './app.js';
 import db from './models/index.js';
 import seedRoles from './seeders/role.seeder.js';
 import seedAdmin from './seeders/admin.seeder.js';
+import seedAdminReportsData from './seeders/admin-reports-data.seeder.js';
 
 import { initializeFieldSettings } from './controllers/AdminControllers/applicationFields.controller.js';
 import http from 'http';
@@ -17,6 +18,7 @@ db.sequelize.sync().then(async () => {
   console.log('Database connected');
   await seedRoles();
   await seedAdmin();
+  await seedAdminReportsData();
   await initializeFieldSettings();
 
   const server = http.createServer(app);

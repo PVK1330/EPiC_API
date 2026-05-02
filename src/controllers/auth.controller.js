@@ -356,7 +356,7 @@ export const login = async (req, res) => {
       userId: user.id,
       email: user.email,
       role_id: user.role_id,
-      role_name: user.Role?.name || null,
+      role_name: user.role?.name || null,
     };
 
     const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '7d' });
@@ -369,7 +369,7 @@ export const login = async (req, res) => {
       resource_type: 'SYSTEM',
       resource_id: 'SYSTEM',
       status: 'SUCCESS',
-      details: `Logged in with role: ${user.Role?.name}`,
+      details: `Logged in with role: ${user.role?.name}`,
       req,
     });
 
@@ -383,7 +383,7 @@ export const login = async (req, res) => {
           last_name: user.last_name,
           email: user.email,
           role_id: user.role_id,
-          role_name: user.Role?.name,
+          role_name: user.role?.name,
           status: user.status,
           two_factor_enabled: user.two_factor_enabled,
         },
@@ -892,7 +892,7 @@ export const verify2FA = async (req, res) => {
       userId: user.id,
       email: user.email,
       role_id: user.role_id,
-      role_name: user.Role?.name || null,
+      role_name: user.role?.name || null,
     };
 
     const jwtToken = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '7d' });
@@ -914,7 +914,7 @@ export const verify2FA = async (req, res) => {
           last_name: user.last_name,
           email: user.email,
           role_id: user.role_id,
-          role_name: user.Role?.name,
+          role_name: user.role?.name,
           status: user.status,
           two_factor_enabled: true,
         },

@@ -64,8 +64,8 @@ const buildFilterConditions = (filters) => {
     }
 
     // Action filter
-    if (filters.action && filters.action !== 'ALL') {
-        if (filters.action === 'USER_MANAGEMENT') {
+    if (filters.action && filters.action.toUpperCase() !== 'ALL') {
+        if (filters.action.toUpperCase() === 'USER_MANAGEMENT') {
             conditions.action = {
                 [Op.in]: ['USER_CREATED', 'USER_UPDATED'],
             };
@@ -75,13 +75,13 @@ const buildFilterConditions = (filters) => {
     }
 
     // User ID filter
-    if (filters.user_id && filters.user_id !== 'ALL') {
+    if (filters.user_id && filters.user_id.toString().toUpperCase() !== 'ALL') {
         conditions.user_id = parseInt(filters.user_id);
     }
 
     // Status filter
-    if (filters.status && filters.status !== 'ALL') {
-        conditions.status = filters.status;
+    if (filters.status && filters.status.toUpperCase() !== 'ALL') {
+        conditions.status = filters.status.toUpperCase();
     }
 
     return conditions;
@@ -130,19 +130,34 @@ export const getAuditLogs = async (req, res) => {
         });
 
         // Format response
-        const formattedLogs = rows.map(log => ({
-            id: log.id,
-            userId: log.user_id,
-            userName: log.user_name,
-            action: log.action,
-            resourceType: log.resource_type,
-            resourceId: log.resource_id,
-            resourceDisplay: formatResourceDisplay(log.resource_type, log.resource_id),
-            ipAddress: log.ip_address,
-            status: log.status,
-            details: log.details ? JSON.parse(log.details) : null,
-            timestamp: log.createdAt,
-        }));
+        const formattedLogs = rows.map((log) => {
+            let parsedDetails = null;
+
+            if (log.details) {
+                try {
+                    parsedDetails = JSON.parse(log.details);
+                } catch (err) {
+                    parsedDetails = log.details; // fallback to plain text
+                }
+            }
+
+            return {
+                id: log.id,
+                userId: log.user_id,
+                userName: log.user_name,
+                action: log.action,
+                resourceType: log.resource_type,
+                resourceId: log.resource_id,
+                resourceDisplay: formatResourceDisplay(
+                    log.resource_type,
+                    log.resource_id
+                ),
+                ipAddress: log.ip_address,
+                status: log.status.toUpperCase(),
+                details: parsedDetails,
+                timestamp: log.createdAt,
+            };
+        });
 
         return res.status(200).json({
             success: true,

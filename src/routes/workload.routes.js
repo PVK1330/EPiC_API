@@ -34,6 +34,30 @@ router.get(
   workloadController.getCaseworkerPerformance
 );
 
+// Export endpoints for CSV reports
+router.get(
+  "/export/team-workload",
+  checkRole([ROLES.ADMIN, ROLES.CASEWORKER]),
+  workloadController.exportTeamWorkloadCSV
+);
 
+router.get(
+  "/export/pending-tasks",
+  checkRole([ROLES.ADMIN, ROLES.CASEWORKER]),
+  workloadController.exportPendingTasksCSV
+);
+
+router.get(
+  "/export/deadline-monitor",
+  checkRole([ROLES.ADMIN, ROLES.CASEWORKER]),
+  workloadController.exportDeadlineMonitorCSV
+);
+
+// Combined export endpoint - All reports in one CSV
+router.get(
+  "/export-report",
+  checkRole([ROLES.ADMIN, ROLES.CASEWORKER]),
+  workloadController.exportCombinedReport
+);
 
 export default router;

@@ -8,6 +8,12 @@ import {
   calculateAvgCompletionTime,
   getWorkloadHealth,
 } from "../../utils/workload.utils.js";
+import {
+  convertToCSV,
+  generateFileName,
+  sendCSVFile,
+  combineSectionsToCSV,
+} from "../../utils/csvExport.utils.js";
 
 const User = db.User;
 const Case = db.Case;
@@ -59,27 +65,39 @@ export const  getTeamWorkload = async (req, res) => {
         // Count active cases (status: In Progress or Pending)
         const activeCasesCount = await Case.count({
           where: {
-            assignedcaseworkerId: {
-              [Op.like]: `%${caseworker.id}%`,
-            },
-            status: {
-              [Op.in]: ["Pending", "In Progress"],
-            },
+            [Sequelize.Op.and]: [
+              Sequelize.where(
+                Sequelize.cast(Sequelize.col('assignedcaseworkerId'), 'TEXT'),
+                Op.like,
+                `%${caseworker.id}%`
+              ),
+              {
+                status: {
+                  [Op.in]: ["Pending", "In Progress"],
+                },
+              },
+            ],
           },
         });
 
         // Count overdue cases
         const overdueCases = await Case.findAll({
           where: {
-            assignedcaseworkerId: {
-              [Op.like]: `%${caseworker.id}%`,
-            },
-            targetSubmissionDate: {
-              [Op.lt]: today,
-            },
-            status: {
-              [Op.in]: ["Pending", "In Progress"],
-            },
+            [Sequelize.Op.and]: [
+              Sequelize.where(
+                Sequelize.cast(Sequelize.col('assignedcaseworkerId'), 'TEXT'),
+                Op.like,
+                `%${caseworker.id}%`
+              ),
+              {
+                targetSubmissionDate: {
+                  [Op.lt]: today,
+                },
+                status: {
+                  [Op.in]: ["Pending", "In Progress"],
+                },
+              },
+            ],
           },
         });
 
@@ -372,19 +390,31 @@ export const getCaseworkerPerformance = async (req, res) => {
     // Get case statistics
     const activeCases = await Case.count({
       where: {
-        assignedcaseworkerId: {
-          [Op.like]: `%${id}%`,
-        },
-        status: { [Op.in]: ["Pending", "In Progress"] },
+        [Sequelize.Op.and]: [
+          Sequelize.where(
+            Sequelize.cast(Sequelize.col('assignedcaseworkerId'), 'TEXT'),
+            Op.like,
+            `%${id}%`
+          ),
+          {
+            status: { [Op.in]: ["Pending", "In Progress"] },
+          },
+        ],
       },
     });
 
     const completedCases = await Case.count({
       where: {
-        assignedcaseworkerId: {
-          [Op.like]: `%${id}%`,
-        },
-        status: "Completed",
+        [Sequelize.Op.and]: [
+          Sequelize.where(
+            Sequelize.cast(Sequelize.col('assignedcaseworkerId'), 'TEXT'),
+            Op.like,
+            `%${id}%`
+          ),
+          {
+            status: "Completed",
+          },
+        ],
       },
     });
 
@@ -465,9 +495,470 @@ export const getCaseworkerPerformance = async (req, res) => {
   }
 };
 
+/**
+ * EXPORT FUNCTIONS FOR CSV
+ */
+
+/**
+ * GET /api/workload/export/team-workload
+ * Export team workload report as CSV
+ */
+export const exportTeamWorkloadCSV = async (req, res) => {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Get all caseworkers with their profiles
+    const caseworkers = await User.findAll({
+      where: { role_id: 2, status: "active" }, // CASEWORKER role
+      include: [
+        {
+          model: CaseworkerProfile,
+          as: "caseworkerProfile",
+          attributes: [
+            "id",
+            "employee_id",
+            "job_title",
+            "department",
+            "region",
+          ],
+        },
+      ],
+      attributes: ["id", "first_name", "last_name", "email"],
+      raw: false,
+    });
+
+    // Calculate metrics for each caseworker
+    const teamWorkload = await Promise.all(
+      caseworkers.map(async (caseworker) => {
+        const activeCasesCount = await Case.count({
+          where: {
+            assignedcaseworkerId: {
+              [Op.like]: `%${caseworker.id}%`,
+            },
+            status: {
+              [Op.in]: ["Pending", "In Progress"],
+            },
+          },
+        });
+
+        const overdueCases = await Case.findAll({
+          where: {
+            assignedcaseworkerId: {
+              [Op.like]: `%${caseworker.id}%`,
+            },
+            targetSubmissionDate: {
+              [Op.lt]: today,
+            },
+            status: {
+              [Op.in]: ["Pending", "In Progress"],
+            },
+          },
+        });
+
+        const pendingTasksCount = await Task.count({
+          where: {
+            assigned_to: caseworker.id,
+            status: { [Op.in]: ["pending", "in-progress"] },
+          },
+        });
+
+        const completedTasks = await Task.findAll({
+          where: {
+            assigned_to: caseworker.id,
+            status: "completed",
+          },
+          attributes: ["id", "created_at", "updated_at"],
+          raw: true,
+          limit: 50,
+        });
+
+        const avgCompletionTime = calculateAvgCompletionTime(completedTasks);
+        const workloadPercentage = calculateWorkloadPercentage(
+          activeCasesCount,
+          50
+        );
+        const health = getWorkloadHealth(workloadPercentage, overdueCases.length);
+
+        return {
+          "Caseworker Name": getFullName(caseworker),
+          "Email": caseworker.email,
+          "Job Title": caseworker.caseworkerProfile?.job_title || "N/A",
+          "Department": caseworker.caseworkerProfile?.department || "N/A",
+          "Region": caseworker.caseworkerProfile?.region || "N/A",
+          "Active Cases": activeCasesCount,
+          "Overdue Cases": overdueCases.length,
+          "Pending Tasks": pendingTasksCount,
+          "Avg Completion Time (Days)": avgCompletionTime,
+          "Workload Percentage": `${workloadPercentage}%`,
+          "Health Status": health.status,
+        };
+      })
+    );
+
+    const csvContent = await convertToCSV(teamWorkload);
+    const fileName = generateFileName("team_workload_report");
+    sendCSVFile(res, csvContent, fileName);
+  } catch (error) {
+    console.error("Error exporting team workload CSV:", error);
+    return res.status(500).json({
+      status: "error",
+      message: "Failed to export team workload report",
+      data: null,
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * GET /api/workload/export/pending-tasks
+ * Export pending tasks report as CSV
+ */
+export const exportPendingTasksCSV = async (req, res) => {
+  try {
+    const tasks = await Task.findAll({
+      where: {
+        status: {
+          [Op.in]: ["pending", "in-progress"],
+        },
+      },
+      include: [
+        {
+          model: User,
+          as: "assignee",
+          attributes: ["id", "first_name", "last_name", "email"],
+        },
+        {
+          model: Case,
+          attributes: ["id", "caseId"],
+        },
+      ],
+      order: [["due_date", "ASC"]],
+      raw: false,
+    });
+
+    const pendingTasks = tasks.map((task) => {
+      const daysRemaining = calculateDaysRemaining(task.due_date);
+      const riskStatus = calculateRiskStatus(daysRemaining);
+
+      return {
+        "Task ID": task.id,
+        "Task Title": task.title,
+        "Case Code": task.Case?.caseId || "N/A",
+        "Assigned To": getFullName(task.assignee),
+        "Assigned Email": task.assignee?.email || "N/A",
+        "Due Date": task.due_date
+          ? new Date(task.due_date).toLocaleDateString()
+          : "N/A",
+        "Days Remaining": daysRemaining,
+        "Risk Status": riskStatus,
+        "Priority": task.priority || "N/A",
+        "Task Status": task.status,
+        "Created Date": new Date(task.created_at).toLocaleDateString(),
+      };
+    });
+
+    const csvContent = await convertToCSV(pendingTasks);
+    const fileName = generateFileName("pending_tasks_report");
+    sendCSVFile(res, csvContent, fileName);
+  } catch (error) {
+    console.error("Error exporting pending tasks CSV:", error);
+    return res.status(500).json({
+      status: "error",
+      message: "Failed to export pending tasks report",
+      data: null,
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * GET /api/workload/export/deadline-monitor
+ * Export deadline monitoring report as CSV
+ */
+export const exportDeadlineMonitorCSV = async (req, res) => {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const cases = await Case.findAll({
+      where: {
+        status: {
+          [Op.in]: ["Pending", "In Progress"],
+        },
+      },
+      include: [
+        {
+          model: User,
+          as: "candidate",
+          attributes: ["id", "first_name", "last_name"],
+        },
+      ],
+      order: [["targetSubmissionDate", "ASC"]],
+      raw: false,
+    });
+
+    const deadlineMonitor = cases.map((caseRecord) => {
+      const daysRemaining = calculateDaysRemaining(caseRecord.targetSubmissionDate);
+      const riskStatus = calculateRiskStatus(daysRemaining);
+
+      let caseworkerNames = "Unassigned";
+      if (caseRecord.assignedcaseworkerId) {
+        try {
+          const caseworkerIds = Array.isArray(caseRecord.assignedcaseworkerId)
+            ? caseRecord.assignedcaseworkerId
+            : JSON.parse(caseRecord.assignedcaseworkerId);
+          caseworkerNames = caseworkerIds.join(", ");
+        } catch (e) {
+          caseworkerNames = String(caseRecord.assignedcaseworkerId);
+        }
+      }
+
+      return {
+        "Case ID": caseRecord.id,
+        "Case Code": caseRecord.caseId,
+        "Candidate Name": getFullName(caseRecord.candidate),
+        "Caseworker IDs": caseworkerNames,
+        "Deadline": caseRecord.targetSubmissionDate
+          ? new Date(caseRecord.targetSubmissionDate).toLocaleDateString()
+          : "N/A",
+        "Days Remaining": daysRemaining,
+        "Risk Status": riskStatus,
+        "Case Status": caseRecord.status,
+        "Priority": caseRecord.priority || "N/A",
+        "Nationality": caseRecord.nationality || "N/A",
+        "Job Title": caseRecord.jobTitle || "N/A",
+      };
+    });
+
+    const csvContent = await convertToCSV(deadlineMonitor);
+    const fileName = generateFileName("deadline_monitor_report");
+    sendCSVFile(res, csvContent, fileName);
+  } catch (error) {
+    console.error("Error exporting deadline monitor CSV:", error);
+    return res.status(500).json({
+      status: "error",
+      message: "Failed to export deadline monitor report",
+      data: null,
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * GET /api/workload/export-report
+ * Export combined report (Team Workload, Pending Tasks, Deadline Monitor) as single CSV
+ */
+export const exportCombinedReport = async (req, res) => {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // ============================================
+    // 1. FETCH TEAM WORKLOAD DATA
+    // ============================================
+    const caseworkers = await User.findAll({
+      where: { role_id: 2, status: "active" },
+      include: [
+        {
+          model: CaseworkerProfile,
+          as: "caseworkerProfile",
+          attributes: ["id", "employee_id", "job_title", "department", "region"],
+        },
+      ],
+      attributes: ["id", "first_name", "last_name", "email"],
+      raw: false,
+    });
+
+    const teamWorkloadData = await Promise.all(
+      caseworkers.map(async (caseworker) => {
+        const activeCasesCount = await Case.count({
+          where: {
+            [Sequelize.Op.and]: [
+              Sequelize.where(
+                Sequelize.cast(Sequelize.col('assignedcaseworkerId'), 'TEXT'),
+                Op.like,
+                `%${caseworker.id}%`
+              ),
+              { status: { [Op.in]: ["Pending", "In Progress"] } },
+            ],
+          },
+        });
+
+        const completedCasesCount = await Case.count({
+          where: {
+            [Sequelize.Op.and]: [
+              Sequelize.where(
+                Sequelize.cast(Sequelize.col('assignedcaseworkerId'), 'TEXT'),
+                Op.like,
+                `%${caseworker.id}%`
+              ),
+              { status: "Completed" },
+            ],
+          },
+        });
+
+        const overdueCases = await Case.findAll({
+          where: {
+            [Sequelize.Op.and]: [
+              Sequelize.where(
+                Sequelize.cast(Sequelize.col('assignedcaseworkerId'), 'TEXT'),
+                Op.like,
+                `%${caseworker.id}%`
+              ),
+              {
+                targetSubmissionDate: { [Op.lt]: today },
+                status: { [Op.in]: ["Pending", "In Progress"] },
+              },
+            ],
+          },
+        });
+
+        const workloadPercentage = calculateWorkloadPercentage(activeCasesCount, 50);
+
+        return {
+          "Caseworker Name": getFullName(caseworker),
+          "Total Cases": activeCasesCount + completedCasesCount,
+          "Active Cases": activeCasesCount,
+          "Completed Cases": completedCasesCount,
+          "Overdue Cases": overdueCases.length,
+          "Workload %": `${workloadPercentage}%`,
+        };
+      })
+    );
+
+    // ============================================
+    // 2. FETCH PENDING TASKS DATA
+    // ============================================
+    const tasks = await Task.findAll({
+      where: { status: { [Op.in]: ["pending", "in-progress"] } },
+      include: [
+        {
+          model: User,
+          as: "assignee",
+          attributes: ["id", "first_name", "last_name", "email"],
+        },
+        { model: Case, attributes: ["id", "caseId"] },
+      ],
+      order: [["due_date", "ASC"]],
+      raw: false,
+    });
+
+    const pendingTasksData = tasks.map((task) => {
+      const daysRemaining = calculateDaysRemaining(task.due_date);
+      const riskStatus = calculateRiskStatus(daysRemaining);
+
+      return {
+        "Task Name": task.title,
+        "Assigned To": getFullName(task.assignee),
+        "Case Code": task.Case?.caseId || "N/A",
+        "Case ID": task.case_id,
+        "Due Date": task.due_date
+          ? new Date(task.due_date).toLocaleDateString()
+          : "N/A",
+        "Days Remaining": daysRemaining,
+        "Priority": task.priority || "N/A",
+        "Risk Status": riskStatus,
+        "Task Status": task.status,
+      };
+    });
+
+    // ============================================
+    // 3. FETCH DEADLINE MONITORING DATA
+    // ============================================
+    const cases = await Case.findAll({
+      where: { status: { [Op.in]: ["Pending", "In Progress"] } },
+      include: [
+        {
+          model: User,
+          as: "candidate",
+          attributes: ["id", "first_name", "last_name"],
+        },
+      ],
+      order: [["targetSubmissionDate", "ASC"]],
+      raw: false,
+    });
+
+    const deadlineMonitorData = cases.map((caseRecord) => {
+      const daysRemaining = calculateDaysRemaining(caseRecord.targetSubmissionDate);
+      const riskStatus = calculateRiskStatus(daysRemaining);
+
+      let caseworkerNames = "Unassigned";
+      if (caseRecord.assignedcaseworkerId) {
+        try {
+          const caseworkerIds = Array.isArray(caseRecord.assignedcaseworkerId)
+            ? caseRecord.assignedcaseworkerId
+            : JSON.parse(caseRecord.assignedcaseworkerId);
+          caseworkerNames = caseworkerIds.join(", ");
+        } catch (e) {
+          caseworkerNames = String(caseRecord.assignedcaseworkerId);
+        }
+      }
+
+      const deadlineDate = caseRecord.targetSubmissionDate
+        ? new Date(caseRecord.targetSubmissionDate).toLocaleDateString()
+        : "N/A";
+
+      return {
+        "Case ID": caseRecord.id,
+        "Case Code": caseRecord.caseId,
+        "Candidate Name": getFullName(caseRecord.candidate),
+        "Assigned To": caseworkerNames,
+        "Deadline Date": deadlineDate,
+        "Days Remaining": daysRemaining,
+        "Status": riskStatus,
+        "Priority": caseRecord.priority || "N/A",
+      };
+    });
+
+    // ============================================
+    // 4. COMBINE INTO SINGLE CSV FILE
+    // ============================================
+    const sections = [
+      {
+        title: "TEAM WORKLOAD REPORT",
+        data: teamWorkloadData,
+      },
+      {
+        title: "PENDING TASKS REPORT",
+        data: pendingTasksData,
+      },
+      {
+        title: "DEADLINE MONITORING REPORT",
+        data: deadlineMonitorData,
+      },
+    ];
+
+    const combinedCSV = await combineSectionsToCSV(sections);
+
+    if (!combinedCSV || combinedCSV.trim() === "") {
+      return res.status(400).json({
+        status: "error",
+        message: "No data available to export",
+        data: null,
+      });
+    }
+
+    const fileName = generateFileName("combined_workload_report");
+    sendCSVFile(res, combinedCSV, fileName);
+  } catch (error) {
+    console.error("Error exporting combined report CSV:", error);
+    return res.status(500).json({
+      status: "error",
+      message: "Failed to export combined report",
+      data: null,
+      error: error.message,
+    });
+  }
+};
+
 export default {
   getTeamWorkload,
   getPendingTasks,
   getDeadlineMonitor,
   getCaseworkerPerformance,
+  exportTeamWorkloadCSV,
+  exportPendingTasksCSV,
+  exportDeadlineMonitorCSV,
+  exportCombinedReport,
 };
