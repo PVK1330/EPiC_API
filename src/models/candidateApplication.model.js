@@ -324,6 +324,16 @@ export default (sequelize, DataTypes) => {
                     key: "id",
                 },
             },
+            organisation_id: {
+                type: DataTypes.INTEGER,
+                allowNull: true,
+                references: {
+                    model: "organisations",
+                    key: "id",
+                },
+                onUpdate: "CASCADE",
+                onDelete: "SET NULL",
+            },
         },
         {
             tableName: "candidate_applications",

@@ -3,6 +3,7 @@ import { Sequelize } from "sequelize";
 import config from "../config/config.js";
 
 import UserModel from "./user.model.js";
+import OrganisationModel from "./organisation.model.js";
 
 import RoleModel from "./role.model.js";
 
@@ -92,6 +93,7 @@ db.Sequelize = Sequelize;
 db.sequelize = sequelize;
 
 db.User = UserModel(sequelize, Sequelize.DataTypes);
+db.Organisation = OrganisationModel(sequelize, Sequelize.DataTypes);
 
 db.Role = RoleModel(sequelize, Sequelize.DataTypes);
 
@@ -435,6 +437,22 @@ db.User.hasMany(db.LicenceApplication, {
 db.LicenceApplication.belongsTo(db.User, { foreignKey: "userId", as: "user" });
 db.CalendarMeeting.belongsTo(db.User, { foreignKey: "user_id", as: "user" });
 db.User.hasMany(db.CalendarMeeting, { foreignKey: "user_id", as: "calendarMeetings" });
+
+// Organisation associations
+db.Organisation.hasMany(db.User, { foreignKey: "organisation_id", as: "users" });
+db.User.belongsTo(db.Organisation, { foreignKey: "organisation_id", as: "organisation" });
+
+db.Organisation.hasMany(db.Case, { foreignKey: "organisation_id", as: "cases" });
+db.Case.belongsTo(db.Organisation, { foreignKey: "organisation_id", as: "organisation" });
+
+db.Organisation.hasMany(db.SponsorProfile, { foreignKey: "organisation_id", as: "sponsors" });
+db.SponsorProfile.belongsTo(db.Organisation, { foreignKey: "organisation_id", as: "organisation" });
+
+db.Organisation.hasMany(db.AuditLog, { foreignKey: "organisation_id", as: "auditLogs" });
+db.AuditLog.belongsTo(db.Organisation, { foreignKey: "organisation_id", as: "organisation" });
+
+db.Organisation.hasMany(db.CandidateApplication, { foreignKey: "organisation_id", as: "candidateApplications" });
+db.CandidateApplication.belongsTo(db.Organisation, { foreignKey: "organisation_id", as: "organisation" });
 
 export default db;
 

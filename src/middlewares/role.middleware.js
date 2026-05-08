@@ -1,10 +1,11 @@
 import db from "../models/index.js";
 
 export const ROLES = {
-  ADMIN: 1,
+  CANDIDATE: 1,
   CASEWORKER: 2,
-  CANDIDATE: 3,
+  ADMIN: 3,
   BUSINESS: 4,
+  SUPERADMIN: 5,
 };
 
 const normalizeRoleId = (id) => {

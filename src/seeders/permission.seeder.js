@@ -205,10 +205,11 @@ const PERMISSIONS_DATA = [
 ];
 
 const ROLE_PERMISSIONS = {
-  1: 'admin', // Admin role - all permissions
-  2: 'caseworker', // Caseworker role - case, escalation, reports
-  3: 'candidate', // Candidate role - view own data
-  4: 'sponsor', // Sponsor/Business role - case, payment, reports
+  1: 'candidate',
+  2: 'caseworker',
+  3: 'admin',
+  4: 'sponsor',
+  5: 'superadmin',
 };
 
 const getCaseworkerPermissions = () => {
@@ -285,8 +286,15 @@ const seedRolePermissions = async () => {
     const roles = await Role.findAll();
     const allPermissions = await Permission.findAll();
 
-    // Admin (role_id: 1) - All permissions
-    const adminRole = roles.find(r => r.id === 1);
+    // SuperAdmin (role_id: 5) - All permissions
+    const superAdminRole = roles.find(r => r.id === 5);
+    if (superAdminRole) {
+      await superAdminRole.setPermissions(allPermissions);
+      console.log('SuperAdmin role assigned all permissions');
+    }
+
+    // Admin (role_id: 3) - All permissions
+    const adminRole = roles.find(r => r.id === 3);
     if (adminRole) {
       await adminRole.setPermissions(allPermissions);
       console.log('Admin role assigned all permissions');
@@ -301,8 +309,8 @@ const seedRolePermissions = async () => {
       console.log('Caseworker role assigned permissions');
     }
 
-    // Candidate (role_id: 3) - View own cases
-    const candidateRole = roles.find(r => r.id === 3);
+    // Candidate (role_id: 1) - View own cases
+    const candidateRole = roles.find(r => r.id === 1);
     if (candidateRole) {
       const candidatePermNames = getCandidatePermissions();
       const candidatePerms = allPermissions.filter(p => candidatePermNames.includes(p.name));

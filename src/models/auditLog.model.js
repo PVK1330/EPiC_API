@@ -35,7 +35,25 @@ export default (sequelize) => {
     details: {
       type: DataTypes.TEXT,
       allowNull: true
-    }
+    },
+    old_value: {
+      type: DataTypes.JSONB,
+      allowNull: true
+    },
+    new_value: {
+      type: DataTypes.JSONB,
+      allowNull: true
+    },
+    organisation_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: "organisations",
+        key: "id",
+      },
+      onUpdate: "CASCADE",
+      onDelete: "SET NULL",
+    },
   }, {
     tableName: 'audit_logs',
     timestamps: true,

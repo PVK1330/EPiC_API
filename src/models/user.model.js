@@ -107,6 +107,16 @@ export default (sequelize, DataTypes) => {
                 allowNull: true,
                 defaultValue: 'other',
             },
+            organisation_id: {
+                type: DataTypes.INTEGER,
+                allowNull: true, // Nullable for Superadmins who don't belong to an org
+                references: {
+                    model: "organisations",
+                    key: "id",
+                },
+                onUpdate: "CASCADE",
+                onDelete: "SET NULL",
+            },
         },
         {
             tableName: "users",

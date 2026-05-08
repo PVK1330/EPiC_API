@@ -40,6 +40,7 @@ import adminLicenceRoutes from './routes/admin.licence.routes.js';
 import caseworkerLicenceRoutes from './routes/caseworker.licence.routes.js';
 import caseworkerTimelineRoutes from './routes/CaseworkerRoutes/caseTimeline.routes.js';
 import caseworkerPerformanceRoutes from './routes/CaseworkerRoutes/caseworkerPerformance.routes.js';
+import superadminRoutes from './routes/superadmin.routes.js';
 import { getFrontendOrigins } from './config/frontendOrigins.js';
 
 const app = express();
@@ -98,6 +99,7 @@ app.use('/api/case-notes', caseNoteRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/workload', workloadRoutes);
 app.use('/api/reports', reportingRoutes);
+app.use('/api/superadmin', superadminRoutes);
 
 // API 404 handler
 app.use('/api', (req, res) => {

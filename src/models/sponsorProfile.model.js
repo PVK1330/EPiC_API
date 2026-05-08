@@ -231,6 +231,16 @@ export default (sequelize, DataTypes) => {
                 defaultValue: 20,
                 field: 'risk_pct',
             },
+            organisation_id: {
+                type: DataTypes.INTEGER,
+                allowNull: true,
+                references: {
+                    model: "organisations",
+                    key: "id",
+                },
+                onUpdate: "CASCADE",
+                onDelete: "SET NULL",
+            },
         },
         {
             tableName: "sponsor_profiles",

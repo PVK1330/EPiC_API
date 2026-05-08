@@ -162,7 +162,17 @@ const CaseModel = (sequelize, DataTypes) => {
       type: DataTypes.DATE,
       allowNull: true,
       comment: "Soft delete timestamp"
-    }
+    },
+    organisation_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: "organisations",
+        key: "id",
+      },
+      onUpdate: "CASCADE",
+      onDelete: "SET NULL",
+    },
   }, {
     tableName: 'cases',
     timestamps: true,
