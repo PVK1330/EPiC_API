@@ -32,7 +32,7 @@ export const createCandidate = async (req, res) => {
       email,
       country_code,
       mobile,
-      role_id = 3, // Default to Candidate role
+      role_id = 1, // Default to Candidate role
       password,
       confirm_password,
       application, // Application data for child table
@@ -134,7 +134,7 @@ export const createCandidate = async (req, res) => {
           email,
           country_code,
           mobile,
-          role_id: 3, // Always set to Candidate role
+          role_id: 1, // Always set to Candidate role
           password: hashedPassword,
           is_email_verified: true, // Auto-verify for admin-created accounts
           is_otp_verified: true, // Auto-verify for candidate login
@@ -249,7 +249,7 @@ export const getAllCandidates = async (req, res) => {
 
     // Build where clause
     const whereClause = {
-      role_id: 3, // Candidate role
+      role_id: 1, // Candidate role
     };
 
     if (search) {
@@ -362,7 +362,7 @@ export const getCandidateById = async (req, res) => {
     const { id } = req.params;
 
     const candidate = await User.findOne({
-      where: { id, role_id: 3 },
+      where: { id, role_id: 1 },
       attributes: {
         exclude: [
           "password",
@@ -443,7 +443,7 @@ export const updateCandidate = async (req, res) => {
     } = req.body;
 
     // Find candidate
-    const candidate = await User.findOne({ where: { id, role_id: 3 } });
+    const candidate = await User.findOne({ where: { id, role_id: 1 } });
     if (!candidate) {
       return res.status(404).json({
         status: "error",
@@ -650,7 +650,7 @@ export const deleteCandidate = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const candidate = await User.findOne({ where: { id, role_id: 3 } });
+    const candidate = await User.findOne({ where: { id, role_id: 1 } });
     if (!candidate) {
       return res.status(404).json({
         status: "error",
@@ -708,7 +708,7 @@ export const resetCandidatePassword = async (req, res) => {
       });
     }
 
-    const candidate = await User.findOne({ where: { id, role_id: 3 } });
+    const candidate = await User.findOne({ where: { id, role_id: 1 } });
     if (!candidate) {
       return res.status(404).json({
         status: "error",
@@ -749,7 +749,7 @@ export const toggleCandidateStatus = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const candidate = await User.findOne({ where: { id, role_id: 3 } });
+    const candidate = await User.findOne({ where: { id, role_id: 1 } });
     if (!candidate) {
       return res.status(404).json({
         status: "error",
@@ -787,7 +787,7 @@ export const exportCandidates = async (req, res) => {
     const { search, status, visaType, paymentStatus } = req.query;
 
     const whereClause = {
-      role_id: 3, // Candidate role
+      role_id: 1, // Candidate role
     };
 
     if (search) {
@@ -1009,7 +1009,7 @@ export const bulkImportCandidates = async (req, res) => {
           email: rowData.email,
           country_code: rowData.country_code || rowData.countryCode || "+44",
           mobile: rowData.mobile,
-          role_id: 3,
+          role_id: 1,
           password: hashedPassword,
           is_email_verified: true,
           is_otp_verified: true,

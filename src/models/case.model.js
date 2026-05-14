@@ -128,6 +128,14 @@ const CaseModel = (sequelize, DataTypes) => {
       type: DataTypes.DECIMAL(10, 2),
       defaultValue: 0,
     },
+    amountStatus: {
+      type: DataTypes.ENUM('Not Submitted', 'Pending Approval', 'Approved', 'Rejected'),
+      defaultValue: 'Not Submitted',
+    },
+    amountNotes: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
     notes: {
       type: DataTypes.TEXT,
       allowNull: true,

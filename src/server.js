@@ -11,6 +11,12 @@ import { initSocketIO } from './realtime/socketServer.js';
 const PORT = process.env.PORT || 5000;
 
 db.sequelize.sync().then(async () => {
+  try {
+    await db.Case.sync({ alter: true });
+    console.log('Case table schema synchronized successfully');
+  } catch (syncErr) {
+    console.error('Individual Case sync note:', syncErr.message);
+  }
   console.log('Database connected');
   await seedRoles();
   await seedAdmin();

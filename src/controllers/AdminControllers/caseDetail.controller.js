@@ -299,6 +299,8 @@ export const getCaseDetails = async (req, res) => {
           totalPaid: totalPaid,
           outstandingBalance: outstandingBalance,
           salaryOffered: caseData.salaryOffered,
+          amountStatus: caseData.amountStatus || 'Not Submitted',
+          amountNotes: caseData.amountNotes || '',
           payments: caseData.payments
         },
         
@@ -405,6 +407,73 @@ export const updateCaseStatus = async (req, res) => {
     });
   } catch (error) {
     console.error("Update Case Status Error:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error",
+      data: null,
+      error: error.message,
+    });
+  }
+};
+
+// Update case finance proposed amount and approval status
+export const updateCaseFinance = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { totalAmount, amountStatus, amountNotes } = req.body;
+
+    if (!id) {
+      return res.status(400).json({
+        status: "error",
+        message: "Case ID is required",
+        data: null,
+      });
+    }
+
+    const whereClause = isNaN(id) ? { caseId: id } : { id: parseInt(id) };
+    const caseData = await db.Case.findOne({ where: whereClause });
+    if (!caseData) {
+      return res.status(404).json({
+        status: "error",
+        message: "Case not found",
+        data: null,
+      });
+    }
+
+    const updateData = {};
+    if (totalAmount !== undefined) updateData.totalAmount = totalAmount;
+    if (amountStatus !== undefined) updateData.amountStatus = amountStatus;
+    if (amountNotes !== undefined) updateData.amountNotes = amountNotes;
+
+    await caseData.update(updateData);
+
+    // Add timeline entry
+    await db.CaseTimeline.create({
+      caseId: caseData.id,
+      actionType: 'case_updated',
+      description: `Case finance details updated (${amountStatus || caseData.amountStatus})`,
+      performedBy: req.user?.id,
+      previousValue: JSON.stringify({
+        totalAmount: caseData.totalAmount,
+        amountStatus: caseData.amountStatus,
+      }),
+      newValue: JSON.stringify({
+        totalAmount: totalAmount ?? caseData.totalAmount,
+        amountStatus: amountStatus ?? caseData.amountStatus,
+      })
+    });
+
+    res.status(200).json({
+      status: "success",
+      message: "Case finance updated successfully",
+      data: {
+        totalAmount: caseData.totalAmount,
+        amountStatus: caseData.amountStatus,
+        amountNotes: caseData.amountNotes,
+      }
+    });
+  } catch (error) {
+    console.error("Update Case Finance Error:", error);
     res.status(500).json({
       status: "error",
       message: "Internal server error",
