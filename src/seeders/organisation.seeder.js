@@ -15,6 +15,7 @@ export default async function seedOrganisations() {
         status: "active",
         primaryEmail: "platform@epic.local",
         country: null,
+        database_name: null,
       },
     });
     console.log(`✔ Organisation ready: ${org.slug} (id=${org.id})`);

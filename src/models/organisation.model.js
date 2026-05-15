@@ -37,6 +37,10 @@ export default (sequelize, DataTypes) => {
         type: DataTypes.STRING(100),
         allowNull: true,
       },
+      database_name: {
+        type: DataTypes.STRING(63),
+        allowNull: true,
+      },
     },
     {
       tableName: "organisations",

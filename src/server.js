@@ -18,6 +18,11 @@ db.sequelize.sync().then(async () => {
   } catch (syncErr) {
     console.error('Individual Case sync note:', syncErr.message);
   }
+
+  await db.sequelize.query(
+    'ALTER TABLE "organisations" ADD COLUMN IF NOT EXISTS "database_name" VARCHAR(63);'
+  );
+
   console.log('Database connected');
   await seedRoles();
   await seedOrganisations();

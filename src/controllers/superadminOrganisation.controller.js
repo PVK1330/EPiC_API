@@ -1,7 +1,12 @@
 import { Op } from "sequelize";
 import bcrypt from "bcryptjs";
 import db from "../models/index.js";
-
+import {
+  buildPhysicalTenantDatabaseName,
+  createTenantPostgresDatabase,
+  syncTenantDatabaseSchema,
+  dropTenantPostgresDatabase,
+} from "../services/tenantDatabaseProvision.service.js";
 const Organisation = db.Organisation;
 const User = db.User;
 
@@ -58,18 +63,53 @@ export const createOrganisation = async (req, res) => {
     if (exists) {
       finalSlug = `${finalSlug}-${Date.now().toString(36)}`;
     }
-    const org = await Organisation.create({
-      name: String(name).trim(),
-      slug: finalSlug,
-      plan: plan || "starter",
-      status: status || "trial",
-      primaryEmail: String(primaryEmail).trim().toLowerCase(),
-      country: country || null,
-    });
+    const physicalEnabled = process.env.ENABLE_TENANT_PHYSICAL_DATABASE === "true";
+    let databaseName = null;
+    if (physicalEnabled) {
+      databaseName = buildPhysicalTenantDatabaseName(finalSlug);
+    }
+
+    let org;
+    try {
+      if (physicalEnabled && databaseName) {
+        await createTenantPostgresDatabase(databaseName);
+        try {
+          await syncTenantDatabaseSchema(databaseName);
+        } catch (syncErr) {
+          await dropTenantPostgresDatabase(databaseName);
+          throw syncErr;
+        }
+      }
+
+      org = await Organisation.create({
+        name: String(name).trim(),
+        slug: finalSlug,
+        plan: plan || "starter",
+        status: status || "trial",
+        primaryEmail: String(primaryEmail).trim().toLowerCase(),
+        country: country || null,
+        database_name: databaseName,
+      });
+    } catch (err) {
+      if (physicalEnabled && databaseName) {
+        try {
+          await dropTenantPostgresDatabase(databaseName);
+        } catch (_) {
+          /* ignore rollback errors */
+        }
+      }
+      throw err;
+    }
+
     return res.status(201).json({
       status: "success",
-      message: "Organisation created",
-      data: { organisation: org },
+      message: physicalEnabled
+        ? "Organisation created with dedicated PostgreSQL database (schema synced)."
+        : "Organisation created",
+      data: {
+        organisation: org,
+        ...(physicalEnabled && databaseName ? { tenant_database: databaseName } : {}),
+      },
     });
   } catch (err) {
     console.error("createOrganisation", err);
