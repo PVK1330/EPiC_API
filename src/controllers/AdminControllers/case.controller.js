@@ -2,6 +2,7 @@ import db from "../../models/index.js";
 import { Op } from "sequelize";
 import { notifyCaseAssigned, notifyCaseStatusChanged } from "../../services/notification.service.js";
 import { generateCaseId } from "../../utils/case.utils.js";
+import { mergeCaseWhere, assertUsersInOrganisation } from "../../utils/tenantScope.js";
 import { recordAuditLog } from "../../services/audit.service.js";
 import { recordCaseCreated, recordStatusChange, recordAssignmentChange } from "../../services/caseTimeline.service.js";
 
@@ -82,10 +83,23 @@ export const createCase = async (req, res) => {
       });
     }
 
-    const caseId = await generateCaseId();
+    const organisationId = req.user?.organisation_id != null ? Number(req.user.organisation_id) : null;
+    try {
+      await assertUsersInOrganisation(candidateId, sponsorId, organisationId);
+    } catch (tenantErr) {
+      const code = tenantErr.status || 403;
+      return res.status(code).json({
+        status: "error",
+        message: tenantErr.message || "Tenant validation failed",
+        data: null,
+      });
+    }
+
+    const caseId = await generateCaseId(organisationId);
 
     const newCase = await Case.create({
       caseId,
+      organisation_id: organisationId,
       candidateId,
       sponsorId,
       visaTypeId,
@@ -206,7 +220,7 @@ export const getCasesWithFilters = async (req, res) => {
     if (sponsorId) whereClause.sponsorId = sponsorId;
 
     const { count, rows: cases } = await Case.findAndCountAll({
-      where: whereClause,
+      where: mergeCaseWhere(req, whereClause),
       order: [["created_at", "DESC"]],
       limit: parseInt(limit),
       offset: parseInt(offset),
@@ -279,7 +293,7 @@ export const getAllCases = async (req, res) => {
     if (visaType) whereClause.visaType = visaType;
 
     const { count, rows: cases } = await Case.findAndCountAll({
-      where: whereClause,
+      where: mergeCaseWhere(req, whereClause),
       order: [["created_at", "DESC"]],
       limit: parseInt(limit),
       offset: parseInt(offset),
@@ -308,10 +322,10 @@ export const getAllCases = async (req, res) => {
     });
 
     // Get case statistics
-    const totalCount = await Case.count();
-    const pendingCount = await Case.count({ where: { status: 'Pending' } });
-    const approvedCount = await Case.count({ where: { status: 'Completed' } });
-    const rejectedCount = await Case.count({ where: { status: 'Cancelled' } });
+    const totalCount = await Case.count({ where: mergeCaseWhere(req, {}) });
+    const pendingCount = await Case.count({ where: mergeCaseWhere(req, { status: 'Pending' }) });
+    const approvedCount = await Case.count({ where: mergeCaseWhere(req, { status: 'Completed' }) });
+    const rejectedCount = await Case.count({ where: mergeCaseWhere(req, { status: 'Cancelled' }) });
 
     res.status(200).json({
       status: "success",
@@ -350,7 +364,7 @@ export const getCaseById = async (req, res) => {
     const { id } = req.params;
 
     const caseData = (await Case.findOne({ 
-      where: { caseId: id },
+      where: mergeCaseWhere(req, { caseId: id }),
       include: [
         {
           model: db.User,
@@ -373,7 +387,8 @@ export const getCaseById = async (req, res) => {
           attributes: ['id', 'name']
         }
       ]
-    })) || (!isNaN(parseInt(id)) ? await Case.findByPk(id, {
+    })) || (!isNaN(parseInt(id)) ? await Case.findOne({
+      where: mergeCaseWhere(req, { id: parseInt(id, 10) }),
       include: [
         {
           model: db.User,
@@ -428,8 +443,8 @@ export const updateCase = async (req, res) => {
     const { id } = req.params;
     console.log("Update Case - Request received for ID:", id);
     
-    const caseData = (await Case.findOne({ where: { caseId: id } })) || 
-                     (!isNaN(parseInt(id)) ? await Case.findByPk(id) : null);
+    const caseData = (await Case.findOne({ where: mergeCaseWhere(req, { caseId: id }) })) || 
+                     (!isNaN(parseInt(id)) ? await Case.findOne({ where: mergeCaseWhere(req, { id: parseInt(id, 10) }) }) : null);
     console.log("Update Case - Found case:", caseData?.caseId);
 
     if (!caseData) {
@@ -589,8 +604,8 @@ export const deleteCase = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const caseData = (await Case.findOne({ where: { caseId: id } })) || 
-                     (!isNaN(parseInt(id)) ? await Case.findByPk(id) : null);
+    const caseData = (await Case.findOne({ where: mergeCaseWhere(req, { caseId: id }) })) || 
+                     (!isNaN(parseInt(id)) ? await Case.findOne({ where: mergeCaseWhere(req, { id: parseInt(id, 10) }) }) : null);
 
     if (!caseData) {
       return res.status(404).json({
@@ -622,6 +637,7 @@ export const deleteCase = async (req, res) => {
 export const getPipelineCases = async (req, res) => {
   try {
     const cases = await Case.findAll({
+      where: mergeCaseWhere(req, {}),
       include: [
         {
           model: db.User,
@@ -684,8 +700,8 @@ export const updatePipelineStage = async (req, res) => {
 
     console.log(`Update Pipeline Stage - Case ID: ${id}, New Status: ${status}`);
 
-    const caseData = (await Case.findOne({ where: { caseId: id } })) || 
-                     (!isNaN(parseInt(id)) ? await Case.findByPk(id) : null);
+    const caseData = (await Case.findOne({ where: mergeCaseWhere(req, { caseId: id }) })) || 
+                     (!isNaN(parseInt(id)) ? await Case.findOne({ where: mergeCaseWhere(req, { id: parseInt(id, 10) }) }) : null);
 
     if (!caseData) {
       console.log(`Case not found with ID: ${id}`);
@@ -733,7 +749,7 @@ export const exportCases = async (req, res) => {
     }
 
     const cases = await Case.findAll({
-      where: whereClause,
+      where: mergeCaseWhere(req, whereClause),
       include: [
         {
           model: db.User,
@@ -833,11 +849,11 @@ export const getTeamCapacity = async (req, res) => {
   try {
     const cases = await Case.findAll({
       attributes: ['assignedcaseworkerId'],
-      where: {
+      where: mergeCaseWhere(req, {
         status: {
           [Op.notIn]: ['Approved', 'Rejected'] // Only active Cases
         }
-      }
+      })
     });
 
     const userIds = new Set();
@@ -893,8 +909,8 @@ export const assignCase = async (req, res) => {
     const { id } = req.params;
     const { assignTo, assignToName, reason } = req.body;
 
-    const caseData = (await Case.findOne({ where: { caseId: id } })) || 
-                     (!isNaN(parseInt(id)) ? await Case.findByPk(id) : null);
+    const caseData = (await Case.findOne({ where: mergeCaseWhere(req, { caseId: id }) })) || 
+                     (!isNaN(parseInt(id)) ? await Case.findOne({ where: mergeCaseWhere(req, { id: parseInt(id, 10) }) }) : null);
 
     if (!caseData) return res.status(404).json({ status: "error", message: "Case not found" });
 
@@ -942,6 +958,7 @@ export const assignCase = async (req, res) => {
 export const getCasesDropdown = async (req, res) => {
   try {
     const cases = await Case.findAll({
+      where: mergeCaseWhere(req, {}),
       attributes: ['id', 'caseId', 'candidateId', 'sponsorId'],
       include: [
         {

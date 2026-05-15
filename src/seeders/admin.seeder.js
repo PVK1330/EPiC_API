@@ -34,6 +34,9 @@ export default async function seedAdmin() {
     const adminPassword = process.env.ADMIN_DEFAULT_PASSWORD || "Admin@123";
     const hashedPassword = await bcrypt.hash(adminPassword, 12);
 
+    const defaultOrg = await db.Organisation.findOne({ where: { slug: "epic-default" } });
+    const defaultOrgId = defaultOrg?.id ?? null;
+
     const testUsers = [
       {
         email: "superadmin@epic.com",
@@ -73,6 +76,7 @@ export default async function seedAdmin() {
     ];
 
     for (const u of testUsers) {
+      const organisation_id = u.role_id === 5 ? null : defaultOrgId;
       const [user, created] = await db.User.findOrCreate({
         where: { email: u.email },
         defaults: {
@@ -82,12 +86,17 @@ export default async function seedAdmin() {
           is_otp_verified: true,
           is_email_verified: true,
           status: "active",
+          organisation_id,
         },
       });
 
       if (!created) {
         // Enforce the test password even if the user already existed
-        await user.update({ password: hashedPassword, role_id: u.role_id });
+        await user.update({
+          password: hashedPassword,
+          role_id: u.role_id,
+          organisation_id,
+        });
         console.log(`✔ Updated existing user: ${u.email} (Password set to Admin@123)`);
       } else {
         console.log(`✔ Created new user: ${u.email} / Admin@123`);

@@ -1,24 +1,16 @@
 import express from 'express';
 import { verifyToken } from '../middlewares/auth.middleware.js';
 import { isSuperAdmin } from '../middlewares/isSuperAdmin.js';
+import * as orgController from '../controllers/superadminOrganisation.controller.js';
 
 const router = express.Router();
 
-// All routes here require superadmin privileges
 router.use(verifyToken, isSuperAdmin);
 
-// Placeholder controllers (to be implemented)
-router.get('/organisations', (req, res) => {
-  res.json({ status: 'success', message: 'List all organizations (scaffold)' });
-});
-
-router.post('/organisations', (req, res) => {
-  res.json({ status: 'success', message: 'Create organization (scaffold)' });
-});
-
-router.patch('/organisations/:id', (req, res) => {
-  res.json({ status: 'success', message: 'Update organization (scaffold)' });
-});
+router.get('/organisations', orgController.listOrganisations);
+router.post('/organisations', orgController.createOrganisation);
+router.patch('/organisations/:id', orgController.updateOrganisation);
+router.post('/organisations/:id/admins', orgController.createOrganisationAdmin);
 
 router.get('/audit-log', (req, res) => {
   res.json({ status: 'success', message: 'Global audit log (scaffold)' });

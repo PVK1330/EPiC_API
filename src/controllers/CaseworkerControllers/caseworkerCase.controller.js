@@ -1,6 +1,7 @@
 import db from "../../models/index.js";
 import { Op } from "sequelize";
 import { ROLES } from "../../middlewares/role.middleware.js";
+import { mergeCaseWhere, assertUsersInOrganisation } from "../../utils/tenantScope.js";
 
 const Case = db.Case;
 const Document = db.Document;
@@ -22,19 +23,19 @@ const buildCaseworkerWhereClause = (userId) => {
   };
 };
 
-// Generate unique case ID
-const generateCaseId = async () => {
+// Generate unique case ID (scoped to organisation when present on request)
+const generateCaseId = async (req) => {
   const prefix = "C";
   const today = new Date();
   const year = today.getFullYear().toString().slice(-2);
   const month = (today.getMonth() + 1).toString().padStart(2, "0");
   
   const lastCase = await Case.findOne({
-    where: {
+    where: mergeCaseWhere(req, {
       caseId: {
         [Op.like]: `${prefix}-${year}${month}%`
       }
-    },
+    }),
     order: [['caseId', 'DESC']]
   });
   
@@ -133,7 +134,7 @@ export const getMyCases = async (req, res) => {
     }
 
     const { count, rows: cases } = await Case.findAndCountAll({
-      where: whereClause,
+      where: mergeCaseWhere(req, whereClause),
       order,
       limit: parseInt(limit),
       offset: parseInt(offset),
@@ -191,25 +192,25 @@ export const getMyCases = async (req, res) => {
 
     // Get statistics for the caseworker's cases
     const myTotal = await Case.count({
-      where: buildCaseworkerWhereClause(userId)
+      where: mergeCaseWhere(req, buildCaseworkerWhereClause(userId))
     });
     const myActive = await Case.count({
-      where: { 
+      where: mergeCaseWhere(req, { 
         ...buildCaseworkerWhereClause(userId),
         status: { [Op.in]: ['Pending', 'In Progress', 'Under Review'] }
-      }
+      })
     });
     const myOverdue = await Case.count({
-      where: { 
+      where: mergeCaseWhere(req, { 
         ...buildCaseworkerWhereClause(userId),
         status: 'Overdue'
-      }
+      })
     });
     const myCompleted = await Case.count({
-      where: { 
+      where: mergeCaseWhere(req, { 
         ...buildCaseworkerWhereClause(userId),
         status: { [Op.in]: ['Approved', 'Rejected', 'Closed'] }
-      }
+      })
     });
 
     res.status(200).json({
@@ -275,41 +276,41 @@ export const getMyDashboardStats = async (req, res) => {
 
     // Get all assigned cases
     const myTotal = await Case.count({
-      where: buildCaseworkerWhereClause(userId)
+      where: mergeCaseWhere(req, buildCaseworkerWhereClause(userId))
     });
 
     // Get active cases
     const myActive = await Case.count({
-      where: { 
+      where: mergeCaseWhere(req, { 
         ...buildCaseworkerWhereClause(userId),
         status: { [Op.in]: ['Pending', 'In Progress', 'Under Review'] }
-      }
+      })
     });
 
     // Get overdue cases
     const myOverdue = await Case.count({
-      where: { 
+      where: mergeCaseWhere(req, { 
         ...buildCaseworkerWhereClause(userId),
         status: 'Overdue'
-      }
+      })
     });
 
     // Get due today cases
     const myDueToday = await Case.count({
-      where: { 
+      where: mergeCaseWhere(req, { 
         ...buildCaseworkerWhereClause(userId),
         targetSubmissionDate: todayStr
-      }
+      })
     });
 
     // Get completed this month
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     const myCompletedMonth = await Case.count({
-      where: { 
+      where: mergeCaseWhere(req, { 
         ...buildCaseworkerWhereClause(userId),
         status: { [Op.in]: ['Approved', 'Rejected', 'Closed'] },
         updated_at: { [Op.gte]: startOfMonth }
-      }
+      })
     });
 
     // Get tasks due today for this caseworker
@@ -338,20 +339,20 @@ export const getMyDashboardStats = async (req, res) => {
 
     // Calculate SLA compliance (cases completed on time)
     const completedOnTime = await Case.count({
-      where: {
+      where: mergeCaseWhere(req, {
         ...buildCaseworkerWhereClause(userId),
         status: { [Op.in]: ['Approved', 'Rejected', 'Closed'] },
         [Op.or]: [
           { targetSubmissionDate: null },
           { decisionDate: { [Op.lte]: db.sequelize.col('targetSubmissionDate') } }
         ]
-      }
+      })
     });
     const totalCompleted = await Case.count({
-      where: {
+      where: mergeCaseWhere(req, {
         ...buildCaseworkerWhereClause(userId),
         status: { [Op.in]: ['Approved', 'Rejected', 'Closed'] }
-      }
+      })
     });
     const slaCompliance = totalCompleted > 0 ? (completedOnTime / totalCompleted) * 100 : 0;
 
@@ -360,7 +361,7 @@ export const getMyDashboardStats = async (req, res) => {
 
     // Get recent cases (last 5)
     const recentCases = await Case.findAll({
-      where: buildCaseworkerWhereClause(userId),
+      where: mergeCaseWhere(req, buildCaseworkerWhereClause(userId)),
       order: [['created_at', 'DESC']],
       limit: 5,
       include: [
@@ -463,7 +464,7 @@ export const getMyPipelineCases = async (req, res) => {
     }
 
     const cases = await Case.findAll({
-      where: buildCaseworkerWhereClause(userId),
+      where: mergeCaseWhere(req, buildCaseworkerWhereClause(userId)),
       order: [['created_at', 'DESC']],
       include: [
         {
@@ -537,15 +538,15 @@ export const updateMyCaseStatus = async (req, res) => {
     const { status, notes } = req.body;
 
     const caseData = await Case.findOne({ 
-      where: { 
+      where: mergeCaseWhere(req, { 
         caseId: id,
         ...buildCaseworkerWhereClause(userId)
-      } 
+      })
     }) || await Case.findOne({ 
-      where: { 
+      where: mergeCaseWhere(req, { 
         id: id,
         ...buildCaseworkerWhereClause(userId)
-      } 
+      })
     });
 
     if (!caseData) {
@@ -645,8 +646,20 @@ export const createMyCase = async (req, res) => {
       });
     }
 
+    const organisationId = req.user?.organisation_id != null ? Number(req.user.organisation_id) : null;
+    try {
+      await assertUsersInOrganisation(candidateId, sponsorId, organisationId);
+    } catch (tenantErr) {
+      const code = tenantErr.status || 403;
+      return res.status(code).json({
+        status: "error",
+        message: tenantErr.message || "Tenant validation failed",
+        data: null,
+      });
+    }
+
     // Generate case ID
-    const caseId = await generateCaseId();
+    const caseId = await generateCaseId(req);
 
     // Handle caseworker assignment - include the creating caseworker if not specified
     const cwIds = Array.isArray(assignedcaseworkerId) ? assignedcaseworkerId : (assignedcaseworkerId ? [assignedcaseworkerId] : []);
@@ -656,6 +669,7 @@ export const createMyCase = async (req, res) => {
 
     const newCase = await Case.create({
       caseId,
+      organisation_id: organisationId,
       candidateId,
       sponsorId,
       businessId,
@@ -710,15 +724,15 @@ export const updateMyCase = async (req, res) => {
     }
 
     const caseData = await Case.findOne({ 
-      where: { 
+      where: mergeCaseWhere(req, { 
         caseId: id,
         ...buildCaseworkerWhereClause(userId)
-      } 
+      })
     }) || await Case.findOne({ 
-      where: { 
+      where: mergeCaseWhere(req, { 
         id: id,
         ...buildCaseworkerWhereClause(userId)
-      } 
+      })
     });
 
     if (!caseData) {
@@ -807,16 +821,16 @@ export const deleteMyCase = async (req, res) => {
       });
     }
 
-    const caseData = await Case.findOne({ 
-      where: { 
+    const caseData = await Case.findOne({
+      where: mergeCaseWhere(req, {
         caseId: id,
         ...buildCaseworkerWhereClause(userId)
-      } 
-    }) || await Case.findOne({ 
-      where: { 
+      })
+    }) || await Case.findOne({
+      where: mergeCaseWhere(req, {
         id: id,
         ...buildCaseworkerWhereClause(userId)
-      } 
+      })
     });
 
     if (!caseData) {
@@ -864,10 +878,10 @@ export const getCaseDetails = async (req, res) => {
 
     // Get main case details with all relationships (only if assigned to caseworker)
     const caseData = await Case.findOne({
-      where: {
+      where: mergeCaseWhere(req, {
         ...whereClause,
         ...buildCaseworkerWhereClause(userId)
-      },
+      }),
       include: [
         {
           model: User,
@@ -1167,7 +1181,7 @@ export const exportMyCases = async (req, res) => {
     }
 
     const cases = await Case.findAll({
-      where: whereClause,
+      where: mergeCaseWhere(req, whereClause),
       include: [
         {
           model: db.User,

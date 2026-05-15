@@ -21,8 +21,13 @@ export const recordAuditLog = async ({ userId, action, resource, status, details
       }
     }
 
+    const organisation_id =
+      params.organisationId ??
+      (req?.user?.organisation_id != null ? Number(req.user.organisation_id) : null);
+
     await db.AuditLog.create({
       user_id: userId,
+      organisation_id: Number.isNaN(organisation_id) ? null : organisation_id,
       action,
       resource,
       ip_address: ipAddress,

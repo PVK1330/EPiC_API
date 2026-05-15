@@ -1,6 +1,6 @@
 export const isSuperAdmin = (req, res, next) => {
-  // role_id 5 is superadmin
-  if (req.user && (req.user.role_id === 5 || req.user.role === 'superadmin' || req.user.role_name === 'superadmin')) {
+  const rid = Number(req.user?.role_id);
+  if (req.user && (rid === 5 || req.user.role === 'superadmin' || req.user.role_name === 'superadmin')) {
     next();
   } else {
     return res.status(403).json({

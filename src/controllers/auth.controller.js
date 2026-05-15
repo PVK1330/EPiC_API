@@ -5,6 +5,7 @@ import QRCode from 'qrcode';
 import db from '../models/index.js';
 import transporter from '../config/mail.js';
 import { generateOTPTemplate, generateCredentialsTemplate } from '../utils/emailTemplate.js';
+import { buildJwtPayload, resolveDefaultOrganisationId } from '../utils/tenantScope.js';
 
 const User = db.User;
 const UnverifiedUser = db.UnverifiedUser;
@@ -162,6 +163,15 @@ export const verifyOTP = async (req, res) => {
       });
     }
 
+    const orgId = await resolveDefaultOrganisationId();
+    if (!orgId) {
+      return res.status(503).json({
+        status: "error",
+        message: "Registration unavailable: no default organisation configured.",
+        data: null,
+      });
+    }
+
     const loginUrl = `${process.env.FRONTEND_URL}`;
     const originalPassword = 'Use the password you set during registration';
 
@@ -181,19 +191,14 @@ export const verifyOTP = async (req, res) => {
       mobile: unverifiedUser.mobile,
       role_id: unverifiedUser.role_id,
       is_otp_verified: true,
+      organisation_id: orgId,
     });
 
     await unverifiedUser.destroy();
 
-    // Get role name for the payload
     const role = await db.Role.findByPk(verifiedUser.role_id);
 
-    const payload = {
-      userId: verifiedUser.id,
-      email: verifiedUser.email,
-      role_id: verifiedUser.role_id,
-      role_name: role?.name || null,
-    };
+    const payload = buildJwtPayload(verifiedUser, role);
 
     const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "7d" });
 
@@ -207,6 +212,7 @@ export const verifyOTP = async (req, res) => {
       country_code: verifiedUser.country_code,
       mobile: verifiedUser.mobile,
       role_id: verifiedUser.role_id,
+      organisation_id: verifiedUser.organisation_id,
       is_otp_verified: verifiedUser.is_otp_verified,
       createdAt: verifiedUser.createdAt,
     };
@@ -341,12 +347,7 @@ export const login = async (req, res) => {
       });
     }
 
-    const payload = {
-      userId: user.id,
-      email: user.email,
-      role_id: user.role_id,
-      role_name: user.role?.name || null,
-    };
+    const payload = buildJwtPayload(user, user.role);
 
     const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '7d' });
 
@@ -363,6 +364,7 @@ export const login = async (req, res) => {
           email: user.email,
           role_id: user.role_id,
           role_name: user.role?.name,
+          organisation_id: user.organisation_id,
           status: user.status,
           two_factor_enabled: user.two_factor_enabled,
         },
@@ -928,12 +930,7 @@ export const verify2FA = async (req, res) => {
       });
     }
 
-    const payload = {
-      userId: user.id,
-      email: user.email,
-      role_id: user.role_id,
-      role_name: user.role?.name || null,
-    };
+    const payload = buildJwtPayload(user, user.role);
 
     const jwtToken = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '7d' });
 
@@ -956,6 +953,7 @@ export const verify2FA = async (req, res) => {
           role_id: user.role_id,
           role_name: user.role?.name,
           status: user.status,
+          organisation_id: user.organisation_id,
           two_factor_enabled: true,
         },
         token: jwtToken,

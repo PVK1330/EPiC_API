@@ -1,5 +1,6 @@
 import db from '../../models/index.js';
 import { Op } from 'sequelize';
+import { mergeCaseWhere } from '../../utils/tenantScope.js';
 
 const { User, Case, SponsorProfile, LicenceApplication, CasePayment } = db;
 const INACTIVE = ['Cancelled', 'Closed', 'Rejected'];
@@ -17,12 +18,12 @@ export const getDashboard = async (req, res) => {
     const [profile, activeCases, totalCases, pendingLicences, overdueCount, recentCases, approvedLicence] =
       await Promise.all([
         SponsorProfile.findOne({ where: { userId } }),
-        Case.count({ where: { sponsorId: userId, status: { [Op.notIn]: INACTIVE } } }),
-        Case.count({ where: { sponsorId: userId } }),
+        Case.count({ where: mergeCaseWhere(req, { sponsorId: userId, status: { [Op.notIn]: INACTIVE } }) }),
+        Case.count({ where: mergeCaseWhere(req, { sponsorId: userId }) }),
         LicenceApplication.count({ where: { userId, status: 'Pending' } }),
-        Case.count({ where: { sponsorId: userId, status: 'Overdue' } }),
+        Case.count({ where: mergeCaseWhere(req, { sponsorId: userId, status: 'Overdue' }) }),
         Case.findAll({
-          where: { sponsorId: userId },
+          where: mergeCaseWhere(req, { sponsorId: userId }),
           include: [{ model: User, as: 'candidate', attributes: ['first_name', 'last_name', 'email'] }],
           order: [['created_at', 'DESC']],
           limit: 5
@@ -65,7 +66,7 @@ export const getBusinessCases = async (req, res) => {
     const userId = uid(req);
     if (!userId) return res.status(401).json({ status: 'error', message: 'Invalid session' });
     const { page = 1, limit = 10, status } = req.query;
-    const where = { sponsorId: userId };
+    const where = mergeCaseWhere(req, { sponsorId: userId });
     if (status) where.status = status;
     const { count, rows } = await Case.findAndCountAll({
       where,
@@ -90,7 +91,7 @@ export const getComplianceSummary = async (req, res) => {
     const [profile, cases] = await Promise.all([
       SponsorProfile.findOne({ where: { userId } }),
       Case.findAll({
-        where: { sponsorId: userId },
+        where: mergeCaseWhere(req, { sponsorId: userId }),
         include: [
           { model: User, as: 'candidate', attributes: ['id', 'first_name', 'last_name', 'email'] },
           { model: db.CandidateApplication, as: 'application', attributes: ['visaType', 'visaEndDate', 'nationality'] }
@@ -298,7 +299,7 @@ export const getBusinessPayments = async (req, res) => {
     if (!userId) return res.status(401).json({ status: 'error', message: 'Invalid session' });
 
     const sponsorCases = await Case.findAll({
-      where: { sponsorId: userId },
+      where: mergeCaseWhere(req, { sponsorId: userId }),
       attributes: ['id', 'caseId']
     });
     const caseIds = sponsorCases.map((c) => c.id);
