@@ -5,6 +5,26 @@ import { buildDb } from "../models/buildDb.js";
 
 const { Client } = pkg;
 
+const TENANT_ROLE_ROWS = [
+  { id: 1, name: "candidate" },
+  { id: 2, name: "caseworker" },
+  { id: 3, name: "admin" },
+  { id: 4, name: "business" },
+  { id: 5, name: "superadmin" },
+];
+
+/**
+ * When true, POST /api/superadmin/organisations creates a dedicated PostgreSQL database.
+ * Set ENABLE_TENANT_PHYSICAL_DATABASE=false to disable (shared catalog only).
+ */
+export function isPhysicalTenantDatabaseEnabled() {
+  const raw = process.env.ENABLE_TENANT_PHYSICAL_DATABASE;
+  if (raw === undefined || raw === null || String(raw).trim() === "") {
+    return true;
+  }
+  return String(raw).toLowerCase() === "true";
+}
+
 /**
  * PostgreSQL-safe database name: lowercase [a-z0-9_], max 63 chars, starts with letter.
  * @param {string} slug
@@ -71,18 +91,62 @@ export async function createTenantPostgresDatabase(databaseName) {
  * Applies Sequelize schema (sync) to a tenant database. Closes the connection when done.
  * @param {string} databaseName
  */
-export async function syncTenantDatabaseSchema(databaseName) {
+function createTenantSequelize(databaseName) {
   const env = process.env.NODE_ENV || "development";
   const c = config[env];
-  const tenantSeq = new Sequelize(databaseName, c.username, c.password, {
+  return new Sequelize(databaseName, c.username, c.password, {
     host: c.host,
     port: c.port,
     dialect: "postgres",
     logging: false,
   });
+}
+
+export async function syncTenantDatabaseSchema(databaseName) {
+  const tenantSeq = createTenantSequelize(databaseName);
   buildDb(tenantSeq);
   await tenantSeq.sync();
   await tenantSeq.close();
+}
+
+/**
+ * Minimal bootstrap data every tenant DB needs (roles for FKs / auth).
+ * @param {string} databaseName
+ */
+export async function seedTenantDatabaseBootstrap(databaseName) {
+  const tenantSeq = createTenantSequelize(databaseName);
+  const tenantDb = buildDb(tenantSeq);
+  for (const role of TENANT_ROLE_ROWS) {
+    await tenantDb.Role.findOrCreate({
+      where: { id: role.id },
+      defaults: role,
+    });
+  }
+  await tenantSeq.close();
+}
+
+/**
+ * Create PostgreSQL database + apply schema + bootstrap seed for a new organisation slug.
+ * @param {string} slug
+ * @returns {Promise<{ databaseName: string, created: boolean, schemaSynced: boolean }>}
+ */
+export async function provisionOrganisationTenantDatabase(slug) {
+  const databaseName = buildPhysicalTenantDatabaseName(slug);
+  const { created } = await createTenantPostgresDatabase(databaseName);
+  try {
+    await syncTenantDatabaseSchema(databaseName);
+    await seedTenantDatabaseBootstrap(databaseName);
+    return { databaseName, created, schemaSynced: true };
+  } catch (err) {
+    if (created) {
+      try {
+        await dropTenantPostgresDatabase(databaseName);
+      } catch (_) {
+        /* rollback */
+      }
+    }
+    throw err;
+  }
 }
 
 /**

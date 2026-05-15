@@ -2,9 +2,8 @@ import { Op } from "sequelize";
 import bcrypt from "bcryptjs";
 import db from "../models/index.js";
 import {
-  buildPhysicalTenantDatabaseName,
-  createTenantPostgresDatabase,
-  syncTenantDatabaseSchema,
+  isPhysicalTenantDatabaseEnabled,
+  provisionOrganisationTenantDatabase,
   dropTenantPostgresDatabase,
 } from "../services/tenantDatabaseProvision.service.js";
 const Organisation = db.Organisation;
@@ -63,24 +62,17 @@ export const createOrganisation = async (req, res) => {
     if (exists) {
       finalSlug = `${finalSlug}-${Date.now().toString(36)}`;
     }
-    const physicalEnabled = process.env.ENABLE_TENANT_PHYSICAL_DATABASE === "true";
+    const physicalEnabled = isPhysicalTenantDatabaseEnabled();
     let databaseName = null;
+    let provisionMeta = null;
+
     if (physicalEnabled) {
-      databaseName = buildPhysicalTenantDatabaseName(finalSlug);
+      provisionMeta = await provisionOrganisationTenantDatabase(finalSlug);
+      databaseName = provisionMeta.databaseName;
     }
 
     let org;
     try {
-      if (physicalEnabled && databaseName) {
-        await createTenantPostgresDatabase(databaseName);
-        try {
-          await syncTenantDatabaseSchema(databaseName);
-        } catch (syncErr) {
-          await dropTenantPostgresDatabase(databaseName);
-          throw syncErr;
-        }
-      }
-
       org = await Organisation.create({
         name: String(name).trim(),
         slug: finalSlug,
@@ -105,17 +97,27 @@ export const createOrganisation = async (req, res) => {
       status: "success",
       message: physicalEnabled
         ? "Organisation created with dedicated PostgreSQL database (schema synced)."
-        : "Organisation created",
+        : "Organisation created (shared database; physical tenants disabled).",
       data: {
         organisation: org,
-        ...(physicalEnabled && databaseName ? { tenant_database: databaseName } : {}),
+        ...(physicalEnabled && databaseName
+          ? {
+              tenant_database: databaseName,
+              database_created: provisionMeta?.created ?? false,
+            }
+          : {}),
       },
     });
   } catch (err) {
     console.error("createOrganisation", err);
-    return res.status(500).json({
+    const msg = err?.message || "Failed to create organisation";
+    const permissionDenied =
+      /permission denied|must be owner|createdb|insufficient privilege/i.test(msg);
+    return res.status(permissionDenied ? 503 : 500).json({
       status: "error",
-      message: err?.message || "Failed to create organisation",
+      message: permissionDenied
+        ? "Could not create tenant database. Grant CREATEDB to DB_USER or set TENANT_DB_CREATOR_USER with superuser rights."
+        : msg,
       data: null,
     });
   }
