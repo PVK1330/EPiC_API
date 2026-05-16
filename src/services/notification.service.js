@@ -1,13 +1,8 @@
-import db from '../models/index.js';
 import transporter from '../config/mail.js';
 import { generateNotificationEmailTemplate } from '../utils/emailTemplate.js';
 
-const Notification = db.Notification;
-const User = db.User;
-const Role = db.Role;
-
-const sendNotificationEmailToUser = async (userId, notification) => {
-  const user = await User.findByPk(userId, {
+const sendNotificationEmailToUser = async (tenantDb, userId, notification) => {
+  const user = await tenantDb.User.findByPk(userId, {
     attributes: ['id', 'email', 'first_name', 'last_name', 'status'],
   });
 
@@ -88,6 +83,7 @@ export const NotificationPriority = {
 export const createNotification = async (data) => {
   try {
     const {
+      tenantDb,
       userId,
       roleId,
       type = NotificationTypes.INFO,
@@ -102,6 +98,10 @@ export const createNotification = async (data) => {
       scheduledFor,
       expiresAt,
     } = data;
+
+    if (!tenantDb) {
+      throw new Error('tenantDb is required');
+    }
 
     if (!userId) {
       throw new Error('userId is required');
@@ -128,15 +128,15 @@ export const createNotification = async (data) => {
       sentAt: scheduledFor ? null : new Date(),
     };
 
-    const notification = await Notification.create(notificationData);
+    const notification = await tenantDb.Notification.create(notificationData);
 
     // If email sending is enabled, send email immediately for non-scheduled notifications.
     if (sendEmail && !scheduledFor) {
       (async () => {
         try {
-          const sent = await sendNotificationEmailToUser(userId, notification);
+          const sent = await sendNotificationEmailToUser(tenantDb, userId, notification);
           if (sent) {
-            await notification.update({ emailSent: true });
+            await tenantDb.Notification.update({ emailSent: true });
           }
         } catch (emailError) {
           console.error(`Email send failed for notification ${notification.id}:`, emailError);
@@ -148,20 +148,20 @@ export const createNotification = async (data) => {
     if (!data.isInternalAdminOnly && !scheduledFor) {
       (async () => {
         try {
-          const adminRole = await db.Role.findOne({ where: { name: { [db.Sequelize.Op.iLike]: 'admin' } } });
+          const adminRole = await tenantDb.Role.findOne({ where: { name: { [tenantDb.Sequelize.Op.iLike]: 'admin' } } });
           if (adminRole) {
             // Find all admin users EXCEPT the one who might already be the recipient
-            const admins = await db.User.findAll({
+            const admins = await tenantDb.User.findAll({
               where: {
                 role_id: adminRole.id,
-                id: { [db.Sequelize.Op.ne]: userId },
+                id: { [tenantDb.Sequelize.Op.ne]: userId },
                 status: 'active'
               },
               attributes: ['id']
             });
 
             for (const admin of admins) {
-              await Notification.create({
+              await tenantDb.Notification.create({
                 ...notificationData,
                 userId: admin.id,
                 emailSent: false, // Don't spam admin emails for every single user notification
@@ -192,18 +192,20 @@ export const notifyUser = async (userId, notificationData) => {
   });
 };
 
-export const notifyAdmins = async (notificationData) => {
+export const notifyAdmins = async (tenantDb, notificationData) => {
   try {
-    const adminRole = await db.Role.findOne({ where: { name: { [db.Sequelize.Op.iLike]: 'admin' } } });
+    if (!tenantDb) throw new Error('tenantDb is required');
+    const adminRole = await tenantDb.Role.findOne({ where: { name: { [tenantDb.Sequelize.Op.iLike]: 'admin' } } });
     if (!adminRole) return;
 
-    const admins = await db.User.findAll({
+    const admins = await tenantDb.User.findAll({
       where: { role_id: adminRole.id, status: 'active' },
       attributes: ['id']
     });
 
     for (const admin of admins) {
       await createNotification({
+        tenantDb,
         ...notificationData,
         userId: admin.id,
       });
@@ -221,6 +223,9 @@ export const notifyAdmins = async (notificationData) => {
  */
 export const createBulkNotifications = async (userIds, notificationData) => {
   try {
+    if (!notificationData?.tenantDb) {
+      throw new Error('tenantDb is required in notificationData');
+    }
     const notifications = await Promise.all(
       userIds.map((userId) =>
         createNotification({
@@ -244,7 +249,9 @@ export const createBulkNotifications = async (userIds, notificationData) => {
  */
 export const createNotificationForRole = async (roleId, notificationData) => {
   try {
-    const users = await User.findAll({
+    const { tenantDb } = notificationData;
+    if (!tenantDb) throw new Error('tenantDb is required');
+    const users = await tenantDb.User.findAll({
       where: { role_id: roleId, status: 'active' },
       attributes: ['id'],
     });
@@ -267,7 +274,9 @@ export const createNotificationForRole = async (roleId, notificationData) => {
  */
 export const createNotificationForAllUsers = async (notificationData) => {
   try {
-    const users = await User.findAll({
+    const { tenantDb } = notificationData;
+    if (!tenantDb) throw new Error('tenantDb is required');
+    const users = await tenantDb.User.findAll({
       where: { status: 'active' },
       attributes: ['id'],
     });
@@ -288,9 +297,9 @@ export const createNotificationForAllUsers = async (notificationData) => {
  * @param {number} notificationId - Notification ID
  * @returns {Promise<Object>} Updated notification
  */
-export const markAsRead = async (notificationId) => {
+export const markAsRead = async (tenantDb, notificationId) => {
   try {
-    const notification = await Notification.findByPk(notificationId);
+    const notification = await tenantDb.Notification.findByPk(notificationId);
     if (!notification) {
       throw new Error('Notification not found');
     }
@@ -312,9 +321,9 @@ export const markAsRead = async (notificationId) => {
  * @param {number} userId - User ID
  * @returns {Promise<number>} Number of updated notifications
  */
-export const markAllAsRead = async (userId) => {
+export const markAllAsRead = async (tenantDb, userId) => {
   try {
-    const [count] = await Notification.update(
+    const [count] = await tenantDb.Notification.update(
       {
         isRead: true,
         readAt: new Date(),
@@ -338,9 +347,9 @@ export const markAllAsRead = async (userId) => {
  * @param {number} notificationId - Notification ID
  * @returns {Promise<boolean>} Success status
  */
-export const deleteNotification = async (notificationId) => {
+export const deleteNotification = async (tenantDb, notificationId) => {
   try {
-    const notification = await Notification.findByPk(notificationId);
+    const notification = await tenantDb.Notification.findByPk(notificationId);
     if (!notification) {
       throw new Error('Notification not found');
     }
@@ -358,9 +367,9 @@ export const deleteNotification = async (notificationId) => {
  * @param {number} userId - User ID
  * @returns {Promise<number>} Unread count
  */
-export const getUnreadCount = async (userId) => {
+export const getUnreadCount = async (tenantDb, userId) => {
   try {
-    const count = await Notification.count({
+    const count = await tenantDb.Notification.count({
       where: {
         userId,
         isRead: false,
@@ -379,7 +388,7 @@ export const getUnreadCount = async (userId) => {
  * @param {Object} options - Query options
  * @returns {Promise<Object>} Notifications with pagination
  */
-export const getUserNotifications = async (userId, options = {}) => {
+export const getUserNotifications = async (tenantDb, userId, options = {}) => {
   try {
     const {
       page = 1,
@@ -398,16 +407,16 @@ export const getUserNotifications = async (userId, options = {}) => {
       ...(priority && { priority }),
     };
 
-    const { count, rows: notifications } = await Notification.findAndCountAll({
+    const { count, rows: notifications } = await tenantDb.Notification.findAndCountAll({
       where: whereClause,
       include: [
         {
-          model: User,
+          model: tenantDb.User,
           as: 'user',
           attributes: ['id', 'first_name', 'last_name', 'email'],
         },
         {
-          model: Role,
+          model: tenantDb.Role,
           as: 'role',
           attributes: ['id', 'name'],
         },
@@ -436,14 +445,14 @@ export const getUserNotifications = async (userId, options = {}) => {
  * Process scheduled notifications (to be called by a cron job)
  * @returns {Promise<number>} Number of processed notifications
  */
-export const processScheduledNotifications = async () => {
+export const processScheduledNotifications = async (tenantDb) => {
   try {
+    if (!tenantDb) throw new Error('tenantDb is required');
+    const { Op } = tenantDb.Sequelize;
     const now = new Date();
-    const dueNotifications = await Notification.findAll({
+    const dueNotifications = await tenantDb.Notification.findAll({
       where: {
-        scheduledFor: {
-          [db.Sequelize.Op.lte]: now,
-        },
+        scheduledFor: { [Op.lte]: now },
         sentAt: null,
       },
       order: [['scheduledFor', 'ASC']],
@@ -457,7 +466,7 @@ export const processScheduledNotifications = async () => {
       let emailSent = false;
       if (notification.sendEmail) {
         try {
-          emailSent = await sendNotificationEmailToUser(notification.userId, notification);
+          emailSent = await sendNotificationEmailToUser(tenantDb, notification.userId, notification);
         } catch (emailError) {
           console.error(`Scheduled email send failed for notification ${notification.id}:`, emailError);
         }
@@ -480,17 +489,16 @@ export const processScheduledNotifications = async () => {
  * Delete expired notifications (to be called by a cron job)
  * @returns {Promise<number>} Number of deleted notifications
  */
-export const deleteExpiredNotifications = async () => {
+export const deleteExpiredNotifications = async (tenantDb) => {
   try {
+    if (!tenantDb) throw new Error('tenantDb is required');
+    const { Op } = tenantDb.Sequelize;
     const now = new Date();
-    const count = await Notification.destroy({
+    return await tenantDb.Notification.destroy({
       where: {
-        expiresAt: {
-          [db.Sequelize.Op.lt]: now,
-        },
+        expiresAt: { [Op.lt]: now },
       },
     });
-    return count;
   } catch (error) {
     console.error('Error deleting expired notifications:', error);
     throw error;
@@ -504,12 +512,13 @@ export const deleteExpiredNotifications = async () => {
  * @param {number} caseworkerId - Caseworker user ID
  * @param {Object} caseData - Case information
  */
-export const notifyCaseAssigned = async (caseworkerId, caseData) => {
+export const notifyCaseAssigned = async (tenantDb, caseworkerId, caseData) => {
   const safeCaseId = caseData?.caseId || caseData?.id || 'Unknown';
   const safeCandidateName = caseData?.candidateName || 'a candidate';
   const safeVisaType = caseData?.visaType || 'Not specified';
   
   return await createNotification({
+    tenantDb,
     userId: caseworkerId,
     type: NotificationTypes.CASE_ASSIGNED,
     priority: NotificationPriority.HIGH,
@@ -531,15 +540,17 @@ export const notifyCaseAssigned = async (caseworkerId, caseData) => {
  * Send notification when a new case is created
  * @param {Object} caseData - Case information
  */
-export const notifyCaseCreated = async (caseData) => {
+export const notifyCaseCreated = async (tenantDb, caseData) => {
   const safeCaseId = caseData?.caseId || 'Unknown';
   const safeCandidateName = caseData?.candidateName || 'a candidate';
   
   // Notify all Admins
   try {
-    const adminRole = await db.Role.findOne({ where: { name: { [db.Sequelize.Op.iLike]: 'admin' } } });
+    if (!tenantDb) throw new Error('tenantDb is required');
+    const adminRole = await tenantDb.Role.findOne({ where: { name: { [tenantDb.Sequelize.Op.iLike]: 'admin' } } });
     if (adminRole) {
       await createNotificationForRole(adminRole.id, {
+        tenantDb,
         type: NotificationTypes.CASE_CREATED,
         priority: NotificationPriority.HIGH,
         title: `New Case Created: ${safeCaseId}`,
@@ -567,13 +578,14 @@ export const notifyCaseCreated = async (caseData) => {
  * @param {string} oldStatus - Previous status
  * @param {string} newStatus - New status
  */
-export const notifyCaseStatusChanged = async (userIds, caseData, oldStatus, newStatus) => {
+export const notifyCaseStatusChanged = async (tenantDb, userIds, caseData, oldStatus, newStatus) => {
   const safeCaseId = caseData?.caseId || caseData?.id || 'Unknown';
   const safeOldStatus = oldStatus || 'Unknown';
   const safeNewStatus = newStatus || 'Unknown';
   const safeCandidateName = caseData?.candidateName || 'Not specified';
   
   return await createBulkNotifications(userIds, {
+    tenantDb,
     type: NotificationTypes.CASE_STATUS_CHANGED,
     priority: NotificationPriority.HIGH,
     title: `Case Status Updated: ${safeCaseId}`,
@@ -654,12 +666,13 @@ export const notifyPaymentOverdue = async (userId, paymentData) => {
  * @param {number} userId - User ID to notify
  * @param {Object} documentData - Document information
  */
-export const notifyDocumentUploaded = async (userId, documentData) => {
+export const notifyDocumentUploaded = async (tenantDb, userId, documentData) => {
   const safeFileName = documentData?.fileName || 'Unknown file';
   const safeCaseId = documentData?.caseId || 'your case';
   const safeUploadedBy = documentData?.uploadedBy || 'Unknown';
   
   return await createNotification({
+    tenantDb,
     userId,
     type: NotificationTypes.DOCUMENT_UPLOADED,
     priority: NotificationPriority.LOW,
@@ -682,12 +695,13 @@ export const notifyDocumentUploaded = async (userId, documentData) => {
  * @param {Object} documentData - Document information
  * @param {string} status - Review status
  */
-export const notifyDocumentReviewed = async (userId, documentData, status) => {
+export const notifyDocumentReviewed = async (tenantDb, userId, documentData, status) => {
   const safeFileName = documentData?.fileName || 'Unknown file';
   const safeCaseId = documentData?.caseId || 'your case';
   const safeStatus = status || 'Unknown';
   
   return await createNotification({
+    tenantDb,
     userId,
     type: NotificationTypes.DOCUMENT_REVIEWED,
     priority: NotificationPriority.MEDIUM,
@@ -941,7 +955,8 @@ export const notifySystemMaintenance = async (roleId, maintenanceData) => {
  * @param {Object} messageData - Message information
  * @param {Object} senderData - Sender information
  */
-export const notifyMessageReceived = async (receiverId, messageData, senderData, skipAdminBroadcast = false) => {
+export const notifyMessageReceived = async (tenantDb, receiverId, messageData, senderData, skipAdminBroadcast = false) => {
+  if (!tenantDb) throw new Error('tenantDb is required');
   const safeSenderName = senderData?.first_name && senderData?.last_name 
     ? `${senderData.first_name} ${senderData.last_name}` 
     : senderData?.email || 'Unknown sender';
@@ -952,6 +967,7 @@ export const notifyMessageReceived = async (receiverId, messageData, senderData,
     : safeMessageContent;
   
   return await createNotification({
+    tenantDb,
     userId: receiverId,
     type: NotificationTypes.MESSAGE_RECEIVED,
     priority: NotificationPriority.MEDIUM,

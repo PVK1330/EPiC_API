@@ -1,12 +1,11 @@
+import ApiResponse from "../utils/apiResponse.js";
+
+/**
+ * Ensures the authenticated user has a Superadmin role (role_id: 5).
+ */
 export const isSuperAdmin = (req, res, next) => {
-  const rid = Number(req.user?.role_id);
-  if (req.user && (rid === 5 || req.user.role === 'superadmin' || req.user.role_name === 'superadmin')) {
-    next();
-  } else {
-    return res.status(403).json({
-      status: 'error',
-      message: 'Access denied. SuperAdmin privileges required.',
-      data: null,
-    });
+  if (req.user && req.user.role_id === 5) {
+    return next();
   }
+  return ApiResponse.forbidden(res, "Superadmin access required");
 };

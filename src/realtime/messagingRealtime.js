@@ -1,11 +1,13 @@
-import db from "../models/index.js";
-
 export function userRoom(userId) {
   return `user:${Number(userId)}`;
 }
 
 export function threadRoom(conversationId) {
   return `thread:${Number(conversationId)}`;
+}
+
+export function orgRoom(organisationId) {
+  return `org:${Number(organisationId)}`;
 }
 
 export function buildMessageNewPayload(messageRow, caseId) {
@@ -28,8 +30,8 @@ export function buildMessageNewPayload(messageRow, caseId) {
   };
 }
 
-export async function getUnreadCountForUserInConversation(userId, conversationId) {
-  return db.Message.count({
+export async function getUnreadCountForUserInConversation(tenantDb, userId, conversationId) {
+  return tenantDb.Message.count({
     where: { receiverId: userId, conversationId, isRead: false },
   });
 }
@@ -44,10 +46,11 @@ function lastMessageEnvelope(content, at) {
  * @param {import('socket.io').Server} io
  */
 export async function emitMessageNewAndConversationUpdated(io, {
+  tenantDb,
   conversation,
   messageRow,
 }) {
-  if (!io) return;
+  if (!io || !tenantDb) return;
 
   const caseId = conversation.caseId ?? null;
   const messagePayload = buildMessageNewPayload(messageRow, caseId);
@@ -70,8 +73,8 @@ export async function emitMessageNewAndConversationUpdated(io, {
   const lastMsg = lastMessageEnvelope(conversation.lastMessage, conversation.lastMessageAt);
 
   const [u1, u2] = await Promise.all([
-    getUnreadCountForUserInConversation(p1, conversationId),
-    getUnreadCountForUserInConversation(p2, conversationId),
+    getUnreadCountForUserInConversation(tenantDb, p1, conversationId),
+    getUnreadCountForUserInConversation(tenantDb, p2, conversationId),
   ]);
 
   io.to(userRoom(p1)).emit("conversation:updated", {
@@ -91,11 +94,11 @@ export async function emitMessageNewAndConversationUpdated(io, {
 /**
  * @param {import('socket.io').Server} io
  */
-export async function emitAfterMarkRead(io, { senderId, readerUserId, conversationIds }) {
-  if (!io || !conversationIds?.length) return;
+export async function emitAfterMarkRead(io, { tenantDb, senderId, readerUserId, conversationIds }) {
+  if (!io || !tenantDb || !conversationIds?.length) return;
 
   for (const conversationId of conversationIds) {
-    const conv = await db.Conversation.findByPk(conversationId);
+    const conv = await tenantDb.Conversation.findByPk(conversationId);
     if (!conv) continue;
 
     const readEvent = {
@@ -110,8 +113,8 @@ export async function emitAfterMarkRead(io, { senderId, readerUserId, conversati
     const p2 = conv.participantTwoId;
     const lastMsg = lastMessageEnvelope(conv.lastMessage, conv.lastMessageAt);
     const [u1, u2] = await Promise.all([
-      getUnreadCountForUserInConversation(p1, conversationId),
-      getUnreadCountForUserInConversation(p2, conversationId),
+      getUnreadCountForUserInConversation(tenantDb, p1, conversationId),
+      getUnreadCountForUserInConversation(tenantDb, p2, conversationId),
     ]);
 
     io.to(userRoom(p1)).emit("conversation:updated", {

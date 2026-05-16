@@ -1,6 +1,3 @@
-import db from '../models/index.js';
-
-const { Permission, Role, RolePermission } = db;
 
 const PERMISSIONS_DATA = [
   // ==================== ADMIN PANEL MODULES ====================
@@ -259,7 +256,8 @@ const getCandidatePermissions = () => {
     .map(p => p.name);
 };
 
-const seedPermissions = async () => {
+const seedPermissions = async (db) => {
+  const { Permission } = db;
   try {
     console.log('Seeding permissions...');
 
@@ -278,7 +276,8 @@ const seedPermissions = async () => {
   }
 };
 
-const seedRolePermissions = async () => {
+const seedRolePermissions = async (db) => {
+  const { Permission, Role } = db;
   try {
     console.log('Seeding role permissions...');
 
@@ -334,15 +333,37 @@ const seedRolePermissions = async () => {
   }
 };
 
-const seedAll = async () => {
+export async function seedPermissionsForDb(db) {
   try {
-    await seedPermissions();
-    await seedRolePermissions();
+    await seedPermissions(db);
+    await seedRolePermissions(db);
     console.log('All permissions and role permissions seeded successfully');
   } catch (error) {
     console.error('Error seeding permissions:', error);
     throw error;
   }
-};
+}
 
-export default seedAll;
+/**
+ * Ensure tenant admin role (id 3) is mapped to every permission in this organisation DB.
+ * Safe to call on each request — only writes when mappings are missing.
+ */
+export async function ensureAdminHasAllPermissions(db) {
+  const { Permission, Role } = db;
+  const adminRole = await Role.findByPk(3);
+  if (!adminRole) return;
+
+  let allPermissions = await Permission.findAll();
+  if (allPermissions.length === 0) {
+    await seedPermissions(db);
+    allPermissions = await Permission.findAll();
+  }
+
+  const current = await adminRole.getPermissions();
+  if (current.length >= allPermissions.length) return;
+
+  await adminRole.setPermissions(allPermissions);
+  console.log(`Admin role synced with ${allPermissions.length} permissions`);
+}
+
+export default seedPermissionsForDb;

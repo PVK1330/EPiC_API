@@ -1,5 +1,3 @@
-import db from "../models/index.js";
-
 const ROLES = [
   { id: 1, name: "candidate" },
   { id: 2, name: "caseworker" },
@@ -8,7 +6,7 @@ const ROLES = [
   { id: 5, name: "superadmin" },
 ];
 
-export default async function seedRoles() {
+export async function seedRolesForDb(db) {
   try {
     for (const role of ROLES) {
       await db.Role.findOrCreate({
@@ -17,17 +15,18 @@ export default async function seedRoles() {
       });
     }
     console.log("✔ Roles seeded");
-    
-    // Assign default permissions to roles
-    await assignDefaultPermissions();
+    await assignDefaultPermissions(db);
   } catch (err) {
     console.error("Role seeder failed:", err.message);
+    throw err;
   }
 }
 
-async function assignDefaultPermissions() {
+export default seedRolesForDb;
+
+async function assignDefaultPermissions(db) {
   try {
-    const { Permission, Role, RolePermission } = db;
+    const { Permission, Role } = db;
     
     // Get all permissions
     const allPermissions = await Permission.findAll();

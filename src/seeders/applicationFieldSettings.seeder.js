@@ -1,7 +1,3 @@
-import db from "../models/index.js";
-
-const ApplicationFieldSetting = db.ApplicationFieldSetting;
-
 const BUILTIN = [
   ["applicationType", "Application type", "select", 1],
   ["firstName", "First name", "text", 2],
@@ -69,7 +65,8 @@ const BUILTIN = [
   ["englishProof", "English language evidence", "select", 64],
 ];
 
-export default async function seedApplicationFieldSettings() {
+export async function seedApplicationFieldSettingsForDb(db) {
+  const ApplicationFieldSetting = db.ApplicationFieldSetting;
   try {
     for (const [field_key, field_label, field_type, field_order] of BUILTIN) {
       await ApplicationFieldSetting.findOrCreate({
@@ -85,5 +82,8 @@ export default async function seedApplicationFieldSettings() {
     }
   } catch (err) {
     console.error("applicationFieldSettings seeder:", err.message);
+    throw err;
   }
 }
+
+export default seedApplicationFieldSettingsForDb;
