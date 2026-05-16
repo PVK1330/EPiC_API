@@ -577,6 +577,100 @@ export const generateAdminCredentialsTemplate = (email, password, loginUrl) => {
 
 };
 
+/** Organisation admin welcome — credentials + tenant login URL(s). */
+export const generateOrganisationWelcomeTemplate = ({
+    organisationName,
+    adminName,
+    email,
+    password,
+    loginUrl,
+    mainLoginUrl,
+}) => {
+    const altLinkBlock = mainLoginUrl && mainLoginUrl !== loginUrl
+        ? `<p class="message" style="margin-top:-12px;margin-bottom:20px;font-size:14px;">
+            You can also sign in from the main portal:
+            <a href="${mainLoginUrl}" style="color:#004ca5;font-weight:600;">${mainLoginUrl}</a>
+           </p>`
+        : "";
+
+    return `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>EPiC — ${organisationName} is ready</title>
+        <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #eef2f7; padding: 30px 16px; }
+            .wrapper { max-width: 580px; margin: 0 auto; }
+            .header { background-color: #004ca5; border-radius: 12px 12px 0 0; padding: 28px 32px; }
+            .brand-name { font-size: 22px; font-weight: 700; color: #ffffff; }
+            .brand-name span { color: #f5a623; }
+            .brand-sub { font-size: 10px; color: rgba(255,255,255,0.65); letter-spacing: 2px; text-transform: uppercase; margin-top: 6px; }
+            .accent-stripe { height: 4px; background: linear-gradient(90deg, #c8102e 0%, #f5a623 50%, #004ca5 100%); }
+            .card { background: #ffffff; padding: 40px 36px; border-left: 1px solid #dde4ef; border-right: 1px solid #dde4ef; }
+            .org-pill { display: inline-block; background: #eef2f7; color: #004ca5; font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; padding: 5px 14px; border-radius: 20px; margin-bottom: 16px; }
+            .title { font-size: 22px; font-weight: 700; color: #004ca5; margin-bottom: 10px; }
+            .message { font-size: 15px; color: #556070; line-height: 1.7; margin-bottom: 28px; }
+            .cred-box { border: 1.5px solid #dde4ef; border-radius: 12px; overflow: hidden; margin-bottom: 28px; }
+            .cred-box-header { background: #004ca5; padding: 12px 20px; font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.85); letter-spacing: 2px; text-transform: uppercase; }
+            .cred-item { padding: 16px 20px; border-bottom: 1px solid #eef2f7; }
+            .cred-label { font-size: 11px; font-weight: 700; color: #8a9ab0; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px; }
+            .cred-value { font-size: 15px; color: #1a2a3a; font-family: 'Courier New', monospace; word-break: break-all; font-weight: 700; }
+            .btn-wrap { text-align: center; margin-bottom: 28px; }
+            .login-btn { display: inline-block; background-color: #c8102e; color: #ffffff; text-decoration: none; font-size: 15px; font-weight: 600; padding: 14px 36px; border-radius: 8px; }
+            .security-box { background: #fff8f0; border-left: 3px solid #f5a623; border-radius: 0 6px 6px 0; padding: 14px 16px; font-size: 13px; color: #7a5c20; line-height: 1.6; }
+            .footer { background-color: #004ca5; border-radius: 0 0 12px 12px; padding: 20px 32px; text-align: center; }
+            .footer p { font-size: 12px; color: rgba(255,255,255,0.6); line-height: 1.8; }
+        </style>
+    </head>
+    <body>
+        <div class="wrapper">
+            <div class="header">
+                <div class="brand-name">EP<span>i</span>C</div>
+                <div class="brand-sub">Immigration Case Management</div>
+            </div>
+            <div class="accent-stripe"></div>
+            <div class="card">
+                <div class="org-pill">${organisationName}</div>
+                <h1 class="title">Welcome, ${adminName}</h1>
+                <p class="message">
+                    Your organisation workspace on EPiC is ready. Use the credentials below to sign in
+                    and complete your setup. Please change your password after your first login.
+                </p>
+                <div class="cred-box">
+                    <div class="cred-box-header">Login credentials</div>
+                    <div class="cred-item">
+                        <div class="cred-label">Email</div>
+                        <div class="cred-value">${email}</div>
+                    </div>
+                    <div class="cred-item">
+                        <div class="cred-label">Temporary password</div>
+                        <div class="cred-value">${password}</div>
+                    </div>
+                    <div class="cred-item">
+                        <div class="cred-label">Organisation login URL</div>
+                        <div class="cred-value" style="font-family:inherit;font-weight:600;"><a href="${loginUrl}">${loginUrl}</a></div>
+                    </div>
+                </div>
+                <div class="btn-wrap">
+                    <a href="${loginUrl}" class="login-btn">Sign in to ${organisationName}</a>
+                </div>
+                ${altLinkBlock}
+                <div class="security-box">
+                    <strong>Keep this email private.</strong> Do not share your password. If you did not expect this message, contact platform support.
+                </div>
+            </div>
+            <div class="footer">
+                <p>© 2026 EPiC. Automated message — do not reply.</p>
+            </div>
+        </div>
+    </body>
+    </html>
+  `;
+};
+
 /** Caseworker account — same credential layout as generic template, distinct copy for role. */
 export const generateCaseworkerCredentialsTemplate = (email, password, loginUrl, firstName = "") => {
     const greeting = firstName ? `Hi ${firstName},` : "Hello,";
@@ -1169,3 +1263,5 @@ export const generateAppointmentTemplate = ({
     </html>
     `;
 };
+
+

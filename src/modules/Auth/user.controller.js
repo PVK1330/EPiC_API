@@ -1,0 +1,350 @@
+import { Op } from 'sequelize';
+import bcrypt from 'bcryptjs';
+import path from 'path';
+import fs from 'fs';
+
+// Get user profile
+export const profile = async (req, res) => {
+  try {
+    // Get user ID from decoded JWT token (added by auth middleware)
+    const userId = req.user.userId;
+
+    // Find user by ID
+    const user = await req.tenantDb.User.findOne({
+      where: { id: userId },
+      include: [{ model: req.tenantDb.Role, as: 'role', attributes: ['id', 'name'] }],
+      attributes: {
+        exclude: [
+          "password",
+          "otp_code",
+          "otp_expiry",
+          "password_reset_otp",
+          "password_reset_otp_expiry",
+          "temp_password",
+        ],
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        status: "error",
+        message: "User not found",
+        data: null
+      });
+    }
+
+    // Convert profile_pic path to URL-friendly format and add base URL
+    if (user.profile_pic) {
+      const normalizedPath = user.profile_pic.replace(/\\/g, '/');
+      user.profile_pic = `${process.env.BASE_URL}/${normalizedPath}`;
+    }
+
+    res.status(200).json({
+      status: "success",
+      message: "Profile retrieved successfully",
+      data: {
+        user: user
+      }
+    });
+
+  } catch (err) {
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error",
+      data: null,
+      error: err.message
+    });
+  }
+};
+
+// Edit user profile
+export const editProfile = async (req, res) => {
+  try {
+    // Get user ID from decoded JWT token
+    const userId = req.user.userId;
+    
+    // Get editable fields from request body
+    const body = req.body || {};
+    const { first_name, last_name, country_code, mobile, gender } = body;
+
+    // Find user by ID
+    const user = await req.tenantDb.User.findOne({ where: { id: userId } });
+
+    if (!user) {
+      return res.status(404).json({
+        status: "error",
+        message: "User not found",
+        data: null
+      });
+    }
+
+    // Validate required fields
+    if (!first_name || !last_name) {
+      return res.status(400).json({
+        status: "error",
+        message: "First name and last name are required",
+        data: null
+      });
+    }
+
+    // Check if mobile number is being changed and if it's already taken by another user
+    if (mobile && country_code) {
+      const mobileExists = await req.tenantDb.User.findOne({
+        where: { 
+          country_code, 
+          mobile,
+          id: { [Op.ne]: userId } // Exclude current user from check
+        }
+      });
+
+      if (mobileExists) {
+        return res.status(400).json({
+          status: "error",
+          message: "Mobile number already exists",
+          data: null
+        });
+      }
+    }
+
+    const updateData = {
+      first_name: first_name || user.first_name,
+      last_name: last_name || user.last_name,
+      country_code: country_code || user.country_code,
+      mobile: mobile || user.mobile,
+      gender: gender || user.gender,
+    };
+
+    // Add profile_pic if file was uploaded
+    if (req.file?.path) {
+      const userDir = path.join('uploads', 'profile_pics', String(userId));
+      fs.mkdirSync(userDir, { recursive: true });
+      const targetPath = path.join(userDir, req.file.filename);
+      fs.renameSync(req.file.path, targetPath);
+      updateData.profile_pic = targetPath.replace(/\\/g, '/');
+    }
+
+    await user.update(updateData);
+
+    // Return updated user profile without sensitive fields
+    const updatedUser = await req.tenantDb.User.findOne({
+      where: { id: userId },
+      include: [{ model: req.tenantDb.Role, as: 'role', attributes: ['id', 'name'] }],
+      attributes: {
+        exclude: [
+          "password",
+          "otp_code",
+          "otp_expiry",
+          "password_reset_otp",
+          "password_reset_otp_expiry",
+          "temp_password",
+        ],
+      },
+    });
+
+    // Convert profile_pic path to URL-friendly format and add base URL
+    if (updatedUser.profile_pic) {
+      const normalizedPath = updatedUser.profile_pic.replace(/\\/g, '/');
+      updatedUser.profile_pic = `${process.env.BASE_URL}/${normalizedPath}`;
+    }
+
+    res.status(200).json({
+      status: "success",
+      message: "Profile updated successfully",
+      data: {
+        user: updatedUser
+      }
+    });
+
+  } catch (err) {
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error",
+      data: null,
+      error: err.message
+    });
+  }
+};
+
+/** POST /api/user/change-password — authenticated user updates own password */
+export const changeOwnPassword = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { new_password } = req.body || {};
+
+    if (!new_password) {
+      return res.status(400).json({
+        status: "error",
+        message: "new_password is required",
+        data: null,
+      });
+    }
+
+    if (new_password.length < 8) {
+      return res.status(400).json({
+        status: "error",
+        message: "New password must be at least 8 characters",
+        data: null,
+      });
+    }
+
+    const full = await req.tenantDb.User.findOne({ where: { id: userId } });
+    if (!full) {
+      return res.status(404).json({
+        status: "error",
+        message: "User not found",
+        data: null,
+      });
+    }
+
+    const hashed = await bcrypt.hash(new_password, 12);
+    await full.update({ password: hashed });
+
+    res.status(200).json({
+      status: "success",
+      message: "Password updated successfully.",
+      data: null,
+    });
+  } catch (err) {
+    console.error("changeOwnPassword error:", err);
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error",
+      data: null,
+      error: err.message,
+    });
+  }
+};
+
+// Get all users grouped by roles
+export const getAllUsers = async (req, res) => {
+  try {
+    // Get all users with their roles
+    const users = await req.tenantDb.User.findAll({
+      attributes: {
+        exclude: [
+          "password",
+          "otp_code",
+          "otp_expiry",
+          "password_reset_otp",
+          "password_reset_otp_expiry",
+          "temp_password",
+        ],
+      },
+      include: [
+        {
+          model: req.tenantDb.Role,
+          as: 'role',
+          attributes: ['id', 'name']
+        },
+        {
+          model: req.tenantDb.SponsorProfile,
+          as: 'sponsorProfile',
+          required: false,
+          attributes: ['id','companyName', 'tradingName']
+        }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+
+    // Group users by role
+    const usersByRole = {
+      admin: [],
+      candidate: [],
+      sponsor: [],
+      caseworker: []
+    };
+
+    users.forEach(user => {
+      const roleName = user.role?.name?.toLowerCase() || 'unknown';
+
+      if (roleName === 'admin') {
+        usersByRole.admin.push(user);
+      } else if (roleName === 'candidate') {
+        usersByRole.candidate.push(user);
+      } else if (roleName === 'sponsor' || roleName === 'business') {
+        usersByRole.sponsor.push(user);
+      } else if (roleName === 'caseworker') {
+        usersByRole.caseworker.push(user);
+      }
+    });
+
+    res.status(200).json({
+      status: "success",
+      message: "Users retrieved successfully",
+      data: {
+        admin: usersByRole.admin,
+        candidate: usersByRole.candidate,
+        sponsor: usersByRole.sponsor,
+        caseworker: usersByRole.caseworker
+      }
+    });
+
+  } catch (err) {
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error",
+      data: null,
+      error: err.message
+    });
+  }
+};
+
+// Get sponsors and business dropdown API
+export const dropdownSponsors = async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    if (!userId) {
+      return res.status(401).json({ status: "error", message: "Authentication required.", data: null });
+    }
+
+    const sponsors = await req.tenantDb.User.findAll({
+      where: { role_id: 4 }, // Sponsor/Business role
+      attributes: {
+        exclude: [
+          "password",
+          "otp_code",
+          "otp_expiry",
+          "password_reset_otp",
+          "password_reset_otp_expiry",
+          "temp_password",
+        ],
+      },
+      include: [
+        {
+          model: req.tenantDb.Role,
+          as: 'role',
+          attributes: ['id', 'name']
+        },
+        {
+          model: req.tenantDb.SponsorProfile,
+          as: 'sponsorProfile',
+          required: false,
+          attributes: ['companyName', 'tradingName']
+        }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+
+    // Format for dropdown: id, name (first + last), company name
+    const formattedSponsors = sponsors.map(sponsor => ({
+      id: sponsor.id,
+      name: `${sponsor.first_name} ${sponsor.last_name}`,
+      email: sponsor.email,
+      companyName: sponsor.sponsorProfile?.companyName || sponsor.sponsorProfile?.tradingName || null
+    }));
+
+    res.status(200).json({
+      status: "success",
+      message: "Sponsors retrieved successfully",
+      data: { sponsors: formattedSponsors }
+    });
+  } catch (err) {
+    console.error("dropdownSponsors error:", err);
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error",
+      data: null,
+      error: err.message
+    });
+  }
+};

@@ -1,24 +1,34 @@
 import pkg from "pg";
-import { Sequelize } from "sequelize";
 import config from "../config/config.js";
-import { buildDb } from "../models/buildDb.js";
 
 const { Client } = pkg;
 
+/** EPiC_ tenant prefix (PostgreSQL stores unquoted names as lowercase: epic_). */
+export function getTenantDatabasePrefix() {
+  const raw = process.env.TENANT_DB_PREFIX || "epic_";
+  const prefix = String(raw).toLowerCase().replace(/[^a-z0-9_]/g, "");
+  if (!prefix || !/^[a-z]/.test(prefix)) {
+    return "epic_";
+  }
+  return prefix.endsWith("_") ? prefix : `${prefix}_`;
+}
+
 /**
  * PostgreSQL-safe database name: lowercase [a-z0-9_], max 63 chars, starts with letter.
+ * Example: slug "acme" → epic_acme (EPiC_ prefix).
  * @param {string} slug
  */
 export function buildPhysicalTenantDatabaseName(slug) {
+  const prefix = getTenantDatabasePrefix();
   const raw = String(slug || "tenant")
     .toLowerCase()
     .replace(/[^a-z0-9_]/g, "_")
     .replace(/_+/g, "_")
     .replace(/^_+|_+$/g, "");
   const body = (raw || "tenant").replace(/^[0-9]+/, "");
-  let name = `epic_t_${body}`.slice(0, 63);
+  let name = `${prefix}${body}`.slice(0, 63);
   if (!/^[a-z]/.test(name)) {
-    name = `epic_t_tenant_${body}`.slice(0, 63);
+    name = `${prefix}tenant_${body}`.slice(0, 63);
   }
   if (!/^[a-z][a-z0-9_]*$/.test(name)) {
     throw new Error("Could not derive a valid PostgreSQL database name from slug");
@@ -40,6 +50,27 @@ function getMaintenanceConnectionConfig() {
       process.env.DB_PASS,
     database: process.env.DB_MAINTENANCE_DATABASE || "postgres",
   };
+}
+
+/**
+ * @param {string} databaseName
+ * @returns {Promise<boolean>}
+ */
+export async function tenantPostgresDatabaseExists(databaseName) {
+  if (!databaseName || !/^[a-z][a-z0-9_]{0,62}$/.test(databaseName)) {
+    return false;
+  }
+  const cfg = getMaintenanceConnectionConfig();
+  const client = new Client(cfg);
+  await client.connect();
+  try {
+    const check = await client.query("SELECT 1 FROM pg_database WHERE datname = $1", [
+      databaseName,
+    ]);
+    return check.rowCount > 0;
+  } finally {
+    await client.end();
+  }
 }
 
 /**
@@ -67,22 +98,52 @@ export async function createTenantPostgresDatabase(databaseName) {
   }
 }
 
+import { runTenantMigrations } from "../migrations/run.js";
+
 /**
- * Applies Sequelize schema (sync) to a tenant database. Closes the connection when done.
+ * Create tenant DB when missing (registry may reference a dropped database).
+ * @param {string} databaseName
+ */
+export async function ensureTenantPostgresDatabase(databaseName) {
+  const exists = await tenantPostgresDatabaseExists(databaseName);
+  if (exists) {
+    return { created: false, databaseName };
+  }
+  return createTenantPostgresDatabase(databaseName);
+}
+
+/**
+ * Resolve physical DB name for an org: canonical EPiC_ name, unless legacy DB still exists.
+ * @param {{ slug: string, database_name?: string|null }} org
+ * @returns {Promise<string>}
+ */
+export async function resolveOrganisationDatabaseName(org) {
+  const canonicalName = buildPhysicalTenantDatabaseName(org.slug);
+  const registered = org.database_name?.trim();
+
+  if (!registered) {
+    return canonicalName;
+  }
+
+  if (registered.startsWith("epic_t_")) {
+    const legacyExists = await tenantPostgresDatabaseExists(registered);
+    return legacyExists ? registered : canonicalName;
+  }
+
+  if (registered !== canonicalName) {
+    const registeredExists = await tenantPostgresDatabaseExists(registered);
+    return registeredExists ? registered : canonicalName;
+  }
+
+  return registered;
+}
+
+/**
+ * Applies SQL migrations to a tenant database.
  * @param {string} databaseName
  */
 export async function syncTenantDatabaseSchema(databaseName) {
-  const env = process.env.NODE_ENV || "development";
-  const c = config[env];
-  const tenantSeq = new Sequelize(databaseName, c.username, c.password, {
-    host: c.host,
-    port: c.port,
-    dialect: "postgres",
-    logging: false,
-  });
-  buildDb(tenantSeq);
-  await tenantSeq.sync();
-  await tenantSeq.close();
+  await runTenantMigrations(databaseName);
 }
 
 /**
