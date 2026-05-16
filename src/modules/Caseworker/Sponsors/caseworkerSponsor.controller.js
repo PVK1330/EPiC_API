@@ -50,14 +50,14 @@ export const getAllSponsors = async (req, res) => {
     // Get active case count for each sponsor
     const sponsorsWithCaseCount = await Promise.all(
       sponsors.map(async (sponsor) => {
-        const activeCasesCount = await Case.count({
+        const activeCasesCount = await req.tenantDb.Case.count({
           where: {
             sponsorId: sponsor.id,
             status: { [Op.notIn]: ['Approved', 'Rejected', 'Closed', 'Cancelled'] }
           }
         });
 
-        const sponsoredWorkersCount = await Case.count({
+        const sponsoredWorkersCount = await req.tenantDb.Case.count({
           where: {
             sponsorId: sponsor.id
           }
@@ -129,7 +129,7 @@ export const getSponsorById = async (req, res) => {
     }
 
     // Get active cases for this sponsor
-    const activeCases = await Case.findAll({
+    const activeCases = await req.tenantDb.Case.findAll({
       where: {
         sponsorId: sponsor.id,
         status: { [Op.notIn]: ['Approved', 'Rejected', 'Closed', 'Cancelled'] }
@@ -151,12 +151,12 @@ export const getSponsorById = async (req, res) => {
     });
 
     // Get total sponsored workers count
-    const sponsoredWorkersCount = await Case.count({
+    const sponsoredWorkersCount = await req.tenantDb.Case.count({
       where: { sponsorId: sponsor.id }
     });
 
     // Get active cases count
-    const activeCasesCount = await Case.count({
+    const activeCasesCount = await req.tenantDb.Case.count({
       where: {
         sponsorId: sponsor.id,
         status: { [Op.notIn]: ['Approved', 'Rejected', 'Closed', 'Cancelled'] }

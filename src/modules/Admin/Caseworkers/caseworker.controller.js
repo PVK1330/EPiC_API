@@ -153,7 +153,7 @@ export const updateDepartment = async (req, res) => {
     }
 
     // Update the department name
-    await req.tenantDb.Department.update({ name: newName.trim() });
+    await department.update({ name: newName.trim() });
 
     // Update all caseworker profiles with the old department name
     const updated = await req.tenantDb.CaseworkerProfile.update(
@@ -217,7 +217,7 @@ export const deleteDepartment = async (req, res) => {
     }
 
     // Delete the department (soft delete by setting is_active to false)
-    await req.tenantDb.Department.update({ is_active: false });
+    await department.update({ is_active: false });
 
     res.status(200).json({
       status: "success",
@@ -1143,7 +1143,7 @@ export const getPerformanceReport = async (req, res) => {
 
     const caseworker = await req.tenantDb.User.findOne({
       where: { id, role_id: CASEWORKER_ROLE },
-      include: caseworkerInclude()
+      include: caseworkerInclude(req)
     });
 
     if (!caseworker) {
@@ -1164,7 +1164,7 @@ export const getPerformanceReport = async (req, res) => {
     }
 
     // Get cases assigned to this caseworker
-    const cases = await Case.findAll({
+    const cases = await req.tenantDb.Case.findAll({
       where: {
         assignedToId: id,
         ...dateFilter
@@ -1245,7 +1245,7 @@ export const reassignCase = async (req, res) => {
     }
 
     // Find case by string caseId (e.g., "CAS-000001") to get numeric id
-    const caseRecord = await Case.findOne({ where: { caseId } });
+    const caseRecord = await req.tenantDb.Case.findOne({ where: { caseId } });
     if (!caseRecord) {
       return res.status(404).json({
         status: "error",

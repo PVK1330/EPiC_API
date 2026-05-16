@@ -15,7 +15,7 @@ export const getCaseTimeline = async (req, res) => {
 
     // Support both numeric PK (id) and human-readable case reference (caseId)
     const whereClause = isNaN(id) ? { caseId: id } : { id: parseInt(id) };
-    const caseData = await Case.findOne({ where: whereClause });
+    const caseData = await req.tenantDb.Case.findOne({ where: whereClause });
     
     if (!caseData) {
       return res.status(404).json({
@@ -80,7 +80,7 @@ export const createTimelineEntry = async (req, res) => {
     }
 
     // Verify case exists
-    const caseData = await Case.findOne({ 
+    const caseData = await req.tenantDb.Case.findOne({ 
       where: isNaN(caseId) ? { caseId: caseId } : { id: parseInt(caseId) }
     });
     

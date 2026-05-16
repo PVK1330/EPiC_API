@@ -20,10 +20,10 @@ export const getCaseAuditLogs = async (req, res) => {
     let caseRecord;
     if (!isNaN(parseInt(caseId))) {
       // Try numeric ID first
-      caseRecord = await Case.findByPk(parseInt(caseId));
+      caseRecord = await req.tenantDb.Case.findByPk(parseInt(caseId));
     } else {
       // Try string caseId
-      caseRecord = await Case.findOne({ where: { caseId } });
+      caseRecord = await req.tenantDb.Case.findOne({ where: { caseId } });
     }
 
     if (!caseRecord) {

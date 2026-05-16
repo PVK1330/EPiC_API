@@ -64,6 +64,7 @@ export const requestCosAllocation = async (req, res) => {
       req.tenantDb.User.findByPk(userId)
     ]);
 
+    const organisationId = req.user?.organisation_id != null ? Number(req.user.organisation_id) : null;
     const app = await req.tenantDb.LicenceApplication.create({
       userId, type: 'Renewal', status: 'Pending',
       cosAllocation: parseInt(requestedAmount),
@@ -74,14 +75,15 @@ export const requestCosAllocation = async (req, res) => {
       contactEmail: profile?.keyContactEmail || user.email,
       contactPhone: profile?.keyContactPhone || user.mobile || '',
       registrationNumber: profile?.registrationNumber || 'N/A',
-      industry: profile?.industrySector || 'N/A'
+      industry: profile?.industrySector || 'N/A',
+      organisation_id: organisationId,
     });
 
     res.status(201).json({ status: 'success', message: 'CoS allocation request submitted', data: app });
 
     const company = profile?.companyName || user.email;
-    try { await notifyAdmins({ type: NotificationTypes.INFO, priority: NotificationPriority.HIGH, title: `CoS Request: ${company}`, message: `${company} requested ${requestedAmount} CoS slots for ${visaType}. Reason: ${reason}`, actionType: 'cos_request', entityId: app.id, entityType: 'licence_application' }); } catch (e) { console.error(e); }
-    try { await createNotification({ userId, type: NotificationTypes.INFO, priority: NotificationPriority.MEDIUM, title: 'CoS Request Submitted', message: `Your request for ${requestedAmount} CoS slots (${visaType}) is under review.` }); } catch (e) { console.error(e); }
+    try { await notifyAdmins(req.tenantDb, { type: NotificationTypes.INFO, priority: NotificationPriority.HIGH, title: `CoS Request: ${company}`, message: `${company} requested ${requestedAmount} CoS slots for ${visaType}. Reason: ${reason}`, actionType: 'cos_request', entityId: app.id, entityType: 'licence_application' }); } catch (e) { console.error(e); }
+    try { await createNotification({ tenantDb: req.tenantDb, userId, type: NotificationTypes.INFO, priority: NotificationPriority.MEDIUM, title: 'CoS Request Submitted', message: `Your request for ${requestedAmount} CoS slots (${visaType}) is under review.` }); } catch (e) { console.error(e); }
     if (process.env.ADMIN_EMAIL) {
       try {
         await transporter.sendMail({

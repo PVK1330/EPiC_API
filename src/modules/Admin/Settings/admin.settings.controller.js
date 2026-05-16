@@ -859,7 +859,7 @@ export const listCaseCategories = async (req, res) => {
 
     if (!(await requireAdmin(req, res))) return;
 
-    const rows = await CaseCategory.findAll({ order: [["name", "ASC"]] });
+    const rows = await req.tenantDb.CaseCategory.findAll({ order: [["name", "ASC"]] });
 
     res.status(200).json({
 
@@ -1227,7 +1227,7 @@ export const updatePaymentSetting = async (req, res) => {
 export const listSlaRules = async (req, res) => {
   try {
     if (!(await requireAdmin(req, res))) return;
-    const rules = await SlaRule.findAll({ order: [["id", "ASC"]] });
+    const rules = await req.tenantDb.SlaRule.findAll({ order: [["id", "ASC"]] });
     res.status(200).json({
       status: "success",
       message: "SLA rules retrieved.",
@@ -1247,7 +1247,7 @@ export const createSlaRule = async (req, res) => {
     if (!name || !String(name).trim()) return res.status(400).json({ status: "error", message: "Name is required" });
     if (days === undefined || isNaN(parseInt(days))) return res.status(400).json({ status: "error", message: "Days must be a valid number" });
 
-    const rule = await SlaRule.create({ 
+    const rule = await req.tenantDb.SlaRule.create({ 
       name: String(name).trim(), 
       days: parseInt(days), 
       rule_type: rule_type === "Global" ? "Global" : "Visa" 
@@ -1269,7 +1269,7 @@ export const updateSlaRule = async (req, res) => {
     const { id } = req.params;
     const { name, days, rule_type } = req.body;
 
-    const rule = await SlaRule.findByPk(id);
+    const rule = await req.tenantDb.SlaRule.findByPk(id);
     if (!rule) return res.status(404).json({ status: "error", message: "Rule not found" });
 
     const updates = {};
@@ -1292,7 +1292,7 @@ export const deleteSlaRule = async (req, res) => {
   try {
     if (!(await requireAdmin(req, res))) return;
     const { id } = req.params;
-    const rule = await SlaRule.findByPk(id);
+    const rule = await req.tenantDb.SlaRule.findByPk(id);
     if (!rule) return res.status(404).json({ status: "error", message: "Rule not found" });
 
     await rule.destroy();

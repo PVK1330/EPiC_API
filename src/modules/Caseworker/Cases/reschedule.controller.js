@@ -26,7 +26,7 @@ export const rescheduleCase = async (req, res) => {
       reason
     } = req.body;
 
-    const caseData = await Case.findByPk(id);
+    const caseData = await req.tenantDb.Case.findByPk(id);
     if (!caseData) {
       return res.status(404).json({
         status: "error",
@@ -174,7 +174,7 @@ export const getRescheduleHistory = async (req, res) => {
     }
 
     // Check if case is assigned to this caseworker or created by this caseworker
-    const caseData = await Case.findByPk(id);
+    const caseData = await req.tenantDb.Case.findByPk(id);
     if (!caseData) {
       return res.status(404).json({
         status: "error",
@@ -241,7 +241,7 @@ export const getAllRescheduleHistory = async (req, res) => {
     }
 
     // Get all cases assigned to this caseworker or created by this caseworker
-    const assignedCases = await Case.findAll({
+    const assignedCases = await req.tenantDb.Case.findAll({
       where: {
         [req.tenantDb.Sequelize.Op.or]: [
           {

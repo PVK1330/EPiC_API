@@ -24,7 +24,7 @@ const generateCaseId = async (req) => {
   const today = new Date();
   const year = today.getFullYear().toString().slice(-2);
   const month = (today.getMonth() + 1).toString().padStart(2, "0");
-  const lastCase = await Case.findOne({
+  const lastCase = await req.tenantDb.Case.findOne({
     where: { caseId: { [Op.like]: `${prefix}-${year}${month}%` } },
     order: [["caseId", "DESC"]],
   });
@@ -119,7 +119,7 @@ export const getMyCases = async (req, res) => {
       order.push(['created_at', sortOrder]);
     }
 
-    const { count, rows: cases } = await Case.findAndCountAll({
+    const { count, rows: cases } = await req.tenantDb.Case.findAndCountAll({
       where: whereClause,
       order,
       limit: parseInt(limit),
@@ -165,7 +165,7 @@ export const getMyCases = async (req, res) => {
     const casesWithCaseworkers = await Promise.all(
       cases.map(async (caseItem) => {
         const caseworkerIds = caseItem.assignedcaseworkerId || [];
-        const caseworkers = await User.findAll({
+        const caseworkers = await req.tenantDb.User.findAll({
           where: { id: caseworkerIds },
           attributes: ['id', 'first_name', 'last_name', 'email']
         });
@@ -177,22 +177,22 @@ export const getMyCases = async (req, res) => {
     );
 
     // Get statistics for the caseworker's cases
-    const myTotal = await Case.count({
+    const myTotal = await req.tenantDb.Case.count({
       where: buildCaseworkerWhereClause(req, userId)
     });
-    const myActive = await Case.count({
+    const myActive = await req.tenantDb.Case.count({
       where: { 
         ...buildCaseworkerWhereClause(req, userId),
         status: { [Op.in]: ['Pending', 'In Progress', 'Under Review'] }
       }
     });
-    const myOverdue = await Case.count({
+    const myOverdue = await req.tenantDb.Case.count({
       where: { 
         ...buildCaseworkerWhereClause(req, userId),
         status: 'Overdue'
       }
     });
-    const myCompleted = await Case.count({
+    const myCompleted = await req.tenantDb.Case.count({
       where: { 
         ...buildCaseworkerWhereClause(req, userId),
         status: { [Op.in]: ['Approved', 'Rejected', 'Closed'] }
@@ -261,12 +261,12 @@ export const getMyDashboardStats = async (req, res) => {
     });
 
     // Get all assigned cases
-    const myTotal = await Case.count({
+    const myTotal = await req.tenantDb.Case.count({
       where: buildCaseworkerWhereClause(req, userId)
     });
 
     // Get active cases
-    const myActive = await Case.count({
+    const myActive = await req.tenantDb.Case.count({
       where: { 
         ...buildCaseworkerWhereClause(req, userId),
         status: { [Op.in]: ['Pending', 'In Progress', 'Under Review'] }
@@ -274,7 +274,7 @@ export const getMyDashboardStats = async (req, res) => {
     });
 
     // Get overdue cases
-    const myOverdue = await Case.count({
+    const myOverdue = await req.tenantDb.Case.count({
       where: { 
         ...buildCaseworkerWhereClause(req, userId),
         status: 'Overdue'
@@ -282,7 +282,7 @@ export const getMyDashboardStats = async (req, res) => {
     });
 
     // Get due today cases
-    const myDueToday = await Case.count({
+    const myDueToday = await req.tenantDb.Case.count({
       where: { 
         ...buildCaseworkerWhereClause(req, userId),
         targetSubmissionDate: todayStr
@@ -291,7 +291,7 @@ export const getMyDashboardStats = async (req, res) => {
 
     // Get completed this month
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-    const myCompletedMonth = await Case.count({
+    const myCompletedMonth = await req.tenantDb.Case.count({
       where: { 
         ...buildCaseworkerWhereClause(req, userId),
         status: { [Op.in]: ['Approved', 'Rejected', 'Closed'] },
@@ -324,7 +324,7 @@ export const getMyDashboardStats = async (req, res) => {
     const taskCompletionRate = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0;
 
     // Calculate SLA compliance (cases completed on time)
-    const completedOnTime = await Case.count({
+    const completedOnTime = await req.tenantDb.Case.count({
       where: {
         ...buildCaseworkerWhereClause(req, userId),
         status: { [Op.in]: ['Approved', 'Rejected', 'Closed'] },
@@ -334,7 +334,7 @@ export const getMyDashboardStats = async (req, res) => {
         ]
       }
     });
-    const totalCompleted = await Case.count({
+    const totalCompleted = await req.tenantDb.Case.count({
       where: {
         ...buildCaseworkerWhereClause(req, userId),
         status: { [Op.in]: ['Approved', 'Rejected', 'Closed'] }
@@ -346,7 +346,7 @@ export const getMyDashboardStats = async (req, res) => {
     const performanceScore = Math.round((taskCompletionRate * 0.4) + (slaCompliance * 0.6));
 
     // Get recent cases (last 5)
-    const recentCases = await Case.findAll({
+    const recentCases = await req.tenantDb.Case.findAll({
       where: buildCaseworkerWhereClause(req, userId),
       order: [['created_at', 'DESC']],
       limit: 5,
@@ -507,12 +507,12 @@ export const updateMyCaseStatus = async (req, res) => {
 
     const { status, notes } = req.body;
 
-    const caseData = await Case.findOne({ 
+    const caseData = await req.tenantDb.Case.findOne({ 
       where: { 
         caseId: id,
         ...buildCaseworkerWhereClause(req, userId)
       }
-    }) || await Case.findOne({ 
+    }) || await req.tenantDb.Case.findOne({ 
       where: { 
         id: id,
         ...buildCaseworkerWhereClause(req, userId)
@@ -694,12 +694,12 @@ export const updateMyCase = async (req, res) => {
       });
     }
 
-    const caseData = await Case.findOne({ 
+    const caseData = await req.tenantDb.Case.findOne({ 
       where: { 
         caseId: id,
         ...buildCaseworkerWhereClause(req, userId)
       }
-    }) || await Case.findOne({ 
+    }) || await req.tenantDb.Case.findOne({ 
       where: { 
         id: id,
         ...buildCaseworkerWhereClause(req, userId)
@@ -792,12 +792,12 @@ export const deleteMyCase = async (req, res) => {
       });
     }
 
-    const caseData = await Case.findOne({
+    const caseData = await req.tenantDb.Case.findOne({
       where: {
         caseId: id,
         ...buildCaseworkerWhereClause(req, userId)
       }
-    }) || await Case.findOne({
+    }) || await req.tenantDb.Case.findOne({
       where: {
         id: id,
         ...buildCaseworkerWhereClause(req, userId)
@@ -848,7 +848,7 @@ export const getCaseDetails = async (req, res) => {
     const whereClause = isNaN(id) ? { caseId: id } : { id: parseInt(id) };
 
     // Get main case details with all relationships (only if assigned to caseworker)
-    const caseData = await Case.findOne({
+    const caseData = await req.tenantDb.Case.findOne({
       where: {
         ...whereClause,
         ...buildCaseworkerWhereClause(req, userId)
@@ -996,7 +996,7 @@ export const getCaseDetails = async (req, res) => {
 
     // Get assigned caseworkers details
     const caseworkerIds = caseData.assignedcaseworkerId || [];
-    const caseworkers = await User.findAll({
+    const caseworkers = await req.tenantDb.User.findAll({
       where: { id: caseworkerIds },
       attributes: ['id', 'first_name', 'last_name', 'email']
     });
@@ -1151,7 +1151,7 @@ export const exportMyCases = async (req, res) => {
       whereClause.visaTypeId = visaTypeId;
     }
 
-    const cases = await Case.findAll({
+    const cases = await req.tenantDb.Case.findAll({
       where: whereClause,
       include: [
         {
@@ -1198,7 +1198,7 @@ export const exportMyCases = async (req, res) => {
       });
     });
 
-    const caseworkers = await User.findAll({
+    const caseworkers = await req.tenantDb.User.findAll({
       where: { id: Array.from(allCaseworkerIds) },
       attributes: ['id', 'first_name', 'last_name']
     });

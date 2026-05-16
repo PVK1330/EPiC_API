@@ -39,8 +39,14 @@ export const createAdmin = catchAsync(async (req, res) => {
     return ApiResponse.badRequest(res, "Invalid email format");
   }
 
+  const emailNorm = String(email).trim().toLowerCase();
+  const organisationId = req.user?.organisation_id != null ? Number(req.user.organisation_id) : null;
+  if (!organisationId) {
+    return ApiResponse.badRequest(res, "Organisation context is required to create an admin");
+  }
+
   // Check if email already exists
-  const existingEmail = await req.tenantDb.User.findOne({ where: { email } });
+  const existingEmail = await platformDb.User.findOne({ where: { email: emailNorm } });
   if (existingEmail) {
     return ApiResponse.badRequest(res, "Email already exists");
   }

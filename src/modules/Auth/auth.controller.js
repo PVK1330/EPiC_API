@@ -145,6 +145,7 @@ export const register = catchAsync(async (req, res) => {
     return ApiResponse.badRequest(res, "Invalid role_id (allowed: 1,2,3,4)");
   }
 
+  const { orgId: registrationOrgId } = await resolveTenantDbForAuth(req);
   const hashedPassword = await bcrypt.hash(password, 10);
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
   const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
@@ -160,6 +161,7 @@ export const register = catchAsync(async (req, res) => {
     otp_code: otp,
     otp_expiry: otpExpiry,
     temp_password: null,
+    organisation_id: registrationOrgId,
   });
 
   await transporter.sendMail({
@@ -228,7 +230,7 @@ export const verifyOTP = catchAsync(async (req, res) => {
   });
 
   if (Number(verifiedUser.role_id) === 1) {
-    await ensureCandidateEnquiryCase(tenantDb, verifiedUser.id);
+    await ensureCandidateEnquiryCase(tenantDb, verifiedUser.id, { organisationId: orgId });
   }
 
   if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {

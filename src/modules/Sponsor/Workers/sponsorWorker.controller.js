@@ -4,6 +4,7 @@ import { generateCredentialsTemplate, generateNotificationEmailTemplate } from '
 import crypto from 'crypto';
 import { generateCaseId } from '../../../utils/case.utils.js';
 import { notifyAdmins, createNotification, NotificationTypes, NotificationPriority } from '../../../services/notification.service.js';
+import { ROLES } from '../../../middlewares/role.middleware.js';
 
 const REQUIRED_DOCUMENT_KEYS = ['passport', 'visaCopy', 'cosCopy', 'contract', 'payslips'];
 
@@ -50,7 +51,9 @@ export const addSponsoredWorker = async (req, res) => {
     const tempPassword = crypto.randomBytes(4).toString('hex'); // 8 characters
     const hashedPassword = await bcrypt.hash(tempPassword, 10);
 
-    // 3. Create User (Candidate role_id = 3)
+    const organisationId = req.user?.organisation_id != null ? Number(req.user.organisation_id) : null;
+
+    // 3. Create User (Candidate)
     const newUser = await req.tenantDb.User.create({
       first_name: firstName,
       last_name: lastName,
@@ -58,10 +61,11 @@ export const addSponsoredWorker = async (req, res) => {
       password: hashedPassword,
       country_code: '+44', // Default for now
       mobile: phone,
-      role_id: 3,
+      role_id: ROLES.CANDIDATE,
       is_otp_verified: true,
       is_email_verified: true,
-      status: 'active'
+      status: 'active',
+      organisation_id: organisationId,
     }, { transaction });
 
     // 4. Create Candidate Application
@@ -84,11 +88,12 @@ export const addSponsoredWorker = async (req, res) => {
       visaEndDate: visaExpiryDate,
       sponsored: 'Yes',
       status: 'submitted',
-      submittedAt: new Date()
+      submittedAt: new Date(),
+      organisation_id: organisationId,
     }, { transaction });
 
     // 5. Create Case
-    const caseId = await generateCaseId();
+    const caseId = await generateCaseId(req.tenantDb);
     await req.tenantDb.Case.create({
       caseId,
       candidateId: newUser.id,
@@ -98,7 +103,8 @@ export const addSponsoredWorker = async (req, res) => {
       status: 'In Progress',
       caseStage: 'Initial',
       targetSubmissionDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
-      notes: notes
+      notes: notes,
+      organisation_id: organisationId,
     }, { transaction });
 
     // 6. Update Sponsor Profile count
@@ -250,7 +256,7 @@ export const getEmployeeRecords = async (req, res) => {
       });
     }
 
-    const profile = req.tenantDb.SponsorProfile.toJSON ? req.tenantDb.SponsorProfile.toJSON() : sponsorProfile;
+    const profile = sponsorProfile.toJSON ? sponsorProfile.toJSON() : sponsorProfile;
     const level1UsersRaw = Array.isArray(profile.level1Users) ? profile.level1Users : [];
 
     const internalEmployees = [];
@@ -265,7 +271,7 @@ export const getEmployeeRecords = async (req, res) => {
         nationality: profile.country || '-',
         visaType: 'Internal Staff',
         niNumber: '-',
-        startDate: req.tenantDb.SponsorProfile.createdAt,
+        startDate: profile.createdAt,
         status: 'Active',
         caseStatus: null,
         role: profile.authorisingJobTitle || 'Authorising Officer',
@@ -290,7 +296,7 @@ export const getEmployeeRecords = async (req, res) => {
         nationality: profile.country || '-',
         visaType: 'Internal Staff',
         niNumber: '-',
-        startDate: req.tenantDb.SponsorProfile.createdAt,
+        startDate: profile.createdAt,
         status: 'Active',
         caseStatus: null,
         role: profile.keyContactDepartment || 'Key Contact',
@@ -315,7 +321,7 @@ export const getEmployeeRecords = async (req, res) => {
         nationality: profile.country || '-',
         visaType: 'Internal Staff',
         niNumber: '-',
-        startDate: req.tenantDb.SponsorProfile.createdAt,
+        startDate: profile.createdAt,
         status: 'Active',
         caseStatus: null,
         role: profile.hrJobTitle || 'HR Manager',
@@ -340,7 +346,7 @@ export const getEmployeeRecords = async (req, res) => {
         nationality: profile.country || '-',
         visaType: 'Internal Staff',
         niNumber: '-',
-        startDate: req.tenantDb.SponsorProfile.createdAt,
+        startDate: profile.createdAt,
         status: 'Active',
         caseStatus: null,
         role: user?.jobTitle || user?.department || 'Level 1 User',
@@ -365,7 +371,7 @@ export const getEmployeeRecords = async (req, res) => {
           attributes: ['id', 'first_name', 'last_name', 'email', 'mobile']
         },
         {
-          model: CandidateApplication,
+          model: req.tenantDb.CandidateApplication,
           as: 'application',
           attributes: ['id', 'nationality', 'visaType', 'niNumber', 'startDate']
         }
@@ -587,8 +593,8 @@ export const deleteSponsoredWorker = async (req, res) => {
     
     // Decrement Sponsor worker count
     const sponsorProfile = await req.tenantDb.SponsorProfile.findOne({ where: { userId: sponsorId } });
-    if (sponsorProfile && req.tenantDb.SponsorProfile.sponsored_workers > 0) {
-      await req.tenantDb.SponsorProfile.decrement('sponsored_workers', { by: 1, transaction });
+    if (sponsorProfile && (sponsorProfile.sponsored_workers || 0) > 0) {
+      await sponsorProfile.decrement('sponsored_workers', { by: 1, transaction });
     }
 
     await transaction.commit();
