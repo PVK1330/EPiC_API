@@ -43,8 +43,7 @@ export function buildPhysicalTenantDatabaseName(slug) {
 function getMaintenanceConnectionConfig() {
   const env = process.env.NODE_ENV || "development";
   const c = config[env];
-  const isRemote = c.host && !c.host.includes('localhost') && c.host !== '127.0.0.1';
-  return {
+  const cfg = {
     host: c.host,
     port: parseInt(String(c.port || 5432), 10),
     user: process.env.TENANT_DB_CREATOR_USER || c.username,
@@ -54,8 +53,14 @@ function getMaintenanceConnectionConfig() {
       process.env.DB_PASSWORD ??
       process.env.DB_PASS,
     database: process.env.DB_MAINTENANCE_DATABASE || "postgres",
-    ...(isRemote ? { ssl: { require: true, rejectUnauthorized: false } } : {}),
   };
+
+  // Propagate SSL settings from Sequelize config to raw pg.Client connections
+  if (c.dialectOptions?.ssl) {
+    cfg.ssl = c.dialectOptions.ssl;
+  }
+
+  return cfg;
 }
 
 /**
@@ -179,4 +184,21 @@ export async function dropTenantPostgresDatabase(databaseName) {
   } finally {
     await client.end();
   }
+}
+
+/** Physical per-org databases (disable with TENANT_PHYSICAL_DATABASES=false). */
+export function isPhysicalTenantDatabaseEnabled() {
+  const flag = String(process.env.TENANT_PHYSICAL_DATABASES ?? "true").toLowerCase();
+  return flag !== "false" && flag !== "0" && flag !== "off";
+}
+
+/**
+ * Provision empty tenant DB + run tenant migrations.
+ * @param {string} slug
+ */
+export async function provisionOrganisationTenantDatabase(slug) {
+  const databaseName = buildPhysicalTenantDatabaseName(slug);
+  const { created } = await ensureTenantPostgresDatabase(databaseName);
+  await syncTenantDatabaseSchema(databaseName);
+  return { databaseName, created };
 }

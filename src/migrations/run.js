@@ -81,6 +81,11 @@ function listTenantSqlFiles() {
   return listOrderedSqlFiles("tenants", TENANT_BOOTSTRAP_ORDER);
 }
 
+/** Stable migration keys across Windows/Linux (always forward slashes). */
+function migrationKey(file) {
+  return String(file).replace(/\\/g, "/");
+}
+
 async function runSqlFiles(sequelize, files, label) {
   if (!files.length) {
     console.log(`No ${label} migrations found.`);
@@ -96,31 +101,40 @@ async function runSqlFiles(sequelize, files, label) {
     );
   `);
 
+  await sequelize.query(`
+    UPDATE migration_history
+    SET filename = REPLACE(filename, '\\', '/')
+    WHERE filename LIKE '%\\%';
+  `);
+
+  const seen = new Set();
   for (const file of files) {
-    // Check if migration already executed
-    const [existing] = await sequelize.query(
-      "SELECT id FROM migration_history WHERE filename = ?",
-      { replacements: [file], type: sequelize.QueryTypes.SELECT }
+    const key = migrationKey(file);
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    const existingRows = await sequelize.query(
+      "SELECT id FROM migration_history WHERE filename = $1 LIMIT 1",
+      { bind: [key], type: sequelize.QueryTypes.SELECT },
     );
+    const existing = Array.isArray(existingRows) ? existingRows[0] : null;
 
     if (existing) {
-      // console.log(`[${label}] Skipping already executed:`, file);
       continue;
     }
 
     const sql = readFileSync(join(__dirname, file), "utf8");
-    console.log(`[${label}] Running:`, file);
-    
-    // Execute SQL
+    console.log(`[${label}] Running:`, key);
+
     await sequelize.query(sql);
 
-    // Record execution
     await sequelize.query(
-      "INSERT INTO migration_history (filename) VALUES (?)",
-      { replacements: [file] }
+      `INSERT INTO migration_history (filename) VALUES ($1)
+       ON CONFLICT (filename) DO NOTHING`,
+      { bind: [key] },
     );
-    
-    console.log(`[${label}] OK:`, file);
+
+    console.log(`[${label}] OK:`, key);
   }
 }
 

@@ -1,48 +1,66 @@
-import 'dotenv/config';
-import { normalizePostgresDatabaseName } from '../utils/postgresDbName.js';
+import "dotenv/config";
+import { normalizePostgresDatabaseName } from "../utils/postgresDbName.js";
 
-const platformDatabase = normalizePostgresDatabaseName(
-  process.env.DB_NAME,
-  'epic_api',
-);
+function dbPassword() {
+  return process.env.DB_PASSWORD || process.env.DB_PASS || "";
+}
 
-// Use SSL when connecting to a remote host (non-localhost)
-const isRemoteHost = process.env.DB_HOST && !process.env.DB_HOST.includes('localhost') && process.env.DB_HOST !== '127.0.0.1';
-const sslOptions = isRemoteHost
-  ? { dialectOptions: { ssl: { require: true, rejectUnauthorized: false } } }
-  : {};
+/**
+ * SSL for hosted Postgres (Render, etc.). Local/Docker/Hostinger VPS: set DB_SSL=false.
+ */
+function useSsl() {
+  const flag = String(process.env.DB_SSL || "").trim().toLowerCase();
+  if (flag === "true" || flag === "1" || flag === "require") return true;
+  if (flag === "false" || flag === "0" || flag === "disable") return false;
+
+  const host = String(process.env.DB_HOST || "localhost").toLowerCase();
+  if (host === "localhost" || host === "127.0.0.1" || host === "::1") {
+    return false;
+  }
+
+  return /render\.com|supabase|amazonaws|neon\.tech|rds\./i.test(host);
+}
+
+function buildBaseConfig(databaseName) {
+  const cfg = {
+    username: process.env.DB_USER || "postgres",
+    password: dbPassword() || "postgres",
+    database: databaseName,
+    host: process.env.DB_HOST || "localhost",
+    port: Number(process.env.DB_PORT || 5432),
+    dialect: "postgres",
+    logging: process.env.DB_LOGGING === "true",
+    pool: {
+      max: Number(process.env.DB_POOL_MAX || 10),
+      min: 0,
+      acquire: 30000,
+      idle: 10000,
+    },
+  };
+
+  if (useSsl()) {
+    cfg.dialectOptions = {
+      ssl: {
+        require: true,
+        rejectUnauthorized: false,
+      },
+    };
+  }
+
+  return cfg;
+}
+
+const platformDatabase = normalizePostgresDatabaseName(process.env.DB_NAME, "epic_api");
+const shared = buildBaseConfig(platformDatabase);
 
 export default {
-  development: {
-    username: process.env.DB_USER || "postgres",
-    password: process.env.DB_PASSWORD || process.env.DB_PASS || "postgres",
-    database: platformDatabase,
-    host: process.env.DB_HOST || "localhost",
-    port: process.env.DB_PORT || 5432,
-    dialect: "postgres",
-    logging: false,
-    ...sslOptions,
-  },
+  development: shared,
   test: {
-    username: process.env.DB_USER || "postgres",
-    password: process.env.DB_PASSWORD || process.env.DB_PASS || "postgres",
-    database: normalizePostgresDatabaseName(process.env.DB_NAME, 'epic_api_test'),
-    host: process.env.DB_HOST || "localhost",
-    port: process.env.DB_PORT || 5432,
-    dialect: "postgres",
-    logging: false,
-    ...sslOptions,
+    ...shared,
+    database: normalizePostgresDatabaseName(
+      process.env.DB_NAME_TEST,
+      `${platformDatabase}_test`,
+    ),
   },
-  production: {
-    username: process.env.DB_USER,
-    password: process.env.DB_PASSWORD || process.env.DB_PASS,
-    database: platformDatabase,
-    host: process.env.DB_HOST,
-    port: process.env.DB_PORT,
-    dialect: "postgres",
-    logging: false,
-    ...sslOptions,
-  },
+  production: buildBaseConfig(platformDatabase),
 };
-
-

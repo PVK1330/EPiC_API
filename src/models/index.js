@@ -15,6 +15,7 @@ const sequelize = new Sequelize(c.database, c.username, c.password, {
   port: c.port,
   dialect: c.dialect || "postgres",
   logging: c.logging ?? false,
+  ...(c.pool ? { pool: c.pool } : {}),
   ...(c.dialectOptions ? { dialectOptions: c.dialectOptions } : {}),
 });
 

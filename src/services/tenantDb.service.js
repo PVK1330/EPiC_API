@@ -27,7 +27,7 @@ export function getTenantDb(databaseName) {
     port: c.port,
     dialect: "postgres",
     logging: false,
-    pool: { max: 5, min: 0, acquire: 30000, idle: 10000 },
+    pool: c.pool ?? { max: 5, min: 0, acquire: 30000, idle: 10000 },
     ...(c.dialectOptions ? { dialectOptions: c.dialectOptions } : {}),
   });
 

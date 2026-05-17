@@ -18,6 +18,7 @@ import {
   generateOrganisationAdminPassword,
   sendOrganisationAdminWelcomeEmail,
 } from '../../services/organisationMail.service.js';
+import { formatDbError } from '../../utils/dbError.js';
 
 const Organisation = platformDb.Organisation;
 const User = platformDb.User;
@@ -265,9 +266,10 @@ export const createOrganisation = async (req, res) => {
       }
     }
     console.error("createOrganisation", err);
-    return res.status(500).json({
+    const status = err?.name === "SequelizeUniqueConstraintError" ? 409 : 500;
+    return res.status(status).json({
       status: "error",
-      message: err?.message || "Failed to create organisation",
+      message: formatDbError(err),
       data: null,
     });
   }
@@ -621,9 +623,10 @@ export const createOrganisationAdmin = async (req, res) => {
     });
   } catch (err) {
     console.error("createOrganisationAdmin", err);
-    return res.status(500).json({
+    const status = err?.name === "SequelizeUniqueConstraintError" ? 409 : 500;
+    return res.status(status).json({
       status: "error",
-      message: err?.message || "Failed to create admin",
+      message: formatDbError(err),
       data: null,
     });
   }
