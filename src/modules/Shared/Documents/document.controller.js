@@ -3,6 +3,10 @@ import fs from 'fs';
 import archiver from 'archiver';
 
 import { notifyDocumentUploaded, notifyDocumentReviewed } from '../../../services/notification.service.js';
+import {
+  evaluateCaseStageAfterEvent,
+  recordDocumentReviewTimeline,
+} from '../../../services/caseStageAutomation.service.js';
 
 const documentsColumnMetadataByDb = new Map();
 
@@ -594,9 +598,10 @@ export const updateDocumentStatus = async (req, res) => {
       reviewedAt: new Date()
     });
 
-    // Notify candidate/user about document review
+    let caseData = null;
+    let stageAdvance = null;
+
     try {
-      let caseData = null;
       if (document.caseId) {
         caseData = await req.tenantDb.Case.findByPk(document.caseId);
       }
@@ -605,20 +610,43 @@ export const updateDocumentStatus = async (req, res) => {
         fileName: document.userFileName || document.documentName,
         caseId: caseData ? caseData.caseId : null,
       };
-      
-      // Notify the owner of the document
+
       if (document.userId !== req.user.userId) {
         await notifyDocumentReviewed(req.tenantDb, document.userId, docNotificationData, status);
       }
+
+      if (caseData) {
+        await recordDocumentReviewTimeline({
+          tenantDb: req.tenantDb,
+          caseRecord: caseData,
+          document,
+          status,
+          performedBy: req.user?.userId,
+        });
+
+        const trigger =
+          status === "rejected" ? "document_rejected" : "document_reviewed";
+        stageAdvance = await evaluateCaseStageAfterEvent({
+          tenantDb: req.tenantDb,
+          caseRecord: caseData,
+          trigger,
+          performedBy: req.user?.userId,
+        });
+        if (stageAdvance) {
+          await caseData.reload();
+        }
+      }
     } catch (notifErr) {
-      console.error("Failed to send document review notification:", notifErr);
+      console.error("Failed post-review workflow:", notifErr);
     }
 
     res.status(200).json({
       status: "success",
       message: "Document status updated successfully",
       data: {
-        document
+        document,
+        case: caseData,
+        stageAdvanced: Boolean(stageAdvance),
       }
     });
 

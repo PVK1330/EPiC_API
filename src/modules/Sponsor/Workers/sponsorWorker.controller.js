@@ -96,7 +96,7 @@ export const addSponsoredWorker = async (req, res) => {
       jobTitle,
       salaryOffered: salary,
       status: 'In Progress',
-      caseStage: 'Initial',
+      caseStage: 'data_capture_initial_docs',
       targetSubmissionDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
       notes: notes
     }, { transaction });

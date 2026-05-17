@@ -46,6 +46,9 @@ import LicenceApplicationModel from "./tenant/licenceApplication.model.js";
 import SponsorUserPreferenceModel from "./tenant/sponsorUserPreference.model.js";
 import WorkerEventModel from "./tenant/workerEvent.model.js";
 import DocumentChecklistModel from "./tenant/documentChecklist.model.js";
+import DataCaptureTemplateModel from "./tenant/dataCaptureTemplate.model.js";
+import DataCaptureSubmissionModel from "./tenant/dataCaptureSubmission.model.js";
+import CaseCclRecordModel from "./tenant/caseCclRecord.model.js";
 
 /**
  * Register all models and associations on a Sequelize instance (main or tenant DB).
@@ -66,6 +69,9 @@ export function buildDb(sequelize) {
   db.AdminUserPreference = AdminUserPreferenceModel(sequelize, Sequelize.DataTypes);
   db.AuditLog = AuditLogModel(sequelize, Sequelize.DataTypes);
   db.DocumentChecklist = DocumentChecklistModel(sequelize, Sequelize.DataTypes);
+  db.DataCaptureTemplate = DataCaptureTemplateModel(sequelize, Sequelize.DataTypes);
+  db.DataCaptureSubmission = DataCaptureSubmissionModel(sequelize, Sequelize.DataTypes);
+  db.CaseCclRecord = CaseCclRecordModel(sequelize, Sequelize.DataTypes);
   db.VisaType = VisaTypeModel(sequelize, Sequelize.DataTypes);
   db.PetitionType = PetitionTypeModel(sequelize, Sequelize.DataTypes);
   db.CaseCategory = CaseCategoryModel(sequelize, Sequelize.DataTypes);
@@ -215,6 +221,14 @@ export function buildDb(sequelize) {
   db.AuditLog.belongsTo(db.User, { foreignKey: "user_id", as: "user" });
   db.VisaType.hasMany(db.DocumentChecklist, { foreignKey: "visaTypeId", as: "documentChecklists" });
   db.DocumentChecklist.belongsTo(db.VisaType, { foreignKey: "visaTypeId", as: "visaType" });
+  db.DataCaptureTemplate.belongsTo(db.VisaType, { foreignKey: "visaTypeId", as: "visaType" });
+  db.VisaType.hasMany(db.DataCaptureTemplate, { foreignKey: "visaTypeId", as: "dataCaptureTemplates" });
+  db.DataCaptureSubmission.belongsTo(db.Case, { foreignKey: "caseId", as: "case" });
+  db.DataCaptureSubmission.belongsTo(db.User, { foreignKey: "userId", as: "user" });
+  db.DataCaptureSubmission.belongsTo(db.DataCaptureTemplate, { foreignKey: "templateId", as: "template" });
+  db.Case.hasOne(db.DataCaptureSubmission, { foreignKey: "caseId", as: "dataCaptureSubmission" });
+  db.Case.hasOne(db.CaseCclRecord, { foreignKey: "caseId", as: "cclRecord" });
+  db.CaseCclRecord.belongsTo(db.Case, { foreignKey: "caseId", as: "case" });
 
   return db;
 }

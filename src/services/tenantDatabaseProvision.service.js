@@ -1,5 +1,9 @@
 import pkg from "pg";
 import config from "../config/config.js";
+import {
+  normalizePostgresDatabaseName,
+  isValidPostgresDatabaseName,
+} from "../utils/postgresDbName.js";
 
 const { Client } = pkg;
 
@@ -57,9 +61,10 @@ function getMaintenanceConnectionConfig() {
  * @returns {Promise<boolean>}
  */
 export async function tenantPostgresDatabaseExists(databaseName) {
-  if (!databaseName || !/^[a-z][a-z0-9_]{0,62}$/.test(databaseName)) {
-    return false;
-  }
+  if (!databaseName) return false;
+  const safeName = normalizePostgresDatabaseName(databaseName);
+  if (!isValidPostgresDatabaseName(safeName)) return false;
+  databaseName = safeName;
   const cfg = getMaintenanceConnectionConfig();
   const client = new Client(cfg);
   await client.connect();
@@ -78,8 +83,15 @@ export async function tenantPostgresDatabaseExists(databaseName) {
  * @param {string} databaseName
  */
 export async function createTenantPostgresDatabase(databaseName) {
-  if (!/^[a-z][a-z0-9_]{0,62}$/.test(databaseName)) {
-    throw new Error(`Invalid database name: ${databaseName}`);
+  const raw = databaseName;
+  databaseName = normalizePostgresDatabaseName(databaseName);
+  if (!isValidPostgresDatabaseName(databaseName)) {
+    throw new Error(`Invalid database name: ${raw}`);
+  }
+  if (raw && raw !== databaseName) {
+    console.warn(
+      `Normalized PostgreSQL database name "${raw}" → "${databaseName}" (hyphens and special characters are not allowed)`,
+    );
   }
   const cfg = getMaintenanceConnectionConfig();
   const client = new Client(cfg);
@@ -151,7 +163,8 @@ export async function syncTenantDatabaseSchema(databaseName) {
  * @param {string} databaseName
  */
 export async function dropTenantPostgresDatabase(databaseName) {
-  if (!/^[a-z][a-z0-9_]{0,62}$/.test(databaseName)) return;
+  databaseName = normalizePostgresDatabaseName(databaseName, "");
+  if (!isValidPostgresDatabaseName(databaseName)) return;
   const cfg = getMaintenanceConnectionConfig();
   const client = new Client(cfg);
   await client.connect();

@@ -193,3 +193,81 @@ export function assignCasesToPipeline(cases = []) {
   }
   return pipeline;
 }
+
+/** Per-step caseworker actions and documents (Standard Immigration Case Process.docx). */
+export const STAGE_GUIDANCE = {
+  client_enquiry: {
+    actions: ["Log enquiry", "Assign caseworker", "Schedule consultation"],
+    docs: [],
+  },
+  initial_consultation: {
+    actions: ["Assess eligibility", "Confirm visa route", "Send fee estimate"],
+    docs: [],
+  },
+  data_capture_initial_docs: {
+    actions: ["Send Data Capture Sheet", "Request mandatory documents"],
+    docs: ["Passport", "BRP / eVisa", "Driving licence (if applicable)"],
+  },
+  application_preparation: {
+    actions: ["Begin application form", "Verify Data Capture Sheet received"],
+    docs: ["Completed Data Capture Sheet"],
+  },
+  document_review: {
+    actions: ["Review uploads", "Flag gaps", "Internal QC"],
+    docs: ["All mandatory documents"],
+  },
+  further_information_request: {
+    actions: ["Email client for missing items", "Set follow-up date"],
+    docs: ["As identified in review"],
+  },
+  draft_application_review: {
+    actions: ["Send draft to client", "Collect written approval"],
+    docs: ["Draft application PDF"],
+  },
+  ccl_issued: {
+    actions: ["Issue Client Care Letter", "Attach terms & fees"],
+    docs: ["Client Care Letter (unsigned)"],
+  },
+  ccl_payment_received: {
+    actions: ["Collect signed CCL", "Confirm payment cleared"],
+    docs: ["Signed CCL", "Payment receipt"],
+  },
+  application_submitted: {
+    actions: ["Submit to Home Office", "Record UAN / reference"],
+    docs: ["Submission confirmation"],
+  },
+  biometrics_booked: {
+    actions: ["Book appointment", "Add to case calendar"],
+    docs: ["Appointment letter"],
+  },
+  biometrics_confirmation_sent: {
+    actions: ["Email client instructions", "Confirm attendance"],
+    docs: ["Biometrics confirmation email"],
+  },
+  documents_uploaded: {
+    actions: ["Upload supporting docs", "Pre-biometrics checklist"],
+    docs: ["Supporting evidence bundle"],
+  },
+  awaiting_decision: {
+    actions: ["Monitor Home Office status", "Log correspondence"],
+    docs: [],
+  },
+  decision_communicated: {
+    actions: ["Send decision email", "Attach decision documents"],
+    docs: ["Approval or refusal letter"],
+  },
+  case_closure: {
+    actions: ["Send case closure email", "Archive case file"],
+    docs: [],
+  },
+};
+
+export function getStageGuidance(stageId) {
+  return STAGE_GUIDANCE[stageId] ?? { actions: [], docs: [] };
+}
+
+export function getNextStageId(stageId) {
+  const step = getStepById(stageId);
+  if (!step || step.order >= IMMIGRATION_CASE_STEPS.length) return null;
+  return IMMIGRATION_CASE_STEPS[step.order]?.id ?? null;
+}

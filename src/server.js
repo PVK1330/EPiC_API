@@ -16,6 +16,7 @@ import { getTenantDb } from './services/tenantDb.service.js';
 import { seedTenantDefaults, seedTenantOrganisation } from './services/tenantSeed.service.js';
 import http from 'http';
 import { initSocketIO } from './realtime/socketServer.js';
+import { normalizePostgresDatabaseName } from './utils/postgresDbName.js';
 
 const PORT = process.env.PORT || 5000;
 
@@ -41,7 +42,10 @@ async function ensureOrganisationTenantDatabase(org) {
 
 async function bootstrapPlatform() {
   try {
-    const centralDbName = (process.env.DB_NAME || 'epic_central').toLowerCase();
+    const centralDbName = normalizePostgresDatabaseName(
+      process.env.DB_NAME,
+      'epic_central',
+    );
     console.log(`Ensuring Platform Database exists: ${centralDbName}...`);
     const dbResult = await createTenantPostgresDatabase(centralDbName);
     if (dbResult.created) {

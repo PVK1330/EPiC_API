@@ -415,6 +415,16 @@ export const getMyApplication = async (req, res) => {
         documentSettings
       );
 
+      const primaryCase = cases[0];
+      if (primaryCase && req.tenantDb.DataCaptureSubmission) {
+        relatedData.dataCaptureSubmission = await req.tenantDb.DataCaptureSubmission.findOne({
+          where: { caseId: primaryCase.id },
+        });
+        relatedData.cclRecord = await req.tenantDb.CaseCclRecord?.findOne({
+          where: { caseId: primaryCase.id },
+        });
+      }
+
       relatedData.cases = cases;
       relatedData.documents = documents;
       relatedData.documentSettings = documentSettings;

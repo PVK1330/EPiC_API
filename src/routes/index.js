@@ -40,6 +40,7 @@ import teamsMeetingRoutes from '../modules/Shared/Integrations/teamsMeeting.rout
 import escalationRoutes from '../modules/Shared/Cases/escalation.routes.js';
 
 import candidatePanelRoutes from '../modules/Candidate/index.js';
+import workflowRoutes from '../modules/Shared/Workflow/workflow.routes.js';
 import sponsorPanelRoutes from '../modules/Sponsor/index.js';
 import superadminRoutes from '../modules/Superadmin/superadmin.routes.js';
 
@@ -75,6 +76,7 @@ router.use('/caseworker', caseworkerRoutes);
 router.use('/sponsors', sponsorsRoutes);
 router.use('/business', sponsorPanelRoutes);
 router.use('/candidate', candidatePanelRoutes);
+router.use('/workflow', workflowRoutes);
 router.use('/appointments', appointmentRoutes);
 router.use('/microsoft', microsoftRoutes);
 router.use('/teams-meetings', teamsMeetingRoutes);

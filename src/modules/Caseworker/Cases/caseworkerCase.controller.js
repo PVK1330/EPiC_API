@@ -758,7 +758,22 @@ export const updateMyCase = async (req, res) => {
       notes: notes !== undefined ? notes : caseData.notes,
     };
 
+    const prevPaid = Number(caseData.paidAmount) || 0;
     await caseData.update(updateData);
+    await caseData.reload();
+
+    if (paidAmount !== undefined && Number(paidAmount) > prevPaid) {
+      const { evaluateCaseStageAfterEvent } = await import(
+        "../../../services/caseStageAutomation.service.js"
+      );
+      await evaluateCaseStageAfterEvent({
+        tenantDb: req.tenantDb,
+        caseRecord: caseData,
+        trigger: "payment_received",
+        performedBy: req.user?.userId,
+      });
+      await caseData.reload();
+    }
 
     res.status(200).json({
       status: "success",

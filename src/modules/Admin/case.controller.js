@@ -4,8 +4,10 @@ import { generateCaseId } from '../../utils/case.utils.js';
 import { mergeCaseWhere, assertUsersInOrganisation } from '../../utils/tenantScope.js';
 import { recordAuditLog } from '../../services/audit.service.js';
 import { recordCaseCreated, recordStatusChange, recordAssignmentChange } from '../../services/caseTimeline.service.js';
+import { sendWorkflowStageEmail } from '../../services/workflowEmail.service.js';
 import {
   IMMIGRATION_CASE_STEPS,
+  STAGE_GUIDANCE,
   assignCasesToPipeline,
   isValidCaseStage,
   getStepById,
@@ -649,7 +651,7 @@ export const getCaseWorkflow = async (_req, res) => {
     res.status(200).json({
       status: "success",
       message: "Immigration case workflow retrieved",
-      data: { steps: IMMIGRATION_CASE_STEPS },
+      data: { steps: IMMIGRATION_CASE_STEPS, guidance: STAGE_GUIDANCE },
     });
   } catch (error) {
     res.status(500).json({ status: "error", message: "Internal server error", error: error.message });
@@ -744,6 +746,11 @@ export const updatePipelineStage = async (req, res) => {
         previousValue: getStepById(previousStage)?.title || previousStage,
         newValue: step?.title || nextStage,
         description: `Workflow moved to: ${step?.title || nextStage}`,
+      });
+      await sendWorkflowStageEmail({
+        tenantDb: req.tenantDb,
+        caseRecord: caseData,
+        stageId: nextStage,
       });
     }
 
