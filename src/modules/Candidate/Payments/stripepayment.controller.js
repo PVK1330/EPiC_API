@@ -1,5 +1,7 @@
 import Stripe from 'stripe';
 import { notifyPaymentReceived } from '../../../services/notification.service.js';
+import platformDb from '../../../models/index.js';
+import { getTenantDb } from '../../../services/tenantDb.service.js';
 
 let stripeInstance = null;
 
@@ -8,6 +10,15 @@ const getStripe = () => {
     stripeInstance = new Stripe(process.env.STRIPE_SECRET_KEY);
   }
   return stripeInstance;
+};
+
+const resolveTenantDbForUser = async (userId) => {
+  if (!userId) return null;
+  const user = await platformDb.User.findByPk(userId, { attributes: ['organisation_id'] });
+  if (!user?.organisation_id) return null;
+  const org = await platformDb.Organisation.findByPk(user.organisation_id, { attributes: ['database_name'] });
+  if (!org?.database_name) return null;
+  return getTenantDb(org.database_name);
 };
 
 // Create Payment Intent
@@ -267,12 +278,15 @@ export const handleWebhook = async (req, res) => {
       // Send payment notification if userId is available in metadata
       if (paymentIntent.metadata?.userId) {
         try {
-          await notifyPaymentReceived(paymentIntent.metadata.userId, {
-            id: paymentIntent.id,
-            invoiceId: paymentIntent.id,
-            amount: paymentIntent.amount / 100, // Stripe amount is in cents
-            caseId: paymentIntent.metadata.caseId || 'your case'
-          });
+          const tenantDb = await resolveTenantDbForUser(paymentIntent.metadata.userId);
+          if (tenantDb) {
+            await notifyPaymentReceived(tenantDb, paymentIntent.metadata.userId, {
+              id: paymentIntent.id,
+              invoiceId: paymentIntent.id,
+              amount: paymentIntent.amount / 100, // Stripe amount is in cents
+              caseId: paymentIntent.metadata.caseId || 'your case'
+            });
+          }
         } catch (notifErr) {
           console.error("Failed to send payment notification:", notifErr);
         }

@@ -6,6 +6,7 @@ import { addTimelineEntry } from '../../../services/timeline.service.js';
 import { streamBrandedPdf } from '../../../services/pdfGenerator.service.js';
 import { rowsToXlsxBuffer, xlsxBufferToRows } from '../../../utils/excelExport.util.js';
 import { generateStrongPassword } from '../../../utils/passwordGenerator.js';
+import { generateCaseId } from '../../../utils/case.utils.js';
 
 /**
  * Every form field that a candidate can save / submit.
@@ -55,25 +56,6 @@ function resolveUserId(req) {
   if (!Number.isFinite(num) || num <= 0) return null;
   return Math.trunc(num);
 }
-
-const generateCaseId = async () => {
-  const lastCase = await Case.findOne({
-    order: [["created_at", "DESC"]],
-  });
-
-  let nextId = 1;
-  if (lastCase && lastCase.caseId) {
-    const parts = lastCase.caseId.split("-");
-    if (parts.length === 2 && !isNaN(parseInt(parts[1], 10))) {
-      nextId = parseInt(parts[1], 10) + 1;
-    } else {
-      const count = await Case.count();
-      nextId = count + 1;
-    }
-  }
-
-  return `CAS-${String(nextId).padStart(6, "0")}`;
-};
 
 /** Every field that maps to a DATE / TIMESTAMPTZ column in the model. */
 const DATE_FIELDS = new Set([
@@ -378,7 +360,7 @@ export const getMyApplication = async (req, res) => {
 
     if (application) {
       // Fetch cases with timeline
-      const cases = await Case.findAll({
+      const cases = await req.tenantDb.Case.findAll({
         where: { candidateId: userId },
         include: [
           {
@@ -509,10 +491,12 @@ export const submitApplication = async (req, res) => {
       const caseworkerId = req.body.caseworkerId;
       const assignedcaseworkerId = caseworkerId ? [Number(caseworkerId)] : null;
 
-      const existingCase = await Case.findOne({
+      const existingCase = await req.tenantDb.Case.findOne({
         where: { candidateId: userId },
         transaction: t,
       });
+
+      const organisationId = req.user?.organisation_id != null ? Number(req.user.organisation_id) : null;
 
       if (existingCase) {
         await existingCase.update(
@@ -525,8 +509,8 @@ export const submitApplication = async (req, res) => {
           { transaction: t }
         );
       } else {
-        const caseIdStr = await generateCaseId();
-        const caseRecord = await Case.create(
+        const caseIdStr = await generateCaseId(req.tenantDb);
+        const caseRecord = await req.tenantDb.Case.create(
           {
             caseId: caseIdStr,
             candidateId: userId,
@@ -539,6 +523,7 @@ export const submitApplication = async (req, res) => {
             totalAmount: 0,
             paidAmount: 0,
             assignedcaseworkerId,
+            organisation_id: organisationId,
           },
           { transaction: t }
         );
@@ -550,6 +535,7 @@ export const submitApplication = async (req, res) => {
         });
 
         await addTimelineEntry({
+          tenantDb: req.tenantDb,
           caseId: caseRecord.id,
           actionType: 'case_created',
           description: `Case ${caseRecord.caseId} created for ${app.firstName} ${app.lastName}`,
@@ -560,7 +546,7 @@ export const submitApplication = async (req, res) => {
 
       const targetCase =
         existingCase ||
-        (await Case.findOne({ where: { candidateId: userId }, transaction: t }));
+        (await req.tenantDb.Case.findOne({ where: { candidateId: userId }, transaction: t }));
 
       if (targetCase) {
         // Link any orphaned documents uploaded by this user to this case
@@ -573,6 +559,7 @@ export const submitApplication = async (req, res) => {
         );
 
         await addTimelineEntry({
+          tenantDb: req.tenantDb,
           caseId: targetCase.id,
           actionType: 'status_changed',
           description: `Application submitted by ${app.firstName} ${app.lastName}`,
@@ -748,7 +735,7 @@ export const adminUpdateCandidateApplication = async (req, res) => {
         }, { transaction: t });
       }
 
-      const existingCase = await Case.findOne({
+      const existingCase = await req.tenantDb.Case.findOne({
         where: { candidateId },
         transaction: t,
       });
@@ -772,8 +759,9 @@ export const adminUpdateCandidateApplication = async (req, res) => {
           assignedcaseworkerId: assignedcaseworkerId ?? existingCase.assignedcaseworkerId,
         }, { transaction: t });
       } else if (payload.nationality || payload.visaType || visaTypeId) {
-        await Case.create({
-          caseId: `CAS-${Math.floor(100000 + Math.random() * 900000)}`,
+        const organisationId = req.user?.organisation_id != null ? Number(req.user.organisation_id) : null;
+        await req.tenantDb.Case.create({
+          caseId: await generateCaseId(req.tenantDb),
           candidateId,
           visaTypeId,
           status: 'Lead',
@@ -782,6 +770,7 @@ export const adminUpdateCandidateApplication = async (req, res) => {
           nationality: payload.nationality || null,
           jobTitle: 'Candidate',
           assignedcaseworkerId,
+          organisation_id: organisationId,
         }, { transaction: t });
       }
     });
@@ -1314,7 +1303,7 @@ export const downloadCaseSummaryPdf = async (req, res) => {
       userRow?.email ||
       'Candidate';
 
-    const caseRecord = await Case.findOne({
+    const caseRecord = await req.tenantDb.Case.findOne({
       where: { candidateId: userId },
       order: [['created_at', 'DESC']],
       include: [

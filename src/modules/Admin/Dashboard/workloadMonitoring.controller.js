@@ -55,7 +55,7 @@ export const exportWorkloadCSV = async (req, res) => {
     });
 
     // Get all cases within date range
-    const allCases = await Case.findAll({
+    const allCases = await req.tenantDb.Case.findAll({
       where: {
         created_at: { [Op.gte]: startDate }
       },
@@ -230,7 +230,7 @@ export const getWorkloadOverview = async (req, res) => {
     });
 
     // Get all cases within date range and manually assign to caseworkers
-    const allCases = await Case.findAll({
+    const allCases = await req.tenantDb.Case.findAll({
       where: {
         created_at: { [Op.gte]: startDate }
       },
@@ -382,7 +382,7 @@ export const getCaseworkerWorkload = async (req, res) => {
     });
 
     // Get all cases within date range and manually filter for this caseworker
-    const allCases = await Case.findAll({
+    const allCases = await req.tenantDb.Case.findAll({
       where: {
         created_at: { [Op.gte]: startDate }
       },
@@ -510,7 +510,7 @@ export const getWorkloadTrends = async (req, res) => {
     });
 
     // Get all cases within date range
-    const allCases = await Case.findAll({
+    const allCases = await req.tenantDb.Case.findAll({
       where: {
         created_at: { [Op.gte]: startDate }
       },
@@ -593,7 +593,7 @@ export const getWorkloadAlerts = async (req, res) => {
     });
 
     // Get all active cases
-    const allCases = await Case.findAll({
+    const allCases = await req.tenantDb.Case.findAll({
       where: {
         status: { [Op.notIn]: ['Completed', 'Cancelled'] }
       },

@@ -40,7 +40,7 @@ export const getCaseworkerPerformance = async (req, res) => {
     }
 
     // Get cases assigned to the caseworker
-    const assignedCases = await Case.findAll({
+    const assignedCases = await req.tenantDb.Case.findAll({
       where: caseWhere,
     });
 
@@ -152,7 +152,7 @@ export const getCaseworkerPerformance = async (req, res) => {
       const monthStart = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const monthEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 0);
       
-      const monthCases = await Case.findAll({
+      const monthCases = await req.tenantDb.Case.findAll({
         where: {
           ...caseworkerWhereClause,
           created_at: { [Op.between]: [monthStart, monthEnd] },

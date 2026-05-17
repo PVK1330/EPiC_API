@@ -982,7 +982,7 @@ export const deleteLicenceDocument = async (req, res) => {
 
             const caseworkerIds = extractCaseworkerIds(application.assignedcaseworkerId);
             for (const caseworkerId of caseworkerIds) {
-                await notifyUser(caseworkerId, {
+                await notifyUser(req.tenantDb, caseworkerId, {
                     type: NotificationTypes.INFO,
                     priority: NotificationPriority.MEDIUM,
                     title: `Document Removed: LIC-${applicationId}`,

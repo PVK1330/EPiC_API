@@ -72,11 +72,13 @@ export const createAppointment = async (req, res) => {
     let caseworker_id = (staff_ids && staff_ids.length > 0) ? staff_ids[0] : null;
     
     if (!caseworker_id && case_id) {
-      const caseData = await Case.findByPk(case_id);
+      const caseData = await req.tenantDb.Case.findByPk(case_id);
       if (caseData && caseData.assignedcaseworkerId && caseData.assignedcaseworkerId.length > 0) {
         caseworker_id = caseData.assignedcaseworkerId[0];
       }
     }
+
+    const organisationId = req.user?.organisation_id != null ? Number(req.user.organisation_id) : null;
 
     const appointment = await req.tenantDb.Appointment.create({
       title,
@@ -89,7 +91,8 @@ export const createAppointment = async (req, res) => {
       caseworker_id,
       invited_staff: staff_ids || [],
       case_id,
-      status: 'scheduled'
+      status: 'scheduled',
+      organisation_id: organisationId,
     });
 
     // --- Notifications & Emails ---
@@ -110,7 +113,8 @@ export const createAppointment = async (req, res) => {
           message: `${candidate.first_name} ${candidate.last_name} has scheduled a meeting: ${title} on ${date} at ${time}.`,
           entityId: appointment.id,
           entityType: 'appointment',
-          actionType: 'appointment_created'
+          actionType: 'appointment_created',
+          organisation_id: organisationId,
         });
 
         // 2. Send Email to each Staff member

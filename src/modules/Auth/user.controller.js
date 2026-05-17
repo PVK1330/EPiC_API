@@ -292,7 +292,7 @@ export const getAllUsers = async (req, res) => {
 // Get sponsors and business dropdown API
 export const dropdownSponsors = async (req, res) => {
   try {
-    const userId = getUserId(req);
+    const userId = req.user?.userId;
     if (!userId) {
       return res.status(401).json({ status: "error", message: "Authentication required.", data: null });
     }

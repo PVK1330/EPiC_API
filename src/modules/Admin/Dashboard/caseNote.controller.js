@@ -21,7 +21,7 @@ export const createCaseNote = async (req, res) => {
 
     // If caseId is a number (or numeric string), try findByPk first
     if (!isNaN(parseInt(caseId))) {
-      caseRecord = await Case.findByPk(parseInt(caseId));
+      caseRecord = await req.tenantDb.Case.findByPk(parseInt(caseId));
       if (caseRecord) {
         numericCaseId = caseRecord.id;
       }
@@ -29,7 +29,7 @@ export const createCaseNote = async (req, res) => {
 
     // If not found by numeric id, try by string caseId
     if (!caseRecord) {
-      caseRecord = await Case.findOne({ where: { caseId } });
+      caseRecord = await req.tenantDb.Case.findOne({ where: { caseId } });
       if (caseRecord) {
         numericCaseId = caseRecord.id;
       }
@@ -102,7 +102,7 @@ export const getCaseNotes = async (req, res) => {
 
     // If caseId is a number (or numeric string), try findByPk first
     if (!isNaN(parseInt(caseId))) {
-      caseRecord = await Case.findByPk(parseInt(caseId));
+      caseRecord = await req.tenantDb.Case.findByPk(parseInt(caseId));
       if (caseRecord) {
         numericCaseId = caseRecord.id;
       }
@@ -110,7 +110,7 @@ export const getCaseNotes = async (req, res) => {
 
     // If not found by numeric id, try by string caseId
     if (!caseRecord) {
-      caseRecord = await Case.findOne({ where: { caseId } });
+      caseRecord = await req.tenantDb.Case.findOne({ where: { caseId } });
       if (caseRecord) {
         numericCaseId = caseRecord.id;
       }

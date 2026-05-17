@@ -61,7 +61,8 @@ export class CandidateService {
       if (application && typeof application === "object") {
         await this.repository.createApplication({
           userId: newUser.id,
-          ...application
+          ...application,
+          organisation_id,
         }, t);
 
         let visaTypeId = null;
@@ -84,6 +85,7 @@ export class CandidateService {
           nationality: application.nationality || null,
           jobTitle: legacyFields.jobTitle || 'Client enquiry',
           assignedcaseworkerId,
+          organisation_id,
         }, t);
       }
 
@@ -93,6 +95,7 @@ export class CandidateService {
     if (!application) {
       await ensureCandidateEnquiryCase(this.repository.tenantDb, candidate.id, {
         visaTypeName: application?.visaType || null,
+        organisationId: organisation_id,
       });
     }
 

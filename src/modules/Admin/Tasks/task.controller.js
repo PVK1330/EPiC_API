@@ -15,7 +15,7 @@ function fullName(user) {
   return s || null;
 }
 
-function userInclude(as) {
+function userInclude(req, as) {
   return {
     model: req.tenantDb.User,
     as,
@@ -24,7 +24,7 @@ function userInclude(as) {
   };
 }
 
-function caseInclude() {
+function caseInclude(req) {
   return {
     model: req.tenantDb.Case,
     as: "case",
@@ -135,7 +135,7 @@ export const createTask = async (req, res) => {
         });
       }
 
-      const caseRow = await Case.findByPk(case_id);
+      const caseRow = await req.tenantDb.Case.findByPk(case_id);
       if (!caseRow) {
         return res.status(404).json({
           status: "error",
@@ -163,7 +163,7 @@ export const createTask = async (req, res) => {
             data: null,
           });
         }
-        const caseRow = await Case.findByPk(case_id);
+        const caseRow = await req.tenantDb.Case.findByPk(case_id);
         if (!caseRow) {
           return res.status(404).json({
             status: "error",
@@ -180,6 +180,8 @@ export const createTask = async (req, res) => {
       });
     }
 
+    const organisationId = req.user?.organisation_id != null ? Number(req.user.organisation_id) : null;
+
     const created = await req.tenantDb.Task.create({
       title: String(title).trim(),
       due_date,
@@ -188,16 +190,17 @@ export const createTask = async (req, res) => {
       case_id,
       assigned_to,
       created_by: userId,
+      organisation_id: organisationId,
     });
 
     const withUsers = await req.tenantDb.Task.findByPk(created.id, {
-      include: [userInclude("assignee"), userInclude("creator")],
+      include: [userInclude(req, "assignee"), userInclude(req, "creator")],
     });
 
     // Notify assigned user if assigned to someone else
     if (assigned_to !== userId) {
       try {
-        await notifyTaskAssigned(assigned_to, created);
+        await notifyTaskAssigned(req.tenantDb, assigned_to, created);
       } catch (notifErr) {
         console.error("Failed to notify user about assigned task:", notifErr);
       }
@@ -268,7 +271,7 @@ export const getTasks = async (req, res) => {
 
     const rows = await req.tenantDb.Task.findAll({
       where,
-      include: [userInclude("assignee"), userInclude("creator")],
+      include: [userInclude(req, "assignee"), userInclude(req, "creator")],
       order: [["due_date", "ASC"], ["id", "DESC"]],
     });
 
@@ -304,7 +307,7 @@ export const getTaskById = async (req, res) => {
     }
 
     const row = await req.tenantDb.Task.findByPk(taskId, {
-      include: [userInclude("assignee"), userInclude("creator")],
+      include: [userInclude(req, "assignee"), userInclude(req, "creator")],
     });
 
     if (!row) {
@@ -368,7 +371,7 @@ export const getTaskByCaseId = async (req, res) => {
       numericCaseId = parseInt(id);
     } else {
       // Otherwise, find case by string caseId to get numeric id
-      const caseRecord = await Case.findOne({ where: { caseId: id } });
+      const caseRecord = await req.tenantDb.Case.findOne({ where: { caseId: id } });
       if (!caseRecord) {
         return res.status(404).json({
           status: "error",
@@ -381,7 +384,7 @@ export const getTaskByCaseId = async (req, res) => {
 
     const rows = await req.tenantDb.Task.findAll({
       where: { case_id: numericCaseId },
-      include: [userInclude("assignee"), userInclude("creator")],
+      include: [userInclude(req, "assignee"), userInclude(req, "creator")],
     });
 
     if (roleId === ROLES.ADMIN) {
@@ -516,7 +519,7 @@ export const updateTask = async (req, res) => {
               data: null,
             });
           }
-          const c = await Case.findByPk(cid);
+          const c = await req.tenantDb.Case.findByPk(cid);
           if (!c) {
             return res.status(404).json({
               status: "error",
@@ -551,7 +554,7 @@ export const updateTask = async (req, res) => {
     await row.update(updates);
 
     const refreshed = await req.tenantDb.Task.findByPk(row.id, {
-      include: [userInclude("assignee"), userInclude("creator")],
+      include: [userInclude(req, "assignee"), userInclude(req, "creator")],
     });
 
     res.status(200).json({
@@ -705,7 +708,7 @@ export const getTasksByUserId = async (req, res) => {
 
     const { count, rows } = await req.tenantDb.Task.findAndCountAll({
       where,
-      include: [userInclude("assignee"), userInclude("creator"), caseInclude()],
+      include: [userInclude(req, "assignee"), userInclude(req, "creator"), caseInclude(req)],
       order: [["due_date", "ASC"], ["id", "DESC"]],
       limit: limitNum,
       offset,

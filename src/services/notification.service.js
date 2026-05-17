@@ -184,8 +184,9 @@ export const createNotification = async (data) => {
   }
 };
 
-export const notifyUser = async (userId, notificationData) => {
+export const notifyUser = async (tenantDb, userId, notificationData = {}) => {
   return await createNotification({
+    tenantDb,
     userId,
     ...notificationData,
     sendEmail: notificationData.sendEmail !== undefined ? notificationData.sendEmail : true
@@ -608,12 +609,13 @@ export const notifyCaseStatusChanged = async (tenantDb, userIds, caseData, oldSt
  * @param {number} userId - User ID (candidate or business)
  * @param {Object} paymentData - Payment information
  */
-export const notifyPaymentReceived = async (userId, paymentData) => {
+export const notifyPaymentReceived = async (tenantDb, userId, paymentData) => {
   const safeInvoiceId = paymentData?.invoiceId || paymentData?.id || 'Unknown';
   const safeAmount = paymentData?.amount || paymentData?.paymentAmount || '0';
   const safeCaseId = paymentData?.caseId || 'your case';
   
   return await createNotification({
+    tenantDb,
     userId,
     type: NotificationTypes.PAYMENT_RECEIVED,
     priority: NotificationPriority.MEDIUM,
@@ -636,13 +638,14 @@ export const notifyPaymentReceived = async (userId, paymentData) => {
  * @param {number} userId - User ID
  * @param {Object} paymentData - Payment information
  */
-export const notifyPaymentOverdue = async (userId, paymentData) => {
+export const notifyPaymentOverdue = async (tenantDb, userId, paymentData) => {
   const safeInvoiceId = paymentData?.invoiceId || 'Unknown';
   const safeAmount = paymentData?.amount || '0';
   const safeCaseId = paymentData?.caseId || 'your case';
   const safeDueDate = paymentData?.dueDate || 'Not specified';
   
   return await createNotification({
+    tenantDb,
     userId,
     type: NotificationTypes.PAYMENT_OVERDUE,
     priority: NotificationPriority.HIGH,
@@ -724,12 +727,13 @@ export const notifyDocumentReviewed = async (tenantDb, userId, documentData, sta
  * @param {number} adminId - Admin user ID
  * @param {Object} escalationData - Escalation information
  */
-export const notifyEscalationCreated = async (adminId, escalationData) => {
+export const notifyEscalationCreated = async (tenantDb, adminId, escalationData) => {
   const safeTitle = escalationData?.title || escalationData?.id || 'Unknown';
   const safeCaseId = escalationData?.caseId || 'Unknown case';
   const safePriority = escalationData?.priority || 'Not specified';
   
   return await createNotification({
+    tenantDb,
     userId: adminId,
     type: NotificationTypes.ESCALATION_CREATED,
     priority: NotificationPriority.URGENT,
@@ -752,12 +756,13 @@ export const notifyEscalationCreated = async (adminId, escalationData) => {
  * @param {Array<number>} userIds - User IDs to notify
  * @param {Object} escalationData - Escalation information
  */
-export const notifyEscalationResolved = async (userIds, escalationData) => {
+export const notifyEscalationResolved = async (tenantDb, userIds, escalationData) => {
   const safeTitle = escalationData?.title || escalationData?.id || 'Unknown';
   const safeCaseId = escalationData?.caseId || 'Unknown case';
   const safeResolution = escalationData?.resolution || 'No resolution details provided';
   
   return await createBulkNotifications(userIds, {
+    tenantDb,
     type: NotificationTypes.ESCALATION_RESOLVED,
     priority: NotificationPriority.MEDIUM,
     title: `Escalation Resolved: ${safeTitle}`,
@@ -778,7 +783,7 @@ export const notifyEscalationResolved = async (userIds, escalationData) => {
  * @param {number} roleId - Role ID (e.g., admin role ID)
  * @param {Object} userData - User information
  */
-export const notifyUserCreated = async (roleId, userData) => {
+export const notifyUserCreated = async (tenantDb, roleId, userData) => {
   const safeEmail = userData?.email || 'Unknown email';
   const safeRole = userData?.role || 'user';
   const safeFirstName = userData?.first_name || '';
@@ -786,6 +791,7 @@ export const notifyUserCreated = async (roleId, userData) => {
   const safeName = safeFirstName && safeLastName ? `${safeFirstName} ${safeLastName}` : safeEmail;
   
   return await createNotificationForRole(roleId, {
+    tenantDb,
     type: NotificationTypes.USER_CREATED,
     priority: NotificationPriority.LOW,
     title: `New User Created: ${safeEmail}`,
@@ -807,12 +813,13 @@ export const notifyUserCreated = async (roleId, userData) => {
  * @param {Object} caseData - Case information
  * @param {string} slaType - Type of SLA breached
  */
-export const notifySLABreach = async (userIds, caseData, slaType) => {
+export const notifySLABreach = async (tenantDb, userIds, caseData, slaType) => {
   const safeCaseId = caseData?.caseId || caseData?.id || 'Unknown';
   const safeSlaType = slaType || 'Unknown';
   const safeCandidateName = caseData?.candidateName || 'Not specified';
   
   return await createBulkNotifications(userIds, {
+    tenantDb,
     type: NotificationTypes.SLA_BREACH,
     priority: NotificationPriority.URGENT,
     title: `SLA Breach: ${safeCaseId}`,
@@ -839,7 +846,7 @@ export const notifySLABreach = async (userIds, caseData, slaType) => {
  * @param {number} userId - Business user ID to notify
  * @param {Object} applicationData - Application information
  */
-export const notifyLicenceInfoRequested = async (userId, applicationData) => {
+export const notifyLicenceInfoRequested = async (tenantDb, userId, applicationData) => {
   const safeType = applicationData?.type || 'Licence';
   const safeId = applicationData?.id || 'Unknown';
   const docs = applicationData?.requestedDocuments;
@@ -852,6 +859,7 @@ export const notifyLicenceInfoRequested = async (userId, applicationData) => {
   message += `\n\nPlease review and upload the requested evidence through your dashboard.`;
 
   return await createNotification({
+    tenantDb,
     userId,
     type: NotificationTypes.LICENCE_INFO_REQUESTED,
     priority: NotificationPriority.HIGH,
@@ -870,7 +878,7 @@ export const notifyLicenceInfoRequested = async (userId, applicationData) => {
   });
 };
 
-export const notifyLicenceStatusChanged = async (userId, applicationData, status, notes = '') => {
+export const notifyLicenceStatusChanged = async (tenantDb, userId, applicationData, status, notes = '') => {
   const safeId = applicationData?.id || 'Unknown';
   const company = applicationData?.companyName || 'Your business';
   const type = applicationData?.type || 'Licence';
@@ -882,6 +890,7 @@ export const notifyLicenceStatusChanged = async (userId, applicationData, status
   }
 
   return await createNotification({
+    tenantDb,
     userId,
     type: NotificationTypes.LICENCE_STATUS_CHANGED,
     priority: status === 'Approved' ? NotificationPriority.HIGH : NotificationPriority.URGENT,
@@ -902,11 +911,12 @@ export const notifyLicenceStatusChanged = async (userId, applicationData, status
   });
 };
 
-export const notifyLicenceAssigned = async (caseworkerId, applicationData) => {
+export const notifyLicenceAssigned = async (tenantDb, caseworkerId, applicationData) => {
   const safeId = applicationData?.id || 'Unknown';
   const company = applicationData?.companyName || 'A business';
 
   return await createNotification({
+    tenantDb,
     userId: caseworkerId,
     type: NotificationTypes.LICENCE_ASSIGNED,
     priority: NotificationPriority.HIGH,
@@ -924,7 +934,7 @@ export const notifyLicenceAssigned = async (caseworkerId, applicationData) => {
   });
 };
 
-export const notifySystemMaintenance = async (roleId, maintenanceData) => {
+export const notifySystemMaintenance = async (tenantDb, roleId, maintenanceData) => {
   if (roleId) {
     const safeTitle = maintenanceData?.title || 'System Maintenance';
     const safeMessage = maintenanceData?.message || 'System maintenance is scheduled.';
@@ -933,6 +943,7 @@ export const notifySystemMaintenance = async (roleId, maintenanceData) => {
     const safeNotifyBefore = maintenanceData?.notifyBefore || null;
     
     return await createNotificationForRole(roleId, {
+      tenantDb,
       type: NotificationTypes.SYSTEM_MAINTENANCE,
       priority: NotificationPriority.HIGH,
       title: `Scheduled Maintenance: ${safeTitle}`,
@@ -988,12 +999,13 @@ export const notifyMessageReceived = async (tenantDb, receiverId, messageData, s
   });
 };
 
-export const notifyTaskAssigned = async (userId, taskData) => {
+export const notifyTaskAssigned = async (tenantDb, userId, taskData) => {
   const safeTitle = taskData?.title || 'Unknown Task';
   const safeDueDate = taskData?.due_date ? new Date(taskData.due_date).toLocaleDateString() : 'No deadline';
   const safePriority = taskData?.priority || 'medium';
 
   return await createNotification({
+    tenantDb,
     userId,
     type: NotificationTypes.INFO,
     priority: safePriority === 'high' ? NotificationPriority.HIGH : NotificationPriority.MEDIUM,

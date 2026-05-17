@@ -42,9 +42,9 @@ const extractCaseworkerIds = (assignedcaseworkerId) => {
     .filter((id) => Number.isInteger(id));
 };
 
-const notifyInvolvedParties = async ({ workerCase, workerId, title, message, actionType, eventId }) => {
+const notifyInvolvedParties = async ({ tenantDb, workerCase, workerId, title, message, actionType, eventId }) => {
   try {
-    await notifyAdmins(req.tenantDb, {
+    await notifyAdmins(tenantDb, {
       type: NotificationTypes.INFO,
       priority: NotificationPriority.HIGH,
       title,
@@ -59,7 +59,7 @@ const notifyInvolvedParties = async ({ workerCase, workerId, title, message, act
   }
 
   try {
-    await notifyUser(workerId, {
+    await notifyUser(tenantDb, workerId, {
       type: NotificationTypes.INFO,
       priority: NotificationPriority.MEDIUM,
       title,
@@ -77,7 +77,7 @@ const notifyInvolvedParties = async ({ workerCase, workerId, title, message, act
   const caseworkerIds = extractCaseworkerIds(workerCase?.assignedcaseworkerId);
   for (const caseworkerId of caseworkerIds) {
     try {
-      await notifyUser(caseworkerId, {
+      await notifyUser(tenantDb, caseworkerId, {
         type: NotificationTypes.INFO,
         priority: NotificationPriority.HIGH,
         title,
@@ -142,6 +142,7 @@ export const createWorkerEvent = async (req, res) => {
     }
 
     const deadlineDate = toISODate(addDays(eventDate, 10));
+    const organisationId = req.user?.organisation_id != null ? Number(req.user.organisation_id) : null;
     const newEvent = await req.tenantDb.WorkerEvent.create({
       sponsorId,
       workerId,
@@ -152,9 +153,11 @@ export const createWorkerEvent = async (req, res) => {
       reportedDate: null,
       status: resolveStatus(null, deadlineDate),
       description: description || null,
+      organisation_id: organisationId,
     });
 
     await notifyInvolvedParties({
+      tenantDb: req.tenantDb,
       workerCase,
       workerId,
       title: "Worker Event Reported",
@@ -211,6 +214,7 @@ export const updateWorkerEvent = async (req, res) => {
 
     await event.save();
     await notifyInvolvedParties({
+      tenantDb: req.tenantDb,
       workerCase,
       workerId: event.workerId,
       title: "Worker Event Updated",
@@ -246,6 +250,7 @@ export const deleteWorkerEvent = async (req, res) => {
     }
 
     await notifyInvolvedParties({
+      tenantDb: req.tenantDb,
       workerCase,
       workerId: event.workerId,
       title: "Worker Event Removed",
