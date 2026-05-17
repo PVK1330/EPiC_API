@@ -43,6 +43,7 @@ export function buildPhysicalTenantDatabaseName(slug) {
 function getMaintenanceConnectionConfig() {
   const env = process.env.NODE_ENV || "development";
   const c = config[env];
+  const isRemote = c.host && !c.host.includes('localhost') && c.host !== '127.0.0.1';
   return {
     host: c.host,
     port: parseInt(String(c.port || 5432), 10),
@@ -53,6 +54,7 @@ function getMaintenanceConnectionConfig() {
       process.env.DB_PASSWORD ??
       process.env.DB_PASS,
     database: process.env.DB_MAINTENANCE_DATABASE || "postgres",
+    ...(isRemote ? { ssl: { require: true, rejectUnauthorized: false } } : {}),
   };
 }
 
