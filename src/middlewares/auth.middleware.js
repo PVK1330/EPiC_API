@@ -24,7 +24,34 @@ export const verifyToken = async (req, res, next) => {
       return ApiResponse.forbidden(res, "User account is " + user.status);
     }
 
-    user.userId = user.id; // Compatibility with legacy modules
+    if (user.organisation_id && user.role_id !== 5) {
+      const org = await platformDb.Organisation.findByPk(user.organisation_id, {
+        attributes: ['status'],
+        include: [
+          {
+            model: platformDb.Subscription,
+            as: 'subscriptions',
+            where: { status: { [platformDb.Sequelize.Op.in]: ['active', 'trial'] } },
+            required: false,
+          },
+        ],
+      });
+
+      if (org?.status === 'suspended') {
+        return ApiResponse.forbidden(res, 'Your organisation subscription has expired. Please contact your administrator.');
+      }
+
+      if (!org?.subscriptions || org.subscriptions.length === 0) {
+        const expiredSub = await platformDb.Subscription.findOne({
+          where: { organisation_id: user.organisation_id, status: 'expired' },
+        });
+        if (expiredSub) {
+          return ApiResponse.forbidden(res, 'Your organisation subscription has expired. Please contact your administrator.');
+        }
+      }
+    }
+
+    user.userId = user.id;
     req.user = user;
     next();
   } catch (err) {

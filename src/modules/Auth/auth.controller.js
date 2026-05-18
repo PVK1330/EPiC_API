@@ -81,6 +81,38 @@ async function resolveTenantDbForAuth(req) {
   return resolveDefaultTenantDb();
 }
 
+async function resolveAllowedModules(user) {
+  if (isSuperAdminRole(user.role_id)) return ['*'];
+  if (!user.organisation_id) return [];
+  try {
+    const subscription = await platformDb.Subscription.findOne({
+      where: {
+        organisation_id: user.organisation_id,
+        status: { [platformDb.Sequelize.Op.in]: ['active', 'trial'] },
+      },
+      include: [
+        {
+          model: platformDb.Plan,
+          as: 'plan',
+          include: [
+            {
+              model: platformDb.Module,
+              as: 'modules',
+              through: { attributes: [] },
+              where: { is_active: true },
+              required: false,
+            },
+          ],
+        },
+      ],
+    });
+    if (!subscription?.plan?.modules) return [];
+    return subscription.plan.modules.map((m) => m.key);
+  } catch {
+    return [];
+  }
+}
+
 async function mirrorPlatformUserById(userId) {
   const user = await platformDb.User.findByPk(userId);
   if (!user?.organisation_id) return;
@@ -366,12 +398,15 @@ export const verifyOTP = catchAsync(async (req, res) => {
     createdAt: verifiedUser.createdAt,
   };
 
+  const allowedModules = await resolveAllowedModules(verifiedUser);
+
   return ApiResponse.success(res, "Email verified successfully. You are now logged in!", {
     email: email,
     is_verified: true,
     credentials_sent: true,
     token: token,
-    user: userResponse
+    user: userResponse,
+    allowedModules,
   });
 });
 
@@ -462,12 +497,30 @@ export const login = catchAsync(async (req, res) => {
     return ApiResponse.unauthorized(res, 'Invalid credentials.');
   }
 
-  if (user.organisation_id) {
+  if (user.organisation_id && user.role_id !== 5) {
     const org = await platformDb.Organisation.findByPk(user.organisation_id, {
       attributes: ['status'],
+      include: [
+        {
+          model: platformDb.Subscription,
+          as: 'subscriptions',
+          where: { status: { [platformDb.Sequelize.Op.in]: ['active', 'trial'] } },
+          required: false,
+        },
+      ],
     });
+
     if (org?.status === 'suspended') {
-      return ApiResponse.forbidden(res, 'Organisation suspended.');
+      return ApiResponse.forbidden(res, 'Your organisation subscription has expired. Please contact your administrator.');
+    }
+
+    if (!org?.subscriptions || org.subscriptions.length === 0) {
+      const expiredSub = await platformDb.Subscription.findOne({
+        where: { organisation_id: user.organisation_id, status: 'expired' },
+      });
+      if (expiredSub) {
+        return ApiResponse.forbidden(res, 'Your organisation subscription has expired. Please contact your administrator.');
+      }
     }
   }
 
@@ -507,6 +560,8 @@ export const login = catchAsync(async (req, res) => {
     }
   }
 
+  const allowedModules = await resolveAllowedModules(user);
+
   return ApiResponse.success(res, 'Login successful.', {
     user: {
       id: user.id,
@@ -521,6 +576,7 @@ export const login = catchAsync(async (req, res) => {
       two_factor_enabled: user.two_factor_enabled,
     },
     token,
+    allowedModules,
   });
 });
 
@@ -878,6 +934,8 @@ export const verify2FA = catchAsync(async (req, res) => {
     }
   }
 
+  const allowedModules = await resolveAllowedModules(user);
+
   return ApiResponse.success(res, '2FA verified, login successful', {
     user: {
       id: user.id,
@@ -892,6 +950,7 @@ export const verify2FA = catchAsync(async (req, res) => {
       two_factor_enabled: true,
     },
     token: jwtToken,
+    allowedModules,
   });
 });
 

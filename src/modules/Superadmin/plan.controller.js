@@ -8,16 +8,32 @@ import ApiResponse from "../../utils/apiResponse.js";
 export const getAllPlans = catchAsync(async (req, res) => {
   const plans = await platformDb.Plan.findAll({
     order: [["price", "ASC"]],
+    include: [
+      {
+        model: platformDb.Module,
+        as: "modules",
+        through: { attributes: [] },
+        where: { is_active: true },
+        required: false,
+      },
+    ],
   });
   return ApiResponse.success(res, "Plans retrieved successfully", { plans });
 });
 
-/**
- * Get a specific plan by ID
- */
 export const getPlanById = catchAsync(async (req, res) => {
   const { id } = req.params;
-  const plan = await platformDb.Plan.findByPk(id);
+  const plan = await platformDb.Plan.findByPk(id, {
+    include: [
+      {
+        model: platformDb.Module,
+        as: "modules",
+        through: { attributes: [] },
+        where: { is_active: true },
+        required: false,
+      },
+    ],
+  });
   if (!plan) {
     return ApiResponse.notFound(res, "Plan not found");
   }

@@ -250,3 +250,213 @@ export const createOrganisationAdmin = async (req, res) => {
     });
   }
 };
+
+export const getOrganisationById = async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (Number.isNaN(id)) {
+      return res.status(400).json({ status: "error", message: "Invalid id", data: null });
+    }
+    const org = await Organisation.findByPk(id, {
+      include: [
+        {
+          model: User,
+          as: "users",
+          attributes: ["id", "email", "role_id", "status"],
+          required: false,
+        },
+        {
+          model: db.Plan,
+          as: "plan",
+          attributes: ["id", "name", "price", "billing_cycle"],
+          required: false,
+        },
+        {
+          model: db.Subscription,
+          as: "subscriptions",
+          attributes: ["id", "status", "current_period_end"],
+          required: false,
+        },
+      ],
+    });
+    if (!org) {
+      return res.status(404).json({ status: "error", message: "Organisation not found", data: null });
+    }
+    return res.status(200).json({
+      status: "success",
+      message: "Organisation retrieved",
+      data: { organisation: org },
+    });
+  } catch (err) {
+    console.error("getOrganisationById", err);
+    return res.status(500).json({
+      status: "error",
+      message: err?.message || "Failed to retrieve organisation",
+      data: null,
+    });
+  }
+};
+
+export const deleteOrganisation = async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (Number.isNaN(id)) {
+      return res.status(400).json({ status: "error", message: "Invalid id", data: null });
+    }
+    const org = await Organisation.findByPk(id);
+    if (!org) {
+      return res.status(404).json({ status: "error", message: "Organisation not found", data: null });
+    }
+
+    if (org.database_name) {
+      try {
+        await dropTenantPostgresDatabase(org.database_name);
+      } catch (err) {
+        console.error("Failed to drop tenant database:", err);
+      }
+    }
+
+    await org.destroy();
+
+    return res.status(200).json({
+      status: "success",
+      message: "Organisation deleted",
+      data: null,
+    });
+  } catch (err) {
+    console.error("deleteOrganisation", err);
+    return res.status(500).json({
+      status: "error",
+      message: err?.message || "Failed to delete organisation",
+      data: null,
+    });
+  }
+};
+
+export const suspendOrganisation = async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (Number.isNaN(id)) {
+      return res.status(400).json({ status: "error", message: "Invalid id", data: null });
+    }
+    const org = await Organisation.findByPk(id);
+    if (!org) {
+      return res.status(404).json({ status: "error", message: "Organisation not found", data: null });
+    }
+
+    await org.update({ status: "suspended" });
+
+    return res.status(200).json({
+      status: "success",
+      message: "Organisation suspended",
+      data: { organisation: org },
+    });
+  } catch (err) {
+    console.error("suspendOrganisation", err);
+    return res.status(500).json({
+      status: "error",
+      message: err?.message || "Failed to suspend organisation",
+      data: null,
+    });
+  }
+};
+
+export const activateOrganisation = async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (Number.isNaN(id)) {
+      return res.status(400).json({ status: "error", message: "Invalid id", data: null });
+    }
+    const org = await Organisation.findByPk(id);
+    if (!org) {
+      return res.status(404).json({ status: "error", message: "Organisation not found", data: null });
+    }
+
+    await org.update({ status: "active" });
+
+    return res.status(200).json({
+      status: "success",
+      message: "Organisation activated",
+      data: { organisation: org },
+    });
+  } catch (err) {
+    console.error("activateOrganisation", err);
+    return res.status(500).json({
+      status: "error",
+      message: err?.message || "Failed to activate organisation",
+      data: null,
+    });
+  }
+};
+
+export const impersonateOrganisationAdmin = async (req, res) => {
+  try {
+    const orgId = parseInt(req.params.id, 10);
+    if (Number.isNaN(orgId)) {
+      return res.status(400).json({ status: "error", message: "Invalid organisation id", data: null });
+    }
+
+    const org = await Organisation.findByPk(orgId);
+    if (!org) {
+      return res.status(404).json({ status: "error", message: "Organisation not found", data: null });
+    }
+
+    const admin = await User.findOne({
+      where: {
+        organisation_id: orgId,
+        role_id: 3,
+        status: "active",
+      },
+      order: [["id", "ASC"]],
+    });
+
+    if (!admin) {
+      return res.status(404).json({
+        status: "error",
+        message: "No active admin found for this organisation",
+        data: null,
+      });
+    }
+
+    const jwt = await import("jsonwebtoken");
+    const token = jwt.default.sign(
+      {
+        id: admin.id,
+        email: admin.email,
+        role_id: admin.role_id,
+        organisation_id: admin.organisation_id,
+      },
+      process.env.JWT_SECRET || "epic-secret-key",
+      { expiresIn: "7d" }
+    );
+
+    return res.status(200).json({
+      status: "success",
+      message: "Impersonation token generated",
+      data: {
+        token,
+        user: {
+          id: admin.id,
+          email: admin.email,
+          first_name: admin.first_name,
+          last_name: admin.last_name,
+          role_id: admin.role_id,
+          organisation_id: admin.organisation_id,
+        },
+        organisation: {
+          id: org.id,
+          name: org.name,
+          slug: org.slug,
+          status: org.status,
+        },
+      },
+    });
+  } catch (err) {
+    console.error("impersonateOrganisationAdmin", err);
+    return res.status(500).json({
+      status: "error",
+      message: err?.message || "Failed to impersonate admin",
+      data: null,
+    });
+  }
+};
