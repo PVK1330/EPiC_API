@@ -730,29 +730,51 @@ export const updatePipelineStage = async (req, res) => {
     }
 
     const previousStage = resolveCaseStage(caseData);
-    const step = getStepById(nextStage);
-    const legacyStatus = STAGE_TO_LEGACY_STATUS[nextStage] || caseData.status;
 
-    await caseData.update({
-      caseStage: nextStage,
-      status: legacyStatus,
-    });
+    if (nextStage === "application_submitted") {
+      const ccl = await req.tenantDb.CaseCclRecord?.findOne({
+        where: { caseId: caseData.id },
+      });
+      const cclOk =
+        ccl && (ccl.status === "signed" || ccl.status === "accepted");
+      const paid =
+        caseData.amountStatus === "paid" ||
+        (Number(caseData.totalAmount) > 0 &&
+          Number(caseData.paidAmount) >= Number(caseData.totalAmount));
+      if (!cclOk) {
+        return res.status(400).json({
+          status: "error",
+          message: "Cannot submit: Client Care Letter not accepted by candidate.",
+          data: null,
+        });
+      }
+      if (!paid) {
+        return res.status(400).json({
+          status: "error",
+          message: "Cannot submit: payment outstanding.",
+          data: null,
+        });
+      }
+    }
+
+    if (nextStage === "biometrics_booked" && !caseData.biometricsDate) {
+      await caseData.update({ biometricsDate: new Date() });
+    }
+
+    const { applyCaseStageChange } = await import("../../services/caseStageAutomation.service.js");
 
     if (previousStage !== nextStage) {
-      await recordStatusChange({
-        tenantDb: req.tenantDb,
-        caseId: caseData.id,
-        performedBy: req.user?.userId,
-        previousValue: getStepById(previousStage)?.title || previousStage,
-        newValue: step?.title || nextStage,
-        description: `Workflow moved to: ${step?.title || nextStage}`,
-      });
-      await sendWorkflowStageEmail({
+      await applyCaseStageChange({
         tenantDb: req.tenantDb,
         caseRecord: caseData,
-        stageId: nextStage,
+        nextStageId: nextStage,
+        performedBy: req.user?.userId,
+        reason: `Workflow moved to: ${getStepById(nextStage)?.title || nextStage}`,
+        sendEmail: true,
       });
     }
+
+    await caseData.reload();
 
     res.status(200).json({
       status: "success",
@@ -949,23 +971,42 @@ export const getTeamCapacity = async (req, res) => {
 export const assignCase = async (req, res) => {
   try {
     const { id } = req.params;
-    const { assignTo, assignToName, reason } = req.body;
+    const {
+      assignTo,
+      assignToName,
+      caseworkerId,
+      reason,
+      priority,
+      notes: internalNotes,
+    } = req.body;
 
     const caseData = (await req.tenantDb.Case.findOne({ where: { caseId: id } })) || 
                      (!isNaN(parseInt(id)) ? await req.tenantDb.Case.findOne({ where: { id: parseInt(id, 10) } }) : null);
 
     if (!caseData) return res.status(404).json({ status: "error", message: "Case not found" });
 
-    const updatedNotes = caseData.notes 
-      ? `${caseData.notes}\n[System]: Reassigned to ${assignToName || assignTo}. Reason: ${reason}` 
-      : `[System]: Reassigned to ${assignToName || assignTo}. Reason: ${reason}`;
+    const rawAssign = assignTo ?? (caseworkerId != null ? caseworkerId : null);
+    const cwIds = Array.isArray(rawAssign)
+      ? rawAssign
+      : rawAssign != null && rawAssign !== ""
+        ? [rawAssign]
+        : caseData.assignedcaseworkerId;
 
-    const cwIds = Array.isArray(assignTo) ? assignTo : (assignTo ? [assignTo] : caseData.assignedcaseworkerId);
+    const noteLines = [];
+    if (reason) noteLines.push(`[System]: ${reason}`);
+    if (internalNotes) noteLines.push(`[Admin]: ${internalNotes}`);
+    if (assignToName) noteLines.push(`[System]: Assigned to ${assignToName}`);
+    const updatedNotes = noteLines.length
+      ? [caseData.notes, ...noteLines].filter(Boolean).join("\n")
+      : caseData.notes;
 
-    await caseData.update({
+    const updates = {
       assignedcaseworkerId: cwIds,
-      notes: updatedNotes
-    });
+      notes: updatedNotes,
+    };
+    if (priority) updates.priority = priority;
+
+    await caseData.update(updates);
 
     // Notify assigned caseworkers
     if (cwIds && cwIds.length > 0) {

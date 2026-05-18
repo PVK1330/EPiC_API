@@ -124,6 +124,14 @@ export const saveDataCaptureSubmission = async (req, res) => {
         performedBy: userId,
         visibility: "public",
       });
+      await applyCaseStageChange({
+        tenantDb: req.tenantDb,
+        caseRecord,
+        nextStageId: "application_preparation",
+        performedBy: userId,
+        reason: "Data Capture Sheet submitted by client",
+        sendEmail: false,
+      });
     }
 
     res.status(200).json({
@@ -133,6 +141,33 @@ export const saveDataCaptureSubmission = async (req, res) => {
     });
   } catch (err) {
     console.error("saveDataCaptureSubmission:", err);
+    res.status(500).json({ status: "error", message: err.message, data: null });
+  }
+};
+
+/** Staff: fetch data capture sheet for a case */
+export const getStaffDataCapture = async (req, res) => {
+  try {
+    const caseRecord = await findCaseByRef(req.tenantDb, req.params.caseId);
+    if (!caseRecord) {
+      return res.status(404).json({ status: "error", message: "Case not found", data: null });
+    }
+    const template = await resolveTemplate(req.tenantDb, caseRecord.visaTypeId);
+    const submission = await req.tenantDb.DataCaptureSubmission.findOne({
+      where: { caseId: caseRecord.id },
+    });
+    res.status(200).json({
+      status: "success",
+      data: {
+        fields: template?.fields || [],
+        template,
+        submission,
+        status: submission?.status || "not_started",
+        candidateResponse: submission?.responses || null,
+      },
+    });
+  } catch (err) {
+    console.error("getStaffDataCapture:", err);
     res.status(500).json({ status: "error", message: err.message, data: null });
   }
 };
@@ -285,6 +320,65 @@ export const getCclStatus = async (req, res) => {
     const ccl = await req.tenantDb.CaseCclRecord.findOne({ where: { caseId: caseRecord.id } });
     res.status(200).json({ status: "success", data: { ccl, caseId: caseRecord.caseId } });
   } catch (err) {
+    res.status(500).json({ status: "error", message: err.message, data: null });
+  }
+};
+
+/** Candidate: accept Client Care Letter (checkbox confirmation) */
+export const acceptCcl = async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+    const caseRecord = await findCaseForUser(req.tenantDb, userId);
+    if (!caseRecord) {
+      return res.status(404).json({ status: "error", message: "No case found", data: null });
+    }
+
+    const ccl = await req.tenantDb.CaseCclRecord.findOne({ where: { caseId: caseRecord.id } });
+    if (!ccl || ccl.status !== "issued") {
+      return res.status(400).json({
+        status: "error",
+        message: "Client Care Letter has not been issued yet",
+        data: null,
+      });
+    }
+
+    await ccl.update({
+      status: "signed",
+      signedAt: new Date(),
+    });
+
+    await recordTimelineEntry({
+      tenantDb: req.tenantDb,
+      caseId: caseRecord.id,
+      actionType: "case_updated",
+      description: "Client Care Letter accepted by candidate",
+      performedBy: userId,
+      visibility: "public",
+    });
+
+    const paid =
+      caseRecord.amountStatus === "paid" ||
+      (Number(caseRecord.totalAmount) > 0 &&
+        Number(caseRecord.paidAmount) >= Number(caseRecord.totalAmount));
+
+    if (paid) {
+      await applyCaseStageChange({
+        tenantDb: req.tenantDb,
+        caseRecord,
+        nextStageId: "ccl_payment_received",
+        performedBy: userId,
+        reason: "CCL accepted and payment received",
+        sendEmail: false,
+      });
+    }
+
+    res.status(200).json({
+      status: "success",
+      message: "Client Care Letter accepted",
+      data: { ccl, paid },
+    });
+  } catch (err) {
+    console.error("acceptCcl:", err);
     res.status(500).json({ status: "error", message: err.message, data: null });
   }
 };

@@ -66,7 +66,22 @@ export async function applyCaseStageChange({ tenantDb, caseRecord, nextStageId, 
   });
 
   if (sendEmail) {
-    await sendWorkflowStageEmail({ tenantDb, caseRecord, stageId: nextStageId });
+    const emailResult = await sendWorkflowStageEmail({ tenantDb, caseRecord, stageId: nextStageId });
+    if (emailResult?.sent) {
+      await recordTimelineEntry({
+        tenantDb,
+        caseId: caseRecord.id,
+        actionType: "communication_sent",
+        description: `Workflow email sent (${emailResult.templateKey})`,
+        performedBy,
+        metadata: {
+          templateKey: emailResult.templateKey,
+          recipientEmail: emailResult.to,
+          emailSent: true,
+        },
+        visibility: "internal",
+      });
+    }
   }
 
   return { previousStage, nextStage: nextStageId };

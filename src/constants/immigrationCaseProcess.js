@@ -271,3 +271,26 @@ export function getNextStageId(stageId) {
   if (!step || step.order >= IMMIGRATION_CASE_STEPS.length) return null;
   return IMMIGRATION_CASE_STEPS[step.order]?.id ?? null;
 }
+
+export const CANDIDATE_STAGE_ACTIONS = {
+  data_capture_initial_docs: [
+    { text: "Complete your Data Capture Sheet", to: "/candidate/data-capture-sheet" },
+    { text: "Upload: Passport, BRP/eVisa", to: "/candidate/document-checklist" },
+  ],
+  draft_application_review: [
+    { text: "Review your draft application and notify your caseworker of any changes", to: "/candidate/application" },
+  ],
+  ccl_issued: [{ text: "Review and accept your Client Care Letter", to: "/candidate/ccl" }],
+  ccl_payment_received: [{ text: "Ensure your payment has been received", to: "/candidate/payments" }],
+  biometrics_booked: [{ text: "Attend your biometrics appointment on the scheduled date", to: "/candidate/appointments" }],
+  documents_uploaded: [{ text: "Ensure all supporting documents have been uploaded", to: "/candidate/upload-documents" }],
+  awaiting_decision: [{ text: "No action needed — monitoring Home Office decision", calm: true }],
+  decision_communicated: [{ text: "Download your decision letter from Application Pack", to: "/candidate/account?tab=downloads" }],
+  case_closure: [{ text: "Download your final documents from Application Pack", to: "/candidate/account?tab=downloads" }],
+};
+
+export function getCandidateStageActions(stageId) {
+  return CANDIDATE_STAGE_ACTIONS[stageId] ?? [
+    { text: "Your caseworker is handling this step — no action needed from you.", calm: true },
+  ];
+}
