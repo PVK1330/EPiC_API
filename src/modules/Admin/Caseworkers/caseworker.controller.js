@@ -6,6 +6,7 @@ import { generateStrongPassword } from '../../../utils/passwordGenerator.js';
 import { createUserOnPlatformAndTenant } from '../../../services/userSync.service.js';
 import { sendTenantCaseworkerWelcomeEmail } from '../../../services/tenantUserMail.service.js';
 import platformDb from '../../../models/index.js';
+import { isPlatformEmailTaken, normalizePlatformEmail } from '../../../utils/platformUserEmail.js';
 
 const CASEWORKER_ROLE = ROLES.CASEWORKER;
 
@@ -362,12 +363,11 @@ export const createCaseworker = async (req, res) => {
       });
     }
 
-    const existingEmail = await platformDb.User.findOne({ where: { email: emailNorm } });
-    if (existingEmail) {
+    if (await isPlatformEmailTaken(platformDb, emailNorm, organisationId)) {
       await t.rollback();
       return res.status(400).json({
         status: "error",
-        message: "Email already exists",
+        message: "Email already exists for this organisation",
         data: null,
       });
     }
@@ -712,9 +712,19 @@ export const updateCaseworker = async (req, res) => {
       });
     }
 
-    if (email !== caseworker.email) {
+    const organisationId = req.user?.organisation_id != null ? Number(req.user.organisation_id) : null;
+    const emailNorm = normalizePlatformEmail(email);
+
+    if (emailNorm !== normalizePlatformEmail(caseworker.email)) {
+      if (organisationId && (await isPlatformEmailTaken(platformDb, emailNorm, organisationId))) {
+        return res.status(400).json({
+          status: "error",
+          message: "Email already exists for this organisation",
+          data: null,
+        });
+      }
       const existingEmail = await req.tenantDb.User.findOne({
-        where: { email, id: { [Op.ne]: id } },
+        where: { email: emailNorm, id: { [Op.ne]: id } },
       });
       if (existingEmail) {
         return res.status(400).json({

@@ -13,6 +13,19 @@ export function generateOTPTemplate(otp) {
   });
 }
 
+export function generatePasswordResetOTPTemplate(otp) {
+  return wrapEpicEmail({
+    pageTitle: "EPiC — Password reset",
+    badge: "Password reset",
+    title: "Reset your password",
+    messageHtml:
+      "Use this code on the password reset page. It expires in <strong>10 minutes</strong>.",
+    bodyHtml: otpBlockHtml(otp),
+    securityHtml:
+      "<strong>Never share this code.</strong> If you did not request a reset, ignore this email.",
+  });
+}
+
 export function generateCredentialsTemplate(email, password, loginUrl) {
   return wrapEpicEmail({
     pageTitle: "EPiC — Your account",

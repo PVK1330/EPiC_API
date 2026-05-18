@@ -1,5 +1,5 @@
 import { Op } from 'sequelize';
-import transporter from '../../../config/mail.js';
+import { sendTransactionalEmail } from '../../../services/mail.service.js';
 import { generateNotificationEmailTemplate } from '../../../utils/emailTemplate.js';
 import { notifyAdmins, createNotification, NotificationTypes, NotificationPriority } from '../../../services/notification.service.js';
 
@@ -86,8 +86,8 @@ export const requestCosAllocation = async (req, res) => {
     try { await createNotification({ tenantDb: req.tenantDb, userId, type: NotificationTypes.INFO, priority: NotificationPriority.MEDIUM, title: 'CoS Request Submitted', message: `Your request for ${requestedAmount} CoS slots (${visaType}) is under review.` }); } catch (e) { console.error(e); }
     if (process.env.ADMIN_EMAIL) {
       try {
-        await transporter.sendMail({
-          from: process.env.EMAIL_USER,
+        await sendTransactionalEmail({
+            organisationId: req.user?.organisation_id ?? null,
           to: process.env.ADMIN_EMAIL,
           subject: `CoS Request — ${company}`,
           html: generateNotificationEmailTemplate({

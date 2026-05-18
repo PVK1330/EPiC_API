@@ -1,4 +1,4 @@
-import transporter from '../../../config/mail.js';
+import { sendTransactionalEmail } from '../../../services/mail.service.js';
 import { generateNotificationEmailTemplate } from '../../../utils/emailTemplate.js';
 import { 
     notifyLicenceInfoRequested, 
@@ -22,10 +22,11 @@ export const getAllLicenceApplications = async (req, res) => {
                 {
                     model: req.tenantDb.User,
                     as: 'user',
-                    attributes: ['id', 'first_name', 'last_name', 'email']
-                }
+                    attributes: ['id', 'first_name', 'last_name', 'email'],
+                    required: false,
+                },
             ],
-            order: [['createdAt', 'DESC']]
+            order: [['createdAt', 'DESC']],
         });
 
         res.status(200).json({
@@ -391,8 +392,8 @@ export const assignCosRequestToCaseworker = async (req, res) => {
             for (const cw of caseworkers) {
                 await notifyLicenceAssigned(cw.id, cosRequest);
                 if (cw.email) {
-                    await transporter.sendMail({
-                        from: process.env.EMAIL_USER,
+                    await sendTransactionalEmail({
+                        organisationId: req.user?.organisation_id ?? null,
                         to: cw.email,
                         subject: `New CoS Request Assignment #LIC-${cosRequest.id}`,
                         html: generateNotificationEmailTemplate({
@@ -424,8 +425,8 @@ export const assignCosRequestToCaseworker = async (req, res) => {
             );
 
             if (cosRequest.user?.email) {
-                await transporter.sendMail({
-                    from: process.env.EMAIL_USER,
+                await sendTransactionalEmail({
+                    organisationId: req.user?.organisation_id ?? null,
                     to: cosRequest.user.email,
                     subject: `Your CoS Request #LIC-${cosRequest.id} is Under Review`,
                     html: generateNotificationEmailTemplate({

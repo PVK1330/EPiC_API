@@ -1,9 +1,10 @@
-import transporter from "../config/mail.js";
 import platformDb from "../models/index.js";
 import { buildTenantFrontendUrls } from "../utils/organisationHost.js";
+import { sendTransactionalEmail } from "./mail.service.js";
 import {
   generateAdminCredentialsTemplate,
   generateCaseworkerWelcomeTemplate,
+  generatePasswordResetOTPTemplate,
   generateSponsorWelcomeTemplate,
 } from "../utils/emailTemplates.js";
 
@@ -26,20 +27,17 @@ export async function resolveOrganisationLoginUrl(organisationId) {
   return `${subdomain.replace(/\/$/, "")}/login`;
 }
 
-async function sendCredentialsMail({ to, subject, html }) {
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-    console.warn("EMAIL_USER/EMAIL_PASS not configured — welcome email skipped");
-    return { sent: false, reason: "mail_not_configured" };
-  }
+async function sendCredentialsMail({ to, subject, html, organisationId = null }) {
+  return sendTransactionalEmail({ to, subject, html, organisationId });
+}
 
-  await transporter.sendMail({
-    from: process.env.EMAIL_USER,
+export async function sendPasswordResetOtpEmail({ to, otp, organisationId = null }) {
+  return sendTransactionalEmail({
     to,
-    subject,
-    html,
+    subject: "EPiC — Password reset code",
+    html: generatePasswordResetOTPTemplate(otp),
+    organisationId,
   });
-
-  return { sent: true };
 }
 
 export async function sendTenantAdminWelcomeEmail({ user, plainPassword, organisationId }) {
@@ -49,6 +47,7 @@ export async function sendTenantAdminWelcomeEmail({ user, plainPassword, organis
     to: user.email,
     subject: "EPiC — Your admin account is ready",
     html,
+    organisationId,
   });
   return { ...result, loginUrl };
 }
@@ -70,6 +69,7 @@ export async function sendTenantCaseworkerWelcomeEmail({
     to: user.email,
     subject: "EPiC — Your caseworker account is ready",
     html,
+    organisationId,
   });
   return { ...result, loginUrl };
 }
@@ -91,6 +91,7 @@ export async function sendTenantSponsorWelcomeEmail({
     to: user.email,
     subject: "EPiC — Your sponsor account is ready",
     html,
+    organisationId,
   });
   return { ...result, loginUrl };
 }

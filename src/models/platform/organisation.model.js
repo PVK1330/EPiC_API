@@ -44,6 +44,11 @@ export default (sequelize, DataTypes) => {
         type: DataTypes.STRING(63),
         allowNull: true,
       },
+      smtp_settings: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        defaultValue: null,
+      },
     },
     {
       tableName: "organisations",

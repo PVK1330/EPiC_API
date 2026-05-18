@@ -190,17 +190,22 @@ export const createTask = async (req, res) => {
       case_id,
       assigned_to,
       created_by: userId,
-      organisation_id: organisationId,
     });
 
     const withUsers = await req.tenantDb.Task.findByPk(created.id, {
-      include: [userInclude(req, "assignee"), userInclude(req, "creator")],
+      include: [userInclude(req, "assignee"), userInclude(req, "creator"), caseInclude(req)],
     });
 
     // Notify assigned user if assigned to someone else
     if (assigned_to !== userId) {
       try {
-        await notifyTaskAssigned(req.tenantDb, assigned_to, created);
+        const plain = created.get({ plain: true });
+        const caseLabel = withUsers?.case?.caseId || null;
+        await notifyTaskAssigned(req.tenantDb, assigned_to, {
+          ...plain,
+          organisationId,
+          metadata: { caseId: caseLabel },
+        });
       } catch (notifErr) {
         console.error("Failed to notify user about assigned task:", notifErr);
       }

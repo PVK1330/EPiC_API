@@ -1,7 +1,7 @@
-import transporter from '../config/mail.js';
+import { sendTransactionalEmail } from './mail.service.js';
 import { generateNotificationEmailTemplate } from '../utils/emailTemplate.js';
 
-const sendNotificationEmailToUser = async (tenantDb, userId, notification) => {
+const sendNotificationEmailToUser = async (tenantDb, userId, notification, organisationId = null) => {
   const user = await tenantDb.User.findByPk(userId, {
     attributes: ['id', 'email', 'first_name', 'last_name', 'status'],
   });
@@ -11,8 +11,8 @@ const sendNotificationEmailToUser = async (tenantDb, userId, notification) => {
   }
 
   const recipientName = [user.first_name, user.last_name].filter(Boolean).join(' ') || user.email;
-  await transporter.sendMail({
-    from: process.env.EMAIL_USER,
+  const result = await sendTransactionalEmail({
+    organisationId,
     to: user.email,
     subject: `EPiC Notification: ${notification.title}`,
     html: generateNotificationEmailTemplate({
@@ -25,7 +25,7 @@ const sendNotificationEmailToUser = async (tenantDb, userId, notification) => {
     }),
   });
 
-  return true;
+  return result.sent === true;
 };
 
 // Notification type constants
@@ -97,6 +97,7 @@ export const createNotification = async (data) => {
       sendEmail = false,
       scheduledFor,
       expiresAt,
+      organisationId = null,
     } = data;
 
     if (!tenantDb) {
@@ -134,7 +135,7 @@ export const createNotification = async (data) => {
     if (sendEmail && !scheduledFor) {
       (async () => {
         try {
-          const sent = await sendNotificationEmailToUser(tenantDb, userId, notification);
+          const sent = await sendNotificationEmailToUser(tenantDb, userId, notification, organisationId);
           if (sent) {
             await tenantDb.Notification.update({ emailSent: true });
           }
@@ -467,7 +468,12 @@ export const processScheduledNotifications = async (tenantDb) => {
       let emailSent = false;
       if (notification.sendEmail) {
         try {
-          emailSent = await sendNotificationEmailToUser(tenantDb, notification.userId, notification);
+          emailSent = await sendNotificationEmailToUser(
+            tenantDb,
+            notification.userId,
+            notification,
+            notification.organisationId ?? null,
+          );
         } catch (emailError) {
           console.error(`Scheduled email send failed for notification ${notification.id}:`, emailError);
         }
@@ -1003,6 +1009,7 @@ export const notifyTaskAssigned = async (tenantDb, userId, taskData) => {
   const safeTitle = taskData?.title || 'Unknown Task';
   const safeDueDate = taskData?.due_date ? new Date(taskData.due_date).toLocaleDateString() : 'No deadline';
   const safePriority = taskData?.priority || 'medium';
+  const caseRef = taskData?.metadata?.caseId;
 
   return await createNotification({
     tenantDb,
@@ -1012,15 +1019,17 @@ export const notifyTaskAssigned = async (tenantDb, userId, taskData) => {
     title: `New Task Assigned: ${safeTitle}`,
     message: `You have been assigned a new task "${safeTitle}". Deadline: ${safeDueDate}.`,
     actionType: 'task_assigned',
-    entityId: taskData?.id || null,
-    entityType: 'task',
+    entityId: taskData?.case_id || taskData?.entityId || null,
+    entityType: caseRef ? 'case' : 'task',
     metadata: {
       taskId: taskData?.id,
       title: safeTitle,
       dueDate: taskData?.due_date,
       priority: safePriority,
+      caseId: caseRef,
     },
     sendEmail: true,
+    organisationId: taskData?.organisationId ?? null,
   });
 };
 

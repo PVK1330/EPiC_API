@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import * as adminSettingsController from './admin.settings.controller.js';
+import * as smtpSettingsController from './smtp.settings.controller.js';
 import * as visaController from './visa.controller.js';
 import * as petitionTypeController from './petitionType.controller.js';
 import { verifyTokenAndTenant } from '../../../middlewares/authStack.middleware.js';
@@ -48,5 +49,9 @@ router.delete("/sla-rules/:id", adminSettingsController.deleteSlaRule);
 
 router.get("/payment-settings", adminSettingsController.getPaymentSetting);
 router.put("/payment-settings", adminSettingsController.updatePaymentSetting);
+
+router.get("/smtp-settings", smtpSettingsController.getSmtpSettings);
+router.put("/smtp-settings", smtpSettingsController.updateSmtpSettings);
+router.post("/smtp-settings/test", smtpSettingsController.testSmtpSettings);
 
 export default router;

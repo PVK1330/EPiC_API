@@ -3,6 +3,52 @@ import { resolveCaseStage, STAGE_TO_LEGACY_STATUS } from "../../../constants/imm
 import { applyCaseStageChange } from "../../../services/caseStageAutomation.service.js";
 import { sendWorkflowStageEmail } from "../../../services/workflowEmail.service.js";
 import { recordTimelineEntry } from "../../../services/caseTimeline.service.js";
+import { ROLES } from "../../../middlewares/role.middleware.js";
+import {
+  notifyCclFeeProposed,
+  notifyCclFeeApproved,
+  notifyCclFeeRejected,
+} from "../../../services/workflowNotifications.service.js";
+import {
+  createTasksOnDataCaptureSent,
+  createTasksOnDataCaptureRejected,
+} from "../../../services/workflowTaskAutomation.service.js";
+import {
+  submitCclFeeProposal,
+  reviewCclFeeProposal,
+} from "../../../services/cclFeeProposal.service.js";
+
+function organisationIdFromReq(req) {
+  const id = req.user?.organisation_id;
+  return id != null ? Number(id) : null;
+}
+
+function normalizeInstallments(installments = []) {
+  if (!Array.isArray(installments)) return [];
+  return installments.map((row, i) => ({
+    label: String(row.label || `Instalment ${i + 1}`).trim(),
+    amount: Number.parseFloat(row.amount) || 0,
+    dueDate: row.dueDate || null,
+  }));
+}
+
+function validateInstallmentPlan(total, installments) {
+  const fee = Number.parseFloat(total) || 0;
+  if (fee <= 0) {
+    return { ok: false, message: "Total fee must be greater than zero" };
+  }
+  if (!installments.length) {
+    return { ok: false, message: "Add at least one instalment" };
+  }
+  const sum = installments.reduce((s, r) => s + r.amount, 0);
+  if (Math.abs(sum - fee) > 0.02) {
+    return {
+      ok: false,
+      message: `Instalments (£${sum.toFixed(2)}) must equal total fee (£${fee.toFixed(2)})`,
+    };
+  }
+  return { ok: true };
+}
 
 const DECISION_DOC_TYPES = ["Decision Letter", "Approval Notice", "Visa Copy", "BRP Information"];
 
@@ -129,6 +175,7 @@ export const saveDataCaptureSubmission = async (req, res) => {
         caseRecord,
         nextStageId: "application_preparation",
         performedBy: userId,
+        organisationId: organisationIdFromReq(req),
         reason: "Data Capture Sheet submitted by client",
         sendEmail: false,
       });
@@ -201,6 +248,7 @@ export const sendDataCaptureRequest = async (req, res) => {
       tenantDb: req.tenantDb,
       caseRecord,
       stageId: "data_capture_initial_docs",
+      organisationId: organisationIdFromReq(req),
     });
 
     await recordTimelineEntry({
@@ -212,6 +260,13 @@ export const sendDataCaptureRequest = async (req, res) => {
       metadata: { emailSent: emailResult.sent },
       visibility: "public",
     });
+
+    await createTasksOnDataCaptureSent({
+      tenantDb: req.tenantDb,
+      caseRecord,
+      sentBy: req.user?.userId,
+      organisationId: organisationIdFromReq(req),
+    }).catch((err) => console.error("createTasksOnDataCaptureSent:", err));
 
     res.status(200).json({
       status: "success",
@@ -253,9 +308,18 @@ export const reviewDataCaptureSubmission = async (req, res) => {
         caseRecord,
         nextStageId: "application_preparation",
         performedBy: req.user?.userId,
+        organisationId: organisationIdFromReq(req),
         reason: "Data Capture Sheet approved",
         sendEmail: false,
       });
+    } else if (status === "rejected") {
+      await createTasksOnDataCaptureRejected({
+        tenantDb: req.tenantDb,
+        caseRecord,
+        reviewNotes,
+        reviewedBy: req.user?.userId,
+        organisationId: organisationIdFromReq(req),
+      }).catch((err) => console.error("createTasksOnDataCaptureRejected:", err));
     }
 
     res.status(200).json({ status: "success", data: { submission } });
@@ -265,46 +329,117 @@ export const reviewDataCaptureSubmission = async (req, res) => {
   }
 };
 
-/** Caseworker: issue CCL */
-export const issueCcl = async (req, res) => {
+/** Caseworker: propose CCL fees + instalments (admin must approve before client sees CCL) */
+export const proposeCclFees = async (req, res) => {
   try {
     const { caseId } = req.params;
-    const { feeAmount, notes, documentId } = req.body;
+    const { feeAmount, installments, notes, documentId } = req.body;
     const caseRecord = await findCaseByRef(req.tenantDb, caseId);
     if (!caseRecord) {
       return res.status(404).json({ status: "error", message: "Case not found", data: null });
     }
 
-    const [ccl] = await req.tenantDb.CaseCclRecord.findOrCreate({
-      where: { caseId: caseRecord.id },
-      defaults: { status: "pending" },
-    });
-
-    await ccl.update({
-      status: "issued",
-      feeAmount: feeAmount ?? caseRecord.totalAmount ?? ccl.feeAmount,
-      issuedAt: new Date(),
-      issuedBy: req.user?.userId,
-      issuedDocumentId: documentId || ccl.issuedDocumentId,
-      notes: notes || ccl.notes,
-    });
-
-    if (feeAmount != null) {
-      await caseRecord.update({ totalAmount: feeAmount });
-    }
-
-    await applyCaseStageChange({
+    const result = await submitCclFeeProposal({
       tenantDb: req.tenantDb,
       caseRecord,
-      nextStageId: "ccl_issued",
-      performedBy: req.user?.userId,
-      reason: "Client Care Letter issued",
-      sendEmail: true,
+      feeAmount,
+      installments,
+      notes,
+      proposedBy: req.user?.userId,
+      organisationId: organisationIdFromReq(req),
+      documentId,
+      allowFromAnyStage: false,
     });
 
-    res.status(200).json({ status: "success", data: { ccl, case: caseRecord } });
+    if (!result.ok) {
+      return res.status(result.status || 400).json({
+        status: "error",
+        message: result.message,
+        data: null,
+      });
+    }
+
+    res.status(200).json({
+      status: "success",
+      message: "Fee proposal submitted for admin approval",
+      data: { ccl: result.ccl, case: result.caseRecord },
+    });
   } catch (err) {
-    console.error("issueCcl:", err);
+    console.error("proposeCclFees:", err);
+    res.status(500).json({ status: "error", message: err.message, data: null });
+  }
+};
+
+/** Admin: approve or reject proposed CCL fees */
+export const reviewCclFees = async (req, res) => {
+  try {
+    if (Number(req.user?.role_id) !== ROLES.ADMIN && Number(req.user?.role) !== ROLES.ADMIN) {
+      return res.status(403).json({ status: "error", message: "Admin access required", data: null });
+    }
+
+    const { caseId } = req.params;
+    const { action, reviewNotes } = req.body;
+    const caseRecord = await findCaseByRef(req.tenantDb, caseId);
+    if (!caseRecord) {
+      return res.status(404).json({ status: "error", message: "Case not found", data: null });
+    }
+
+    const result = await reviewCclFeeProposal({
+      tenantDb: req.tenantDb,
+      caseRecord,
+      action,
+      reviewNotes,
+      reviewedBy: req.user?.userId,
+      organisationId: organisationIdFromReq(req),
+    });
+
+    if (!result.ok) {
+      return res.status(result.status || 400).json({
+        status: "error",
+        message: result.message,
+        data: null,
+      });
+    }
+
+    res.status(200).json({
+      status: "success",
+      message:
+        action === "reject"
+          ? "Fee proposal returned to caseworker"
+          : "Fees approved and CCL sent to client",
+      data: { ccl: result.ccl, case: result.caseRecord },
+    });
+  } catch (err) {
+    console.error("reviewCclFees:", err);
+    res.status(500).json({ status: "error", message: err.message, data: null });
+  }
+};
+
+/** @deprecated Use proposeCclFees + reviewCclFees */
+export const issueCcl = async (req, res) => {
+  return proposeCclFees(req, res);
+};
+
+/** Admin: list cases awaiting CCL fee approval */
+export const listCclFeePendingApprovals = async (req, res) => {
+  try {
+    if (Number(req.user?.role_id) !== ROLES.ADMIN && Number(req.user?.role) !== ROLES.ADMIN) {
+      return res.status(403).json({ status: "error", message: "Admin access required", data: null });
+    }
+
+    const cases = await req.tenantDb.Case.findAll({
+      where: { caseStage: "ccl_fee_admin_review" },
+      include: [
+        { model: req.tenantDb.User, as: "candidate", attributes: ["id", "first_name", "last_name", "email"] },
+        { model: req.tenantDb.VisaType, as: "visaType", attributes: ["id", "name"] },
+        { model: req.tenantDb.CaseCclRecord, as: "cclRecord", required: true },
+      ],
+      order: [["updated_at", "DESC"]],
+    });
+
+    res.status(200).json({ status: "success", data: { cases } });
+  } catch (err) {
+    console.error("listCclFeePendingApprovals:", err);
     res.status(500).json({ status: "error", message: err.message, data: null });
   }
 };
@@ -367,6 +502,7 @@ export const acceptCcl = async (req, res) => {
         caseRecord,
         nextStageId: "ccl_payment_received",
         performedBy: userId,
+        organisationId: organisationIdFromReq(req),
         reason: "CCL accepted and payment received",
         sendEmail: false,
       });
@@ -425,6 +561,7 @@ export const confirmCclSigned = async (req, res) => {
         caseRecord,
         nextStageId: "ccl_payment_received",
         performedBy: userId,
+        organisationId: organisationIdFromReq(req),
         reason: "Signed CCL and payment received",
         sendEmail: false,
       });
@@ -475,6 +612,59 @@ export const getDecisionDocuments = async (req, res) => {
     });
   } catch (err) {
     console.error("getDecisionDocuments:", err);
+    res.status(500).json({ status: "error", message: err.message, data: null });
+  }
+};
+
+/** Candidate: payment schedule (visible only after admin approves CCL fees) */
+export const getCandidatePaymentSchedule = async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+    const caseRecord = await findCaseForUser(req.tenantDb, userId);
+    if (!caseRecord) {
+      return res.status(404).json({ status: "error", message: "No case found", data: null });
+    }
+
+    const ccl = await req.tenantDb.CaseCclRecord.findOne({ where: { caseId: caseRecord.id } });
+    const visibleStatuses = new Set(["issued", "signed", "accepted"]);
+    const approved = ccl && visibleStatuses.has(ccl.status);
+
+    if (!approved) {
+      return res.status(200).json({
+        status: "success",
+        data: {
+          visible: false,
+          message: "Payment schedule will appear after your caseworker and admin approve your Client Care Letter fees.",
+          caseId: caseRecord.caseId,
+          cclStatus: ccl?.status || "pending",
+        },
+      });
+    }
+
+    const installments = Array.isArray(ccl.installmentPlan) ? ccl.installmentPlan : [];
+    const totalFee = Number(ccl.feeAmount) || Number(caseRecord.totalAmount) || 0;
+    const paidAmount = Number(caseRecord.paidAmount) || 0;
+
+    res.status(200).json({
+      status: "success",
+      data: {
+        visible: true,
+        caseId: caseRecord.caseId,
+        caseStage: resolveCaseStage(caseRecord),
+        totalFee,
+        paidAmount,
+        balanceDue: Math.max(0, totalFee - paidAmount),
+        amountStatus: caseRecord.amountStatus,
+        installments,
+        ccl: {
+          status: ccl.status,
+          issuedAt: ccl.issuedAt,
+          signedAt: ccl.signedAt,
+        },
+      },
+    });
+  } catch (err) {
+    console.error("getCandidatePaymentSchedule:", err);
     res.status(500).json({ status: "error", message: err.message, data: null });
   }
 };

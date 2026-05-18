@@ -3,6 +3,7 @@ import { verifyToken } from '../../middlewares/auth.middleware.js';
 import { isSuperAdmin } from '../../middlewares/isSuperAdmin.js';
 import * as orgController from './superadminOrganisation.controller.js';
 import * as planController from './plan.controller.js';
+import { getPlatformSmtpSettings } from '../Admin/Settings/smtp.settings.controller.js';
 
 const router = express.Router();
 
@@ -36,5 +37,7 @@ router.get('/analytics', (req, res) => {
 router.get('/billing', (req, res) => {
   res.json({ status: 'success', message: 'Platform billing (scaffold)' });
 });
+
+router.get('/smtp-settings', getPlatformSmtpSettings);
 
 export default router;

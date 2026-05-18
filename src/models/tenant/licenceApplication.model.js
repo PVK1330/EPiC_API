@@ -100,7 +100,9 @@ export default (sequelize, DataTypes) => {
         {
             tableName: "licence_applications",
             timestamps: true,
-            paranoid: true,
+            createdAt: "createdAt",
+            updatedAt: "updatedAt",
+            paranoid: false,
         }
     );
 

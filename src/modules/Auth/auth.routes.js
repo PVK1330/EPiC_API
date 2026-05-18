@@ -11,9 +11,9 @@ router.post("/verify-otp", ...withOrgContext, auth.verifyOTP); // unverified use
 router.post("/resend-otp", ...withOrgContext, auth.resendOTP); // unverified user
 router.post("/login", ...withOrgContext, auth.login);
 router.post("/logout", auth.logout);
-router.post("/forgot-password", auth.forgotPassword);
-router.post("/verify-reset-otp", auth.verifyResetOTP);
-router.post("/set-password", auth.setPassword);
+router.post("/forgot-password", ...withOrgContext, auth.forgotPassword);
+router.post("/verify-reset-otp", ...withOrgContext, auth.verifyResetOTP);
+router.post("/set-password", ...withOrgContext, auth.setPassword);
 router.post("/resendOtpUser", auth.resendOtpUser); // user table
 router.post("/verifyOtpUser", auth.verifyOtpUser); // user table
 router.post("/send-password-change-otp", verifyTokenAndTenant, auth.sendPasswordChangeOtp);

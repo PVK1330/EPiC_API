@@ -1,5 +1,5 @@
 /**
- * Standard UK immigration case workflow (16 steps).
+ * Standard UK immigration case workflow (18 steps).
  * Used for pipeline Kanban, caseStage field, and caseworker guidance.
  */
 export const DEFAULT_CASE_STAGE = "client_enquiry";
@@ -55,64 +55,78 @@ export const IMMIGRATION_CASE_STEPS = [
       "Draft application form prepared and sent to the client for review and confirmation.",
   },
   {
-    id: "ccl_issued",
+    id: "ccl_fee_proposal",
     order: 8,
+    title: "CCL Fee Proposal",
+    description:
+      "Caseworker proposes total fees and instalment schedule for admin review.",
+  },
+  {
+    id: "ccl_fee_admin_review",
+    order: 9,
+    title: "CCL Fee — Admin Review",
+    description:
+      "Admin reviews and approves fees and instalments before the CCL is sent to the client.",
+  },
+  {
+    id: "ccl_issued",
+    order: 10,
     title: "Client Care Letter Issued",
     description:
-      "After client approval of the draft application, the Client Care Letter (CCL) is issued.",
+      "Approved Client Care Letter and fee schedule sent to the client for acceptance.",
   },
   {
     id: "ccl_payment_received",
-    order: 9,
+    order: 11,
     title: "CCL & Payment Received",
     description:
       "Signed Client Care Letter and required payments are received from the client.",
   },
   {
     id: "application_submitted",
-    order: 10,
+    order: 12,
     title: "Application Submitted",
     description:
       "Final application is submitted to the Home Office.",
   },
   {
     id: "biometrics_booked",
-    order: 11,
+    order: 13,
     title: "Biometrics Booked",
     description:
       "Biometrics appointment is booked.",
   },
   {
     id: "biometrics_confirmation_sent",
-    order: 12,
+    order: 14,
     title: "Biometrics Confirmation Sent",
     description:
       "Biometrics appointment confirmation email and instructions are sent to the client.",
   },
   {
     id: "documents_uploaded",
-    order: 13,
+    order: 15,
     title: "Documents Uploaded",
     description:
       "Supporting documents are uploaded prior to the biometrics appointment.",
   },
   {
     id: "awaiting_decision",
-    order: 14,
+    order: 16,
     title: "Awaiting Decision",
     description:
       "Application status is monitored while awaiting Home Office decision.",
   },
   {
     id: "decision_communicated",
-    order: 15,
+    order: 17,
     title: "Decision Communicated",
     description:
       "Approval or refusal email and decision documents are sent to the client.",
   },
   {
     id: "case_closure",
-    order: 16,
+    order: 18,
     title: "Case Closure",
     description:
       "Final case closure email is issued.",
@@ -149,6 +163,8 @@ export const STAGE_TO_LEGACY_STATUS = {
   document_review: "Under Review",
   further_information_request: "On Hold",
   draft_application_review: "Drafting",
+  ccl_fee_proposal: "Drafting",
+  ccl_fee_admin_review: "Drafting",
   ccl_issued: "Drafting",
   ccl_payment_received: "Pending",
   application_submitted: "Submitted",
@@ -221,12 +237,20 @@ export const STAGE_GUIDANCE = {
     docs: ["As identified in review"],
   },
   draft_application_review: {
-    actions: ["Send draft to client", "Collect written approval"],
+    actions: ["Send draft to client", "Collect written approval", "Propose CCL fees & instalments"],
     docs: ["Draft application PDF"],
   },
+  ccl_fee_proposal: {
+    actions: ["Set total fee", "Define instalment schedule", "Submit to admin for approval"],
+    docs: ["Fee breakdown", "Instalment plan"],
+  },
+  ccl_fee_admin_review: {
+    actions: ["Review proposed fees", "Approve or return to caseworker", "Release CCL to client when approved"],
+    docs: ["Proposed fee schedule"],
+  },
   ccl_issued: {
-    actions: ["Issue Client Care Letter", "Attach terms & fees"],
-    docs: ["Client Care Letter (unsigned)"],
+    actions: ["Monitor client acceptance", "Track instalment payments"],
+    docs: ["Client Care Letter (issued to client)"],
   },
   ccl_payment_received: {
     actions: ["Collect signed CCL", "Confirm payment cleared"],

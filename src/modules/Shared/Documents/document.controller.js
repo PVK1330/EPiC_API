@@ -631,6 +631,7 @@ export const updateDocumentStatus = async (req, res) => {
           caseRecord: caseData,
           trigger,
           performedBy: req.user?.userId,
+          organisationId: req.user?.organisation_id ?? null,
         });
         if (stageAdvance) {
           await caseData.reload();

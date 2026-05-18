@@ -2,6 +2,7 @@ import { Op } from 'sequelize';
 import bcrypt from 'bcryptjs';
 import multer from 'multer';
 import platformDb from '../../../models/index.js';
+import { isPlatformEmailTaken, normalizePlatformEmail } from '../../../utils/platformUserEmail.js';
 import { ROLES } from '../../../middlewares/role.middleware.js';
 import { notifyUserCreated } from '../../../services/notification.service.js';
 import {
@@ -66,7 +67,8 @@ export const createSponsor = async (req, res) => {
       });
     }
 
-    const organisationId = req.user?.organisation_id;
+    const organisationId =
+      req.user?.organisation_id != null ? Number(req.user.organisation_id) : null;
     if (!organisationId) {
       return res.status(400).json({
         status: "error",
@@ -86,11 +88,10 @@ export const createSponsor = async (req, res) => {
       });
     }
 
-    const existingEmail = await platformDb.User.findOne({ where: { email: emailNorm } });
-    if (existingEmail) {
+    if (await isPlatformEmailTaken(platformDb, emailNorm, organisationId)) {
       return res.status(400).json({
         status: "error",
-        message: "Email already exists",
+        message: "Email already exists for this organisation",
         data: null,
       });
     }
@@ -411,9 +412,17 @@ export const updateSponsor = async (req, res) => {
       });
     }
 
-    const emailNorm = String(email || sponsor.email).trim().toLowerCase();
-    if (emailNorm !== sponsor.email) {
-      const existingEmail = await platformDb.User.findOne({
+    const organisationId = req.user?.organisation_id != null ? Number(req.user.organisation_id) : null;
+    const emailNorm = normalizePlatformEmail(email || sponsor.email);
+    if (emailNorm !== normalizePlatformEmail(sponsor.email)) {
+      if (organisationId && (await isPlatformEmailTaken(platformDb, emailNorm, organisationId))) {
+        return res.status(400).json({
+          status: "error",
+          message: "Email already exists for this organisation",
+          data: null,
+        });
+      }
+      const existingEmail = await req.tenantDb.User.findOne({
         where: { email: emailNorm, id: { [Op.ne]: id } },
       });
       if (existingEmail) {

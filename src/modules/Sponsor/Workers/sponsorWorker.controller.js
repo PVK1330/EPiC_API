@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import transporter from '../../../config/mail.js';
+import { sendTransactionalEmail } from '../../../services/mail.service.js';
 import { generateCredentialsTemplate, generateNotificationEmailTemplate } from '../../../utils/emailTemplate.js';
 import crypto from 'crypto';
 import { generateCaseId } from '../../../utils/case.utils.js';
@@ -129,8 +129,8 @@ export const addSponsoredWorker = async (req, res) => {
 
     const loginUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
     try {
-      await transporter.sendMail({
-        from: process.env.EMAIL_USER,
+      await sendTransactionalEmail({
+        organisationId: req.user?.organisation_id ?? null,
         to: email,
         subject: "Elite Pic - Your Sponsored Worker Account",
         html: generateCredentialsTemplate(email, tempPassword, loginUrl),
@@ -665,8 +665,8 @@ export const updateWorkerStatus = async (req, res) => {
 
     if (candidate?.email) {
       try {
-        await transporter.sendMail({
-          from: process.env.EMAIL_USER,
+        await sendTransactionalEmail({
+          organisationId: req.user?.organisation_id ?? null,
           to: candidate.email,
           subject: 'Your Case Status Has Been Updated',
           html: generateNotificationEmailTemplate({

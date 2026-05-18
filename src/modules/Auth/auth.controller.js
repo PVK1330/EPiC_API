@@ -5,17 +5,25 @@ import QRCode from 'qrcode';
 import catchAsync from '../../utils/catchAsync.js';
 import ApiResponse from '../../utils/apiResponse.js';
 import platformDb from '../../models/index.js';
-import transporter from '../../config/mail.js';
 import { generateOTPTemplate, generateCredentialsTemplate } from '../../utils/emailTemplates.js';
+import { sendPasswordResetOtpEmail } from '../../services/tenantUserMail.service.js';
+import { sendTransactionalEmail } from '../../services/mail.service.js';
 import { ensureCandidateEnquiryCase } from '../../services/candidateOnboarding.service.js';
 import { buildTenantFrontendUrls } from '../../utils/organisationHost.js';
 import { buildJwtPayload, resolveDefaultOrganisationId, isSuperAdminRole } from '../../utils/tenantScope.js';
+import {
+  findPlatformUserByEmail,
+  findPlatformUserForLogin,
+  isPlatformEmailTaken,
+  normalizePlatformEmail,
+} from '../../utils/platformUserEmail.js';
 import { getTenantDb } from '../../services/tenantDb.service.js';
 import { assertLoginAllowedForOrganisationContext } from '../../utils/organisationHost.js';
 import {
   createUserOnPlatformAndTenant,
   ensureUserOnPlatformFromTenant,
   mirrorUserToTenant,
+  mirrorAuthFieldsToTenantByEmail,
   syncUserToPlatformAndTenant,
 } from '../../services/userSync.service.js';
 
@@ -83,6 +91,93 @@ async function mirrorPlatformUserById(userId) {
   await mirrorUserToTenant(getTenantDb(org.database_name), user);
 }
 
+/** Resolve platform user for password reset (tenant subdomain users may exist only in tenant DB). */
+async function resolveUserForPasswordReset(req, email) {
+  const normalized = String(email || "").trim().toLowerCase();
+  if (!normalized) return { user: null, tenantDb: null };
+
+  let tenantDb = null;
+  let orgId = null;
+  try {
+    const resolved = await resolveTenantDbForAuth(req);
+    tenantDb = resolved.tenantDb;
+    orgId = resolved.orgId;
+  } catch {
+    tenantDb = null;
+  }
+
+  if (tenantDb) {
+    const tenantUser = await tenantDb.User.findOne({ where: { email: normalized } });
+    if (tenantUser) {
+      let platformUser = await findPlatformUserByEmail(platformDb, normalized, orgId);
+      if (!platformUser) {
+        try {
+          platformUser = await ensureUserOnPlatformFromTenant(tenantDb, tenantUser.id, orgId);
+        } catch (err) {
+          if (err?.name === "SequelizeUniqueConstraintError") {
+            platformUser = await findPlatformUserByEmail(platformDb, normalized, orgId);
+          }
+          if (!platformUser) throw err;
+        }
+      }
+      return { user: platformUser, tenantDb };
+    }
+  }
+
+  const platformUser = await findPlatformUserForLogin(
+    platformDb,
+    normalized,
+    req.organisationContext,
+  );
+  if (!platformUser) {
+    return { user: null, tenantDb: null };
+  }
+
+  if (platformUser.organisation_id) {
+    const org = await platformDb.Organisation.findByPk(platformUser.organisation_id, {
+      attributes: ["id", "database_name", "status"],
+    });
+    if (org?.database_name && org.status !== "suspended") {
+      const orgTenantDb = getTenantDb(org.database_name);
+      await mirrorUserToTenant(orgTenantDb, platformUser).catch(() => {});
+      return { user: platformUser, tenantDb: orgTenantDb };
+    }
+  }
+
+  if (tenantDb) {
+    await mirrorUserToTenant(tenantDb, platformUser).catch(() => {});
+  }
+  return { user: platformUser, tenantDb };
+}
+
+async function persistPasswordResetOtp(user, otp, otpExpiry, tenantDb) {
+  const updates = {
+    password_reset_otp: otp,
+    password_reset_otp_expiry: otpExpiry,
+  };
+  await user.save();
+  if (tenantDb) {
+    await mirrorAuthFieldsToTenantByEmail(tenantDb, user, updates);
+  } else {
+    await mirrorPlatformUserById(user.id);
+  }
+}
+
+async function clearPasswordResetOtp(user, tenantDb) {
+  const updates = {
+    password_reset_otp: null,
+    password_reset_otp_expiry: null,
+  };
+  user.password_reset_otp = null;
+  user.password_reset_otp_expiry = null;
+  await user.save();
+  if (tenantDb) {
+    await mirrorAuthFieldsToTenantByEmail(tenantDb, user, updates);
+  } else {
+    await mirrorPlatformUserById(user.id);
+  }
+}
+
 /**
  * Register a new user (Unverified)
  */
@@ -105,18 +200,17 @@ export const register = catchAsync(async (req, res) => {
     return ApiResponse.badRequest(res, "Password must be at least 8 characters");
   }
 
-  const emailExists = await platformDb.User.findOne({ where: { email } });
-  if (emailExists) {
-    return ApiResponse.badRequest(res, "Email already exists");
-  }
-
-  const { tenantDb } = await resolveTenantDbForAuth(req);
   if (!tenantDb) {
     return ApiResponse.error(
       res,
       "Registration unavailable. Use your organisation sign-up URL or ask an administrator to create your organisation.",
       503,
     );
+  }
+
+  const emailNorm = normalizePlatformEmail(email);
+  if (await isPlatformEmailTaken(platformDb, emailNorm, orgId)) {
+    return ApiResponse.badRequest(res, "Email already exists for this organisation");
   }
 
   const mobileExists = await platformDb.User.findOne({
@@ -164,12 +258,21 @@ export const register = catchAsync(async (req, res) => {
     organisation_id: registrationOrgId,
   });
 
-  await transporter.sendMail({
-    from: process.env.EMAIL_USER,
+  const mailResult = await sendTransactionalEmail({
+    organisationId: registrationOrgId,
     to: email,
     subject: "Elite Pic - OTP Verification",
     html: generateOTPTemplate(otp),
   });
+  if (!mailResult.sent) {
+    return ApiResponse.error(
+      res,
+      mailResult.reason === "mail_not_configured"
+        ? "Email is not configured. Contact your administrator or use platform SMTP."
+        : `Could not send OTP email: ${mailResult.error || "please try again"}`,
+      mailResult.reason === "mail_not_configured" ? 503 : 502,
+    );
+  }
 
   return ApiResponse.created(res, "User registered successfully", {
     email: email,
@@ -233,18 +336,16 @@ export const verifyOTP = catchAsync(async (req, res) => {
     await ensureCandidateEnquiryCase(tenantDb, verifiedUser.id, { organisationId: orgId });
   }
 
-  if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to: email,
-      subject: "EPiC — Account verified",
-      html: generateCredentialsTemplate(
-        email,
-        "Use the password you chose during registration",
-        loginUrl,
-      ),
-    });
-  }
+  await sendTransactionalEmail({
+    organisationId: orgId,
+    to: email,
+    subject: "EPiC — Account verified",
+    html: generateCredentialsTemplate(
+      email,
+      "Use the password you chose during registration",
+      loginUrl,
+    ),
+  });
 
   await unverifiedUser.destroy();
 
@@ -279,12 +380,17 @@ export const verifyOTP = catchAsync(async (req, res) => {
  */
 export const resendOTP = catchAsync(async (req, res) => {
   const { email } = req.body;
-  const verifiedUser = await platformDb.User.findOne({ where: { email } });
-  if (verifiedUser) {
+  const emailNorm = normalizePlatformEmail(email);
+  const { orgId, tenantDb } = await resolveTenantDbForAuth(req);
+
+  if (orgId && (await isPlatformEmailTaken(platformDb, emailNorm, orgId))) {
     return ApiResponse.badRequest(res, "User already verified. Please login instead.");
   }
 
-  const { tenantDb } = await resolveTenantDbForAuth(req);
+  const verifiedUser = await findPlatformUserByEmail(platformDb, emailNorm, orgId);
+  if (verifiedUser) {
+    return ApiResponse.badRequest(res, "User already verified. Please login instead.");
+  }
   if (!tenantDb) {
     return ApiResponse.error(
       res,
@@ -305,12 +411,21 @@ export const resendOTP = catchAsync(async (req, res) => {
   unverifiedUser.otp_expiry = otpExpiry;
   await unverifiedUser.save();
 
-  await transporter.sendMail({
-    from: process.env.EMAIL_USER,
+  const mailResult = await sendTransactionalEmail({
+    organisationId: orgId || unverifiedUser.organisation_id,
     to: email,
     subject: "Elite Pic - OTP Verification",
     html: generateOTPTemplate(otp),
   });
+  if (!mailResult.sent) {
+    return ApiResponse.error(
+      res,
+      mailResult.reason === "mail_not_configured"
+        ? "Email is not configured. Contact your administrator."
+        : `Could not send OTP email: ${mailResult.error || "please try again"}`,
+      mailResult.reason === "mail_not_configured" ? 503 : 502,
+    );
+  }
 
   return ApiResponse.success(res, "OTP resent successfully", {
     email: email,
@@ -328,8 +443,8 @@ export const login = catchAsync(async (req, res) => {
     return ApiResponse.badRequest(res, 'Email and password are required.');
   }
 
-  const emailNorm = String(email).trim().toLowerCase();
-  let user = await platformDb.User.findOne({ where: { email: emailNorm } });
+  const emailNorm = normalizePlatformEmail(email);
+  let user = await findPlatformUserForLogin(platformDb, emailNorm, req.organisationContext);
 
   if (!user && req.organisationContext?.organisation?.database_name) {
     const tenantDb = getTenantDb(req.organisationContext.organisation.database_name);
@@ -425,11 +540,11 @@ export const logout = (req, res) => {
  * Forgot Password - Send OTP
  */
 export const forgotPassword = catchAsync(async (req, res) => {
-  const { email } = req.body;
-  const user = await platformDb.User.findOne({ where: { email } });
+  const email = String(req.body?.email || "").trim().toLowerCase();
+  const { user, tenantDb } = await resolveUserForPasswordReset(req, email);
 
   if (!user) {
-    return ApiResponse.notFound(res, "User not found");
+    return ApiResponse.notFound(res, "No account found with this email for this organisation");
   }
 
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
@@ -437,20 +552,45 @@ export const forgotPassword = catchAsync(async (req, res) => {
 
   user.password_reset_otp = otp;
   user.password_reset_otp_expiry = otpExpiry;
-  await user.save();
-  await mirrorPlatformUserById(user.id);
+  await persistPasswordResetOtp(user, otp, otpExpiry, tenantDb);
 
-  await transporter.sendMail({
-    from: process.env.EMAIL_USER,
-    to: email,
-    subject: "Elite Pic - Password Reset OTP",
-    html: generateOTPTemplate(otp),
+  const recipient = String(user.email || email).trim().toLowerCase();
+  const organisationId =
+    user.organisation_id ?? req.organisationContext?.organisation?.id ?? null;
+  const mailResult = await sendPasswordResetOtpEmail({
+    to: recipient,
+    otp,
+    organisationId,
   });
 
+  if (!mailResult.sent) {
+    user.password_reset_otp = null;
+    user.password_reset_otp_expiry = null;
+    await persistPasswordResetOtp(user, null, null, tenantDb);
+
+    if (mailResult.reason === "mail_not_configured") {
+      return ApiResponse.error(
+        res,
+        "Email is not configured. Set organisation SMTP in Admin → Settings → SMTP / Mail, or ask the platform admin to configure EMAIL_USER and EMAIL_PASS.",
+        503,
+      );
+    }
+
+    return ApiResponse.error(
+      res,
+      `Could not send reset email: ${mailResult.error || "please try again later"}`,
+      502,
+    );
+  }
+
+  if (process.env.NODE_ENV === "development") {
+    console.info(`[mail] Password reset OTP sent to ${recipient}`);
+  }
+
   return ApiResponse.success(res, "Password reset OTP sent to your email", {
-    email: email,
+    email: recipient,
     otp_sent: true,
-    next_step: "verify_otp"
+    next_step: "verify_otp",
   });
 });
 
@@ -458,11 +598,12 @@ export const forgotPassword = catchAsync(async (req, res) => {
  * Verify Password Reset OTP
  */
 export const verifyResetOTP = catchAsync(async (req, res) => {
-  const { email, otp } = req.body;
-  const user = await platformDb.User.findOne({ where: { email } });
+  const email = String(req.body?.email || "").trim().toLowerCase();
+  const { otp } = req.body;
+  const { user } = await resolveUserForPasswordReset(req, email);
 
   if (!user) {
-    return ApiResponse.notFound(res, "User not found");
+    return ApiResponse.notFound(res, "No account found with this email for this organisation");
   }
 
   if (user.password_reset_otp !== otp) {
@@ -491,11 +632,12 @@ export const verifyResetOTP = catchAsync(async (req, res) => {
  * Set New Password using Reset Token
  */
 export const setPassword = catchAsync(async (req, res) => {
-  const { email, password, confirmPassword, resetToken } = req.body;
-  const user = await platformDb.User.findOne({ where: { email } });
+  const email = String(req.body?.email || "").trim().toLowerCase();
+  const { password, confirmPassword, resetToken } = req.body;
+  const { user, tenantDb } = await resolveUserForPasswordReset(req, email);
 
   if (!user) {
-    return ApiResponse.notFound(res, "User not found");
+    return ApiResponse.notFound(res, "No account found with this email for this organisation");
   }
 
   if (!resetToken) {
@@ -509,10 +651,8 @@ export const setPassword = catchAsync(async (req, res) => {
     return ApiResponse.unauthorized(res, "Invalid or expired reset token");
   }
 
-  if (
-    decodedResetToken?.purpose !== RESET_TOKEN_PURPOSE ||
-    decodedResetToken?.email !== email
-  ) {
+  const tokenEmail = String(decodedResetToken?.email || "").trim().toLowerCase();
+  if (decodedResetToken?.purpose !== RESET_TOKEN_PURPOSE || tokenEmail !== email) {
     return ApiResponse.unauthorized(res, "Invalid reset token");
   }
 
@@ -537,12 +677,24 @@ export const setPassword = catchAsync(async (req, res) => {
   user.password_reset_otp = null;
   user.password_reset_otp_expiry = null;
   await user.save();
-  await mirrorPlatformUserById(user.id);
+  if (tenantDb) {
+    await mirrorAuthFieldsToTenantByEmail(tenantDb, user, {
+      password: hashedPassword,
+      password_reset_otp: null,
+      password_reset_otp_expiry: null,
+    });
+  } else {
+    await mirrorPlatformUserById(user.id);
+  }
 
-  const loginUrl = `${process.env.FRONTEND_URL}`;
-  await transporter.sendMail({
-    from: process.env.EMAIL_USER,
-    to: email,
+  const orgSlug = req.organisationContext?.organisation?.slug;
+  const loginUrl = orgSlug
+    ? `${buildTenantFrontendUrls(orgSlug).subdomain}/login`
+    : `${process.env.FRONTEND_URL?.split(",")[0]?.trim() || "http://localhost:5173"}/login`;
+
+  await sendTransactionalEmail({
+    organisationId: user.organisation_id ?? req.organisationContext?.organisation?.id ?? null,
+    to: user.email,
     subject: "Elite Pic - Password Updated Successfully",
     html: `<p>Your password was updated successfully.</p><p>You can now log in at <a href="${loginUrl}">${loginUrl}</a>.</p>`,
   });
@@ -573,8 +725,8 @@ export const resendOtpUser = catchAsync(async (req, res) => {
   await user.save();
   await mirrorPlatformUserById(user.id);
 
-  await transporter.sendMail({
-    from: process.env.EMAIL_USER,
+  await sendTransactionalEmail({
+    organisationId: user.organisation_id,
     to: email,
     subject: "Elite Pic - OTP Verification",
     html: generateOTPTemplate(otp),
@@ -633,8 +785,8 @@ export const sendPasswordChangeOtp = catchAsync(async (req, res) => {
   await user.save();
   await mirrorPlatformUserById(userId);
 
-  await transporter.sendMail({
-    from: process.env.EMAIL_USER,
+  await sendTransactionalEmail({
+    organisationId: req.user?.organisation_id ?? user.organisation_id,
     to: user.email,
     subject: "Elite Pic - Password Change OTP",
     html: generateOTPTemplate(otp),

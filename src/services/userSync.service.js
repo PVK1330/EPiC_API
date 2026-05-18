@@ -1,4 +1,5 @@
 import platformDb from "../models/index.js";
+import { findPlatformUserByEmail, normalizePlatformEmail } from "../utils/platformUserEmail.js";
 
 /**
  * Mirror a user row into the tenant database (same primary key as platform registry).
@@ -66,17 +67,22 @@ export async function syncUserToPlatformAndTenant(tenantDb, userId, updates) {
 
 /**
  * Register a tenant-only user on the platform registry (legacy rows created before sync).
- * Preserves tenant user id so FKs stay aligned.
+ * Preserves tenant user id when the platform PK is free; otherwise creates a new platform row.
  */
 export async function ensureUserOnPlatformFromTenant(tenantDb, tenantUserId, organisationId) {
   const tenantUser = await tenantDb.User.findByPk(tenantUserId);
   if (!tenantUser) return null;
 
-  const email = String(tenantUser.email || "").trim().toLowerCase();
+  const email = normalizePlatformEmail(tenantUser.email);
   if (!email) return null;
 
-  const existing = await platformDb.User.findOne({ where: { email } });
-  if (existing) return existing;
+  const existingByEmail = await findPlatformUserByEmail(platformDb, email, organisationId);
+  if (existingByEmail) {
+    if (organisationId && !existingByEmail.organisation_id) {
+      await existingByEmail.update({ organisation_id: organisationId });
+    }
+    return existingByEmail;
+  }
 
   const plain = tenantUser.get({ plain: true });
   const { id, email: _e, createdAt, updatedAt, ...rest } = plain;
@@ -86,10 +92,47 @@ export async function ensureUserOnPlatformFromTenant(tenantDb, tenantUserId, org
     await tenantDb.User.update({ organisation_id: orgId }, { where: { id: tenantUserId } });
   }
 
+  const existingById = await platformDb.User.findByPk(id);
+  if (existingById) {
+    const existingEmail = String(existingById.email || "").trim().toLowerCase();
+    if (existingEmail === email) {
+      if (orgId && !existingById.organisation_id) {
+        await existingById.update({ organisation_id: orgId });
+      }
+      return existingById;
+    }
+    // Platform PK already used by another account — create registry row without forcing id
+    return platformDb.User.create({
+      email,
+      ...rest,
+      organisation_id: orgId,
+    });
+  }
+
   return platformDb.User.create({
     id,
     email,
     ...rest,
     organisation_id: orgId,
   });
+}
+
+/**
+ * Mirror auth fields to the tenant user matched by email (handles platform/tenant id mismatch).
+ */
+export async function mirrorAuthFieldsToTenantByEmail(tenantDb, platformUser, updates) {
+  if (!tenantDb || !platformUser) return;
+
+  const email = String(platformUser.email || "").trim().toLowerCase();
+  if (!email) return;
+
+  const tenantUser = await tenantDb.User.findOne({ where: { email } });
+  if (tenantUser) {
+    await tenantUser.update(updates);
+    return;
+  }
+
+  if (platformUser.id != null) {
+    await tenantDb.User.update(updates, { where: { id: platformUser.id } }).catch(() => {});
+  }
 }

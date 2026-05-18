@@ -17,6 +17,7 @@ import { seedTenantDefaults, seedTenantOrganisation } from './services/tenantSee
 import http from 'http';
 import { initSocketIO } from './realtime/socketServer.js';
 import { normalizePostgresDatabaseName } from './utils/postgresDbName.js';
+import { verifyMailTransport } from './services/mail.service.js';
 
 const PORT = process.env.PORT || 5000;
 
@@ -93,6 +94,8 @@ async function bootstrapPlatform() {
 
     const server = http.createServer(app);
     initSocketIO(server, app);
+
+    await verifyMailTransport();
 
     server.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);

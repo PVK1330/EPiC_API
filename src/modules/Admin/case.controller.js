@@ -1,5 +1,6 @@
 import { Op } from 'sequelize';
 import { notifyCaseAssigned, notifyCaseStatusChanged } from '../../services/notification.service.js';
+import { createTasksOnCaseworkerAssignment } from '../../services/workflowTaskAutomation.service.js';
 import { generateCaseId } from '../../utils/case.utils.js';
 import { mergeCaseWhere, assertUsersInOrganisation } from '../../utils/tenantScope.js';
 import { recordAuditLog } from '../../services/audit.service.js';
@@ -585,9 +586,17 @@ export const updateCase = async (req, res) => {
                 candidateName: candidate ? `${candidate.first_name} ${candidate.last_name}` : 'Unknown',
                 visaType: visaType ? visaType.name : 'Not specified',
             };
+            const organisationId = req.user?.organisation_id ?? null;
             for (const cwId of newCwIds) {
                 await notifyCaseAssigned(req.tenantDb, cwId, caseInfo);
             }
+            await createTasksOnCaseworkerAssignment({
+              tenantDb: req.tenantDb,
+              caseRecord: caseData,
+              newCaseworkerIds: newCwIds,
+              assignedBy: req.user?.userId,
+              organisationId,
+            }).catch((err) => console.error('createTasksOnCaseworkerAssignment:', err));
             // Also notify client that new caseworkers are assigned
             await notifyCaseStatusChanged(req.tenantDb, [caseData.candidateId, caseData.sponsorId], caseInfo, 'Previous', 'New Caseworker Assigned');
         } catch (error) {
@@ -771,6 +780,7 @@ export const updatePipelineStage = async (req, res) => {
         performedBy: req.user?.userId,
         reason: `Workflow moved to: ${getStepById(nextStage)?.title || nextStage}`,
         sendEmail: true,
+        organisationId: req.user?.organisation_id ?? null,
       });
     }
 

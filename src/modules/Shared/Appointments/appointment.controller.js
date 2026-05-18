@@ -121,6 +121,7 @@ export const createAppointment = async (req, res) => {
         try {
           await sendAppointmentEmail({
             to: staff.email,
+            organisationId,
             html: generateAppointmentTemplate({
               title,
               date,
@@ -143,6 +144,7 @@ export const createAppointment = async (req, res) => {
         const primaryStaff = await req.tenantDb.User.findByPk(allStaffIds[0]);
         await sendAppointmentEmail({
           to: candidate.email,
+          organisationId,
           html: generateAppointmentTemplate({
             title,
             date,

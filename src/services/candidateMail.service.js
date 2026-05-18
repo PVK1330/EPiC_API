@@ -1,13 +1,8 @@
-import transporter from "../config/mail.js";
+import { sendTransactionalEmail } from "./mail.service.js";
 import { generateCandidateWelcomeTemplate } from "../utils/emailTemplates.js";
 import { resolveOrganisationLoginUrl } from "./tenantUserMail.service.js";
 
 export async function sendCandidateWelcomeEmail({ user, plainPassword, organisationId }) {
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-    console.warn("EMAIL_USER/EMAIL_PASS not configured — candidate welcome email skipped");
-    return { sent: false, reason: "mail_not_configured" };
-  }
-
   const loginUrl = await resolveOrganisationLoginUrl(organisationId);
 
   const candidateName =
@@ -20,12 +15,12 @@ export async function sendCandidateWelcomeEmail({ user, plainPassword, organisat
     loginUrl,
   });
 
-  await transporter.sendMail({
-    from: process.env.EMAIL_USER,
+  const result = await sendTransactionalEmail({
+    organisationId,
     to: user.email,
     subject: "EPiC — Your account & visa enquiry access",
     html,
   });
 
-  return { sent: true, loginUrl };
+  return { ...result, loginUrl };
 }

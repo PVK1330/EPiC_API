@@ -1,4 +1,9 @@
 import { Op } from 'sequelize';
+import { ROLES } from '../../../middlewares/role.middleware.js';
+import {
+  submitCclFeeProposal,
+  reviewCclFeeProposal,
+} from '../../../services/cclFeeProposal.service.js';
 
 const buildFullCaseIncludes = (tenantDb) => [
   {
@@ -449,6 +454,10 @@ export const updateCaseFinance = async (req, res) => {
   try {
     const { id } = req.params;
     const { totalAmount, amountStatus, amountNotes } = req.body;
+    const roleId = Number(req.user?.role_id);
+    const userId = req.user?.userId ?? req.user?.id;
+    const organisationId =
+      req.user?.organisation_id != null ? Number(req.user.organisation_id) : null;
 
     if (!id) {
       return res.status(400).json({
@@ -468,6 +477,99 @@ export const updateCaseFinance = async (req, res) => {
       });
     }
 
+    const fee = totalAmount !== undefined ? Number.parseFloat(totalAmount) : Number(caseData.totalAmount);
+
+    // Caseworker: submit for approval → full CCL workflow (tasks + admin notifications)
+    if (amountStatus === "Pending Approval") {
+      const result = await submitCclFeeProposal({
+        tenantDb: req.tenantDb,
+        caseRecord: caseData,
+        feeAmount: fee,
+        installments: [{ label: "Full fee", amount: fee, dueDate: null }],
+        notes: amountNotes ?? caseData.amountNotes,
+        proposedBy: userId,
+        organisationId,
+        allowFromAnyStage: true,
+      });
+
+      if (!result.ok) {
+        return res.status(result.status || 400).json({
+          status: "error",
+          message: result.message,
+          data: null,
+        });
+      }
+
+      return res.status(200).json({
+        status: "success",
+        message: "Fee proposal submitted for admin approval",
+        data: {
+          totalAmount: result.caseRecord.totalAmount,
+          amountStatus: result.caseRecord.amountStatus,
+          amountNotes: result.caseRecord.amountNotes,
+          caseStage: result.caseRecord.caseStage,
+        },
+      });
+    }
+
+    // Admin: legacy approve/reject buttons → CCL review when a proposal exists
+    if (roleId === ROLES.ADMIN && (amountStatus === "Approved" || amountStatus === "Rejected")) {
+      let ccl = await req.tenantDb.CaseCclRecord.findOne({ where: { caseId: caseData.id } });
+
+      // Backfill CCL record for cases stuck on legacy "Pending Approval" without workflow sync
+      if (
+        !ccl &&
+        caseData.amountStatus === "Pending Approval" &&
+        amountStatus === "Approved" &&
+        fee > 0
+      ) {
+        await submitCclFeeProposal({
+          tenantDb: req.tenantDb,
+          caseRecord: caseData,
+          feeAmount: fee,
+          installments: [{ label: "Full fee", amount: fee, dueDate: null }],
+          notes: caseData.amountNotes,
+          proposedBy: userId,
+          organisationId,
+          allowFromAnyStage: true,
+        });
+        ccl = await req.tenantDb.CaseCclRecord.findOne({ where: { caseId: caseData.id } });
+      }
+
+      if (ccl?.status === "fee_proposed") {
+        const result = await reviewCclFeeProposal({
+          tenantDb: req.tenantDb,
+          caseRecord: caseData,
+          action: amountStatus === "Approved" ? "approve" : "reject",
+          reviewNotes: amountNotes || null,
+          reviewedBy: userId,
+          organisationId,
+        });
+
+        if (!result.ok) {
+          return res.status(result.status || 400).json({
+            status: "error",
+            message: result.message,
+            data: null,
+          });
+        }
+
+        return res.status(200).json({
+          status: "success",
+          message:
+            amountStatus === "Approved"
+              ? "Fees approved and CCL sent to client"
+              : "Fee proposal returned to caseworker",
+          data: {
+            totalAmount: result.caseRecord.totalAmount,
+            amountStatus: result.caseRecord.amountStatus,
+            amountNotes: result.caseRecord.amountNotes,
+            caseStage: result.caseRecord.caseStage,
+          },
+        });
+      }
+    }
+
     const updateData = {};
     if (totalAmount !== undefined) updateData.totalAmount = totalAmount;
     if (amountStatus !== undefined) updateData.amountStatus = amountStatus;
@@ -475,12 +577,11 @@ export const updateCaseFinance = async (req, res) => {
 
     await caseData.update(updateData);
 
-    // Add timeline entry
     await req.tenantDb.CaseTimeline.create({
       caseId: caseData.id,
-      actionType: 'case_updated',
+      actionType: "case_updated",
       description: `Case finance details updated (${amountStatus || caseData.amountStatus})`,
-      performedBy: req.user?.id,
+      performedBy: userId,
       previousValue: JSON.stringify({
         totalAmount: caseData.totalAmount,
         amountStatus: caseData.amountStatus,
@@ -488,7 +589,7 @@ export const updateCaseFinance = async (req, res) => {
       newValue: JSON.stringify({
         totalAmount: totalAmount ?? caseData.totalAmount,
         amountStatus: amountStatus ?? caseData.amountStatus,
-      })
+      }),
     });
 
     res.status(200).json({
@@ -498,7 +599,7 @@ export const updateCaseFinance = async (req, res) => {
         totalAmount: caseData.totalAmount,
         amountStatus: caseData.amountStatus,
         amountNotes: caseData.amountNotes,
-      }
+      },
     });
   } catch (error) {
     console.error("Update Case Finance Error:", error);

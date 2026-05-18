@@ -1,4 +1,4 @@
-import transporter from '../../../config/mail.js';
+import { sendTransactionalEmail } from '../../../services/mail.service.js';
 import { generateNotificationEmailTemplate } from '../../../utils/emailTemplate.js';
 import { notifyAdmins, notifyUser, NotificationTypes, NotificationPriority } from '../../../services/notification.service.js';
 
@@ -489,8 +489,8 @@ export const requestMoreCos = async (req, res) => {
 
         try {
             if (process.env.ADMIN_EMAIL) {
-                await transporter.sendMail({
-                    from: process.env.EMAIL_USER,
+                await sendTransactionalEmail({
+                    organisationId: req.user?.organisation_id ?? null,
                     to: process.env.ADMIN_EMAIL,
                     subject: 'CoS Allocation Request Submitted',
                     html: generateNotificationEmailTemplate({
@@ -686,8 +686,8 @@ export const requestCosAllocation = async (req, res) => {
 
         try {
             if (process.env.ADMIN_EMAIL) {
-                await transporter.sendMail({
-                    from: process.env.EMAIL_USER,
+                await sendTransactionalEmail({
+                    organisationId: req.user?.organisation_id ?? null,
                     to: process.env.ADMIN_EMAIL,
                     subject: 'New CoS Allocation Request',
                     html: generateNotificationEmailTemplate({
@@ -701,8 +701,8 @@ export const requestCosAllocation = async (req, res) => {
             }
 
             if (contactEmail) {
-                await transporter.sendMail({
-                    from: process.env.EMAIL_USER,
+                await sendTransactionalEmail({
+                    organisationId: req.user?.organisation_id ?? null,
                     to: contactEmail,
                     subject: 'Your CoS Request Has Been Submitted',
                     html: generateNotificationEmailTemplate({
@@ -923,8 +923,8 @@ export const uploadLicenceDocument = async (req, res) => {
             });
 
             if (user?.email) {
-                await transporter.sendMail({
-                    from: process.env.EMAIL_USER,
+                await sendTransactionalEmail({
+                    organisationId: req.user?.organisation_id ?? null,
                     to: user.email,
                     subject: 'Document Upload Confirmation',
                     html: generateNotificationEmailTemplate({

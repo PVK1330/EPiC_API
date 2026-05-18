@@ -122,6 +122,7 @@ export const rescheduleCase = async (req, res) => {
       await sendRescheduleEmail({
         to: candidate.email,
         html: emailHtml,
+        organisationId: req.user?.organisation_id ?? null,
       });
     }
 
@@ -131,6 +132,7 @@ export const rescheduleCase = async (req, res) => {
       await sendRescheduleEmail({
         to: sponsor.email,
         html: emailHtml,
+        organisationId: req.user?.organisation_id ?? null,
       });
     }
 

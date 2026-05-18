@@ -5,6 +5,8 @@ import {
 } from "../constants/immigrationCaseProcess.js";
 import { recordStatusChange, recordTimelineEntry } from "./caseTimeline.service.js";
 import { sendWorkflowStageEmail } from "./workflowEmail.service.js";
+import { notifyWorkflowStageChange } from "./workflowNotifications.service.js";
+import { syncWorkflowTasksForStage } from "./workflowTaskAutomation.service.js";
 
 const UPLOADED_STATUSES = new Set(["uploaded", "under_review", "approved"]);
 
@@ -42,7 +44,15 @@ async function getRequiredChecklistStatus(tenantDb, caseRecord) {
   return { complete, hasRejected, allApproved };
 }
 
-export async function applyCaseStageChange({ tenantDb, caseRecord, nextStageId, performedBy, reason, sendEmail = true }) {
+export async function applyCaseStageChange({
+  tenantDb,
+  caseRecord,
+  nextStageId,
+  performedBy,
+  reason,
+  sendEmail = true,
+  organisationId = null,
+}) {
   const previousStage = resolveCaseStage(caseRecord);
   if (previousStage === nextStageId) return null;
 
@@ -66,7 +76,12 @@ export async function applyCaseStageChange({ tenantDb, caseRecord, nextStageId, 
   });
 
   if (sendEmail) {
-    const emailResult = await sendWorkflowStageEmail({ tenantDb, caseRecord, stageId: nextStageId });
+    const emailResult = await sendWorkflowStageEmail({
+      tenantDb,
+      caseRecord,
+      stageId: nextStageId,
+      organisationId,
+    });
     if (emailResult?.sent) {
       await recordTimelineEntry({
         tenantDb,
@@ -84,6 +99,23 @@ export async function applyCaseStageChange({ tenantDb, caseRecord, nextStageId, 
     }
   }
 
+  await notifyWorkflowStageChange({
+    tenantDb,
+    caseRecord,
+    previousStage,
+    nextStage: nextStageId,
+    performedBy,
+    organisationId,
+  }).catch((err) => console.error("notifyWorkflowStageChange:", err));
+
+  await syncWorkflowTasksForStage({
+    tenantDb,
+    caseRecord,
+    stageId: nextStageId,
+    performedBy,
+    organisationId,
+  }).catch((err) => console.error("syncWorkflowTasksForStage:", err));
+
   return { previousStage, nextStage: nextStageId };
 }
 
@@ -95,6 +127,7 @@ export async function evaluateCaseStageAfterEvent({
   caseRecord,
   trigger,
   performedBy = null,
+  organisationId = null,
 }) {
   if (!tenantDb || !caseRecord) return null;
 
@@ -109,6 +142,7 @@ export async function evaluateCaseStageAfterEvent({
         nextStageId: "further_information_request",
         performedBy,
         reason: "Further information required — document rejected",
+        organisationId,
       });
     }
     return null;
@@ -122,6 +156,7 @@ export async function evaluateCaseStageAfterEvent({
         nextStageId: "application_preparation",
         performedBy,
         reason: "Mandatory documents received — application preparation started",
+        organisationId,
       });
     }
 
@@ -132,6 +167,7 @@ export async function evaluateCaseStageAfterEvent({
         nextStageId: "draft_application_review",
         performedBy,
         reason: "All required documents approved — draft review",
+        organisationId,
       });
     }
   }
@@ -146,6 +182,7 @@ export async function evaluateCaseStageAfterEvent({
         nextStageId: "ccl_payment_received",
         performedBy,
         reason: "Payment received — CCL stage complete",
+        organisationId,
       });
     }
   }

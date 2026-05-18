@@ -5,6 +5,7 @@ import ApiResponse from '../../utils/apiResponse.js';
 import { generateStrongPassword } from '../../utils/passwordGenerator.js';
 import { ROLES } from '../../middlewares/role.middleware.js';
 import platformDb from '../../models/index.js';
+import { isPlatformEmailTaken } from '../../utils/platformUserEmail.js';
 import { createUserOnPlatformAndTenant } from '../../services/userSync.service.js';
 import { sendTenantAdminWelcomeEmail } from '../../services/tenantUserMail.service.js';
 import { ensureAdminHasAllPermissions } from '../../seeders/permission.seeder.js';
@@ -45,10 +46,8 @@ export const createAdmin = catchAsync(async (req, res) => {
     return ApiResponse.badRequest(res, "Organisation context is required to create an admin");
   }
 
-  // Check if email already exists
-  const existingEmail = await platformDb.User.findOne({ where: { email: emailNorm } });
-  if (existingEmail) {
-    return ApiResponse.badRequest(res, "Email already exists");
+  if (await isPlatformEmailTaken(platformDb, emailNorm, organisationId)) {
+    return ApiResponse.badRequest(res, "Email already exists for this organisation");
   }
 
   // Check if mobile number already exists

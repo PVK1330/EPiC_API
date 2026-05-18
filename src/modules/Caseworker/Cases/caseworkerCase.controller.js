@@ -771,6 +771,7 @@ export const updateMyCase = async (req, res) => {
         caseRecord: caseData,
         trigger: "payment_received",
         performedBy: req.user?.userId,
+        organisationId: req.user?.organisation_id ?? null,
       });
       await caseData.reload();
     }

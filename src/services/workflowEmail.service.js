@@ -1,4 +1,4 @@
-import transporter from "../config/mail.js";
+import { sendTransactionalEmail } from "./mail.service.js";
 
 /** Workflow stage → email_templates.template_key */
 export const STAGE_EMAIL_TEMPLATE = {
@@ -30,7 +30,12 @@ async function loadCaseContext(tenantDb, caseRecord) {
 /**
  * Send tenant email template when a case enters a workflow stage (best-effort).
  */
-export async function sendWorkflowStageEmail({ tenantDb, caseRecord, stageId }) {
+export async function sendWorkflowStageEmail({
+  tenantDb,
+  caseRecord,
+  stageId,
+  organisationId = null,
+}) {
   const templateKey = STAGE_EMAIL_TEMPLATE[stageId];
   if (!templateKey || !tenantDb?.EmailTemplateSetting) return { sent: false };
 
@@ -60,15 +65,19 @@ export async function sendWorkflowStageEmail({ tenantDb, caseRecord, stageId }) 
     const subject = interpolate(row.subject, vars);
     const body = interpolate(row.body || "", vars);
 
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
+    const result = await sendTransactionalEmail({
+      organisationId,
       to: candidate.email,
       subject,
       text: body,
-      html: `<div style="font-family:sans-serif;line-height:1.6;white-space:pre-wrap">${body}</div>`,
+      html: '<div style="font-family:sans-serif;line-height:1.6;white-space:pre-wrap">' + body + '</div>',
     });
 
-    return { sent: true, to: candidate.email, templateKey };
+    if (!result.sent) {
+      return { sent: false, reason: result.reason || result.error };
+    }
+
+    return { sent: true, to: candidate.email, templateKey, usedSource: result.usedSource };
   } catch (err) {
     console.error("sendWorkflowStageEmail error:", err.message);
     return { sent: false, error: err.message };

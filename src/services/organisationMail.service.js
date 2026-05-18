@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import transporter from "../config/mail.js";
+import { sendTransactionalEmail } from "./mail.service.js";
 import { generateOrganisationWelcomeTemplate } from "../utils/emailTemplates.js";
 import { buildTenantFrontendUrls } from "../utils/organisationHost.js";
 
@@ -28,13 +28,9 @@ export function generateOrganisationAdminPassword(length = 14) {
 
 /**
  * Send welcome email with login URL and temporary password.
+ * Uses platform SMTP until the organisation configures its own.
  */
 export async function sendOrganisationAdminWelcomeEmail({ organisation, admin, plainPassword }) {
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-    console.warn("EMAIL_USER/EMAIL_PASS not configured — welcome email skipped");
-    return { sent: false, reason: "mail_not_configured" };
-  }
-
   const tenantUrls = buildTenantFrontendUrls(organisation.slug);
   const loginUrl = `${tenantUrls.subdomain.replace(/\/$/, "")}/login`;
   const adminName = [admin.first_name, admin.last_name].filter(Boolean).join(" ").trim() || "Admin";
@@ -48,12 +44,12 @@ export async function sendOrganisationAdminWelcomeEmail({ organisation, admin, p
     mainLoginUrl: tenantUrls.main,
   });
 
-  await transporter.sendMail({
-    from: process.env.EMAIL_USER,
+  const result = await sendTransactionalEmail({
+    organisationId: organisation.id,
     to: admin.email,
     subject: `Welcome to EPiC — ${organisation.name} is ready`,
     html,
   });
 
-  return { sent: true, loginUrl, mainLoginUrl: tenantUrls.main };
+  return { ...result, loginUrl, mainLoginUrl: tenantUrls.main };
 }
