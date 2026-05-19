@@ -428,11 +428,15 @@ export const listCclFeePendingApprovals = async (req, res) => {
     }
 
     const cases = await req.tenantDb.Case.findAll({
-      where: { caseStage: "ccl_fee_admin_review" },
       include: [
         { model: req.tenantDb.User, as: "candidate", attributes: ["id", "first_name", "last_name", "email"] },
         { model: req.tenantDb.VisaType, as: "visaType", attributes: ["id", "name"] },
-        { model: req.tenantDb.CaseCclRecord, as: "cclRecord", required: true },
+        {
+          model: req.tenantDb.CaseCclRecord,
+          as: "cclRecord",
+          required: true,
+          where: { status: "fee_proposed" },
+        },
       ],
       order: [["updated_at", "DESC"]],
     });
@@ -496,18 +500,6 @@ export const acceptCcl = async (req, res) => {
       (Number(caseRecord.totalAmount) > 0 &&
         Number(caseRecord.paidAmount) >= Number(caseRecord.totalAmount));
 
-    if (paid) {
-      await applyCaseStageChange({
-        tenantDb: req.tenantDb,
-        caseRecord,
-        nextStageId: "ccl_payment_received",
-        performedBy: userId,
-        organisationId: organisationIdFromReq(req),
-        reason: "CCL accepted and payment received",
-        sendEmail: false,
-      });
-    }
-
     res.status(200).json({
       status: "success",
       message: "Client Care Letter accepted",
@@ -552,20 +544,6 @@ export const confirmCclSigned = async (req, res) => {
       performedBy: userId,
       visibility: "public",
     });
-
-    const paid = Number(caseRecord.paidAmount) || 0;
-    const total = Number(caseRecord.totalAmount) || 0;
-    if (total > 0 && paid >= total) {
-      await applyCaseStageChange({
-        tenantDb: req.tenantDb,
-        caseRecord,
-        nextStageId: "ccl_payment_received",
-        performedBy: userId,
-        organisationId: organisationIdFromReq(req),
-        reason: "Signed CCL and payment received",
-        sendEmail: false,
-      });
-    }
 
     res.status(200).json({ status: "success", data: { ccl } });
   } catch (err) {

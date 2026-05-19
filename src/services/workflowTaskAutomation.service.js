@@ -134,13 +134,9 @@ const STAGE_TASK_MATRIX = {
       },
     ],
   },
-  ccl_fee_proposal: {
-    caseworkers: [{ title: "Propose CCL fees and instalment schedule", priority: "high", dueInDays: 2 }],
-  },
-  ccl_fee_admin_review: {
-    admins: [{ title: "Approve CCL fee proposal", priority: "high", dueInDays: 1 }],
-  },
-  ccl_issued: {
+  client_care_letter: {
+    caseworkers: [{ title: "Propose CCL fees or monitor acceptance and payment", priority: "high", dueInDays: 3 }],
+    admins: [{ title: "Approve CCL fee proposal when submitted", priority: "high", dueInDays: 1 }],
     candidates: [
       {
         title: "Accept Client Care Letter and pay fees",
@@ -150,10 +146,6 @@ const STAGE_TASK_MATRIX = {
         message: "Your Client Care Letter and payment schedule are ready. Please review and pay in the portal.",
       },
     ],
-    caseworkers: [{ title: "Monitor CCL acceptance and payments", priority: "medium", dueInDays: 5 }],
-  },
-  ccl_payment_received: {
-    caseworkers: [{ title: "Confirm signed CCL and payment — advance to submission", priority: "high", dueInDays: 2 }],
   },
   application_submitted: {
     caseworkers: [{ title: "Record Home Office submission reference", priority: "medium", dueInDays: 2 }],

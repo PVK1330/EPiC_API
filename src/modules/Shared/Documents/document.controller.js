@@ -13,6 +13,54 @@ import {
   findDocumentForChecklistItem,
   normalizeDocKey,
 } from '../../../utils/documentMatch.utils.js';
+import { resolveCaseStage, getStageOrder } from '../../../constants/immigrationCaseProcess.js';
+import { ROLES } from '../../../middlewares/role.middleware.js';
+
+const DECISION_DOC_TYPES = ['Decision Letter', 'Approval Notice'];
+const FINAL_DOC_TYPES = ['Visa Copy', 'BRP Information'];
+
+async function assertCandidateMayDownloadDocument(req, document) {
+  const roleId = Number(req.user?.role_id);
+  if (roleId !== ROLES.CANDIDATE) return { ok: true };
+
+  if (!document.caseId) return { ok: true };
+
+  const caseRecord = await req.tenantDb.Case.findByPk(document.caseId, {
+    attributes: ['id', 'caseStage', 'status', 'candidateId'],
+  });
+  if (!caseRecord) {
+    return { ok: false, message: 'Case not found for this document' };
+  }
+  if (Number(caseRecord.candidateId) !== Number(req.user?.userId)) {
+    return { ok: false, message: 'Access denied' };
+  }
+
+  const stage = resolveCaseStage(caseRecord);
+  const order = getStageOrder(stage);
+  const docType = document.documentType || '';
+
+  if (DECISION_DOC_TYPES.includes(docType)) {
+    if (order < getStageOrder('decision_communicated')) {
+      return {
+        ok: false,
+        message: 'Decision documents are available after your decision has been communicated.',
+      };
+    }
+    return { ok: true };
+  }
+
+  if (FINAL_DOC_TYPES.includes(docType)) {
+    if (order < getStageOrder('case_closure')) {
+      return {
+        ok: false,
+        message: 'Final documents are available after case closure.',
+      };
+    }
+    return { ok: true };
+  }
+
+  return { ok: true };
+}
 
 const documentsColumnMetadataByDb = new Map();
 
@@ -792,6 +840,15 @@ export const downloadDocument = async (req, res) => {
         status: "error",
         message: "Document not found",
         data: null
+      });
+    }
+
+    const access = await assertCandidateMayDownloadDocument(req, document);
+    if (!access.ok) {
+      return res.status(403).json({
+        status: "error",
+        message: access.message,
+        data: null,
       });
     }
 

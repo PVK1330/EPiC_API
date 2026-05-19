@@ -1,6 +1,7 @@
 import {
   resolveCaseStage,
   getStepById,
+  normalizeCaseStage,
   STAGE_TO_LEGACY_STATUS,
 } from "../constants/immigrationCaseProcess.js";
 import { recordStatusChange, recordTimelineEntry } from "./caseTimeline.service.js";
@@ -54,14 +55,15 @@ export async function applyCaseStageChange({
   organisationId = null,
 }) {
   const previousStage = resolveCaseStage(caseRecord);
-  if (previousStage === nextStageId) return null;
+  const nextStage = normalizeCaseStage(nextStageId);
+  if (!nextStage || previousStage === nextStage) return null;
 
   const prevStep = getStepById(previousStage);
-  const nextStep = getStepById(nextStageId);
-  const legacyStatus = STAGE_TO_LEGACY_STATUS[nextStageId] || caseRecord.status;
+  const nextStep = getStepById(nextStage);
+  const legacyStatus = STAGE_TO_LEGACY_STATUS[nextStage] || caseRecord.status;
 
   await caseRecord.update({
-    caseStage: nextStageId,
+    caseStage: nextStage,
     status: legacyStatus,
   });
 
@@ -70,8 +72,8 @@ export async function applyCaseStageChange({
     caseId: caseRecord.id,
     performedBy,
     previousValue: prevStep?.title || previousStage,
-    newValue: nextStep?.title || nextStageId,
-    description: reason || `Workflow advanced to: ${nextStep?.title || nextStageId}`,
+    newValue: nextStep?.title || nextStage,
+    description: reason || `Workflow advanced to: ${nextStep?.title || nextStage}`,
     isSystemAction: true,
   });
 
@@ -79,7 +81,7 @@ export async function applyCaseStageChange({
     const emailResult = await sendWorkflowStageEmail({
       tenantDb,
       caseRecord,
-      stageId: nextStageId,
+      stageId: nextStage,
       organisationId,
     });
     if (emailResult?.sent) {
@@ -103,7 +105,7 @@ export async function applyCaseStageChange({
     tenantDb,
     caseRecord,
     previousStage,
-    nextStage: nextStageId,
+    nextStage,
     performedBy,
     organisationId,
   }).catch((err) => console.error("notifyWorkflowStageChange:", err));
@@ -111,12 +113,12 @@ export async function applyCaseStageChange({
   await syncWorkflowTasksForStage({
     tenantDb,
     caseRecord,
-    stageId: nextStageId,
+    stageId: nextStage,
     performedBy,
     organisationId,
   }).catch((err) => console.error("syncWorkflowTasksForStage:", err));
 
-  return { previousStage, nextStage: nextStageId };
+  return { previousStage, nextStage };
 }
 
 /**
@@ -167,21 +169,6 @@ export async function evaluateCaseStageAfterEvent({
         nextStageId: "draft_application_review",
         performedBy,
         reason: "All required documents approved — draft review",
-        organisationId,
-      });
-    }
-  }
-
-  if (trigger === "payment_received") {
-    const paid = Number(caseRecord.paidAmount) || 0;
-    const total = Number(caseRecord.totalAmount) || 0;
-    if (currentStage === "ccl_issued" && total > 0 && paid >= total) {
-      return applyCaseStageChange({
-        tenantDb,
-        caseRecord,
-        nextStageId: "ccl_payment_received",
-        performedBy,
-        reason: "Payment received — CCL stage complete",
         organisationId,
       });
     }
