@@ -25,6 +25,13 @@ export function isSuperAdminRole(roleId) {
   return Number(roleId) === 5;
 }
 
+export const isPlatformSuperAdminRole = isSuperAdminRole;
+
+/** Platform panel users live on the registry DB with no organisation_id. */
+export function isPlatformStaffUser(user) {
+  return user != null && (user.organisation_id == null || user.organisation_id === "");
+}
+
 /** DB-per-tenant: no row-level org filter needed on case queries. */
 export function caseWhereForRequest(_req) {
   return {};

@@ -1,13 +1,24 @@
 import express from 'express';
 import { verifyToken } from '../../middlewares/auth.middleware.js';
-import { isSuperAdmin } from '../../middlewares/isSuperAdmin.js';
+import { isPlatformStaff, requirePlatformPermission } from '../../middlewares/isPlatformStaff.js';
+import * as teamController from './superadminTeam.controller.js';
 import * as orgController from './superadminOrganisation.controller.js';
 import * as planController from './plan.controller.js';
 import { getPlatformSmtpSettings } from '../Admin/Settings/smtp.settings.controller.js';
 
 const router = express.Router();
 
-router.use(verifyToken, isSuperAdmin);
+router.use(verifyToken, isPlatformStaff);
+
+router.get('/team/modules', teamController.listPlatformModules);
+router.get('/team', teamController.listTeamMembers);
+router.post('/team', requirePlatformPermission('platform.team.manage'), teamController.inviteTeamMember);
+router.patch('/team/:id', requirePlatformPermission('platform.team.manage'), teamController.updateTeamMember);
+
+router.get('/platform-roles', teamController.listPlatformRoles);
+router.post('/platform-roles', requirePlatformPermission('platform.team.manage'), teamController.createPlatformRole);
+router.patch('/platform-roles/:id', requirePlatformPermission('platform.team.manage'), teamController.updatePlatformRole);
+router.delete('/platform-roles/:id', requirePlatformPermission('platform.team.manage'), teamController.deletePlatformRole);
 
 router.get('/organisations', orgController.listOrganisations);
 router.get('/organisations/:id', orgController.getOrganisationById);

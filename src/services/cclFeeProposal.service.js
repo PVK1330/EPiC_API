@@ -62,12 +62,12 @@ export async function submitCclFeeProposal({
 
   const canPropose =
     allowFromAnyStage ||
-    ["draft_application_review", "ccl_fee_proposal", "application_preparation", "document_review"].includes(
+    ["draft_application_review", "client_care_letter", "application_preparation", "document_review"].includes(
       stage,
     ) ||
     existingCcl?.status === "fee_rejected";
 
-  if (!canPropose && stage !== "ccl_fee_admin_review") {
+  if (!canPropose) {
     return {
       ok: false,
       status: 400,
@@ -108,30 +108,29 @@ export async function submitCclFeeProposal({
     amountNotes: notes ?? caseRecord.amountNotes,
   });
 
-  const alreadyOnAdminReview = resolveCaseStage(caseRecord) === "ccl_fee_admin_review";
-
-  if (!alreadyOnAdminReview) {
+  const currentStage = resolveCaseStage(caseRecord);
+  if (currentStage !== "client_care_letter") {
     await applyCaseStageChange({
       tenantDb,
       caseRecord,
-      nextStageId: "ccl_fee_admin_review",
+      nextStageId: "client_care_letter",
       performedBy: proposedBy,
       reason: "CCL fees and instalments submitted for admin approval",
       sendEmail: false,
       organisationId,
     });
-  } else {
-    const caseLabel = caseRecord.caseId || `#${caseRecord.id}`;
-    await createAdminWorkflowTask({
-      tenantDb,
-      caseRecord,
-      title: `Approve CCL fee proposal — ${caseLabel}`,
-      createdBy: proposedBy,
-      priority: "high",
-      dueInDays: 1,
-      organisationId,
-    }).catch((err) => console.error("createAdminWorkflowTask:", err));
   }
+
+  const caseLabel = caseRecord.caseId || `#${caseRecord.id}`;
+  await createAdminWorkflowTask({
+    tenantDb,
+    caseRecord,
+    title: `Approve CCL fee proposal — ${caseLabel}`,
+    createdBy: proposedBy,
+    priority: "high",
+    dueInDays: 1,
+    organisationId,
+  }).catch((err) => console.error("createAdminWorkflowTask:", err));
 
   await recordTimelineEntry({
     tenantDb,
@@ -192,15 +191,17 @@ export async function reviewCclFeeProposal({
 
     await caseRecord.update({ amountStatus: "Rejected" });
 
-    await applyCaseStageChange({
-      tenantDb,
-      caseRecord,
-      nextStageId: "ccl_fee_proposal",
-      performedBy: reviewedBy,
-      organisationId,
-      reason: reviewNotes || "CCL fee proposal returned to caseworker",
-      sendEmail: false,
-    });
+    if (resolveCaseStage(caseRecord) !== "client_care_letter") {
+      await applyCaseStageChange({
+        tenantDb,
+        caseRecord,
+        nextStageId: "client_care_letter",
+        performedBy: reviewedBy,
+        organisationId,
+        reason: reviewNotes || "CCL fee proposal returned to caseworker",
+        sendEmail: false,
+      });
+    }
 
     await recordTimelineEntry({
       tenantDb,
@@ -237,15 +238,25 @@ export async function reviewCclFeeProposal({
     amountStatus: "Approved",
   });
 
-  await applyCaseStageChange({
-    tenantDb,
-    caseRecord,
-    nextStageId: "ccl_issued",
-    performedBy: reviewedBy,
-    reason: "CCL fees approved — Client Care Letter released to client",
-    sendEmail: true,
-    organisationId,
-  });
+  if (resolveCaseStage(caseRecord) !== "client_care_letter") {
+    await applyCaseStageChange({
+      tenantDb,
+      caseRecord,
+      nextStageId: "client_care_letter",
+      performedBy: reviewedBy,
+      reason: "CCL fees approved — Client Care Letter released to client",
+      sendEmail: true,
+      organisationId,
+    });
+  } else {
+    const { sendWorkflowStageEmail } = await import("./workflowEmail.service.js");
+    await sendWorkflowStageEmail({
+      tenantDb,
+      caseRecord,
+      stageId: "client_care_letter",
+      organisationId,
+    });
+  }
 
   await recordTimelineEntry({
     tenantDb,
@@ -284,6 +295,13 @@ export async function reviewCclFeeProposal({
     ccl,
     organisationId,
   }).catch((err) => console.error("notifyCclFeeApproved:", err));
+
+  const { createVisaPortalSubmissionTasks } = await import("./caseWorkflowExtended.service.js");
+  await createVisaPortalSubmissionTasks({
+    tenantDb,
+    caseRecord,
+    createdBy: reviewedBy,
+  }).catch((err) => console.error("createVisaPortalSubmissionTasks:", err));
 
   return { ok: true, ccl, caseRecord };
 }

@@ -79,8 +79,8 @@ export async function resolveOrganisationContext(req) {
 export function assertLoginAllowedForOrganisationContext(user, ctx) {
   if (!ctx?.organisation) return;
 
-  if (Number(user.role_id) === 5) {
-    const err = new Error("Sign in as superadmin from the main platform URL.");
+  if (user.organisation_id == null) {
+    const err = new Error("Sign in as platform staff from the main platform URL.");
     err.status = 403;
     throw err;
   }

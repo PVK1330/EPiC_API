@@ -1,4 +1,4 @@
-  import { Op } from "sequelize";
+import { Op } from "sequelize";
 import { resolveCaseStage } from "../constants/immigrationCaseProcess.js";
 import { applyCaseStageChange } from "./caseStageAutomation.service.js";
 import { recordTimelineEntry } from "./caseTimeline.service.js";

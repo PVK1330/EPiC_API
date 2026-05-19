@@ -723,7 +723,8 @@ export const updatePipelineStage = async (req, res) => {
     const { id } = req.params;
     const { caseStage, status } = req.body;
 
-    let nextStage = caseStage;
+    const { normalizeCaseStage } = await import("../../constants/immigrationCaseProcess.js");
+    let nextStage = normalizeCaseStage(caseStage);
     if (!nextStage && status) {
       nextStage = LEGACY_STATUS_TO_STAGE[status] || null;
     }
@@ -747,30 +748,14 @@ export const updatePipelineStage = async (req, res) => {
 
     const previousStage = resolveCaseStage(caseData);
 
-    if (nextStage === "application_submitted") {
-      const ccl = await req.tenantDb.CaseCclRecord?.findOne({
-        where: { caseId: caseData.id },
+    const { assertSubmissionGate } = await import("../../constants/immigrationCaseProcess.js");
+    const gate = await assertSubmissionGate(req.tenantDb, caseData, nextStage);
+    if (!gate.ok) {
+      return res.status(400).json({
+        status: "error",
+        message: gate.message,
+        data: null,
       });
-      const cclOk =
-        ccl && (ccl.status === "signed" || ccl.status === "accepted");
-      const paid =
-        caseData.amountStatus === "paid" ||
-        (Number(caseData.totalAmount) > 0 &&
-          Number(caseData.paidAmount) >= Number(caseData.totalAmount));
-      if (!cclOk) {
-        return res.status(400).json({
-          status: "error",
-          message: "Cannot submit: Client Care Letter not accepted by candidate.",
-          data: null,
-        });
-      }
-      if (!paid) {
-        return res.status(400).json({
-          status: "error",
-          message: "Cannot submit: payment outstanding.",
-          data: null,
-        });
-      }
     }
 
     if (nextStage === "biometrics_booked" && !caseData.biometricsDate) {
