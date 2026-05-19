@@ -1,12 +1,18 @@
 import path from 'path';
 import fs from 'fs';
 import archiver from 'archiver';
+import { Op } from 'sequelize';
 
 import { notifyDocumentUploaded, notifyDocumentReviewed } from '../../../services/notification.service.js';
 import {
   evaluateCaseStageAfterEvent,
   recordDocumentReviewTimeline,
 } from '../../../services/caseStageAutomation.service.js';
+import {
+  buildDocumentLookupMap,
+  findDocumentForChecklistItem,
+  normalizeDocKey,
+} from '../../../utils/documentMatch.utils.js';
 
 const documentsColumnMetadataByDb = new Map();
 
@@ -61,7 +67,21 @@ export const uploadDocuments = async (req, res) => {
   try {
     // Multer processes files and form fields differently
     const documentCategory = req.body?.documentCategory || 'general';
-    const userId = req.body?.userId;
+    let userId = req.body?.userId;
+
+    // Candidates may only upload to their own account
+    const roleId = Number(req.user?.role_id);
+    if (roleId === 1) {
+      userId = req.user.userId ?? req.user.id;
+    }
+
+    if (!userId) {
+      return res.status(400).json({
+        status: "error",
+        message: "userId is required",
+        data: null,
+      });
+    }
     const caseId = req.body?.caseId;
     const documentType = req.body?.documentType || 'General';
     const userFileName = req.body?.userFileName;
@@ -87,27 +107,19 @@ export const uploadDocuments = async (req, res) => {
       });
     }
 
-    // Validate case if provided - handle both numeric id and string caseId
+  // Validate case if provided - handle both numeric id and string caseId
     let numericCaseId = null;
-    if (caseId) {
-      let caseRecord;
+    let caseRecord = null;
 
-      // If caseId is a number (or numeric string), try findByPk first
+    if (caseId) {
       if (!isNaN(parseInt(caseId))) {
         caseRecord = await req.tenantDb.Case.findByPk(parseInt(caseId));
-        if (caseRecord) {
-          numericCaseId = caseRecord.id;
-        }
+        if (caseRecord) numericCaseId = caseRecord.id;
       }
-
-      // If not found by numeric id, try by string caseId
       if (!caseRecord) {
         caseRecord = await req.tenantDb.Case.findOne({ where: { caseId } });
-        if (caseRecord) {
-          numericCaseId = caseRecord.id;
-        }
+        if (caseRecord) numericCaseId = caseRecord.id;
       }
-
       if (!caseRecord) {
         return res.status(404).json({
           status: "error",
@@ -115,6 +127,15 @@ export const uploadDocuments = async (req, res) => {
           data: null,
         });
       }
+    }
+
+    // Candidates: always attach to their active case when possible
+    if (roleId === 1 && !numericCaseId) {
+      caseRecord = await req.tenantDb.Case.findOne({
+        where: { candidateId: userId },
+        order: [["created_at", "DESC"]],
+      });
+      if (caseRecord) numericCaseId = caseRecord.id;
     }
 
     const uploadedDocuments = [];
@@ -161,56 +182,123 @@ export const uploadDocuments = async (req, res) => {
 
     const { hasNotesColumn } = await getDocumentAttributes(req.tenantDb);
 
+    let caseDocsForMatch = [];
+    if (numericCaseId) {
+      caseDocsForMatch = await req.tenantDb.Document.findAll({
+        where: { caseId: numericCaseId },
+        order: [["uploadedAt", "DESC"]],
+      });
+    }
+    const caseDocLookup = buildDocumentLookupMap(caseDocsForMatch);
+
     for (const [index, file] of uploadedFiles.entries()) {
-      // Move file from temp to correct directory structure
       const sourcePath = file.path;
-      
-      // Determine target directory based on upload type
+
       let targetDir;
       let urlPath;
-      
-      if (caseId) {
-        // Case-related upload: uploads/caseimages/caseId/
-        targetDir = path.join('uploads', 'caseimages', caseId.toString());
-        urlPath = `caseimages/${caseId}`;
+
+      if (numericCaseId) {
+        targetDir = path.join("uploads", "caseimages", String(numericCaseId));
+        urlPath = `caseimages/${numericCaseId}`;
       } else {
-        // Candidate document upload: uploads/documents/userId/
-        targetDir = path.join('uploads', 'documents', userId.toString());
+        targetDir = path.join("uploads", "documents", userId.toString());
         urlPath = `documents/${userId}`;
       }
-      
-      // Generate system document name
-      const systemDocumentName = generateSystemDocumentName(file.originalname, documentType, index);
+
+      const systemDocumentName = generateSystemDocumentName(
+        file.originalname,
+        documentType,
+        index,
+      );
       const targetPath = path.join(targetDir, systemDocumentName);
-      
-      // Create target directory if it doesn't exist
+
       fs.mkdirSync(targetDir, { recursive: true });
-      
-      // Move file to correct location
       fs.renameSync(sourcePath, targetPath);
-      
-      // Create document record with system-generated name
-      const documentPayload = {
-        userId,
-        caseId: numericCaseId || null,
-        documentType: documentType || 'General',
+
+      const uploadMeta = {
         documentName: systemDocumentName,
-        userFileName: userFileName || file.originalname, // Keep user's preferred name
+        userFileName: userFileName || file.originalname,
         documentPath: targetPath,
         documentCategory,
         mimeType: file.mimetype,
         fileSize: file.size,
-        uploadedBy: req.user.userId,
+        uploadedBy: req.user.userId ?? req.user.id,
         uploadedAt: new Date(),
-        status: 'uploaded',
-        expiryDate: expiryDate || null
+        status: "uploaded",
+        expiryDate: expiryDate || null,
+        reviewedBy: null,
+        reviewedAt: null,
+        reviewNotes: null,
       };
 
       if (hasNotesColumn) {
-        documentPayload.notes = notes || null;
+        uploadMeta.notes = notes || null;
       }
 
-      const document = await req.tenantDb.Document.create(documentPayload);
+      let document = findDocumentForChecklistItem(
+        { documentType, documentName: userFileName },
+        caseDocLookup,
+      );
+
+      if (document) {
+        if (document.documentPath && fs.existsSync(document.documentPath)) {
+          try {
+            fs.unlinkSync(document.documentPath);
+          } catch {
+            /* ignore stale file cleanup errors */
+          }
+        }
+        await document.update({
+          ...uploadMeta,
+          caseId: numericCaseId || document.caseId,
+        });
+        document = await document.reload();
+      } else if (numericCaseId) {
+        const orphan = await req.tenantDb.Document.findOne({
+          where: {
+            userId,
+            caseId: null,
+            documentType,
+          },
+          order: [["uploadedAt", "DESC"]],
+        });
+        if (
+          !orphan &&
+          userFileName &&
+          normalizeDocKey(userFileName) !== normalizeDocKey(documentType)
+        ) {
+          const byName = await req.tenantDb.Document.findOne({
+            where: { userId, caseId: null, userFileName },
+            order: [["uploadedAt", "DESC"]],
+          });
+          if (byName) document = byName;
+        } else if (orphan) {
+          document = orphan;
+        }
+
+        if (document) {
+          if (document.documentPath && fs.existsSync(document.documentPath)) {
+            try {
+              fs.unlinkSync(document.documentPath);
+            } catch {
+              /* ignore */
+            }
+          }
+          await document.update({ ...uploadMeta, caseId: numericCaseId });
+          document = await document.reload();
+        }
+      }
+
+      if (!document) {
+        document = await req.tenantDb.Document.create({
+          userId,
+          caseId: numericCaseId || null,
+          documentType: documentType || "General",
+          ...uploadMeta,
+        });
+      }
+
+      caseDocLookup.set(normalizeDocKey(document.documentType), document);
 
       uploadedDocuments.push({
         id: document.id,
@@ -262,6 +350,24 @@ export const uploadDocuments = async (req, res) => {
         }
       } catch (notifErr) {
         console.error("Failed to send document upload notification:", notifErr);
+      }
+    }
+
+    if (numericCaseId) {
+      try {
+        const caseForStage =
+          caseRecord || (await req.tenantDb.Case.findByPk(numericCaseId));
+        if (caseForStage) {
+          await evaluateCaseStageAfterEvent({
+            tenantDb: req.tenantDb,
+            caseRecord: caseForStage,
+            trigger: "document_uploaded",
+            performedBy: req.user.userId ?? req.user.id,
+            organisationId: req.user.organisation_id,
+          });
+        }
+      } catch (stageErr) {
+        console.error("evaluateCaseStageAfterEvent:", stageErr);
       }
     }
 
@@ -371,10 +477,23 @@ export const getCaseDocuments = async (req, res) => {
       });
     }
 
-    const whereClause = { caseId: numericCaseId };
+    const candidateId = caseRecord.candidateId;
+    const scopeClause = candidateId
+      ? {
+          [Op.or]: [
+            { caseId: numericCaseId },
+            { userId: candidateId, caseId: null },
+          ],
+        }
+      : { caseId: numericCaseId };
 
-    if (status) whereClause.status = status;
-    if (category) whereClause.documentCategory = category;
+    const whereClause = {
+      [Op.and]: [
+        scopeClause,
+        ...(status ? [{ status }] : []),
+        ...(category ? [{ documentCategory: category }] : []),
+      ],
+    };
 
     const { attributes } = await getDocumentAttributes(req.tenantDb);
 

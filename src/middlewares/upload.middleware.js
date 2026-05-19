@@ -34,7 +34,30 @@ export const memoryUpload = multer({
 
 export const handleProfilePicUpload = memoryUpload.single('profile_pic');
 
-export const handleDocumentUpload = upload.array('files', 10); // Max 10 files
+export const handleDocumentUpload = (req, res, next) => {
+  upload.array("files", 10)(req, res, (err) => {
+    if (!err) return next();
+    if (err.code === "LIMIT_UNEXPECTED_FILE") {
+      return res.status(400).json({
+        status: "error",
+        message: `Unexpected file field "${err.field}". Use field name "files".`,
+        data: null,
+      });
+    }
+    if (err.code === "LIMIT_FILE_SIZE") {
+      return res.status(400).json({
+        status: "error",
+        message: "File is too large (max 10 MB).",
+        data: null,
+      });
+    }
+    return res.status(400).json({
+      status: "error",
+      message: err.message || "File upload failed",
+      data: null,
+    });
+  });
+};
 
 export const handleMessageFileUpload = upload.single('file');
 

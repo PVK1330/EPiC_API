@@ -63,16 +63,16 @@ router.get('/bundle/me',
   downloadMyDocumentsBundle
 );
 
-router.get('/:documentId',
-  verifyTokenAndTenant,
-  checkAnyPermission(VIEW_PERMS),
-  getDocumentById
-);
-
 router.get('/checklist/visa/:visaTypeId',
   verifyTokenAndTenant,
   checkAnyPermission(VIEW_PERMS),
   getChecklistByVisaType
+);
+
+router.get('/:documentId',
+  verifyTokenAndTenant,
+  checkAnyPermission(VIEW_PERMS),
+  getDocumentById
 );
 
 // ── Update ────────────────────────────────────────────────────────────────────
