@@ -304,7 +304,10 @@ export const CANDIDATE_STAGE_ACTIONS = {
   draft_application_review: [
     { text: "Review your draft application and notify your caseworker of any changes", to: "/candidate/application" },
   ],
-  ccl_issued: [{ text: "Review and accept your Client Care Letter", to: "/candidate/ccl" }],
+  ccl_issued: [
+    { text: "Review and accept your Client Care Letter", to: "/candidate/ccl" },
+    { text: "Pay your approved case fees", to: "/candidate/payments" },
+  ],
   ccl_payment_received: [{ text: "Ensure your payment has been received", to: "/candidate/payments" }],
   biometrics_booked: [{ text: "Attend your biometrics appointment on the scheduled date", to: "/candidate/appointments" }],
   documents_uploaded: [{ text: "Ensure all supporting documents have been uploaded", to: "/candidate/upload-documents" }],

@@ -5,6 +5,7 @@ import cors from 'cors';
 
 import routes from './routes/index.js';
 import { corsOriginDelegate } from './config/frontendOrigins.js';
+import { handleWebhook } from './modules/Candidate/Payments/stripepayment.controller.js';
 
 const app = express();
 
@@ -15,7 +16,11 @@ app.use(cors({
 }));
 
 // Stripe webhooks must use raw body for signature verification.
-app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }));
+app.post(
+  '/api/stripe/webhook',
+  express.raw({ type: 'application/json' }),
+  handleWebhook,
+);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());       // must be BEFORE any route that reads req.cookies

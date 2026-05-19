@@ -11,6 +11,10 @@ router.use((req, res, next) => {
   return verifyTokenAndTenant(req, res, next);
 });
 
+// Case fee checkout (after admin approves CCL)
+router.post("/create-checkout-session", stripeController.createCaseCheckoutSession);
+router.get("/verify-session/:session_id", stripeController.verifyCheckoutSession);
+
 // Payment Intent Routes
 router.post("/create-payment-intent", stripeController.createPaymentIntent);
 router.post("/confirm-payment", stripeController.confirmPayment);
