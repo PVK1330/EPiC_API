@@ -5,6 +5,7 @@ import { seedPlans } from './seeders/plan.seeder.js';
 import seedAdmin from './seeders/admin.seeder.js';
 import { seedRolesForDb } from './seeders/role.seeder.js';
 import { seedPermissionsForDb } from './seeders/permission.seeder.js';
+import { seedModules } from './seeders/module.seeder.js';
 import { seedPlatformRbacForDb } from './seeders/platformRbac.seeder.js';
 import {
   createTenantPostgresDatabase,
@@ -15,6 +16,7 @@ import {
 import { runPlatformMigrations } from './migrations/run.js';
 import { getTenantDb } from './services/tenantDb.service.js';
 import { seedTenantDefaults, seedTenantOrganisation } from './services/tenantSeed.service.js';
+import { checkAndExpireSubscriptions } from './services/subscriptionExpiry.service.js';
 import http from 'http';
 import { initSocketIO } from './realtime/socketServer.js';
 import { normalizePostgresDatabaseName } from './utils/postgresDbName.js';
@@ -56,20 +58,15 @@ async function bootstrapPlatform() {
       console.log(`✔ Platform database verified: ${centralDbName}`);
     }
     
-    // Connect and Sync
     await platformDb.sequelize.authenticate();
     console.log('Platform database connected');
     
-    // For a "Fresh" start as requested, we can use { alter: true } or { force: true }
-    // User asked for "fresh all tables", but force: true is dangerous. 
-    // We'll use sync() and then our manual ALTERs.
     await platformDb.sequelize.sync();
     console.log('✔ Platform schema synchronized');
 
     await runPlatformMigrations();
     console.log('✔ Platform SQL migrations applied');
     
-    // Seed Platform Level RBAC (needed for Superadmins)
     await seedRolesForDb(platformDb);
     await seedPermissionsForDb(platformDb);
     await seedPlatformRbacForDb(platformDb);
@@ -85,6 +82,7 @@ async function bootstrapPlatform() {
     );
 
     await seedPlans();
+    await seedModules();
     await seedAdmin();
 
     const organisations = await platformDb.Organisation.findAll();
@@ -101,6 +99,12 @@ async function bootstrapPlatform() {
     initSocketIO(server, app);
 
     await verifyMailTransport();
+
+    setInterval(() => {
+      checkAndExpireSubscriptions();
+    }, 6 * 60 * 60 * 1000);
+
+    checkAndExpireSubscriptions();
 
     server.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);

@@ -39,23 +39,27 @@ const ROLE_NAMES = {
 };
 
 async function resolveAuthRole(user) {
-  const row = await platformDb.Role.findByPk(user.role_id, {
-    attributes: ['id', 'name', 'scope'],
-  });
-  const name = row?.name || ROLE_NAMES[user.role_id] || null;
-  return { name, scope: row?.scope || 'tenant' };
+  try {
+    const row = await platformDb.Role.findByPk(user.role_id, {
+      attributes: ['id', 'name'],
+    });
+    const name = row?.name || ROLE_NAMES[user.role_id] || null;
+    return { name };
+  } catch {
+    return { name: ROLE_NAMES[user.role_id] || null };
+  }
 }
 
 function buildLoginUserResponse(user, roleMeta) {
   const roleName = roleMeta?.name || ROLE_NAMES[user.role_id] || null;
-  const panelRole = isPlatformStaffUser(user) ? 'superadmin' : roleName;
+  const panelRole = isPlatformStaffUser(user) ? 'superadmin' : (roleName || ROLE_NAMES[user.role_id]);
   return {
     id: user.id,
     first_name: user.first_name,
     last_name: user.last_name,
     email: user.email,
     role_id: user.role_id,
-    role_name: roleName,
+    role_name: ROLE_NAMES[user.role_id] || roleName,
     role: panelRole,
     organisation_id: user.organisation_id,
     status: user.status,
@@ -104,6 +108,59 @@ async function resolveTenantDbForAuth(req) {
   }
 
   return resolveDefaultTenantDb();
+}
+
+async function resolveAllowedModules(user) {
+  if (isSuperAdminRole(user.role_id)) return ['*'];
+  if (!user.organisation_id) return [];
+  try {
+    const subscription = await platformDb.Subscription.findOne({
+      where: {
+        organisation_id: user.organisation_id,
+        status: { [platformDb.Sequelize.Op.in]: ['active', 'trial'] },
+      },
+      include: [
+        {
+          model: platformDb.Plan,
+          as: 'plan',
+          include: [
+            {
+              model: platformDb.Module,
+              as: 'modules',
+              through: { attributes: [] },
+              where: { is_active: true },
+              required: false,
+            },
+          ],
+        },
+      ],
+    });
+
+    if (subscription?.plan?.modules?.length > 0) {
+      return subscription.plan.modules.map((m) => m.key);
+    }
+
+    const org = await platformDb.Organisation.findByPk(user.organisation_id, {
+      attributes: ['plan_id'],
+    });
+    if (!org?.plan_id) return [];
+
+    const plan = await platformDb.Plan.findByPk(org.plan_id, {
+      include: [
+        {
+          model: platformDb.Module,
+          as: 'modules',
+          through: { attributes: [] },
+          where: { is_active: true },
+          required: false,
+        },
+      ],
+    });
+    if (!plan?.modules?.length) return [];
+    return plan.modules.map((m) => m.key);
+  } catch {
+    return [];
+  }
 }
 
 async function mirrorPlatformUserById(userId) {
@@ -391,12 +448,15 @@ export const verifyOTP = catchAsync(async (req, res) => {
     createdAt: verifiedUser.createdAt,
   };
 
+  const allowedModules = await resolveAllowedModules(verifiedUser);
+
   return ApiResponse.success(res, "Email verified successfully. You are now logged in!", {
     email: email,
     is_verified: true,
     credentials_sent: true,
     token: token,
-    user: userResponse
+    user: userResponse,
+    allowedModules,
   });
 });
 
@@ -487,12 +547,30 @@ export const login = catchAsync(async (req, res) => {
     return ApiResponse.unauthorized(res, 'Invalid credentials.');
   }
 
-  if (user.organisation_id) {
+  if (user.organisation_id && user.role_id !== 5) {
     const org = await platformDb.Organisation.findByPk(user.organisation_id, {
       attributes: ['status'],
+      include: [
+        {
+          model: platformDb.Subscription,
+          as: 'subscriptions',
+          where: { status: { [platformDb.Sequelize.Op.in]: ['active', 'trial'] } },
+          required: false,
+        },
+      ],
     });
+
     if (org?.status === 'suspended') {
-      return ApiResponse.forbidden(res, 'Organisation suspended.');
+      return ApiResponse.forbidden(res, 'Your organisation subscription has expired. Please contact your administrator.');
+    }
+
+    if (!org?.subscriptions || org.subscriptions.length === 0) {
+      const expiredSub = await platformDb.Subscription.findOne({
+        where: { organisation_id: user.organisation_id, status: 'expired' },
+      });
+      if (expiredSub) {
+        return ApiResponse.forbidden(res, 'Your organisation subscription has expired. Please contact your administrator.');
+      }
     }
   }
 
@@ -532,12 +610,15 @@ export const login = catchAsync(async (req, res) => {
     }
   }
 
-  const userResponse = buildLoginUserResponse(user, roleMeta);
-  if (organisation) userResponse.organisation = organisation;
+  const allowedModules = await resolveAllowedModules(user);
 
   return ApiResponse.success(res, 'Login successful.', {
-    user: userResponse,
+    user: {
+      ...buildLoginUserResponse(user, roleMeta),
+      organisation,
+    },
     token,
+    allowedModules,
   });
 });
 
@@ -895,6 +976,8 @@ export const verify2FA = catchAsync(async (req, res) => {
     }
   }
 
+  const allowedModules = await resolveAllowedModules(user);
+
   return ApiResponse.success(res, '2FA verified, login successful', {
     user: {
       id: user.id,
@@ -909,6 +992,7 @@ export const verify2FA = catchAsync(async (req, res) => {
       two_factor_enabled: true,
     },
     token: jwtToken,
+    allowedModules,
   });
 });
 
