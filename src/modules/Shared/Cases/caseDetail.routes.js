@@ -16,6 +16,7 @@ router.use(checkRole([ROLES.ADMIN, ROLES.CASEWORKER]));
 router.get("/:id", caseDetailController.getCaseDetails);
 router.patch("/:id/status", caseDetailController.updateCaseStatus);
 router.patch("/:id/finance", caseDetailController.updateCaseFinance);
+router.post("/:id/payments/manual", caseDetailController.recordManualCasePayment);
 
 // Timeline Routes
 router.get("/:id/timeline", timelineController.getCaseTimeline);

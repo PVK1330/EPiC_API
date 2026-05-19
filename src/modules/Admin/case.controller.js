@@ -157,6 +157,13 @@ export const createCase = async (req, res) => {
       } catch (notifError) {
           console.error('Failed to notify client of assignment:', notifError);
       }
+      await createTasksOnCaseworkerAssignment({
+        tenantDb: req.tenantDb,
+        caseRecord: newCase,
+        newCaseworkerIds: cwIds,
+        assignedBy: req.user?.userId,
+        organisationId,
+      }).catch((err) => console.error('createTasksOnCaseworkerAssignment:', err));
     }
 
     // Record Audit Log
@@ -1016,7 +1023,14 @@ export const assignCase = async (req, res) => {
     };
     if (priority) updates.priority = priority;
 
+    const oldCwIds = Array.isArray(caseData.assignedcaseworkerId)
+      ? caseData.assignedcaseworkerId
+      : caseData.assignedcaseworkerId
+        ? [caseData.assignedcaseworkerId]
+        : [];
+
     await caseData.update(updates);
+    await caseData.reload();
 
     // Notify assigned caseworkers
     if (cwIds && cwIds.length > 0) {
@@ -1028,12 +1042,22 @@ export const assignCase = async (req, res) => {
         candidateName: candidate ? `${candidate.first_name || ''} ${candidate.last_name || ''}`.trim() : 'Unknown Candidate',
         visaType: visaType ? visaType.name : 'Not specified',
       };
+      const newCwIds = cwIds.filter((id) => !oldCwIds.includes(id));
       for (const cwId of cwIds) {
         try {
           await notifyCaseAssigned(req.tenantDb, cwId, notifData);
         } catch (notifErr) {
           console.error("Failed to notify caseworker about assignment:", notifErr);
         }
+      }
+      if (newCwIds.length > 0) {
+        await createTasksOnCaseworkerAssignment({
+          tenantDb: req.tenantDb,
+          caseRecord: caseData,
+          newCaseworkerIds: newCwIds,
+          assignedBy: req.user?.userId,
+          organisationId: req.user?.organisation_id ?? null,
+        }).catch((err) => console.error('createTasksOnCaseworkerAssignment:', err));
       }
     }
 

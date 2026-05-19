@@ -669,6 +669,85 @@ export const getCandidatePaymentSchedule = async (req, res) => {
   }
 };
 
+/** Candidate: tasks assigned to them (e.g. Data Capture Sheet) */
+export const getCandidateTasks = async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ status: "error", message: "Unauthorized", data: null });
+    }
+
+    const rows = await req.tenantDb.Task.findAll({
+      where: { assigned_to: userId },
+      order: [
+        ["status", "ASC"],
+        ["due_date", "ASC"],
+        ["id", "DESC"],
+      ],
+      include: [
+        {
+          model: req.tenantDb.Case,
+          as: "case",
+          attributes: ["id", "caseId"],
+          required: false,
+        },
+      ],
+    });
+
+    const tasks = rows.map((row) => {
+      const plain = row.get({ plain: true });
+      const caseRef = plain.case?.caseId || (plain.case_id ? `#${plain.case_id}` : null);
+      return {
+        id: plain.id,
+        title: plain.title,
+        status: plain.status,
+        priority: plain.priority,
+        due_date: plain.due_date,
+        case_id: plain.case_id,
+        caseRef,
+        isDataCapture:
+          /data capture sheet/i.test(plain.title || "") ||
+          plain.title?.toLowerCase().includes("data capture"),
+      };
+    });
+
+    res.status(200).json({
+      status: "success",
+      data: { tasks },
+    });
+  } catch (err) {
+    console.error("getCandidateTasks:", err);
+    res.status(500).json({ status: "error", message: err.message, data: null });
+  }
+};
+
+/** Candidate: mark own task complete */
+export const completeCandidateTask = async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+    const taskId = parseInt(req.params.taskId, 10);
+    if (!userId || Number.isNaN(taskId)) {
+      return res.status(400).json({ status: "error", message: "Invalid request", data: null });
+    }
+
+    const task = await req.tenantDb.Task.findByPk(taskId);
+    if (!task || task.assigned_to !== userId) {
+      return res.status(404).json({ status: "error", message: "Task not found", data: null });
+    }
+
+    await task.update({ status: "completed" });
+
+    res.status(200).json({
+      status: "success",
+      message: "Task marked complete",
+      data: { task: task.get({ plain: true }) },
+    });
+  } catch (err) {
+    console.error("completeCandidateTask:", err);
+    res.status(500).json({ status: "error", message: err.message, data: null });
+  }
+};
+
 /** Caseworker: get workflow bundle for case detail */
 export const getCaseWorkflowBundle = async (req, res) => {
   try {

@@ -4,6 +4,29 @@ import {
   submitCclFeeProposal,
   reviewCclFeeProposal,
 } from '../../../services/cclFeeProposal.service.js';
+import { evaluateCaseStageAfterEvent } from '../../../services/caseStageAutomation.service.js';
+import { recordTimelineEntry } from '../../../services/caseTimeline.service.js';
+
+const MANUAL_PAYMENT_METHOD_MAP = {
+  bank_transfer: 'bank_transfer',
+  'bank transfer': 'bank_transfer',
+  card: 'credit_card',
+  credit_card: 'credit_card',
+  cheque: 'check',
+  check: 'check',
+  cash: 'cash',
+  online: 'online',
+};
+
+function resolvePaymentMethodEnum(input) {
+  const key = String(input || 'bank_transfer').trim().toLowerCase();
+  if (MANUAL_PAYMENT_METHOD_MAP[key]) return MANUAL_PAYMENT_METHOD_MAP[key];
+  if (key.includes('bank')) return 'bank_transfer';
+  if (key.includes('card')) return 'credit_card';
+  if (key.includes('cheque') || key.includes('check')) return 'check';
+  if (key.includes('cash')) return 'cash';
+  return 'online';
+}
 
 const buildFullCaseIncludes = (tenantDb) => [
   {
@@ -606,6 +629,122 @@ export const updateCaseFinance = async (req, res) => {
     res.status(500).json({
       status: "error",
       message: "Internal server error",
+      data: null,
+      error: error.message,
+    });
+  }
+};
+
+/** Record a manual payment (admin/caseworker) and mark as completed */
+export const recordManualCasePayment = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { amount, paymentMethod, description, markFullyPaid, notes } = req.body;
+    const userId = req.user?.userId ?? req.user?.id;
+    const organisationId =
+      req.user?.organisation_id != null ? Number(req.user.organisation_id) : null;
+
+    if (!id) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Case ID is required',
+        data: null,
+      });
+    }
+
+    const whereClause = Number.isNaN(Number(id)) ? { caseId: id } : { id: parseInt(id, 10) };
+    const caseData = await req.tenantDb.Case.findOne({ where: whereClause });
+    if (!caseData) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Case not found',
+        data: null,
+      });
+    }
+
+    const totalFee = Number.parseFloat(caseData.totalAmount) || 0;
+    const prevPaid = Number.parseFloat(caseData.paidAmount) || 0;
+    const balanceDue = Math.max(0, totalFee - prevPaid);
+
+    let payAmount = markFullyPaid
+      ? balanceDue
+      : Number.parseFloat(amount) || 0;
+
+    if (payAmount <= 0) {
+      return res.status(400).json({
+        status: 'error',
+        message: markFullyPaid
+          ? 'Case is already fully paid or has no fee total set'
+          : 'Payment amount must be greater than zero',
+        data: null,
+      });
+    }
+
+    const methodEnum = resolvePaymentMethodEnum(paymentMethod);
+    const paymentDate = new Date().toISOString().split('T')[0];
+    const invoiceNumber = `MAN-${Date.now()}`;
+
+    const payment = await req.tenantDb.CasePayment.create({
+      caseId: caseData.id,
+      paymentType: 'fee',
+      amount: payAmount,
+      paymentMethod: methodEnum,
+      paymentDate,
+      paymentStatus: 'completed',
+      transactionId: invoiceNumber,
+      invoiceNumber,
+      description: description || (markFullyPaid ? 'Manual payment — marked fully paid' : 'Manual payment recorded'),
+      notes: notes || null,
+      receivedBy: userId || null,
+    });
+
+    const newPaid = prevPaid + payAmount;
+    await caseData.update({ paidAmount: newPaid });
+    await caseData.reload();
+
+    await evaluateCaseStageAfterEvent({
+      tenantDb: req.tenantDb,
+      caseRecord: caseData,
+      trigger: 'payment_received',
+      performedBy: userId || null,
+      organisationId,
+    }).catch((err) => console.error('evaluateCaseStageAfterEvent:', err));
+
+    await recordTimelineEntry({
+      tenantDb: req.tenantDb,
+      caseId: caseData.id,
+      actionType: 'payment_received',
+      description: `Manual payment recorded: £${payAmount.toFixed(2)}${markFullyPaid ? ' (fully paid)' : ''}`,
+      performedBy: userId,
+      metadata: {
+        amount: payAmount,
+        paymentMethod: methodEnum,
+        paymentId: payment.id,
+        markFullyPaid: Boolean(markFullyPaid),
+      },
+      visibility: 'internal',
+    });
+
+    const balanceAfter = Math.max(0, totalFee - newPaid);
+
+    res.status(200).json({
+      status: 'success',
+      message: markFullyPaid || balanceAfter === 0
+        ? 'Payment recorded — case is fully paid'
+        : 'Manual payment recorded successfully',
+      data: {
+        payment,
+        paidAmount: newPaid,
+        totalFee,
+        balanceDue: balanceAfter,
+        paymentStatus: balanceAfter === 0 ? 'Fully Paid' : 'Partially Paid',
+      },
+    });
+  } catch (error) {
+    console.error('Record Manual Case Payment Error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Internal server error',
       data: null,
       error: error.message,
     });

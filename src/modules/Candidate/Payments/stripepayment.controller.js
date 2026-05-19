@@ -1,7 +1,76 @@
 import Stripe from 'stripe';
+import { Op } from 'sequelize';
 import { notifyPaymentReceived } from '../../../services/notification.service.js';
+import { createWorkflowTask } from '../../../services/workflowTaskAutomation.service.js';
+import { evaluateCaseStageAfterEvent } from '../../../services/caseStageAutomation.service.js';
 import platformDb from '../../../models/index.js';
 import { getTenantDb } from '../../../services/tenantDb.service.js';
+
+async function getActiveAdminIds(tenantDb) {
+  const adminRole = await tenantDb.Role.findOne({
+    where: { name: { [Op.iLike]: 'admin' } },
+    attributes: ['id'],
+  });
+  if (!adminRole) return [];
+  const admins = await tenantDb.User.findAll({
+    where: { role_id: adminRole.id, status: 'active' },
+    attributes: ['id'],
+  });
+  return admins.map((a) => a.id);
+}
+
+async function notifyAdminsOfPaymentReceived({ tenantDb, caseRecord, organisationId }) {
+  const adminIds = await getActiveAdminIds(tenantDb);
+  const caseLabel = caseRecord.caseId || `#${caseRecord.id}`;
+  for (const adminId of adminIds) {
+    await createWorkflowTask({
+      tenantDb,
+      caseRecord,
+      assigneeId: adminId,
+      title: `Review payment received — ${caseLabel}`,
+      priority: 'high',
+      dueInDays: 1,
+      organisationId: organisationId ?? null,
+    }).catch(() => {});
+  }
+}
+
+async function recordStripeCasePayment({ tenantDb, caseRecord, paymentIntent, userId, organisationId }) {
+  const amount = paymentIntent.amount / 100;
+  const paymentStatus = paymentIntent.status === 'succeeded' ? 'completed' : 'pending';
+
+  const casePayment = await tenantDb.CasePayment.create({
+    caseId: caseRecord.id,
+    paymentType: 'fee',
+    amount,
+    paymentMethod: 'online',
+    paymentDate: new Date().toISOString().split('T')[0],
+    paymentStatus,
+    transactionId: paymentIntent.id,
+    invoiceNumber: paymentIntent.id,
+    description: 'Stripe payment',
+    receivedBy: userId || null,
+  });
+
+  if (paymentStatus === 'completed' || paymentStatus === 'pending') {
+    const prevPaid = Number(caseRecord.paidAmount) || 0;
+    const newPaid = prevPaid + amount;
+    await caseRecord.update({ paidAmount: newPaid });
+    await caseRecord.reload();
+
+    await evaluateCaseStageAfterEvent({
+      tenantDb,
+      caseRecord,
+      trigger: 'payment_received',
+      performedBy: userId || null,
+      organisationId: organisationId ?? null,
+    }).catch(() => {});
+
+    await notifyAdminsOfPaymentReceived({ tenantDb, caseRecord, organisationId });
+  }
+
+  return casePayment;
+}
 
 let stripeInstance = null;
 
@@ -278,13 +347,43 @@ export const handleWebhook = async (req, res) => {
       // Send payment notification if userId is available in metadata
       if (paymentIntent.metadata?.userId) {
         try {
-          const tenantDb = await resolveTenantDbForUser(paymentIntent.metadata.userId);
+          const userId = Number(paymentIntent.metadata.userId);
+          const tenantDb = await resolveTenantDbForUser(userId);
           if (tenantDb) {
-            await notifyPaymentReceived(tenantDb, paymentIntent.metadata.userId, {
+            let caseRecord = null;
+            const caseRef = paymentIntent.metadata.caseId;
+            if (caseRef) {
+              const numeric = parseInt(caseRef, 10);
+              caseRecord =
+                (await tenantDb.Case.findOne({ where: { caseId: String(caseRef) } })) ||
+                (!Number.isNaN(numeric) ? await tenantDb.Case.findByPk(numeric) : null);
+            }
+            if (!caseRecord) {
+              caseRecord = await tenantDb.Case.findOne({
+                where: { candidateId: userId },
+                order: [['created_at', 'DESC']],
+              });
+            }
+
+            if (caseRecord) {
+              const user = await platformDb.User.findByPk(userId, {
+                attributes: ['organisation_id'],
+              });
+              const organisationId = user?.organisation_id ?? null;
+              await recordStripeCasePayment({
+                tenantDb,
+                caseRecord,
+                paymentIntent,
+                userId,
+                organisationId,
+              });
+            }
+
+            await notifyPaymentReceived(tenantDb, userId, {
               id: paymentIntent.id,
               invoiceId: paymentIntent.id,
-              amount: paymentIntent.amount / 100, // Stripe amount is in cents
-              caseId: paymentIntent.metadata.caseId || 'your case'
+              amount: paymentIntent.amount / 100,
+              caseId: paymentIntent.metadata.caseId || 'your case',
             });
           }
         } catch (notifErr) {

@@ -5,6 +5,7 @@ import {
   notifyCclFeeProposed,
   notifyCclFeeApproved,
   notifyCclFeeRejected,
+  createAdminWorkflowTask,
 } from "./workflowNotifications.service.js";
 
 export function normalizeInstallments(installments = []) {
@@ -106,7 +107,9 @@ export async function submitCclFeeProposal({
     amountNotes: notes ?? caseRecord.amountNotes,
   });
 
-  if (resolveCaseStage(caseRecord) !== "ccl_fee_admin_review") {
+  const alreadyOnAdminReview = resolveCaseStage(caseRecord) === "ccl_fee_admin_review";
+
+  if (!alreadyOnAdminReview) {
     await applyCaseStageChange({
       tenantDb,
       caseRecord,
@@ -116,6 +119,17 @@ export async function submitCclFeeProposal({
       sendEmail: false,
       organisationId,
     });
+  } else {
+    const caseLabel = caseRecord.caseId || `#${caseRecord.id}`;
+    await createAdminWorkflowTask({
+      tenantDb,
+      caseRecord,
+      title: `Approve CCL fee proposal — ${caseLabel}`,
+      createdBy: proposedBy,
+      priority: "high",
+      dueInDays: 1,
+      organisationId,
+    }).catch((err) => console.error("createAdminWorkflowTask:", err));
   }
 
   await recordTimelineEntry({

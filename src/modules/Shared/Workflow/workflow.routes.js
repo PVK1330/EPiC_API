@@ -18,6 +18,8 @@ router.get("/decision-documents", requireCandidate, workflowController.getDecisi
 router.post("/ccl/accept", requireCandidate, workflowController.acceptCcl);
 router.post("/ccl/confirm-signed", requireCandidate, workflowController.confirmCclSigned);
 router.get("/payments/schedule", requireCandidate, workflowController.getCandidatePaymentSchedule);
+router.get("/my-tasks", requireCandidate, workflowController.getCandidateTasks);
+router.patch("/my-tasks/:taskId/complete", requireCandidate, workflowController.completeCandidateTask);
 
 // Caseworker / Admin
 const staff = checkRole([ROLES.ADMIN, ROLES.CASEWORKER]);
