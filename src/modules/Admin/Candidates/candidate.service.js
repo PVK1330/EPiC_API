@@ -108,7 +108,7 @@ export class CandidateService {
     }
 
     // Background notification
-    notifyUserCreated(ROLES.ADMIN, {
+    notifyUserCreated(this.repository.tenantDb, ROLES.ADMIN, {
       id: candidate.id,
       email: candidate.email,
       role: "candidate",

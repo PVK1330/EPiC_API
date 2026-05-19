@@ -107,26 +107,45 @@ export async function seedTenantOrganisation(tenantDb, platformOrg) {
     database_name: plain.database_name ?? null,
   };
 
-  const existing = await tenantDb.Organisation.findByPk(plain.id);
-  if (existing) {
-    await existing.update(payload);
-    return existing;
-  }
+  const [rows] = await tenantDb.sequelize.query(
+    `SELECT id FROM organisations WHERE id = :id LIMIT 1`,
+    { replacements: { id: plain.id } },
+  );
 
-  await tenantDb.Organisation.create({
-    id: plain.id,
-    ...payload,
-  });
-
-  try {
+  if (rows?.length) {
     await tenantDb.sequelize.query(
-      `SELECT setval(
-        pg_get_serial_sequence('organisations', 'id'),
-        GREATEST((SELECT COALESCE(MAX(id), 1) FROM organisations), 1)
-      )`,
+      `UPDATE organisations SET
+        name = :name,
+        slug = :slug,
+        plan_id = :plan_id,
+        status = :status,
+        "primaryEmail" = :primaryEmail,
+        country = :country,
+        database_name = :database_name,
+        "updatedAt" = NOW()
+      WHERE id = :id`,
+      { replacements: { id: plain.id, ...payload } },
     );
-  } catch {
-    /* non-fatal if sequence name differs */
+  } else {
+    await tenantDb.sequelize.query(
+      `INSERT INTO organisations (
+        id, name, slug, plan_id, status, "primaryEmail", country, database_name, "createdAt", "updatedAt"
+      ) VALUES (
+        :id, :name, :slug, :plan_id, :status, :primaryEmail, :country, :database_name, NOW(), NOW()
+      )`,
+      { replacements: { id: plain.id, ...payload } },
+    );
+
+    try {
+      await tenantDb.sequelize.query(
+        `SELECT setval(
+          pg_get_serial_sequence('organisations', 'id'),
+          GREATEST((SELECT COALESCE(MAX(id), 1) FROM organisations), 1)
+        )`,
+      );
+    } catch {
+      /* non-fatal if sequence name differs */
+    }
   }
 
   return tenantDb.Organisation.findByPk(plain.id);

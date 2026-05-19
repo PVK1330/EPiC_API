@@ -78,6 +78,9 @@ async function bootstrapPlatform() {
     await platformDb.sequelize.query(
       'ALTER TABLE "organisations" ADD COLUMN IF NOT EXISTS "plan_id" INTEGER;',
     );
+    await platformDb.sequelize.query(
+      'ALTER TABLE "organisations" ADD COLUMN IF NOT EXISTS "smtp_settings" JSONB DEFAULT NULL;',
+    );
 
     await seedPlans();
     await seedAdmin();
