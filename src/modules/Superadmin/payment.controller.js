@@ -55,29 +55,51 @@ export const getTransactionById = catchAsync(async (req, res) => {
 });
 
 export const getGatewayStatus = catchAsync(async (req, res) => {
-  const stripeConfigured = !!(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_PUBLISHABLE_KEY);
+  const rows = await platformDb.PlatformSetting.findAll({
+    where: { key: ['stripe_publishable_key', 'stripe_secret_key', 'stripe_webhook_secret', 'stripe_currency', 'platform_fee'] },
+  });
+
+  const settings = {};
+  rows.forEach(r => { settings[r.key] = r.value; });
+
+  const configured = !!(settings.stripe_secret_key && settings.stripe_publishable_key);
 
   const lastTransaction = await platformDb.PaymentTransaction.findOne({
     where: { gateway: 'Stripe' },
     order: [["createdAt", "DESC"]],
   });
 
-  const lastSync = lastTransaction ? lastTransaction.createdAt : null;
-
   return ApiResponse.success(res, "Gateway status retrieved", {
     gateway: {
       name: "Stripe",
-      status: stripeConfigured ? "Connected" : "Not Configured",
-      lastSync: lastSync ? new Date(lastSync).toISOString() : null,
+      status: configured ? "Connected" : "Not Configured",
+      lastSync: lastTransaction ? new Date(lastTransaction.createdAt).toISOString() : null,
+      publishable_key: settings.stripe_publishable_key || '',
+      webhook_secret: settings.stripe_webhook_secret || '',
+      currency: settings.stripe_currency || 'GBP',
+      platform_fee: settings.platform_fee || '0',
+      secret_key_set: !!settings.stripe_secret_key,
     },
   });
 });
 
 export const configureGateway = catchAsync(async (req, res) => {
-  const { publishable_key, secret_key, webhook_secret } = req.body;
+  const { publishable_key, secret_key, webhook_secret, currency, platform_fee } = req.body;
 
   if (!publishable_key || !secret_key) {
     return ApiResponse.badRequest(res, "Publishable key and secret key are required");
+  }
+
+  const upserts = [
+    { key: 'stripe_publishable_key', value: String(publishable_key).trim() },
+    { key: 'stripe_secret_key',      value: String(secret_key).trim() },
+    { key: 'stripe_webhook_secret',  value: webhook_secret ? String(webhook_secret).trim() : null },
+    { key: 'stripe_currency',        value: currency ? String(currency).trim().toUpperCase() : 'GBP' },
+    { key: 'platform_fee',           value: platform_fee != null ? String(platform_fee).trim() : '0' },
+  ];
+
+  for (const item of upserts) {
+    await platformDb.PlatformSetting.upsert(item, { conflictFields: ['key'] });
   }
 
   return ApiResponse.success(res, "Gateway configuration saved successfully");

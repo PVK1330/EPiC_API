@@ -51,7 +51,13 @@ export async function findPlatformUserForLogin(platformDb, email, organisationCo
   });
   if (superadmin) return superadmin;
 
-  return platformDb.User.findOne({
+  const platformStaff = await platformDb.User.findOne({
     where: { email: emailNorm, organisation_id: { [Op.is]: null } },
+  });
+  if (platformStaff) return platformStaff;
+
+  return platformDb.User.findOne({
+    where: { email: emailNorm },
+    order: [["id", "ASC"]],
   });
 }

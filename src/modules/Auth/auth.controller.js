@@ -39,23 +39,27 @@ const ROLE_NAMES = {
 };
 
 async function resolveAuthRole(user) {
-  const row = await platformDb.Role.findByPk(user.role_id, {
-    attributes: ['id', 'name', 'scope'],
-  });
-  const name = row?.name || ROLE_NAMES[user.role_id] || null;
-  return { name, scope: row?.scope || 'tenant' };
+  try {
+    const row = await platformDb.Role.findByPk(user.role_id, {
+      attributes: ['id', 'name'],
+    });
+    const name = row?.name || ROLE_NAMES[user.role_id] || null;
+    return { name };
+  } catch {
+    return { name: ROLE_NAMES[user.role_id] || null };
+  }
 }
 
 function buildLoginUserResponse(user, roleMeta) {
   const roleName = roleMeta?.name || ROLE_NAMES[user.role_id] || null;
-  const panelRole = isPlatformStaffUser(user) ? 'superadmin' : roleName;
+  const panelRole = isPlatformStaffUser(user) ? 'superadmin' : (roleName || ROLE_NAMES[user.role_id]);
   return {
     id: user.id,
     first_name: user.first_name,
     last_name: user.last_name,
     email: user.email,
     role_id: user.role_id,
-    role_name: roleName,
+    role_name: ROLE_NAMES[user.role_id] || roleName,
     role: panelRole,
     organisation_id: user.organisation_id,
     status: user.status,
@@ -131,8 +135,29 @@ async function resolveAllowedModules(user) {
         },
       ],
     });
-    if (!subscription?.plan?.modules) return [];
-    return subscription.plan.modules.map((m) => m.key);
+
+    if (subscription?.plan?.modules?.length > 0) {
+      return subscription.plan.modules.map((m) => m.key);
+    }
+
+    const org = await platformDb.Organisation.findByPk(user.organisation_id, {
+      attributes: ['plan_id'],
+    });
+    if (!org?.plan_id) return [];
+
+    const plan = await platformDb.Plan.findByPk(org.plan_id, {
+      include: [
+        {
+          model: platformDb.Module,
+          as: 'modules',
+          through: { attributes: [] },
+          where: { is_active: true },
+          required: false,
+        },
+      ],
+    });
+    if (!plan?.modules?.length) return [];
+    return plan.modules.map((m) => m.key);
   } catch {
     return [];
   }
@@ -588,7 +613,10 @@ export const login = catchAsync(async (req, res) => {
   const allowedModules = await resolveAllowedModules(user);
 
   return ApiResponse.success(res, 'Login successful.', {
-    user: userResponse,
+    user: {
+      ...buildLoginUserResponse(user, roleMeta),
+      organisation,
+    },
     token,
     allowedModules,
   });
