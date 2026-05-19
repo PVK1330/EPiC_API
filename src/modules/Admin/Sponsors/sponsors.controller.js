@@ -188,7 +188,7 @@ export const createSponsor = async (req, res) => {
     }
 
     try {
-      await notifyUserCreated(ROLES.ADMIN, {
+      await notifyUserCreated(req.tenantDb, ROLES.ADMIN, {
         id: sponsor.id,
         email: sponsor.email,
         role: "sponsor",
@@ -800,7 +800,7 @@ export const bulkImportSponsors = async (req, res) => {
         }
 
         try {
-          await notifyUserCreated(ROLES.ADMIN, {
+          await notifyUserCreated(req.tenantDb, ROLES.ADMIN, {
             id: sponsor.id,
             email: sponsor.email,
             role: "sponsor",

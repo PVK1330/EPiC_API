@@ -10,7 +10,7 @@ import { sendPasswordResetOtpEmail } from '../../services/tenantUserMail.service
 import { sendTransactionalEmail } from '../../services/mail.service.js';
 import { ensureCandidateEnquiryCase } from '../../services/candidateOnboarding.service.js';
 import { buildTenantFrontendUrls } from '../../utils/organisationHost.js';
-import { buildJwtPayload, resolveDefaultOrganisationId, isSuperAdminRole } from '../../utils/tenantScope.js';
+import { buildJwtPayload, resolveDefaultOrganisationId, isSuperAdminRole, isPlatformStaffUser } from '../../utils/tenantScope.js';
 import {
   findPlatformUserByEmail,
   findPlatformUserForLogin,
@@ -37,6 +37,31 @@ const ROLE_NAMES = {
   4: 'business',
   5: 'superadmin',
 };
+
+async function resolveAuthRole(user) {
+  const row = await platformDb.Role.findByPk(user.role_id, {
+    attributes: ['id', 'name', 'scope'],
+  });
+  const name = row?.name || ROLE_NAMES[user.role_id] || null;
+  return { name, scope: row?.scope || 'tenant' };
+}
+
+function buildLoginUserResponse(user, roleMeta) {
+  const roleName = roleMeta?.name || ROLE_NAMES[user.role_id] || null;
+  const panelRole = isPlatformStaffUser(user) ? 'superadmin' : roleName;
+  return {
+    id: user.id,
+    first_name: user.first_name,
+    last_name: user.last_name,
+    email: user.email,
+    role_id: user.role_id,
+    role_name: roleName,
+    role: panelRole,
+    organisation_id: user.organisation_id,
+    status: user.status,
+    two_factor_enabled: user.two_factor_enabled,
+  };
+}
 
 async function resolveDefaultTenantDb() {
   const orgId = await resolveDefaultOrganisationId();
@@ -546,12 +571,12 @@ export const login = catchAsync(async (req, res) => {
     });
   }
 
-  const role = { name: ROLE_NAMES[user.role_id] ?? null };
-  const payload = buildJwtPayload(user, role);
+  const roleMeta = await resolveAuthRole(user);
+  const payload = buildJwtPayload(user, { name: roleMeta.name });
   const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '7d' });
 
   let organisation = null;
-  if (user.organisation_id && !isSuperAdminRole(user.role_id)) {
+  if (user.organisation_id && !isPlatformStaffUser(user)) {
     const org = await platformDb.Organisation.findByPk(user.organisation_id, {
       attributes: ['id', 'slug', 'name', 'status'],
     });
@@ -563,18 +588,7 @@ export const login = catchAsync(async (req, res) => {
   const allowedModules = await resolveAllowedModules(user);
 
   return ApiResponse.success(res, 'Login successful.', {
-    user: {
-      id: user.id,
-      first_name: user.first_name,
-      last_name: user.last_name,
-      email: user.email,
-      role_id: user.role_id,
-      role_name: ROLE_NAMES[user.role_id] ?? null,
-      organisation_id: user.organisation_id,
-      organisation,
-      status: user.status,
-      two_factor_enabled: user.two_factor_enabled,
-    },
+    user: userResponse,
     token,
     allowedModules,
   });

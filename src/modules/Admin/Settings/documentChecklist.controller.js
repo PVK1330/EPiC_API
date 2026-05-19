@@ -1,3 +1,9 @@
+import { Op } from "sequelize";
+import {
+  buildDocumentLookupMap,
+  findDocumentForChecklistItem,
+} from "../../../utils/documentMatch.utils.js";
+
 /**
  * Get document checklist for a specific visa type
  */
@@ -37,6 +43,68 @@ export const getChecklistByVisaType = async (req, res) => {
     });
   } catch (error) {
     console.error("Get Checklist Error:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error",
+      data: null,
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * Candidate: checklist for their own case (same payload as getCaseChecklist)
+ */
+export const getCandidateDocumentChecklist = async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({
+        status: "error",
+        message: "Unauthorized",
+        data: null,
+      });
+    }
+
+    const caseRecord = await req.tenantDb.Case.findOne({
+      where: { candidateId: userId },
+      order: [["created_at", "DESC"]],
+    });
+
+    if (!caseRecord) {
+      return res.status(200).json({
+        status: "success",
+        message: "No case linked yet",
+        data: {
+          checklist: {},
+          completionPercentage: 0,
+          total: 0,
+          required: 0,
+          completed: 0,
+          caseId: null,
+        },
+      });
+    }
+
+    if (!caseRecord.visaTypeId) {
+      return res.status(200).json({
+        status: "success",
+        message: "Visa type not assigned yet",
+        data: {
+          checklist: {},
+          completionPercentage: 0,
+          total: 0,
+          required: 0,
+          completed: 0,
+          caseId: caseRecord.id,
+        },
+      });
+    }
+
+    req.params.caseId = String(caseRecord.id);
+    return getCaseChecklist(req, res);
+  } catch (error) {
+    console.error("Get Candidate Document Checklist Error:", error);
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -118,26 +186,31 @@ export const getCaseChecklist = async (req, res) => {
       order: [['sortOrder', 'ASC'], ['category', 'ASC']]
     });
 
-    // Get existing documents for this case - use numeric id
+    const candidateId = caseData.candidateId;
+    const docWhere = candidateId
+      ? {
+          [Op.or]: [
+            { caseId: numericCaseId },
+            { userId: candidateId, caseId: null },
+          ],
+        }
+      : { caseId: numericCaseId };
+
     const existingDocuments = await req.tenantDb.Document.findAll({
-      where: { caseId: numericCaseId }
+      where: docWhere,
+      order: [["uploadedAt", "DESC"]],
     });
 
-    // Map documents by type for quick lookup
-    const docMap = existingDocuments.reduce((acc, doc) => {
-      acc[doc.documentType] = doc;
-      return acc;
-    }, {});
+    const docLookup = buildDocumentLookupMap(existingDocuments);
 
-    // Merge checklist with document status
-    const checklistWithStatus = checklist.map(item => {
-      const existingDoc = docMap[item.documentType];
+    const checklistWithStatus = checklist.map((item) => {
+      const existingDoc = findDocumentForChecklistItem(item, docLookup);
       return {
         ...item.toJSON(),
-        status: existingDoc ? existingDoc.status : 'missing',
+        status: existingDoc ? existingDoc.status : "missing",
         documentId: existingDoc ? existingDoc.id : null,
         uploadedAt: existingDoc ? existingDoc.uploadedAt : null,
-        expiryDate: existingDoc ? existingDoc.expiryDate : null
+        expiryDate: existingDoc ? existingDoc.expiryDate : null,
       };
     });
 
@@ -152,8 +225,10 @@ export const getCaseChecklist = async (req, res) => {
 
     // Calculate completion percentage
     const requiredCount = checklistWithStatus.filter(i => i.isRequired).length;
-    const completedCount = checklistWithStatus.filter(i => 
-      i.isRequired && (i.status === 'uploaded' || i.status === 'approved')
+    const completedCount = checklistWithStatus.filter(
+      (i) =>
+        i.isRequired &&
+        ["uploaded", "under_review", "approved"].includes(i.status),
     ).length;
     const completionPercentage = requiredCount > 0 
       ? Math.round((completedCount / requiredCount) * 100) 
@@ -163,6 +238,7 @@ export const getCaseChecklist = async (req, res) => {
       status: "success",
       message: "Case document checklist retrieved successfully",
       data: {
+        caseId: numericCaseId,
         checklist: grouped,
         completionPercentage,
         total: checklistWithStatus.length,

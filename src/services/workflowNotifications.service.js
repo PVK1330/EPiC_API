@@ -113,6 +113,19 @@ export async function createAdminWorkflowTask({
   const created = [];
 
   for (const adminId of adminIds) {
+    const existing = await tenantDb.Task.findOne({
+      where: {
+        case_id: caseRecord.id,
+        assigned_to: adminId,
+        status: "pending",
+        title: { [Op.iLike]: `${String(title).trim().slice(0, 40)}%` },
+      },
+    });
+    if (existing) {
+      created.push(existing);
+      continue;
+    }
+
     const task = await tenantDb.Task.create({
       title: String(title).trim(),
       assigned_to: adminId,

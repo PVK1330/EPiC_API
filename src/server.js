@@ -6,6 +6,7 @@ import seedAdmin from './seeders/admin.seeder.js';
 import { seedRolesForDb } from './seeders/role.seeder.js';
 import { seedPermissionsForDb } from './seeders/permission.seeder.js';
 import { seedModules } from './seeders/module.seeder.js';
+import { seedPlatformRbacForDb } from './seeders/platformRbac.seeder.js';
 import {
   createTenantPostgresDatabase,
   ensureTenantPostgresDatabase,
@@ -68,12 +69,16 @@ async function bootstrapPlatform() {
     
     await seedRolesForDb(platformDb);
     await seedPermissionsForDb(platformDb);
+    await seedPlatformRbacForDb(platformDb);
 
     await platformDb.sequelize.query(
       'ALTER TABLE "organisations" ADD COLUMN IF NOT EXISTS "database_name" VARCHAR(63);',
     );
     await platformDb.sequelize.query(
       'ALTER TABLE "organisations" ADD COLUMN IF NOT EXISTS "plan_id" INTEGER;',
+    );
+    await platformDb.sequelize.query(
+      'ALTER TABLE "organisations" ADD COLUMN IF NOT EXISTS "smtp_settings" JSONB DEFAULT NULL;',
     );
 
     await seedPlans();

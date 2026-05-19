@@ -7,6 +7,8 @@ import { streamBrandedPdf } from '../../../services/pdfGenerator.service.js';
 import { rowsToXlsxBuffer, xlsxBufferToRows } from '../../../utils/excelExport.util.js';
 import { generateStrongPassword } from '../../../utils/passwordGenerator.js';
 import { generateCaseId } from '../../../utils/case.utils.js';
+import { getWorkflowState } from '../../../services/caseWorkflowProcess.service.js';
+import { resolveCaseStage } from '../../../constants/immigrationCaseProcess.js';
 
 /**
  * Every form field that a candidate can save / submit.
@@ -398,17 +400,27 @@ export const getMyApplication = async (req, res) => {
       );
 
       const primaryCase = cases[0];
-      if (primaryCase && req.tenantDb.DataCaptureSubmission) {
-        relatedData.dataCaptureSubmission = await req.tenantDb.DataCaptureSubmission.findOne({
-          where: { caseId: primaryCase.id },
-        });
-        relatedData.cclRecord = await req.tenantDb.CaseCclRecord?.findOne({
-          where: { caseId: primaryCase.id },
-        });
+      if (primaryCase) {
+        if (req.tenantDb.DataCaptureSubmission) {
+          const dcs = await req.tenantDb.DataCaptureSubmission.findOne({
+            where: { caseId: primaryCase.id },
+          });
+          relatedData.dataCaptureSubmission = dcs ? dcs.get({ plain: true }) : null;
+        }
+        if (req.tenantDb.CaseCclRecord) {
+          const ccl = await req.tenantDb.CaseCclRecord.findOne({
+            where: { caseId: primaryCase.id },
+          });
+          relatedData.cclRecord = ccl ? ccl.get({ plain: true }) : null;
+        }
       }
 
-      relatedData.cases = cases;
-      relatedData.documents = documents;
+      relatedData.cases = cases.map((c) => {
+        const plain = c.get({ plain: true });
+        plain.workflowState = getWorkflowState(plain);
+        return plain;
+      });
+      relatedData.documents = documents.map((d) => d.get({ plain: true }));
       relatedData.documentSettings = documentSettings;
       relatedData.completionScore = completionScore;
     }
@@ -441,9 +453,28 @@ export const submitApplication = async (req, res) => {
       return res.status(401).json({ status: 'error', message: 'Invalid session', data: null });
     }
 
-    // Guard: reject if the application has already been submitted
     const alreadySubmitted = await req.tenantDb.CandidateApplication.findOne({ where: { userId } });
-    if (alreadySubmitted && alreadySubmitted.status === 'submitted') {
+    const caseRecord = await req.tenantDb.Case.findOne({
+      where: { candidateId: userId },
+      order: [['created_at', 'DESC']],
+    });
+    const stage = caseRecord ? resolveCaseStage(caseRecord) : null;
+    const ws = caseRecord ? getWorkflowState(caseRecord) : null;
+    const draftRevisionAllowed =
+      stage === 'draft_application_review' && ws?.draftReview?.confirmed === false;
+
+    if (
+      alreadySubmitted &&
+      alreadySubmitted.status === 'submitted' &&
+      alreadySubmitted.isLocked &&
+      !draftRevisionAllowed
+    ) {
+      if (stage === 'draft_application_review' && ws?.draftReview?.confirmed === null) {
+        return res.status(403).json({
+          success: false,
+          message: 'Please confirm or reject the draft application review before submitting changes.',
+        });
+      }
       return res.status(409).json({
         success: false,
         message: 'Your application has already been submitted and is currently under review.',
@@ -598,12 +629,22 @@ export const saveDraft = async (req, res) => {
 
     const existing = await req.tenantDb.CandidateApplication.findOne({ where: { userId } });
 
-    // Guard: locked applications cannot be edited
+    // Guard: locked applications cannot be edited (except after draft review "No")
     if (existing && existing.isLocked) {
-      return res.status(403).json({
-        success: false,
-        message: 'Your application is locked and cannot be edited. Contact your caseworker.',
+      const caseRecord = await req.tenantDb.Case.findOne({
+        where: { candidateId: userId },
+        order: [['created_at', 'DESC']],
       });
+      const stage = caseRecord ? resolveCaseStage(caseRecord) : null;
+      const ws = caseRecord ? getWorkflowState(caseRecord) : null;
+      const draftRevisionAllowed =
+        stage === 'draft_application_review' && ws?.draftReview?.confirmed === false;
+      if (!draftRevisionAllowed) {
+        return res.status(403).json({
+          success: false,
+          message: 'Your application is locked and cannot be edited. Contact your caseworker.',
+        });
+      }
     }
 
     const payload = pickFields(req.body || {});

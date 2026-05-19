@@ -1,12 +1,67 @@
 import path from 'path';
 import fs from 'fs';
 import archiver from 'archiver';
+import { Op } from 'sequelize';
 
 import { notifyDocumentUploaded, notifyDocumentReviewed } from '../../../services/notification.service.js';
 import {
   evaluateCaseStageAfterEvent,
   recordDocumentReviewTimeline,
 } from '../../../services/caseStageAutomation.service.js';
+import {
+  buildDocumentLookupMap,
+  findDocumentForChecklistItem,
+  normalizeDocKey,
+  resolveChecklistDocumentType,
+} from '../../../utils/documentMatch.utils.js';
+import { resolveCaseStage, getStageOrder } from '../../../constants/immigrationCaseProcess.js';
+import { ROLES } from '../../../middlewares/role.middleware.js';
+
+const DECISION_DOC_TYPES = ['Decision Letter', 'Approval Notice'];
+const FINAL_DOC_TYPES = ['Visa Copy', 'BRP Information'];
+
+async function assertCandidateMayDownloadDocument(req, document) {
+  const roleId = Number(req.user?.role_id);
+  if (roleId !== ROLES.CANDIDATE) return { ok: true };
+
+  if (!document.caseId) return { ok: true };
+
+  const caseRecord = await req.tenantDb.Case.findByPk(document.caseId, {
+    attributes: ['id', 'caseStage', 'status', 'candidateId'],
+  });
+  if (!caseRecord) {
+    return { ok: false, message: 'Case not found for this document' };
+  }
+  if (Number(caseRecord.candidateId) !== Number(req.user?.userId)) {
+    return { ok: false, message: 'Access denied' };
+  }
+
+  const stage = resolveCaseStage(caseRecord);
+  const order = getStageOrder(stage);
+  const docType = document.documentType || '';
+
+  if (DECISION_DOC_TYPES.includes(docType)) {
+    if (order < getStageOrder('decision_communicated')) {
+      return {
+        ok: false,
+        message: 'Decision documents are available after your decision has been communicated.',
+      };
+    }
+    return { ok: true };
+  }
+
+  if (FINAL_DOC_TYPES.includes(docType)) {
+    if (order < getStageOrder('case_closure')) {
+      return {
+        ok: false,
+        message: 'Final documents are available after case closure.',
+      };
+    }
+    return { ok: true };
+  }
+
+  return { ok: true };
+}
 
 const documentsColumnMetadataByDb = new Map();
 
@@ -61,12 +116,28 @@ export const uploadDocuments = async (req, res) => {
   try {
     // Multer processes files and form fields differently
     const documentCategory = req.body?.documentCategory || 'general';
-    const userId = req.body?.userId;
+    let userId = req.body?.userId;
+
+    // Candidates may only upload to their own account
+    const roleId = Number(req.user?.role_id);
+    if (roleId === 1) {
+      userId = req.user.userId ?? req.user.id;
+    }
+
+    if (!userId) {
+      return res.status(400).json({
+        status: "error",
+        message: "userId is required",
+        data: null,
+      });
+    }
     const caseId = req.body?.caseId;
     const documentType = req.body?.documentType || 'General';
     const userFileName = req.body?.userFileName;
     const expiryDate = req.body?.expiryDate || null;
     const notes = req.body?.notes || null;
+    let resolvedDocumentType = documentType || "General";
+
     const uploadedFiles = req.files;
 
     if (!uploadedFiles || uploadedFiles.length === 0) {
@@ -87,27 +158,19 @@ export const uploadDocuments = async (req, res) => {
       });
     }
 
-    // Validate case if provided - handle both numeric id and string caseId
+  // Validate case if provided - handle both numeric id and string caseId
     let numericCaseId = null;
-    if (caseId) {
-      let caseRecord;
+    let caseRecord = null;
 
-      // If caseId is a number (or numeric string), try findByPk first
+    if (caseId) {
       if (!isNaN(parseInt(caseId))) {
         caseRecord = await req.tenantDb.Case.findByPk(parseInt(caseId));
-        if (caseRecord) {
-          numericCaseId = caseRecord.id;
-        }
+        if (caseRecord) numericCaseId = caseRecord.id;
       }
-
-      // If not found by numeric id, try by string caseId
       if (!caseRecord) {
         caseRecord = await req.tenantDb.Case.findOne({ where: { caseId } });
-        if (caseRecord) {
-          numericCaseId = caseRecord.id;
-        }
+        if (caseRecord) numericCaseId = caseRecord.id;
       }
-
       if (!caseRecord) {
         return res.status(404).json({
           status: "error",
@@ -115,6 +178,15 @@ export const uploadDocuments = async (req, res) => {
           data: null,
         });
       }
+    }
+
+    // Candidates: always attach to their active case when possible
+    if (roleId === 1 && !numericCaseId) {
+      caseRecord = await req.tenantDb.Case.findOne({
+        where: { candidateId: userId },
+        order: [["created_at", "DESC"]],
+      });
+      if (caseRecord) numericCaseId = caseRecord.id;
     }
 
     const uploadedDocuments = [];
@@ -161,56 +233,145 @@ export const uploadDocuments = async (req, res) => {
 
     const { hasNotesColumn } = await getDocumentAttributes(req.tenantDb);
 
+    if (numericCaseId && caseRecord?.visaTypeId && req.tenantDb.DocumentChecklist) {
+      const checklistRows = await req.tenantDb.DocumentChecklist.findAll({
+        where: { visaTypeId: caseRecord.visaTypeId },
+      });
+      resolvedDocumentType = resolveChecklistDocumentType(
+        checklistRows.map((r) => r.get({ plain: true })),
+        documentType,
+        userFileName,
+      );
+    }
+
+    let caseDocsForMatch = [];
+    if (numericCaseId) {
+      const docWhere = caseRecord?.candidateId
+        ? {
+            [Op.or]: [
+              { caseId: numericCaseId },
+              { userId: caseRecord.candidateId, caseId: null },
+            ],
+          }
+        : { caseId: numericCaseId };
+      caseDocsForMatch = await req.tenantDb.Document.findAll({
+        where: docWhere,
+        order: [["uploadedAt", "DESC"]],
+      });
+    }
+    const caseDocLookup = buildDocumentLookupMap(caseDocsForMatch);
+
     for (const [index, file] of uploadedFiles.entries()) {
-      // Move file from temp to correct directory structure
       const sourcePath = file.path;
-      
-      // Determine target directory based on upload type
+
       let targetDir;
       let urlPath;
-      
-      if (caseId) {
-        // Case-related upload: uploads/caseimages/caseId/
-        targetDir = path.join('uploads', 'caseimages', caseId.toString());
-        urlPath = `caseimages/${caseId}`;
+
+      if (numericCaseId) {
+        targetDir = path.join("uploads", "caseimages", String(numericCaseId));
+        urlPath = `caseimages/${numericCaseId}`;
       } else {
-        // Candidate document upload: uploads/documents/userId/
-        targetDir = path.join('uploads', 'documents', userId.toString());
+        targetDir = path.join("uploads", "documents", userId.toString());
         urlPath = `documents/${userId}`;
       }
-      
-      // Generate system document name
-      const systemDocumentName = generateSystemDocumentName(file.originalname, documentType, index);
+
+      const systemDocumentName = generateSystemDocumentName(
+        file.originalname,
+        resolvedDocumentType,
+        index,
+      );
       const targetPath = path.join(targetDir, systemDocumentName);
-      
-      // Create target directory if it doesn't exist
+
       fs.mkdirSync(targetDir, { recursive: true });
-      
-      // Move file to correct location
       fs.renameSync(sourcePath, targetPath);
-      
-      // Create document record with system-generated name
-      const documentPayload = {
-        userId,
-        caseId: numericCaseId || null,
-        documentType: documentType || 'General',
+
+      const uploadMeta = {
         documentName: systemDocumentName,
-        userFileName: userFileName || file.originalname, // Keep user's preferred name
+        userFileName: userFileName || file.originalname,
         documentPath: targetPath,
         documentCategory,
         mimeType: file.mimetype,
         fileSize: file.size,
-        uploadedBy: req.user.userId,
+        uploadedBy: req.user.userId ?? req.user.id,
         uploadedAt: new Date(),
-        status: 'uploaded',
-        expiryDate: expiryDate || null
+        status: roleId === 1 ? "under_review" : "uploaded",
+        expiryDate: expiryDate || null,
+        reviewedBy: null,
+        reviewedAt: null,
+        reviewNotes: null,
       };
 
       if (hasNotesColumn) {
-        documentPayload.notes = notes || null;
+        uploadMeta.notes = notes || null;
       }
 
-      const document = await req.tenantDb.Document.create(documentPayload);
+      let document = findDocumentForChecklistItem(
+        { documentType: resolvedDocumentType, documentName: userFileName },
+        caseDocLookup,
+      );
+
+      if (document) {
+        if (document.documentPath && fs.existsSync(document.documentPath)) {
+          try {
+            fs.unlinkSync(document.documentPath);
+          } catch {
+            /* ignore stale file cleanup errors */
+          }
+        }
+        await document.update({
+          ...uploadMeta,
+          caseId: numericCaseId || document.caseId,
+        });
+        document = await document.reload();
+      } else if (numericCaseId) {
+        const orphan = await req.tenantDb.Document.findOne({
+          where: {
+            userId,
+            caseId: null,
+            documentType: resolvedDocumentType,
+          },
+          order: [["uploadedAt", "DESC"]],
+        });
+        if (
+          !orphan &&
+          userFileName &&
+          normalizeDocKey(userFileName) !== normalizeDocKey(documentType)
+        ) {
+          const byName = await req.tenantDb.Document.findOne({
+            where: { userId, caseId: null, userFileName },
+            order: [["uploadedAt", "DESC"]],
+          });
+          if (byName) document = byName;
+        } else if (orphan) {
+          document = orphan;
+        }
+
+        if (document) {
+          if (document.documentPath && fs.existsSync(document.documentPath)) {
+            try {
+              fs.unlinkSync(document.documentPath);
+            } catch {
+              /* ignore */
+            }
+          }
+          await document.update({ ...uploadMeta, caseId: numericCaseId });
+          document = await document.reload();
+        }
+      }
+
+      if (!document) {
+        document = await req.tenantDb.Document.create({
+          userId,
+          caseId: numericCaseId || null,
+          documentType: resolvedDocumentType,
+          ...uploadMeta,
+        });
+      }
+
+      caseDocLookup.set(normalizeDocKey(document.documentType), document);
+      if (userFileName) {
+        caseDocLookup.set(normalizeDocKey(userFileName), document);
+      }
 
       uploadedDocuments.push({
         id: document.id,
@@ -248,20 +409,51 @@ export const uploadDocuments = async (req, res) => {
           uploadedBy: uploaderName
         };
 
-        // If a case is attached, notify the caseworkers
+        // Notify assigned caseworkers
         for (const cwId of caseworkers) {
-          // don't notify the person who uploaded it
           if (cwId !== req.user.userId) {
-             await notifyDocumentUploaded(req.tenantDb, cwId, docNotificationData);
+            await notifyDocumentUploaded(req.tenantDb, cwId, docNotificationData);
           }
         }
 
-        // If uploaded by someone other than the user, notify the candidate/sponsor user
-        if (userId !== req.user.userId) {
+        // Candidate upload: notify all admins for review
+        if (roleId === 1) {
+          const admins = await req.tenantDb.User.findAll({
+            where: { role_id: 3, status: "active" },
+            attributes: ["id"],
+          });
+          for (const admin of admins) {
+            await notifyDocumentUploaded(req.tenantDb, admin.id, {
+              ...docNotificationData,
+              uploadedBy: uploaderName,
+            });
+          }
+        }
+
+        // If uploaded by staff for the candidate, notify the candidate
+        if (userId !== req.user.userId && roleId !== 1) {
           await notifyDocumentUploaded(req.tenantDb, userId, docNotificationData);
         }
       } catch (notifErr) {
         console.error("Failed to send document upload notification:", notifErr);
+      }
+    }
+
+    if (numericCaseId) {
+      try {
+        const caseForStage =
+          caseRecord || (await req.tenantDb.Case.findByPk(numericCaseId));
+        if (caseForStage) {
+          await evaluateCaseStageAfterEvent({
+            tenantDb: req.tenantDb,
+            caseRecord: caseForStage,
+            trigger: "document_uploaded",
+            performedBy: req.user.userId ?? req.user.id,
+            organisationId: req.user.organisation_id,
+          });
+        }
+      } catch (stageErr) {
+        console.error("evaluateCaseStageAfterEvent:", stageErr);
       }
     }
 
@@ -371,10 +563,23 @@ export const getCaseDocuments = async (req, res) => {
       });
     }
 
-    const whereClause = { caseId: numericCaseId };
+    const candidateId = caseRecord.candidateId;
+    const scopeClause = candidateId
+      ? {
+          [Op.or]: [
+            { caseId: numericCaseId },
+            { userId: candidateId, caseId: null },
+          ],
+        }
+      : { caseId: numericCaseId };
 
-    if (status) whereClause.status = status;
-    if (category) whereClause.documentCategory = category;
+    const whereClause = {
+      [Op.and]: [
+        scopeClause,
+        ...(status ? [{ status }] : []),
+        ...(category ? [{ documentCategory: category }] : []),
+      ],
+    };
 
     const { attributes } = await getDocumentAttributes(req.tenantDb);
 
@@ -580,6 +785,24 @@ export const updateDocumentStatus = async (req, res) => {
   try {
     const { documentId } = req.params;
     const { status, reviewNotes } = req.body;
+    const roleId = Number(req.user?.role_id);
+
+    if (roleId === 1) {
+      return res.status(403).json({
+        status: "error",
+        message: "Only caseworkers and administrators can review documents",
+        data: null,
+      });
+    }
+
+    const allowedStatuses = new Set(["approved", "rejected", "under_review", "uploaded"]);
+    if (!status || !allowedStatuses.has(status)) {
+      return res.status(400).json({
+        status: "error",
+        message: "status must be approved, rejected, under_review, or uploaded",
+        data: null,
+      });
+    }
 
     const document = await req.tenantDb.Document.findByPk(documentId);
     if (!document) {
@@ -604,6 +827,14 @@ export const updateDocumentStatus = async (req, res) => {
     try {
       if (document.caseId) {
         caseData = await req.tenantDb.Case.findByPk(document.caseId);
+      } else if (document.userId) {
+        caseData = await req.tenantDb.Case.findOne({
+          where: { candidateId: document.userId },
+          order: [["created_at", "DESC"]],
+        });
+        if (caseData) {
+          await document.update({ caseId: caseData.id });
+        }
       }
       const docNotificationData = {
         id: document.id,
@@ -673,6 +904,15 @@ export const downloadDocument = async (req, res) => {
         status: "error",
         message: "Document not found",
         data: null
+      });
+    }
+
+    const access = await assertCandidateMayDownloadDocument(req, document);
+    if (!access.ok) {
+      return res.status(403).json({
+        status: "error",
+        message: access.message,
+        data: null,
       });
     }
 

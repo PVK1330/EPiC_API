@@ -1,6 +1,6 @@
 import platformDb from "../models/index.js";
 import { getTenantDb } from "../services/tenantDb.service.js";
-import { isSuperAdminRole } from "../utils/tenantScope.js";
+import { isPlatformStaffUser } from "../utils/tenantScope.js";
 import { ROLES, hasFullAccessRole } from "./role.middleware.js";
 import { ensureAdminHasAllPermissions } from "../seeders/permission.seeder.js";
 
@@ -10,18 +10,34 @@ import { ensureAdminHasAllPermissions } from "../seeders/permission.seeder.js";
  */
 export async function attachTenantDb(req, res, next) {
   try {
-    if (isSuperAdminRole(req.user?.role_id)) {
+    if (isPlatformStaffUser(req.user)) {
       req.tenantDb = null;
       return next();
     }
 
-    const orgId = req.user?.organisation_id;
+    let orgId = req.user?.organisation_id;
+    
+    // If admin/caseworker/candidate/business has no organisation, use default
     if (!orgId) {
-      return res.status(403).json({
-        status: "error",
-        message: "No organisation on token.",
-        data: null,
-      });
+      const envDefaultOrgId = process.env.DEFAULT_ORGANISATION_ID;
+      if (envDefaultOrgId) {
+        orgId = parseInt(envDefaultOrgId, 10);
+      } else {
+        // Fall back to first active organisation
+        const defaultOrg = await platformDb.Organisation.findOne({
+          where: { status: { [platformDb.Sequelize.Op.in]: ["active", "trial"] } },
+          order: [["id", "ASC"]],
+        });
+        orgId = defaultOrg?.id;
+      }
+      
+      if (!orgId) {
+        return res.status(403).json({
+          status: "error",
+          message: "No organisation on token and no default organisation available.",
+          data: null,
+        });
+      }
     }
 
     const org = await platformDb.Organisation.findByPk(orgId, {

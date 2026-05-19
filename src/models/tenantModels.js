@@ -2,7 +2,7 @@ import { Sequelize } from "sequelize";
 
 // Platform Level Models (Shared)
 import UserModel from "./platform/user.model.js";
-import OrganisationModel from "./platform/organisation.model.js";
+import TenantOrganisationModel from "./tenant/tenantOrganisation.model.js";
 
 // Tenant Level Models (Isolated)
 import RoleModel from "./tenant/role.model.js";
@@ -61,7 +61,7 @@ export function buildDb(sequelize) {
   db.sequelize = sequelize;
 
   db.User = UserModel(sequelize, Sequelize.DataTypes);
-  db.Organisation = OrganisationModel(sequelize, Sequelize.DataTypes);
+  db.Organisation = TenantOrganisationModel(sequelize, Sequelize.DataTypes);
   db.Role = RoleModel(sequelize, Sequelize.DataTypes);
   db.UnverifiedUser = UnverifiedUserModel(sequelize, Sequelize.DataTypes);
   db.Case = CaseModel(sequelize, Sequelize.DataTypes);

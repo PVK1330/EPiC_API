@@ -20,7 +20,7 @@ function dueDateInDays(days = 3) {
   return d.toISOString().split("T")[0];
 }
 
-async function getActiveAdminIds(tenantDb) {
+export async function getActiveAdminIds(tenantDb) {
   const adminRole = await tenantDb.Role.findOne({
     where: { name: { [Op.iLike]: "admin" } },
     attributes: ["id"],
@@ -134,13 +134,9 @@ const STAGE_TASK_MATRIX = {
       },
     ],
   },
-  ccl_fee_proposal: {
-    caseworkers: [{ title: "Propose CCL fees and instalment schedule", priority: "high", dueInDays: 2 }],
-  },
-  ccl_fee_admin_review: {
-    admins: [{ title: "Approve CCL fee proposal", priority: "high", dueInDays: 1 }],
-  },
-  ccl_issued: {
+  client_care_letter: {
+    caseworkers: [{ title: "Propose CCL fees or monitor acceptance and payment", priority: "high", dueInDays: 3 }],
+    admins: [{ title: "Approve CCL fee proposal when submitted", priority: "high", dueInDays: 1 }],
     candidates: [
       {
         title: "Accept Client Care Letter and pay fees",
@@ -150,18 +146,52 @@ const STAGE_TASK_MATRIX = {
         message: "Your Client Care Letter and payment schedule are ready. Please review and pay in the portal.",
       },
     ],
-    caseworkers: [{ title: "Monitor CCL acceptance and payments", priority: "medium", dueInDays: 5 }],
   },
   ccl_payment_received: {
-    caseworkers: [{ title: "Confirm signed CCL and payment — advance to submission", priority: "high", dueInDays: 2 }],
+    caseworkers: [
+      {
+        title: "Submit application on Visa Portal",
+        priority: "high",
+        dueInDays: 3,
+      },
+    ],
   },
   application_submitted: {
-    caseworkers: [{ title: "Record Home Office submission reference", priority: "medium", dueInDays: 2 }],
+    caseworkers: [
+      {
+        title: "Request candidate biometric availability",
+        priority: "high",
+        dueInDays: 2,
+      },
+    ],
+    candidates: [
+      {
+        title: "Provide biometrics appointment availability",
+        priority: "high",
+        dueInDays: 5,
+        notify: true,
+        message:
+          "Please submit your preferred location, date, and time for your biometrics appointment in the portal.",
+      },
+    ],
   },
   biometrics_booked: {
-    caseworkers: [{ title: "Send biometrics instructions to client", priority: "high", dueInDays: 2 }],
+    caseworkers: [
+      {
+        title: "Book biometrics slot and send confirmation to client",
+        priority: "high",
+        dueInDays: 2,
+      },
+    ],
   },
   biometrics_confirmation_sent: {
+    caseworkers: [
+      {
+        title: "Upload biometric documents to Visa Portal",
+        priority: "high",
+        dueInDays: 2,
+      },
+    ],
     candidates: [
       {
         title: "Attend biometrics appointment",
@@ -173,7 +203,13 @@ const STAGE_TASK_MATRIX = {
     ],
   },
   documents_uploaded: {
-    caseworkers: [{ title: "Verify pre-biometrics document bundle", priority: "medium", dueInDays: 3 }],
+    caseworkers: [
+      {
+        title: "Check visa portal email and record Home Office reply",
+        priority: "high",
+        dueInDays: 3,
+      },
+    ],
   },
   awaiting_decision: {
     caseworkers: [{ title: "Monitor Home Office decision status", priority: "low", dueInDays: 14 }],

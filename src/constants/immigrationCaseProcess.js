@@ -1,144 +1,126 @@
 /**
- * Standard UK immigration case workflow (18 steps).
- * Used for pipeline Kanban, caseStage field, and caseworker guidance.
+ * Standard UK immigration case workflow (16 steps).
+ * CCL fee approval / payment is tracked on CaseCclRecord while the case stays on client_care_letter.
  */
 export const DEFAULT_CASE_STAGE = "client_enquiry";
+
+/** Legacy 18-step ids → canonical 16-step id (read + migration). */
+export const DEPRECATED_STAGE_TO_CANONICAL = {
+  ccl_fee_proposal: "client_care_letter",
+  ccl_fee_admin_review: "client_care_letter",
+  ccl_issued: "client_care_letter",
+  ccl_payment_received: "client_care_letter",
+};
 
 export const IMMIGRATION_CASE_STEPS = [
   {
     id: "client_enquiry",
     order: 1,
     title: "Client Enquiry",
-    description:
-      "Client contacts the firm with an immigration query.",
+    description: "Client contacts the firm with an immigration query.",
+  },
+  {
+    id: "admin_assignment",
+    order: 2,
+    title: "Admin Assignment",
+    description: "Admin reviews the enquiry, assigns a caseworker, and sets priority.",
   },
   {
     id: "initial_consultation",
-    order: 2,
+    order: 3,
     title: "Initial Consultation",
-    description:
-      "Initial consultation is conducted to assess eligibility and visa options.",
+    description: "Initial consultation to assess eligibility and visa options.",
   },
   {
     id: "data_capture_initial_docs",
-    order: 3,
-    title: "Data Capture & Initial Documents",
+    order: 4,
+    title: "Data Capture & Documents",
     description:
-      "Relevant Data Capture Sheet sent for the visa category. Initial mandatory documents requested: Passport, BRP/eVisa, Driving licence (if applicable).",
+      "Data Capture Sheet sent; passport, BRP/eVisa, and driving licence (if applicable) requested.",
   },
   {
     id: "application_preparation",
-    order: 4,
+    order: 5,
     title: "Application Preparation",
-    description:
-      "Once documents and Data Capture Sheet are received, application form preparation begins.",
+    description: "Application form preparation begins once documents are received.",
   },
   {
     id: "document_review",
-    order: 5,
+    order: 6,
     title: "Document Review",
-    description:
-      "Caseworker reviews documents and identifies missing information or additional documents required.",
+    description: "Caseworker reviews documents and identifies gaps.",
   },
   {
     id: "further_information_request",
-    order: 6,
-    title: "Further Information Request",
-    description:
-      "Further information or documents are requested from the client where necessary.",
+    order: 7,
+    title: "Further Information",
+    description: "Further information or documents requested from the client (optional).",
   },
   {
     id: "draft_application_review",
-    order: 7,
-    title: "Draft Application Review",
-    description:
-      "Draft application form prepared and sent to the client for review and confirmation.",
-  },
-  {
-    id: "ccl_fee_proposal",
     order: 8,
-    title: "CCL Fee Proposal",
-    description:
-      "Caseworker proposes total fees and instalment schedule for admin review.",
+    title: "Draft Application Review",
+    description: "Draft application sent to the client for review and confirmation.",
   },
   {
-    id: "ccl_fee_admin_review",
+    id: "client_care_letter",
     order: 9,
-    title: "CCL Fee — Admin Review",
+    title: "Client Care Letter",
     description:
-      "Admin reviews and approves fees and instalments before the CCL is sent to the client.",
-  },
-  {
-    id: "ccl_issued",
-    order: 10,
-    title: "Client Care Letter Issued",
-    description:
-      "Approved Client Care Letter and fee schedule sent to the client for acceptance.",
-  },
-  {
-    id: "ccl_payment_received",
-    order: 11,
-    title: "CCL & Payment Received",
-    description:
-      "Signed Client Care Letter and required payments are received from the client.",
+      "CCL issued; candidate accepts and pays. Submission is blocked until both are complete.",
   },
   {
     id: "application_submitted",
-    order: 12,
+    order: 10,
     title: "Application Submitted",
-    description:
-      "Final application is submitted to the Home Office.",
+    description: "Final application submitted to the Home Office.",
   },
   {
     id: "biometrics_booked",
-    order: 13,
+    order: 11,
     title: "Biometrics Booked",
-    description:
-      "Biometrics appointment is booked.",
+    description: "Biometrics appointment is booked.",
   },
   {
     id: "biometrics_confirmation_sent",
-    order: 14,
-    title: "Biometrics Confirmation Sent",
-    description:
-      "Biometrics appointment confirmation email and instructions are sent to the client.",
+    order: 12,
+    title: "Confirmation Sent",
+    description: "Biometrics confirmation and instructions sent to the client.",
   },
   {
     id: "documents_uploaded",
-    order: 15,
+    order: 13,
     title: "Documents Uploaded",
-    description:
-      "Supporting documents are uploaded prior to the biometrics appointment.",
+    description: "Supporting documents uploaded before biometrics.",
   },
   {
     id: "awaiting_decision",
-    order: 16,
+    order: 14,
     title: "Awaiting Decision",
-    description:
-      "Application status is monitored while awaiting Home Office decision.",
+    description: "Monitoring application while awaiting Home Office decision.",
   },
   {
     id: "decision_communicated",
-    order: 17,
+    order: 15,
     title: "Decision Communicated",
-    description:
-      "Approval or refusal email and decision documents are sent to the client.",
+    description: "Decision communicated to the client.",
   },
   {
     id: "case_closure",
-    order: 18,
+    order: 16,
     title: "Case Closure",
-    description:
-      "Final case closure email is issued.",
+    description: "Final case closure email issued.",
   },
 ];
 
 const STEP_BY_ID = new Map(IMMIGRATION_CASE_STEPS.map((s) => [s.id, s]));
 
+export const SUBMISSION_GATE_STAGE_ID = "application_submitted";
+
 /** Map legacy `status` ENUM values to workflow step ids. */
 export const LEGACY_STATUS_TO_STAGE = {
   Lead: "client_enquiry",
-  Pending: "initial_consultation",
+  Pending: "admin_assignment",
   "In Progress": "application_preparation",
   "Docs Pending": "data_capture_initial_docs",
   Drafting: "draft_application_review",
@@ -154,19 +136,16 @@ export const LEGACY_STATUS_TO_STAGE = {
   Overdue: "awaiting_decision",
 };
 
-/** Approximate legacy status for filters/reporting when only caseStage is updated. */
 export const STAGE_TO_LEGACY_STATUS = {
   client_enquiry: "Lead",
+  admin_assignment: "Pending",
   initial_consultation: "Pending",
   data_capture_initial_docs: "Docs Pending",
   application_preparation: "In Progress",
   document_review: "Under Review",
   further_information_request: "On Hold",
   draft_application_review: "Drafting",
-  ccl_fee_proposal: "Drafting",
-  ccl_fee_admin_review: "Drafting",
-  ccl_issued: "Drafting",
-  ccl_payment_received: "Pending",
+  client_care_letter: "Drafting",
   application_submitted: "Submitted",
   biometrics_booked: "Submitted",
   biometrics_confirmation_sent: "Submitted",
@@ -176,21 +155,70 @@ export const STAGE_TO_LEGACY_STATUS = {
   case_closure: "Closed",
 };
 
+export function normalizeCaseStage(stageId) {
+  if (!stageId) return null;
+  return DEPRECATED_STAGE_TO_CANONICAL[stageId] ?? stageId;
+}
+
 export function isValidCaseStage(stageId) {
-  return STEP_BY_ID.has(stageId);
+  return STEP_BY_ID.has(normalizeCaseStage(stageId));
 }
 
 export function getStepById(stageId) {
-  return STEP_BY_ID.get(stageId) ?? null;
+  return STEP_BY_ID.get(normalizeCaseStage(stageId)) ?? null;
 }
 
 export function resolveCaseStage(caseRecord) {
-  if (caseRecord?.caseStage && isValidCaseStage(caseRecord.caseStage)) {
-    return caseRecord.caseStage;
+  const raw = caseRecord?.caseStage;
+  if (raw) {
+    const normalized = normalizeCaseStage(raw);
+    if (STEP_BY_ID.has(normalized)) return normalized;
   }
   const fromStatus = LEGACY_STATUS_TO_STAGE[caseRecord?.status];
   if (fromStatus) return fromStatus;
   return DEFAULT_CASE_STAGE;
+}
+
+export function getStageOrder(stageId) {
+  return getStepById(stageId)?.order ?? 0;
+}
+
+export function isAtOrPastSubmissionStage(stageId) {
+  const order = getStageOrder(stageId);
+  const gateOrder = getStageOrder(SUBMISSION_GATE_STAGE_ID);
+  return order >= gateOrder && gateOrder > 0;
+}
+
+/**
+ * Rule 1 — block pipeline moves at/after submission until CCL accepted and payment received.
+ */
+export async function assertSubmissionGate(tenantDb, caseRecord, nextStageId) {
+  if (!isAtOrPastSubmissionStage(nextStageId)) {
+    return { ok: true };
+  }
+
+  const ccl = await tenantDb.CaseCclRecord?.findOne({
+    where: { caseId: caseRecord.id },
+  });
+  const cclOk = ccl && (ccl.status === "signed" || ccl.status === "accepted");
+  const paid =
+    caseRecord.amountStatus === "paid" ||
+    (Number(caseRecord.totalAmount) > 0 &&
+      Number(caseRecord.paidAmount) >= Number(caseRecord.totalAmount));
+
+  if (!cclOk) {
+    return {
+      ok: false,
+      message: "Cannot advance: Client Care Letter not accepted by candidate.",
+    };
+  }
+  if (!paid) {
+    return {
+      ok: false,
+      message: "Cannot advance: payment outstanding.",
+    };
+  }
+  return { ok: true };
 }
 
 export function buildEmptyPipeline() {
@@ -210,14 +238,17 @@ export function assignCasesToPipeline(cases = []) {
   return pipeline;
 }
 
-/** Per-step caseworker actions and documents (Standard Immigration Case Process.docx). */
 export const STAGE_GUIDANCE = {
   client_enquiry: {
-    actions: ["Log enquiry", "Assign caseworker", "Schedule consultation"],
+    actions: ["Review enquiry", "Assign caseworker"],
+    docs: [],
+  },
+  admin_assignment: {
+    actions: ["Confirm caseworker", "Set priority", "Start consultation"],
     docs: [],
   },
   initial_consultation: {
-    actions: ["Assess eligibility", "Confirm visa route", "Send fee estimate"],
+    actions: ["Assess eligibility", "Confirm visa route"],
     docs: [],
   },
   data_capture_initial_docs: {
@@ -237,24 +268,16 @@ export const STAGE_GUIDANCE = {
     docs: ["As identified in review"],
   },
   draft_application_review: {
-    actions: ["Send draft to client", "Collect written approval", "Propose CCL fees & instalments"],
+    actions: ["Send draft to client", "Collect written approval", "Propose CCL fees"],
     docs: ["Draft application PDF"],
   },
-  ccl_fee_proposal: {
-    actions: ["Set total fee", "Define instalment schedule", "Submit to admin for approval"],
-    docs: ["Fee breakdown", "Instalment plan"],
-  },
-  ccl_fee_admin_review: {
-    actions: ["Review proposed fees", "Approve or return to caseworker", "Release CCL to client when approved"],
-    docs: ["Proposed fee schedule"],
-  },
-  ccl_issued: {
-    actions: ["Monitor client acceptance", "Track instalment payments"],
-    docs: ["Client Care Letter (issued to client)"],
-  },
-  ccl_payment_received: {
-    actions: ["Collect signed CCL", "Confirm payment cleared"],
-    docs: ["Signed CCL", "Payment receipt"],
+  client_care_letter: {
+    actions: [
+      "Propose fees (caseworker)",
+      "Approve fees & issue CCL (admin)",
+      "Monitor acceptance and payment",
+    ],
+    docs: ["Client Care Letter", "Signed CCL", "Payment receipt"],
   },
   application_submitted: {
     actions: ["Submit to Home Office", "Record UAN / reference"],
@@ -287,7 +310,7 @@ export const STAGE_GUIDANCE = {
 };
 
 export function getStageGuidance(stageId) {
-  return STAGE_GUIDANCE[stageId] ?? { actions: [], docs: [] };
+  return STAGE_GUIDANCE[normalizeCaseStage(stageId)] ?? { actions: [], docs: [] };
 }
 
 export function getNextStageId(stageId) {
@@ -302,19 +325,46 @@ export const CANDIDATE_STAGE_ACTIONS = {
     { text: "Upload: Passport, BRP/eVisa", to: "/candidate/document-checklist" },
   ],
   draft_application_review: [
-    { text: "Review your draft application and notify your caseworker of any changes", to: "/candidate/application" },
+    {
+      text: "Review your draft application and notify your caseworker of any changes",
+      to: "/candidate/application",
+    },
   ],
-  ccl_issued: [{ text: "Review and accept your Client Care Letter", to: "/candidate/ccl" }],
-  ccl_payment_received: [{ text: "Ensure your payment has been received", to: "/candidate/payments" }],
-  biometrics_booked: [{ text: "Attend your biometrics appointment on the scheduled date", to: "/candidate/appointments" }],
-  documents_uploaded: [{ text: "Ensure all supporting documents have been uploaded", to: "/candidate/upload-documents" }],
-  awaiting_decision: [{ text: "No action needed — monitoring Home Office decision", calm: true }],
-  decision_communicated: [{ text: "Download your decision letter from Application Pack", to: "/candidate/account?tab=downloads" }],
-  case_closure: [{ text: "Download your final documents from Application Pack", to: "/candidate/account?tab=downloads" }],
+  client_care_letter: [
+    { text: "Review and accept your Client Care Letter", to: "/candidate/ccl" },
+    { text: "Pay your approved case fees", to: "/candidate/payments" },
+  ],
+  biometrics_booked: [
+    { text: "Attend your biometrics appointment on the scheduled date", to: "/candidate/appointments" },
+  ],
+  documents_uploaded: [
+    { text: "Ensure all supporting documents have been uploaded", to: "/candidate/upload-documents" },
+  ],
+  awaiting_decision: [
+    { text: "No action needed — monitoring Home Office decision", calm: true },
+  ],
+  decision_communicated: [
+    {
+      text: "Download your decision letter from Application Pack",
+      to: "/candidate/account?tab=downloads",
+    },
+  ],
+  case_closure: [
+    {
+      text: "Download your final documents from Application Pack",
+      to: "/candidate/account?tab=downloads",
+    },
+  ],
 };
 
 export function getCandidateStageActions(stageId) {
-  return CANDIDATE_STAGE_ACTIONS[stageId] ?? [
-    { text: "Your caseworker is handling this step — no action needed from you.", calm: true },
-  ];
+  const id = normalizeCaseStage(stageId);
+  return (
+    CANDIDATE_STAGE_ACTIONS[id] ?? [
+      {
+        text: "Your caseworker is handling this step — no action needed from you.",
+        calm: true,
+      },
+    ]
+  );
 }

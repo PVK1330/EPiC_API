@@ -4,6 +4,7 @@ import { sendTransactionalEmail } from "./mail.service.js";
 export const STAGE_EMAIL_TEMPLATE = {
   data_capture_initial_docs: "data_capture_request",
   draft_application_review: "draft_application_review",
+  client_care_letter: "ccl_issued",
   ccl_issued: "ccl_issued",
   biometrics_confirmation_sent: "biometrics_confirmation",
   decision_communicated: "decision_communicated",

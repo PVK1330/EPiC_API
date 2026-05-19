@@ -118,6 +118,7 @@ export async function createTenantPostgresDatabase(databaseName) {
 }
 
 import { runTenantMigrations } from "../migrations/run.js";
+import { evictTenantDb, getTenantDb } from "./tenantDb.service.js";
 
 /**
  * Create tenant DB when missing (registry may reference a dropped database).
@@ -162,7 +163,16 @@ export async function resolveOrganisationDatabaseName(org) {
  * @param {string} databaseName
  */
 export async function syncTenantDatabaseSchema(databaseName) {
+  evictTenantDb(databaseName);
   await runTenantMigrations(databaseName);
+  const tenantDb = getTenantDb(databaseName);
+  await tenantDb.sequelize.query(
+    'ALTER TABLE organisations ADD COLUMN IF NOT EXISTS smtp_settings JSONB DEFAULT NULL',
+  );
+  await tenantDb.sequelize.query(
+    "ALTER TABLE cases ADD COLUMN IF NOT EXISTS workflow_meta JSONB DEFAULT '{}'::jsonb",
+  );
+  evictTenantDb(databaseName);
 }
 
 /**

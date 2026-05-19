@@ -166,6 +166,19 @@ const CaseModel = (sequelize, DataTypes) => {
       defaultValue: "client_enquiry",
       comment: "Immigration workflow step id (see immigrationCaseProcess constants)",
     },
+    workflowState: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+      defaultValue: {},
+      comment: "Post-submission workflow: draft review, biometrics, visa portal",
+    },
+    workflowMeta: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+      defaultValue: {},
+      field: "workflow_meta",
+      comment: "Draft review, biometric availability/slot, visa portal notes",
+    },
     deleted_at: {
       type: DataTypes.DATE,
       allowNull: true,

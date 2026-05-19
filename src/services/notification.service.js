@@ -260,7 +260,7 @@ export const createNotificationForRole = async (roleId, notificationData) => {
 
     const userIds = users.map((user) => user.id);
     if (!userIds.length) {
-      throw new Error('No active users found for the selected role');
+      return [];
     }
     return await createBulkNotifications(userIds, notificationData);
   } catch (error) {

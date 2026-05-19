@@ -1,7 +1,181 @@
 import Stripe from 'stripe';
+import { Op } from 'sequelize';
 import { notifyPaymentReceived } from '../../../services/notification.service.js';
+import { createWorkflowTask } from '../../../services/workflowTaskAutomation.service.js';
+import { evaluateCaseStageAfterEvent } from '../../../services/caseStageAutomation.service.js';
+import {
+  isCclReleasedToClient,
+  resolveCaseFeeTotal,
+  syncCclReleaseForApprovedFees,
+} from '../../../services/cclCandidateRelease.service.js';
 import platformDb from '../../../models/index.js';
 import { getTenantDb } from '../../../services/tenantDb.service.js';
+
+async function getActiveAdminIds(tenantDb) {
+  const adminRole = await tenantDb.Role.findOne({
+    where: { name: { [Op.iLike]: 'admin' } },
+    attributes: ['id'],
+  });
+  if (!adminRole) return [];
+  const admins = await tenantDb.User.findAll({
+    where: { role_id: adminRole.id, status: 'active' },
+    attributes: ['id'],
+  });
+  return admins.map((a) => a.id);
+}
+
+async function notifyAdminsOfPaymentReceived({ tenantDb, caseRecord, organisationId }) {
+  const adminIds = await getActiveAdminIds(tenantDb);
+  const caseLabel = caseRecord.caseId || `#${caseRecord.id}`;
+  for (const adminId of adminIds) {
+    await createWorkflowTask({
+      tenantDb,
+      caseRecord,
+      assigneeId: adminId,
+      title: `Review payment received — ${caseLabel}`,
+      priority: 'high',
+      dueInDays: 1,
+      organisationId: organisationId ?? null,
+    }).catch(() => {});
+  }
+}
+
+async function findCasePaymentByTransaction(tenantDb, transactionId) {
+  if (!transactionId || !tenantDb?.CasePayment) return null;
+  return tenantDb.CasePayment.findOne({ where: { transactionId: String(transactionId) } });
+}
+
+async function resolveCandidateCaseForPayment(tenantDb, userId) {
+  if (!tenantDb || !userId) return { ok: false, status: 400, message: 'Unauthorized' };
+
+  let caseRecord = await tenantDb.Case.findOne({
+    where: { candidateId: userId },
+    order: [['created_at', 'DESC']],
+  });
+  if (!caseRecord) {
+    return { ok: false, status: 404, message: 'No case found for your account' };
+  }
+
+  const { ccl: syncedCcl, caseRecord: syncedCase } = await syncCclReleaseForApprovedFees({
+    tenantDb,
+    caseRecord,
+    performedBy: userId,
+  });
+  caseRecord = syncedCase || caseRecord;
+  const ccl =
+    syncedCcl ||
+    (await tenantDb.CaseCclRecord.findOne({ where: { caseId: caseRecord.id } }));
+
+  if (!isCclReleasedToClient(caseRecord, ccl)) {
+    return {
+      ok: false,
+      status: 400,
+      message:
+        'Online payment is available after your caseworker proposes fees and an administrator approves your Client Care Letter.',
+    };
+  }
+
+  const totalFee = resolveCaseFeeTotal(caseRecord, ccl);
+  const paidAmount = Number(caseRecord.paidAmount) || 0;
+  const balanceDue = Math.max(0, totalFee - paidAmount);
+
+  return { ok: true, caseRecord, ccl, totalFee, paidAmount, balanceDue };
+}
+
+async function recordStripeCasePayment({ tenantDb, caseRecord, paymentIntent, userId, organisationId }) {
+  const txnId = paymentIntent?.id;
+  if (!txnId) return null;
+
+  const existing = await findCasePaymentByTransaction(tenantDb, txnId);
+  if (existing) {
+    await caseRecord.reload();
+    return existing;
+  }
+
+  const amount = paymentIntent.amount / 100;
+  const paymentStatus = paymentIntent.status === 'succeeded' ? 'completed' : 'pending';
+
+  const casePayment = await tenantDb.CasePayment.create({
+    caseId: caseRecord.id,
+    paymentType: 'fee',
+    amount,
+    paymentMethod: 'online',
+    paymentDate: new Date().toISOString().split('T')[0],
+    paymentStatus,
+    transactionId: txnId,
+    invoiceNumber: txnId,
+    description: 'Stripe payment',
+    receivedBy: userId || null,
+  });
+
+  if (paymentStatus === 'completed') {
+    const prevPaid = Number(caseRecord.paidAmount) || 0;
+    const newPaid = prevPaid + amount;
+    const total = Number(caseRecord.totalAmount) || 0;
+    const updates = { paidAmount: newPaid };
+    if (total > 0 && newPaid >= total - 0.02) {
+      updates.amountStatus = 'Paid';
+    }
+    await caseRecord.update(updates);
+    await caseRecord.reload();
+
+    await evaluateCaseStageAfterEvent({
+      tenantDb,
+      caseRecord,
+      trigger: 'payment_received',
+      performedBy: userId || null,
+      organisationId: organisationId ?? null,
+    }).catch(() => {});
+
+    await notifyAdminsOfPaymentReceived({ tenantDb, caseRecord, organisationId });
+  }
+
+  return casePayment;
+}
+
+async function finalizeStripePaymentForUser({ userId, paymentIntent, caseRef = null }) {
+  if (!userId || !paymentIntent?.id) return null;
+
+  const tenantDb = await resolveTenantDbForUser(userId);
+  if (!tenantDb) return null;
+
+  let caseRecord = null;
+  if (caseRef) {
+    const numeric = parseInt(caseRef, 10);
+    caseRecord =
+      (await tenantDb.Case.findOne({ where: { caseId: String(caseRef) } })) ||
+      (!Number.isNaN(numeric) ? await tenantDb.Case.findByPk(numeric) : null);
+  }
+  if (!caseRecord) {
+    caseRecord = await tenantDb.Case.findOne({
+      where: { candidateId: userId },
+      order: [['created_at', 'DESC']],
+    });
+  }
+  if (!caseRecord) return null;
+
+  const user = await platformDb.User.findByPk(userId, { attributes: ['organisation_id'] });
+  const organisationId = user?.organisation_id ?? null;
+
+  if (paymentIntent.status !== 'succeeded') return null;
+
+  const recorded = await recordStripeCasePayment({
+    tenantDb,
+    caseRecord,
+    paymentIntent,
+    userId,
+    organisationId,
+  });
+
+  await notifyPaymentReceived(tenantDb, userId, {
+    id: paymentIntent.id,
+    invoiceId: paymentIntent.id,
+    amount: paymentIntent.amount / 100,
+    caseId: caseRecord.caseId || 'your case',
+  }).catch(() => {});
+
+  return { tenantDb, caseRecord, recorded };
+}
 
 let stripeInstance = null;
 
@@ -21,44 +195,55 @@ const resolveTenantDbForUser = async (userId) => {
   return getTenantDb(org.database_name);
 };
 
-// Create Payment Intent
+// Create Payment Intent (optional amount — defaults to case balance due)
 export const createPaymentIntent = async (req, res) => {
   try {
     const stripe = getStripe();
     const {
-      amount,
-      currency = "usd",
+      amount: bodyAmount,
+      currency = "gbp",
       payment_method_id,
       metadata = {},
     } = req.body;
 
-    // Validate required fields
-    if (!amount) {
+    const userId = req.user?.userId;
+    const tenantDb = req.tenantDb;
+    let payAmount = bodyAmount ? Number(bodyAmount) : null;
+    let caseMeta = {};
+
+    if (tenantDb && userId) {
+      const resolved = await resolveCandidateCaseForPayment(tenantDb, userId);
+      if (!resolved.ok) {
+        return res.status(resolved.status).json({
+          status: "error",
+          message: resolved.message,
+          data: null,
+        });
+      }
+      if (!payAmount || payAmount <= 0) payAmount = resolved.balanceDue;
+      caseMeta = {
+        caseId: resolved.caseRecord.caseId,
+        numericCaseId: String(resolved.caseRecord.id),
+      };
+    }
+
+    if (!payAmount || payAmount < 0.5) {
       return res.status(400).json({
         status: "error",
-        message: "Amount is required",
+        message: "No balance due or amount below minimum (£0.50)",
         data: null,
       });
     }
 
-    if (amount < 50) {
-      // Minimum 50 cents
-      return res.status(400).json({
-        status: "error",
-        message: "Amount must be at least $0.50",
-        data: null,
-      });
-    }
-
-    // Create payment intent
     const paymentIntent = await stripe.paymentIntents.create({
-      amount: Math.round(amount * 100), // Convert to cents
+      amount: Math.round(payAmount * 100),
       currency: currency.toLowerCase(),
       payment_method: payment_method_id,
       confirmation_method: "manual",
       confirm: payment_method_id ? true : false,
       metadata: {
-        userId: req.user?.userId || null,
+        userId: userId ? String(userId) : "",
+        ...caseMeta,
         ...metadata,
       },
       automatic_payment_methods: {
@@ -88,6 +273,156 @@ export const createPaymentIntent = async (req, res) => {
   }
 };
 
+/** Candidate: Stripe Checkout for approved CCL balance */
+export const createCaseCheckoutSession = async (req, res) => {
+  try {
+    if (!process.env.STRIPE_SECRET_KEY) {
+      return res.status(503).json({
+        status: "error",
+        message: "Stripe is not configured on the server",
+        data: null,
+      });
+    }
+
+    const stripe = getStripe();
+    const userId = req.user?.userId;
+    const tenantDb = req.tenantDb;
+    const resolved = await resolveCandidateCaseForPayment(tenantDb, userId);
+    if (!resolved.ok) {
+      return res.status(resolved.status).json({
+        status: "error",
+        message: resolved.message,
+        data: null,
+      });
+    }
+
+    const { caseRecord, balanceDue } = resolved;
+    if (balanceDue < 0.5) {
+      return res.status(400).json({
+        status: "error",
+        message: "No outstanding balance on this case",
+        data: null,
+      });
+    }
+
+    const frontend = (process.env.FRONTEND_URL || "http://localhost:5173").replace(/\/$/, "");
+    const session = await stripe.checkout.sessions.create({
+      mode: "payment",
+      payment_method_types: ["card"],
+      line_items: [
+        {
+          price_data: {
+            currency: "gbp",
+            product_data: {
+              name: `Case fees — ${caseRecord.caseId || caseRecord.id}`,
+              description: "Approved Client Care Letter fees",
+            },
+            unit_amount: Math.round(balanceDue * 100),
+          },
+          quantity: 1,
+        },
+      ],
+      success_url: `${frontend}/candidate/payments?payment=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${frontend}/candidate/payments?payment=cancelled`,
+      metadata: {
+        userId: String(userId),
+        caseId: caseRecord.caseId || String(caseRecord.id),
+        numericCaseId: String(caseRecord.id),
+      },
+    });
+
+    res.status(200).json({
+      status: "success",
+      message: "Checkout session created",
+      data: {
+        url: session.url,
+        session_id: session.id,
+        amount: balanceDue,
+        currency: "gbp",
+      },
+    });
+  } catch (error) {
+    console.error("Stripe Checkout Session Error:", error);
+    res.status(500).json({
+      status: "error",
+      message: error.message || "Failed to create checkout session",
+      data: null,
+    });
+  }
+};
+
+/** After redirect from Stripe Checkout — record payment if webhook has not run yet */
+export const verifyCheckoutSession = async (req, res) => {
+  try {
+    const stripe = getStripe();
+    const { session_id } = req.params;
+    const userId = req.user?.userId;
+
+    if (!session_id) {
+      return res.status(400).json({
+        status: "error",
+        message: "session_id is required",
+        data: null,
+      });
+    }
+
+    const session = await stripe.checkout.sessions.retrieve(session_id, {
+      expand: ["payment_intent"],
+    });
+
+    if (String(session.metadata?.userId || "") !== String(userId)) {
+      return res.status(403).json({
+        status: "error",
+        message: "This payment session does not belong to your account",
+        data: null,
+      });
+    }
+
+    if (session.payment_status !== "paid") {
+      return res.status(200).json({
+        status: "success",
+        message: "Payment not completed yet",
+        data: { paid: false, payment_status: session.payment_status },
+      });
+    }
+
+    const paymentIntent =
+      typeof session.payment_intent === "object"
+        ? session.payment_intent
+        : await stripe.paymentIntents.retrieve(session.payment_intent);
+
+    const result = await finalizeStripePaymentForUser({
+      userId,
+      paymentIntent,
+      caseRef: session.metadata?.caseId,
+    });
+
+    const caseRecord = result?.caseRecord;
+    const totalFee = Number(caseRecord?.totalAmount) || 0;
+    const paidAmount = Number(caseRecord?.paidAmount) || 0;
+
+    res.status(200).json({
+      status: "success",
+      message: "Payment verified",
+      data: {
+        paid: true,
+        totalFee,
+        paidAmount,
+        balanceDue: Math.max(0, totalFee - paidAmount),
+        caseStage: caseRecord?.caseStage,
+        amountStatus: caseRecord?.amountStatus,
+      },
+    });
+  } catch (error) {
+    console.error("verifyCheckoutSession:", error);
+    res.status(500).json({
+      status: "error",
+      message: error.message || "Failed to verify checkout session",
+      data: null,
+    });
+  }
+};
+
 // Confirm Payment
 export const confirmPayment = async (req, res) => {
   try {
@@ -107,6 +442,12 @@ export const confirmPayment = async (req, res) => {
       await stripe.paymentIntents.retrieve(payment_intent_id);
 
     if (paymentIntent.status === "succeeded") {
+      await finalizeStripePaymentForUser({
+        userId: req.user?.userId,
+        paymentIntent,
+        caseRef: paymentIntent.metadata?.caseId,
+      }).catch(() => {});
+
       return res.status(200).json({
         status: "success",
         message: "Payment already confirmed",
@@ -118,13 +459,20 @@ export const confirmPayment = async (req, res) => {
       });
     }
 
-    // Confirm payment
     const confirmedPayment = await stripe.paymentIntents.confirm(
       payment_intent_id,
       {
         payment_method: payment_method_id,
       },
     );
+
+    if (confirmedPayment.status === "succeeded") {
+      await finalizeStripePaymentForUser({
+        userId: req.user?.userId,
+        paymentIntent: confirmedPayment,
+        caseRef: confirmedPayment.metadata?.caseId,
+      }).catch(() => {});
+    }
 
     res.status(200).json({
       status: "success",
@@ -163,6 +511,14 @@ export const getPaymentStatus = async (req, res) => {
 
     const paymentIntent =
       await stripe.paymentIntents.retrieve(payment_intent_id);
+
+    if (paymentIntent.status === "succeeded") {
+      await finalizeStripePaymentForUser({
+        userId: req.user?.userId,
+        paymentIntent,
+        caseRef: paymentIntent.metadata?.caseId,
+      }).catch(() => {});
+    }
 
     res.status(200).json({
       status: "success",
@@ -271,27 +627,45 @@ export const handleWebhook = async (req, res) => {
   // Handle the event
   switch (event.type) {
     // Payment Events
-    case "payment_intent.succeeded":
+    case "payment_intent.succeeded": {
       const paymentIntent = event.data.object;
       console.log("PaymentIntent was successful!", paymentIntent.id);
-      
-      // Send payment notification if userId is available in metadata
       if (paymentIntent.metadata?.userId) {
         try {
-          const tenantDb = await resolveTenantDbForUser(paymentIntent.metadata.userId);
-          if (tenantDb) {
-            await notifyPaymentReceived(tenantDb, paymentIntent.metadata.userId, {
-              id: paymentIntent.id,
-              invoiceId: paymentIntent.id,
-              amount: paymentIntent.amount / 100, // Stripe amount is in cents
-              caseId: paymentIntent.metadata.caseId || 'your case'
-            });
-          }
+          const userId = Number(paymentIntent.metadata.userId);
+          await finalizeStripePaymentForUser({
+            userId,
+            paymentIntent,
+            caseRef: paymentIntent.metadata.caseId,
+          });
         } catch (notifErr) {
-          console.error("Failed to send payment notification:", notifErr);
+          console.error("Failed to record payment_intent.succeeded:", notifErr);
         }
       }
       break;
+    }
+
+    case "checkout.session.completed": {
+      const session = event.data.object;
+      if (session.payment_status === "paid" && session.metadata?.userId) {
+        try {
+          const userId = Number(session.metadata.userId);
+          const stripe = getStripe();
+          const paymentIntentId = session.payment_intent;
+          if (paymentIntentId) {
+            const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+            await finalizeStripePaymentForUser({
+              userId,
+              paymentIntent,
+              caseRef: session.metadata.caseId,
+            });
+          }
+        } catch (err) {
+          console.error("Failed to record checkout.session.completed:", err);
+        }
+      }
+      break;
+    }
 
     case "payment_intent.payment_failed":
       const failedPayment = event.data.object;

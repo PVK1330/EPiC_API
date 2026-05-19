@@ -4,6 +4,30 @@ import {
   submitCclFeeProposal,
   reviewCclFeeProposal,
 } from '../../../services/cclFeeProposal.service.js';
+import { syncCclReleaseForApprovedFees } from '../../../services/cclCandidateRelease.service.js';
+import { evaluateCaseStageAfterEvent } from '../../../services/caseStageAutomation.service.js';
+import { recordTimelineEntry } from '../../../services/caseTimeline.service.js';
+
+const MANUAL_PAYMENT_METHOD_MAP = {
+  bank_transfer: 'bank_transfer',
+  'bank transfer': 'bank_transfer',
+  card: 'credit_card',
+  credit_card: 'credit_card',
+  cheque: 'check',
+  check: 'check',
+  cash: 'cash',
+  online: 'online',
+};
+
+function resolvePaymentMethodEnum(input) {
+  const key = String(input || 'bank_transfer').trim().toLowerCase();
+  if (MANUAL_PAYMENT_METHOD_MAP[key]) return MANUAL_PAYMENT_METHOD_MAP[key];
+  if (key.includes('bank')) return 'bank_transfer';
+  if (key.includes('card')) return 'credit_card';
+  if (key.includes('cheque') || key.includes('check')) return 'check';
+  if (key.includes('cash')) return 'cash';
+  return 'online';
+}
 
 const buildFullCaseIncludes = (tenantDb) => [
   {
@@ -568,6 +592,130 @@ export const updateCaseFinance = async (req, res) => {
           },
         });
       }
+
+      if (amountStatus === "Approved") {
+        const sync = await syncCclReleaseForApprovedFees({
+          tenantDb: req.tenantDb,
+          caseRecord: caseData,
+          performedBy: userId,
+          organisationId,
+        });
+        if (sync.ccl) {
+          await caseData.reload();
+          return res.status(200).json({
+            status: "success",
+            message: "Fees approved and CCL sent to client",
+            data: {
+              totalAmount: caseData.totalAmount,
+              amountStatus: caseData.amountStatus,
+              amountNotes: caseData.amountNotes,
+              caseStage: caseData.caseStage,
+            },
+          });
+        }
+      }
+    }
+
+    if (amountStatus === 'Paid') {
+      if (roleId !== ROLES.ADMIN) {
+        return res.status(403).json({
+          status: 'error',
+          message: 'Only administrators can mark a case payment status as Paid',
+          data: null,
+        });
+      }
+
+      const totalFee = Number.parseFloat(caseData.totalAmount) || 0;
+      const prevPaid = Number.parseFloat(caseData.paidAmount) || 0;
+      const balanceDue = Math.max(0, totalFee - prevPaid);
+
+      if (balanceDue > 0.02) {
+        const invoiceNumber = `ADM-${Date.now()}`;
+        await req.tenantDb.CasePayment.create({
+          caseId: caseData.id,
+          paymentType: 'fee',
+          amount: balanceDue,
+          paymentMethod: 'bank_transfer',
+          paymentDate: new Date().toISOString().split('T')[0],
+          paymentStatus: 'completed',
+          transactionId: invoiceNumber,
+          invoiceNumber,
+          description: 'Marked as paid by administrator',
+          receivedBy: userId || null,
+        });
+      }
+
+      await caseData.update({
+        paidAmount: totalFee > 0 ? totalFee : prevPaid,
+        amountStatus: 'Paid',
+      });
+      await caseData.reload();
+
+      await evaluateCaseStageAfterEvent({
+        tenantDb: req.tenantDb,
+        caseRecord: caseData,
+        trigger: 'payment_received',
+        performedBy: userId || null,
+        organisationId,
+      }).catch((err) => console.error('evaluateCaseStageAfterEvent:', err));
+
+      await recordTimelineEntry({
+        tenantDb: req.tenantDb,
+        caseId: caseData.id,
+        actionType: 'payment_received',
+        description: 'Payment status set to Paid by administrator',
+        performedBy: userId,
+        visibility: 'internal',
+      });
+
+      return res.status(200).json({
+        status: 'success',
+        message: 'Case marked as paid',
+        data: {
+          totalAmount: caseData.totalAmount,
+          paidAmount: caseData.paidAmount,
+          amountStatus: caseData.amountStatus,
+          amountNotes: caseData.amountNotes,
+        },
+      });
+    }
+
+    if (roleId !== ROLES.ADMIN) {
+      if (
+        amountStatus !== undefined &&
+        amountStatus !== 'Pending Approval'
+      ) {
+        return res.status(403).json({
+          status: 'error',
+          message:
+            'Caseworkers cannot set payment status directly. Use "Submit CCL fees for approval" to send amounts to admin.',
+          data: null,
+        });
+      }
+
+      const draftUpdate = {};
+      if (totalAmount !== undefined) draftUpdate.totalAmount = totalAmount;
+      if (amountNotes !== undefined) draftUpdate.amountNotes = amountNotes;
+      if (Object.keys(draftUpdate).length === 0) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'No finance fields to update',
+          data: null,
+        });
+      }
+
+      await caseData.update(draftUpdate);
+      await caseData.reload();
+
+      return res.status(200).json({
+        status: 'success',
+        message: 'Draft fee details saved',
+        data: {
+          totalAmount: caseData.totalAmount,
+          amountStatus: caseData.amountStatus,
+          amountNotes: caseData.amountNotes,
+        },
+      });
     }
 
     const updateData = {};
@@ -576,6 +724,17 @@ export const updateCaseFinance = async (req, res) => {
     if (amountNotes !== undefined) updateData.amountNotes = amountNotes;
 
     await caseData.update(updateData);
+    await caseData.reload();
+
+    if (roleId === ROLES.ADMIN && amountStatus === "Approved") {
+      await syncCclReleaseForApprovedFees({
+        tenantDb: req.tenantDb,
+        caseRecord: caseData,
+        performedBy: userId,
+        organisationId,
+      });
+      await caseData.reload();
+    }
 
     await req.tenantDb.CaseTimeline.create({
       caseId: caseData.id,
@@ -606,6 +765,135 @@ export const updateCaseFinance = async (req, res) => {
     res.status(500).json({
       status: "error",
       message: "Internal server error",
+      data: null,
+      error: error.message,
+    });
+  }
+};
+
+/** Record a manual payment (admin only) and mark as completed */
+export const recordManualCasePayment = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { amount, paymentMethod, description, markFullyPaid, notes } = req.body;
+    const roleId = Number(req.user?.role_id);
+    const userId = req.user?.userId ?? req.user?.id;
+    const organisationId =
+      req.user?.organisation_id != null ? Number(req.user.organisation_id) : null;
+
+    if (roleId !== ROLES.ADMIN) {
+      return res.status(403).json({
+        status: 'error',
+        message:
+          'Only administrators can record payments or mark a case as paid. Caseworkers should submit fee proposals for admin approval.',
+        data: null,
+      });
+    }
+
+    if (!id) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Case ID is required',
+        data: null,
+      });
+    }
+
+    const whereClause = Number.isNaN(Number(id)) ? { caseId: id } : { id: parseInt(id, 10) };
+    const caseData = await req.tenantDb.Case.findOne({ where: whereClause });
+    if (!caseData) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Case not found',
+        data: null,
+      });
+    }
+
+    const totalFee = Number.parseFloat(caseData.totalAmount) || 0;
+    const prevPaid = Number.parseFloat(caseData.paidAmount) || 0;
+    const balanceDue = Math.max(0, totalFee - prevPaid);
+
+    let payAmount = markFullyPaid
+      ? balanceDue
+      : Number.parseFloat(amount) || 0;
+
+    if (payAmount <= 0) {
+      return res.status(400).json({
+        status: 'error',
+        message: markFullyPaid
+          ? 'Case is already fully paid or has no fee total set'
+          : 'Payment amount must be greater than zero',
+        data: null,
+      });
+    }
+
+    const methodEnum = resolvePaymentMethodEnum(paymentMethod);
+    const paymentDate = new Date().toISOString().split('T')[0];
+    const invoiceNumber = `MAN-${Date.now()}`;
+
+    const payment = await req.tenantDb.CasePayment.create({
+      caseId: caseData.id,
+      paymentType: 'fee',
+      amount: payAmount,
+      paymentMethod: methodEnum,
+      paymentDate,
+      paymentStatus: 'completed',
+      transactionId: invoiceNumber,
+      invoiceNumber,
+      description: description || (markFullyPaid ? 'Manual payment — marked fully paid' : 'Manual payment recorded'),
+      notes: notes || null,
+      receivedBy: userId || null,
+    });
+
+    const newPaid = prevPaid + payAmount;
+    const balanceAfter = Math.max(0, totalFee - newPaid);
+    const financeUpdates = { paidAmount: newPaid };
+    if (balanceAfter <= 0.02 && totalFee > 0) {
+      financeUpdates.amountStatus = 'Paid';
+    }
+    await caseData.update(financeUpdates);
+    await caseData.reload();
+
+    await evaluateCaseStageAfterEvent({
+      tenantDb: req.tenantDb,
+      caseRecord: caseData,
+      trigger: 'payment_received',
+      performedBy: userId || null,
+      organisationId,
+    }).catch((err) => console.error('evaluateCaseStageAfterEvent:', err));
+
+    await recordTimelineEntry({
+      tenantDb: req.tenantDb,
+      caseId: caseData.id,
+      actionType: 'payment_received',
+      description: `Manual payment recorded: £${payAmount.toFixed(2)}${markFullyPaid ? ' (fully paid)' : ''}`,
+      performedBy: userId,
+      metadata: {
+        amount: payAmount,
+        paymentMethod: methodEnum,
+        paymentId: payment.id,
+        markFullyPaid: Boolean(markFullyPaid),
+      },
+      visibility: 'internal',
+    });
+
+    res.status(200).json({
+      status: 'success',
+      message: markFullyPaid || balanceAfter === 0
+        ? 'Payment recorded — case is fully paid'
+        : 'Manual payment recorded successfully',
+      data: {
+        payment,
+        paidAmount: newPaid,
+        totalFee,
+        balanceDue: balanceAfter,
+        paymentStatus: balanceAfter === 0 ? 'Fully Paid' : 'Partially Paid',
+      },
+    });
+  } catch (error) {
+    console.error('Record Manual Case Payment Error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Internal server error',
       data: null,
       error: error.message,
     });

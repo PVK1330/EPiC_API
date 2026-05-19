@@ -15,9 +15,16 @@ router.get("/data-capture", requireCandidate, workflowController.getDataCaptureF
 router.put("/data-capture", requireCandidate, workflowController.saveDataCaptureSubmission);
 router.post("/data-capture/submit", requireCandidate, workflowController.submitDataCapture);
 router.get("/decision-documents", requireCandidate, workflowController.getDecisionDocuments);
+router.get("/ccl", requireCandidate, workflowController.getCandidateCcl);
+router.get("/ccl/download", requireCandidate, workflowController.downloadCandidateCcl);
 router.post("/ccl/accept", requireCandidate, workflowController.acceptCcl);
 router.post("/ccl/confirm-signed", requireCandidate, workflowController.confirmCclSigned);
 router.get("/payments/schedule", requireCandidate, workflowController.getCandidatePaymentSchedule);
+router.get("/my-tasks", requireCandidate, workflowController.getCandidateTasks);
+router.patch("/my-tasks/:taskId/complete", requireCandidate, workflowController.completeCandidateTask);
+router.get("/process", requireCandidate, workflowController.getCandidateWorkflowProcess);
+router.post("/draft-review", requireCandidate, workflowController.submitCandidateDraftReview);
+router.post("/biometric-availability", requireCandidate, workflowController.submitCandidateBiometricAvailability);
 
 // Caseworker / Admin
 const staff = checkRole([ROLES.ADMIN, ROLES.CASEWORKER]);
@@ -30,5 +37,9 @@ router.post("/cases/:caseId/ccl/propose", staff, workflowController.proposeCclFe
 router.post("/cases/:caseId/ccl/issue", staff, workflowController.issueCcl);
 router.patch("/cases/:caseId/ccl/fee-review", adminOnly, workflowController.reviewCclFees);
 router.get("/ccl/pending-approvals", adminOnly, workflowController.listCclFeePendingApprovals);
+router.post("/cases/:caseId/visa-portal-submit", staff, workflowController.staffRecordVisaPortalSubmission);
+router.post("/cases/:caseId/biometric-slot", staff, workflowController.staffSendBiometricSlot);
+router.post("/cases/:caseId/biometric-docs-uploaded", staff, workflowController.staffRecordBiometricDocsUploaded);
+router.post("/cases/:caseId/visa-portal-reply", staff, workflowController.staffRecordVisaPortalReply);
 
 export default router;
