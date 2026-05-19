@@ -593,6 +593,108 @@ export const updateCaseFinance = async (req, res) => {
       }
     }
 
+    if (amountStatus === 'Paid') {
+      if (roleId !== ROLES.ADMIN) {
+        return res.status(403).json({
+          status: 'error',
+          message: 'Only administrators can mark a case payment status as Paid',
+          data: null,
+        });
+      }
+
+      const totalFee = Number.parseFloat(caseData.totalAmount) || 0;
+      const prevPaid = Number.parseFloat(caseData.paidAmount) || 0;
+      const balanceDue = Math.max(0, totalFee - prevPaid);
+
+      if (balanceDue > 0.02) {
+        const invoiceNumber = `ADM-${Date.now()}`;
+        await req.tenantDb.CasePayment.create({
+          caseId: caseData.id,
+          paymentType: 'fee',
+          amount: balanceDue,
+          paymentMethod: 'bank_transfer',
+          paymentDate: new Date().toISOString().split('T')[0],
+          paymentStatus: 'completed',
+          transactionId: invoiceNumber,
+          invoiceNumber,
+          description: 'Marked as paid by administrator',
+          receivedBy: userId || null,
+        });
+      }
+
+      await caseData.update({
+        paidAmount: totalFee > 0 ? totalFee : prevPaid,
+        amountStatus: 'Paid',
+      });
+      await caseData.reload();
+
+      await evaluateCaseStageAfterEvent({
+        tenantDb: req.tenantDb,
+        caseRecord: caseData,
+        trigger: 'payment_received',
+        performedBy: userId || null,
+        organisationId,
+      }).catch((err) => console.error('evaluateCaseStageAfterEvent:', err));
+
+      await recordTimelineEntry({
+        tenantDb: req.tenantDb,
+        caseId: caseData.id,
+        actionType: 'payment_received',
+        description: 'Payment status set to Paid by administrator',
+        performedBy: userId,
+        visibility: 'internal',
+      });
+
+      return res.status(200).json({
+        status: 'success',
+        message: 'Case marked as paid',
+        data: {
+          totalAmount: caseData.totalAmount,
+          paidAmount: caseData.paidAmount,
+          amountStatus: caseData.amountStatus,
+          amountNotes: caseData.amountNotes,
+        },
+      });
+    }
+
+    if (roleId !== ROLES.ADMIN) {
+      if (
+        amountStatus !== undefined &&
+        amountStatus !== 'Pending Approval'
+      ) {
+        return res.status(403).json({
+          status: 'error',
+          message:
+            'Caseworkers cannot set payment status directly. Use "Submit CCL fees for approval" to send amounts to admin.',
+          data: null,
+        });
+      }
+
+      const draftUpdate = {};
+      if (totalAmount !== undefined) draftUpdate.totalAmount = totalAmount;
+      if (amountNotes !== undefined) draftUpdate.amountNotes = amountNotes;
+      if (Object.keys(draftUpdate).length === 0) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'No finance fields to update',
+          data: null,
+        });
+      }
+
+      await caseData.update(draftUpdate);
+      await caseData.reload();
+
+      return res.status(200).json({
+        status: 'success',
+        message: 'Draft fee details saved',
+        data: {
+          totalAmount: caseData.totalAmount,
+          amountStatus: caseData.amountStatus,
+          amountNotes: caseData.amountNotes,
+        },
+      });
+    }
+
     const updateData = {};
     if (totalAmount !== undefined) updateData.totalAmount = totalAmount;
     if (amountStatus !== undefined) updateData.amountStatus = amountStatus;
@@ -635,14 +737,24 @@ export const updateCaseFinance = async (req, res) => {
   }
 };
 
-/** Record a manual payment (admin/caseworker) and mark as completed */
+/** Record a manual payment (admin only) and mark as completed */
 export const recordManualCasePayment = async (req, res) => {
   try {
     const { id } = req.params;
     const { amount, paymentMethod, description, markFullyPaid, notes } = req.body;
+    const roleId = Number(req.user?.role_id);
     const userId = req.user?.userId ?? req.user?.id;
     const organisationId =
       req.user?.organisation_id != null ? Number(req.user.organisation_id) : null;
+
+    if (roleId !== ROLES.ADMIN) {
+      return res.status(403).json({
+        status: 'error',
+        message:
+          'Only administrators can record payments or mark a case as paid. Caseworkers should submit fee proposals for admin approval.',
+        data: null,
+      });
+    }
 
     if (!id) {
       return res.status(400).json({
@@ -699,7 +811,12 @@ export const recordManualCasePayment = async (req, res) => {
     });
 
     const newPaid = prevPaid + payAmount;
-    await caseData.update({ paidAmount: newPaid });
+    const balanceAfter = Math.max(0, totalFee - newPaid);
+    const financeUpdates = { paidAmount: newPaid };
+    if (balanceAfter <= 0.02 && totalFee > 0) {
+      financeUpdates.amountStatus = 'Paid';
+    }
+    await caseData.update(financeUpdates);
     await caseData.reload();
 
     await evaluateCaseStageAfterEvent({
@@ -724,8 +841,6 @@ export const recordManualCasePayment = async (req, res) => {
       },
       visibility: 'internal',
     });
-
-    const balanceAfter = Math.max(0, totalFee - newPaid);
 
     res.status(200).json({
       status: 'success',
