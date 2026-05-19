@@ -7,6 +7,7 @@ import {
   notifyCclFeeRejected,
   createAdminWorkflowTask,
 } from "./workflowNotifications.service.js";
+import { attachCclTemplateToCase } from "./cclTemplate.service.js";
 
 export function normalizeInstallments(installments = []) {
   if (!Array.isArray(installments)) return [];
@@ -271,7 +272,22 @@ export async function reviewCclFeeProposal({
   });
 
   await ccl.reload();
-  await caseRecord.reload();
+  if (tenantDb.VisaType) {
+    await caseRecord.reload({
+      include: [{ model: tenantDb.VisaType, as: "visaType", attributes: ["id", "name"] }],
+    });
+  } else {
+    await caseRecord.reload();
+  }
+
+  await attachCclTemplateToCase({
+    tenantDb,
+    caseRecord,
+    ccl,
+    performedBy: reviewedBy,
+  }).catch((err) => console.error("attachCclTemplateToCase:", err));
+
+  await ccl.reload();
 
   await notifyCclFeeApproved({
     tenantDb,

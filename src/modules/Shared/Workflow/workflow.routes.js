@@ -15,6 +15,8 @@ router.get("/data-capture", requireCandidate, workflowController.getDataCaptureF
 router.put("/data-capture", requireCandidate, workflowController.saveDataCaptureSubmission);
 router.post("/data-capture/submit", requireCandidate, workflowController.submitDataCapture);
 router.get("/decision-documents", requireCandidate, workflowController.getDecisionDocuments);
+router.get("/ccl", requireCandidate, workflowController.getCandidateCcl);
+router.get("/ccl/download", requireCandidate, workflowController.downloadCandidateCcl);
 router.post("/ccl/accept", requireCandidate, workflowController.acceptCcl);
 router.post("/ccl/confirm-signed", requireCandidate, workflowController.confirmCclSigned);
 router.get("/payments/schedule", requireCandidate, workflowController.getCandidatePaymentSchedule);
