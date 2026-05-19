@@ -34,6 +34,7 @@ export default (sequelize, DataTypes) => {
       content: {
         type: DataTypes.TEXT,
         allowNull: false,
+        field: "message",
       },
       messageType: {
         type: DataTypes.ENUM("text", "image", "file"),

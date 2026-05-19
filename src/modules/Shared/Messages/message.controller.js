@@ -12,14 +12,20 @@ export const getMessages = async (req, res) => {
     const { receiverId } = req.params;
     const senderId = req.user.userId;
     const userRole = req.user.role_id;
+    const organisationId = req.user.organisation_id;
     const { caseId } = req.query;
 
-    const receiver = await req.tenantDb.User.findByPk(receiverId);
+    const receiver = await req.tenantDb.User.findOne({
+      where: {
+        id: receiverId,
+        organisation_id: organisationId,
+      },
+    });
     if (!receiver) {
       return res.status(404).json({ status: "error", message: "User not found." });
     }
 
-    if ((userRole === 3 || userRole === 4) && ![1, 2].includes(receiver.role_id)) {
+    if ((userRole === 1 || userRole === 4) && ![3, 2].includes(receiver.role_id)) {
       return res.status(403).json({ status: "error", message: "You are not authorized to view messages with this user role." });
     }
 
@@ -68,6 +74,7 @@ export const sendMessage = async (req, res) => {
     const { receiverId, caseId } = req.body;
     let { content, messageType = 'text' } = req.body;
     const senderId = req.user.userId;
+    const organisationId = req.user.organisation_id;
 
     // Handle file upload if present
     if (req.file) {
@@ -85,13 +92,18 @@ export const sendMessage = async (req, res) => {
       return res.status(400).json({ status: "error", message: "Receiver ID and content are required." });
     }
 
-    const receiver = await req.tenantDb.User.findByPk(receiverId);
+    const receiver = await req.tenantDb.User.findOne({
+      where: {
+        id: receiverId,
+        organisation_id: organisationId,
+      },
+    });
     if (!receiver) {
       return res.status(404).json({ status: "error", message: "Receiver not found." });
     }
 
     const userRole = req.user.role_id;
-    if ((userRole === 3 || userRole === 4) && ![1, 2].includes(receiver.role_id)) {
+    if ((userRole === 1 || userRole === 4) && ![3, 2].includes(receiver.role_id)) {
       return res.status(403).json({ status: "error", message: "You are not authorized to message this user role." });
     }
 
@@ -176,6 +188,7 @@ export const sendMessage = async (req, res) => {
 export const getRecentConversations = async (req, res) => {
   try {
     const userId = req.user.userId;
+    const organisationId = req.user.organisation_id;
 
     const conversations = await req.tenantDb.Conversation.findAll({
       where: {
@@ -199,23 +212,28 @@ export const getRecentConversations = async (req, res) => {
       ]
     });
 
-    const formattedConversations = await Promise.all(
-      conversations.map(async (conv) => {
-        const otherUser =
-          conv.participantOneId === userId ? conv.participantTwo : conv.participantOne;
-        const unreadCount = await getUnreadCountForUserInConversation(req.tenantDb, userId, conv.id);
-        return {
-          id: conv.id,
-          user: otherUser,
-          case: conv.case,
-          unreadCount,
-          lastMessage: {
-            content: conv.lastMessage,
-            createdAt: conv.lastMessageAt,
-          },
-        };
-      }),
-    );
+    const formattedConversations = [];
+    for (const conv of conversations) {
+      const otherUser = conv.participantOneId === userId ? conv.participantTwo : conv.participantOne;
+      if (!otherUser) continue;
+
+      // Enforce organisation boundary check (allow superadmin to see all, but isolate tenants)
+      if (req.user.role_id !== 5 && otherUser.organisation_id !== organisationId) {
+        continue;
+      }
+
+      const unreadCount = await getUnreadCountForUserInConversation(req.tenantDb, userId, conv.id);
+      formattedConversations.push({
+        id: conv.id,
+        user: otherUser,
+        case: conv.case,
+        unreadCount,
+        lastMessage: {
+          content: conv.lastMessage,
+          createdAt: conv.lastMessageAt,
+        },
+      });
+    }
 
     res.status(200).json({
       status: "success",
@@ -231,12 +249,16 @@ export const getChatUsers = async (req, res) => {
   try {
     const userId = req.user.userId;
     const userRole = req.user.role_id;
+    const organisationId = req.user.organisation_id;
     const sequelize = req.tenantDb.sequelize;
 
-    // Admin can see everyone
-    if (userRole === 1) {
+    // Admin can see everyone in their organization
+    if (userRole === 3) {
       const chatUsers = await req.tenantDb.User.findAll({
-        where: { id: { [Op.ne]: userId } },
+        where: { 
+          id: { [Op.ne]: userId },
+          organisation_id: organisationId
+        },
         attributes: ['id', 'first_name', 'last_name', 'email', 'role_id'],
         include: [{ model: req.tenantDb.Role, as: 'role', attributes: ['name'] }]
       });
@@ -245,9 +267,13 @@ export const getChatUsers = async (req, res) => {
 
     let allowedUserIds = new Set();
 
-    // EVERYONE can always talk to Admins (role_id = 1)
+    // EVERYONE can always talk to Admins (role_id = 3) in the same organization
     const admins = await req.tenantDb.User.findAll({
-      where: { role_id: 1, id: { [Op.ne]: userId } },
+      where: { 
+        role_id: 3, 
+        id: { [Op.ne]: userId },
+        organisation_id: organisationId
+      },
       attributes: ['id']
     });
     admins.forEach(admin => allowedUserIds.add(admin.id));
@@ -255,6 +281,7 @@ export const getChatUsers = async (req, res) => {
     if (userRole === 2) { // Caseworker
       const myCases = await req.tenantDb.Case.findAll({
         where: {
+          organisation_id: organisationId,
           [Op.or]: [
             sequelize.literal(`"assignedcaseworkerId"::jsonb @> '${JSON.stringify([userId])}'::jsonb`),
             sequelize.literal(`"assignedcaseworkerId"::jsonb ? '${userId}'`)
@@ -267,9 +294,12 @@ export const getChatUsers = async (req, res) => {
         if (c.businessId) allowedUserIds.add(c.businessId);
         if (c.sponsorId) allowedUserIds.add(c.sponsorId);
       });
-    } else if (userRole === 3) { // Candidate
+    } else if (userRole === 1) { // Candidate
       const myCases = await req.tenantDb.Case.findAll({
-        where: { candidateId: userId },
+        where: { 
+          candidateId: userId,
+          organisation_id: organisationId
+        },
         attributes: ['businessId', 'sponsorId', 'assignedcaseworkerId']
       });
       myCases.forEach(c => {
@@ -282,6 +312,7 @@ export const getChatUsers = async (req, res) => {
     } else if (userRole === 4) { // Business/Sponsor
       const myCases = await req.tenantDb.Case.findAll({
         where: {
+          organisation_id: organisationId,
           [Op.or]: [
             { businessId: userId },
             { sponsorId: userId }
@@ -299,7 +330,8 @@ export const getChatUsers = async (req, res) => {
 
     const chatUsers = await req.tenantDb.User.findAll({
       where: {
-        id: { [Op.in]: Array.from(allowedUserIds) }
+        id: { [Op.in]: Array.from(allowedUserIds) },
+        organisation_id: organisationId
       },
       attributes: ['id', 'first_name', 'last_name', 'email', 'role_id'],
       include: [
@@ -317,9 +349,20 @@ export const markAsRead = async (req, res) => {
   try {
     const { senderId } = req.body;
     const receiverId = req.user.userId;
+    const organisationId = req.user.organisation_id;
 
     if (senderId == null) {
       return res.status(400).json({ status: "error", message: "senderId is required." });
+    }
+
+    const sender = await req.tenantDb.User.findOne({
+      where: {
+        id: senderId,
+        organisation_id: organisationId
+      }
+    });
+    if (!sender) {
+      return res.status(404).json({ status: "error", message: "Sender not found." });
     }
 
     const pending = await req.tenantDb.Message.findAll({

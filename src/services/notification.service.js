@@ -152,11 +152,19 @@ export const createNotification = async (data) => {
           const adminRole = await tenantDb.Role.findOne({ where: { name: { [tenantDb.Sequelize.Op.iLike]: 'admin' } } });
           if (adminRole) {
             // Find all admin users EXCEPT the one who might already be the recipient
+            // If the user being notified belongs to an organization, we MUST fetch their organization to scope admins to the same organization.
+            let userOrgId = organisationId;
+            if (!userOrgId) {
+              const recipientUser = await tenantDb.User.findByPk(userId, { attributes: ['organisation_id'] });
+              userOrgId = recipientUser?.organisation_id;
+            }
+
             const admins = await tenantDb.User.findAll({
               where: {
                 role_id: adminRole.id,
                 id: { [tenantDb.Sequelize.Op.ne]: userId },
-                status: 'active'
+                status: 'active',
+                ...(userOrgId && { organisation_id: userOrgId })
               },
               attributes: ['id']
             });
@@ -201,7 +209,11 @@ export const notifyAdmins = async (tenantDb, notificationData) => {
     if (!adminRole) return;
 
     const admins = await tenantDb.User.findAll({
-      where: { role_id: adminRole.id, status: 'active' },
+      where: { 
+        role_id: adminRole.id, 
+        status: 'active',
+        ...(notificationData.organisationId && { organisation_id: notificationData.organisationId })
+      },
       attributes: ['id']
     });
 
@@ -251,10 +263,14 @@ export const createBulkNotifications = async (userIds, notificationData) => {
  */
 export const createNotificationForRole = async (roleId, notificationData) => {
   try {
-    const { tenantDb } = notificationData;
+    const { tenantDb, organisationId } = notificationData;
     if (!tenantDb) throw new Error('tenantDb is required');
     const users = await tenantDb.User.findAll({
-      where: { role_id: roleId, status: 'active' },
+      where: { 
+        role_id: roleId, 
+        status: 'active',
+        ...(organisationId && { organisation_id: organisationId })
+      },
       attributes: ['id'],
     });
 
@@ -276,10 +292,13 @@ export const createNotificationForRole = async (roleId, notificationData) => {
  */
 export const createNotificationForAllUsers = async (notificationData) => {
   try {
-    const { tenantDb } = notificationData;
+    const { tenantDb, organisationId } = notificationData;
     if (!tenantDb) throw new Error('tenantDb is required');
     const users = await tenantDb.User.findAll({
-      where: { status: 'active' },
+      where: { 
+        status: 'active',
+        ...(organisationId && { organisation_id: organisationId })
+      },
       attributes: ['id'],
     });
 

@@ -86,8 +86,9 @@ export const getAllNotifications = async (req, res) => {
         {
           model: req.tenantDb.User,
           as: 'user',
+          where: { organisation_id: req.user.organisation_id },
           attributes: ['id', 'first_name', 'last_name', 'email'],
-          required: false,
+          required: true,
         },
         {
           model: req.tenantDb.Role,
@@ -313,6 +314,7 @@ export const deleteNotificationById = async (req, res) => {
 export const createManualNotification = async (req, res) => {
   try {
     const userId = req.user?.userId;
+    const organisationId = req.user?.organisation_id;
     if (!userId) {
       return res.status(401).json({
         status: 'error',
@@ -349,9 +351,27 @@ export const createManualNotification = async (req, res) => {
     const finalRecipientUserId = recipientUserId || legacyUserId;
     const hasRecipient = finalRecipientUserId || recipientRoleId || (recipientUserIds && recipientUserIds.length > 0);
 
-    if (!hasRecipient) {
-      // If none provided, we treat it as broadcast to all users
-      // This matches the frontend 'all' recipientType
+    // Security validation: verify recipientUserId belongs to same organization
+    if (finalRecipientUserId) {
+      const recipient = await req.tenantDb.User.findOne({
+        where: { id: finalRecipientUserId, organisation_id: organisationId }
+      });
+      if (!recipient) {
+        return res.status(404).json({ status: 'error', message: 'Recipient user not found in your organisation.' });
+      }
+    }
+
+    // Security validation: verify recipientUserIds belong to same organization
+    if (recipientUserIds && Array.isArray(recipientUserIds) && recipientUserIds.length > 0) {
+      const recipientsCount = await req.tenantDb.User.count({
+        where: {
+          id: { [req.tenantDb.Sequelize.Op.in]: recipientUserIds },
+          organisation_id: organisationId
+        }
+      });
+      if (recipientsCount !== recipientUserIds.length) {
+        return res.status(400).json({ status: 'error', message: 'One or more recipient users are invalid or not in your organisation.' });
+      }
     }
 
     if (type && !validNotificationTypes.has(type)) {
@@ -374,6 +394,7 @@ export const createManualNotification = async (req, res) => {
     if (recipientRoleId) {
       const notifications = await createNotificationForRole(recipientRoleId, {
         tenantDb: req.tenantDb,
+        organisationId,
         type,
         priority,
         title,
@@ -389,6 +410,7 @@ export const createManualNotification = async (req, res) => {
     } else if (recipientUserIds && Array.isArray(recipientUserIds) && recipientUserIds.length > 0) {
       const notifications = await createBulkNotifications(recipientUserIds, {
         tenantDb: req.tenantDb,
+        organisationId,
         type,
         priority,
         title,
@@ -402,8 +424,10 @@ export const createManualNotification = async (req, res) => {
       });
       notification = notifications[0];
     } else if (finalRecipientUserId) {
-      notification = await createNotification({ tenantDb: req.tenantDb,
+      notification = await createNotification({ 
+        tenantDb: req.tenantDb,
         userId: finalRecipientUserId,
+        organisationId,
         type,
         priority,
         title,
@@ -419,6 +443,7 @@ export const createManualNotification = async (req, res) => {
       // Broadcast to all
       const notifications = await createNotificationForAllUsers({
         tenantDb: req.tenantDb,
+        organisationId,
         type,
         priority,
         title,
