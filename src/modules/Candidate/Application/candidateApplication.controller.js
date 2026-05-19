@@ -398,17 +398,23 @@ export const getMyApplication = async (req, res) => {
       );
 
       const primaryCase = cases[0];
-      if (primaryCase && req.tenantDb.DataCaptureSubmission) {
-        relatedData.dataCaptureSubmission = await req.tenantDb.DataCaptureSubmission.findOne({
-          where: { caseId: primaryCase.id },
-        });
-        relatedData.cclRecord = await req.tenantDb.CaseCclRecord?.findOne({
-          where: { caseId: primaryCase.id },
-        });
+      if (primaryCase) {
+        if (req.tenantDb.DataCaptureSubmission) {
+          const dcs = await req.tenantDb.DataCaptureSubmission.findOne({
+            where: { caseId: primaryCase.id },
+          });
+          relatedData.dataCaptureSubmission = dcs ? dcs.get({ plain: true }) : null;
+        }
+        if (req.tenantDb.CaseCclRecord) {
+          const ccl = await req.tenantDb.CaseCclRecord.findOne({
+            where: { caseId: primaryCase.id },
+          });
+          relatedData.cclRecord = ccl ? ccl.get({ plain: true }) : null;
+        }
       }
 
-      relatedData.cases = cases;
-      relatedData.documents = documents;
+      relatedData.cases = cases.map((c) => c.get({ plain: true }));
+      relatedData.documents = documents.map((d) => d.get({ plain: true }));
       relatedData.documentSettings = documentSettings;
       relatedData.completionScore = completionScore;
     }

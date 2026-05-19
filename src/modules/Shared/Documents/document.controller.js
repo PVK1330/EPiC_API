@@ -224,7 +224,7 @@ export const uploadDocuments = async (req, res) => {
         fileSize: file.size,
         uploadedBy: req.user.userId ?? req.user.id,
         uploadedAt: new Date(),
-        status: "uploaded",
+        status: roleId === 1 ? "under_review" : "uploaded",
         expiryDate: expiryDate || null,
         reviewedBy: null,
         reviewedAt: null,
@@ -336,16 +336,29 @@ export const uploadDocuments = async (req, res) => {
           uploadedBy: uploaderName
         };
 
-        // If a case is attached, notify the caseworkers
+        // Notify assigned caseworkers
         for (const cwId of caseworkers) {
-          // don't notify the person who uploaded it
           if (cwId !== req.user.userId) {
-             await notifyDocumentUploaded(req.tenantDb, cwId, docNotificationData);
+            await notifyDocumentUploaded(req.tenantDb, cwId, docNotificationData);
           }
         }
 
-        // If uploaded by someone other than the user, notify the candidate/sponsor user
-        if (userId !== req.user.userId) {
+        // Candidate upload: notify all admins for review
+        if (roleId === 1) {
+          const admins = await req.tenantDb.User.findAll({
+            where: { role_id: 3, status: "active" },
+            attributes: ["id"],
+          });
+          for (const admin of admins) {
+            await notifyDocumentUploaded(req.tenantDb, admin.id, {
+              ...docNotificationData,
+              uploadedBy: uploaderName,
+            });
+          }
+        }
+
+        // If uploaded by staff for the candidate, notify the candidate
+        if (userId !== req.user.userId && roleId !== 1) {
           await notifyDocumentUploaded(req.tenantDb, userId, docNotificationData);
         }
       } catch (notifErr) {
@@ -699,6 +712,24 @@ export const updateDocumentStatus = async (req, res) => {
   try {
     const { documentId } = req.params;
     const { status, reviewNotes } = req.body;
+    const roleId = Number(req.user?.role_id);
+
+    if (roleId === 1) {
+      return res.status(403).json({
+        status: "error",
+        message: "Only caseworkers and administrators can review documents",
+        data: null,
+      });
+    }
+
+    const allowedStatuses = new Set(["approved", "rejected", "under_review", "uploaded"]);
+    if (!status || !allowedStatuses.has(status)) {
+      return res.status(400).json({
+        status: "error",
+        message: "status must be approved, rejected, under_review, or uploaded",
+        data: null,
+      });
+    }
 
     const document = await req.tenantDb.Document.findByPk(documentId);
     if (!document) {

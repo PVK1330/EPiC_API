@@ -3,6 +3,11 @@ import { Op } from 'sequelize';
 import { notifyPaymentReceived } from '../../../services/notification.service.js';
 import { createWorkflowTask } from '../../../services/workflowTaskAutomation.service.js';
 import { evaluateCaseStageAfterEvent } from '../../../services/caseStageAutomation.service.js';
+import {
+  isCclReleasedToClient,
+  resolveCaseFeeTotal,
+  syncCclReleaseForApprovedFees,
+} from '../../../services/cclCandidateRelease.service.js';
 import platformDb from '../../../models/index.js';
 import { getTenantDb } from '../../../services/tenantDb.service.js';
 
@@ -43,7 +48,7 @@ async function findCasePaymentByTransaction(tenantDb, transactionId) {
 async function resolveCandidateCaseForPayment(tenantDb, userId) {
   if (!tenantDb || !userId) return { ok: false, status: 400, message: 'Unauthorized' };
 
-  const caseRecord = await tenantDb.Case.findOne({
+  let caseRecord = await tenantDb.Case.findOne({
     where: { candidateId: userId },
     order: [['created_at', 'DESC']],
   });
@@ -51,9 +56,17 @@ async function resolveCandidateCaseForPayment(tenantDb, userId) {
     return { ok: false, status: 404, message: 'No case found for your account' };
   }
 
-  const ccl = await tenantDb.CaseCclRecord.findOne({ where: { caseId: caseRecord.id } });
-  const payableStatuses = new Set(['issued', 'signed', 'accepted']);
-  if (!ccl || !payableStatuses.has(ccl.status)) {
+  const { ccl: syncedCcl, caseRecord: syncedCase } = await syncCclReleaseForApprovedFees({
+    tenantDb,
+    caseRecord,
+    performedBy: userId,
+  });
+  caseRecord = syncedCase || caseRecord;
+  const ccl =
+    syncedCcl ||
+    (await tenantDb.CaseCclRecord.findOne({ where: { caseId: caseRecord.id } }));
+
+  if (!isCclReleasedToClient(caseRecord, ccl)) {
     return {
       ok: false,
       status: 400,
@@ -62,7 +75,7 @@ async function resolveCandidateCaseForPayment(tenantDb, userId) {
     };
   }
 
-  const totalFee = Number(ccl.feeAmount) || Number(caseRecord.totalAmount) || 0;
+  const totalFee = resolveCaseFeeTotal(caseRecord, ccl);
   const paidAmount = Number(caseRecord.paidAmount) || 0;
   const balanceDue = Math.max(0, totalFee - paidAmount);
 

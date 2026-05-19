@@ -4,6 +4,7 @@ import {
   submitCclFeeProposal,
   reviewCclFeeProposal,
 } from '../../../services/cclFeeProposal.service.js';
+import { syncCclReleaseForApprovedFees } from '../../../services/cclCandidateRelease.service.js';
 import { evaluateCaseStageAfterEvent } from '../../../services/caseStageAutomation.service.js';
 import { recordTimelineEntry } from '../../../services/caseTimeline.service.js';
 
@@ -591,6 +592,28 @@ export const updateCaseFinance = async (req, res) => {
           },
         });
       }
+
+      if (amountStatus === "Approved") {
+        const sync = await syncCclReleaseForApprovedFees({
+          tenantDb: req.tenantDb,
+          caseRecord: caseData,
+          performedBy: userId,
+          organisationId,
+        });
+        if (sync.ccl) {
+          await caseData.reload();
+          return res.status(200).json({
+            status: "success",
+            message: "Fees approved and CCL sent to client",
+            data: {
+              totalAmount: caseData.totalAmount,
+              amountStatus: caseData.amountStatus,
+              amountNotes: caseData.amountNotes,
+              caseStage: caseData.caseStage,
+            },
+          });
+        }
+      }
     }
 
     if (amountStatus === 'Paid') {
@@ -701,6 +724,17 @@ export const updateCaseFinance = async (req, res) => {
     if (amountNotes !== undefined) updateData.amountNotes = amountNotes;
 
     await caseData.update(updateData);
+    await caseData.reload();
+
+    if (roleId === ROLES.ADMIN && amountStatus === "Approved") {
+      await syncCclReleaseForApprovedFees({
+        tenantDb: req.tenantDb,
+        caseRecord: caseData,
+        performedBy: userId,
+        organisationId,
+      });
+      await caseData.reload();
+    }
 
     await req.tenantDb.CaseTimeline.create({
       caseId: caseData.id,

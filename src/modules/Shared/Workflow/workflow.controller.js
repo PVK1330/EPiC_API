@@ -17,6 +17,18 @@ import {
   submitCclFeeProposal,
   reviewCclFeeProposal,
 } from "../../../services/cclFeeProposal.service.js";
+import {
+  isCclReleasedToClient,
+  resolveCaseFeeTotal,
+  syncCclReleaseForApprovedFees,
+} from "../../../services/cclCandidateRelease.service.js";
+import {
+  attachCclTemplateToCase,
+  isCclStageVisibleToCandidate,
+  resolveCclTemplate,
+} from "../../../services/cclTemplate.service.js";
+import path from "path";
+import fs from "fs";
 
 function organisationIdFromReq(req) {
   const id = req.user?.organisation_id;
@@ -348,7 +360,7 @@ export const proposeCclFees = async (req, res) => {
       proposedBy: req.user?.userId,
       organisationId: organisationIdFromReq(req),
       documentId,
-      allowFromAnyStage: false,
+      allowFromAnyStage: true,
     });
 
     if (!result.ok) {
@@ -459,21 +471,206 @@ export const getCclStatus = async (req, res) => {
   }
 };
 
-/** Candidate: accept Client Care Letter (checkbox confirmation) */
-export const acceptCcl = async (req, res) => {
+/** Candidate: load Client Care Letter status and fee schedule for their case */
+export const getCandidateCcl = async (req, res) => {
   try {
     const userId = req.user?.userId;
-    const caseRecord = await findCaseForUser(req.tenantDb, userId);
+    let caseRecord = await findCaseForUser(req.tenantDb, userId);
     if (!caseRecord) {
       return res.status(404).json({ status: "error", message: "No case found", data: null });
     }
 
-    const ccl = await req.tenantDb.CaseCclRecord.findOne({ where: { caseId: caseRecord.id } });
-    if (!ccl || ccl.status !== "issued") {
+    const { ccl: syncedCcl, caseRecord: syncedCase } = await syncCclReleaseForApprovedFees({
+      tenantDb: req.tenantDb,
+      caseRecord,
+      performedBy: null,
+      organisationId: organisationIdFromReq(req),
+    });
+    caseRecord = syncedCase || caseRecord;
+    const ccl =
+      syncedCcl ||
+      (await req.tenantDb.CaseCclRecord.findOne({
+        where: { caseId: caseRecord.id },
+      }));
+
+    if (isCclReleasedToClient(caseRecord, ccl) && ccl && !ccl.issuedDocumentId) {
+      await attachCclTemplateToCase({
+        tenantDb: req.tenantDb,
+        caseRecord,
+        ccl,
+        performedBy: null,
+        visaTypeName: caseRecord.visaType?.name,
+      }).catch((err) => console.error("attachCclTemplateToCase:", err));
+      await ccl.reload();
+    }
+
+    let issuedDocument = null;
+    if (ccl?.issuedDocumentId && req.tenantDb.Document) {
+      const doc = await req.tenantDb.Document.findByPk(ccl.issuedDocumentId, {
+        attributes: ["id", "documentName", "documentType", "documentPath", "status", "userFileName"],
+      });
+      issuedDocument = doc ? doc.get({ plain: true }) : null;
+    }
+
+    const templateMeta = resolveCclTemplate(
+      caseRecord.visaType?.name || "",
+      "",
+    );
+
+    res.status(200).json({
+      status: "success",
+      data: {
+        ccl: ccl ? ccl.get({ plain: true }) : null,
+        case: {
+          id: caseRecord.id,
+          caseId: caseRecord.caseId,
+          caseStage: resolveCaseStage(caseRecord),
+          amountStatus: caseRecord.amountStatus,
+          totalAmount: caseRecord.totalAmount,
+          paidAmount: caseRecord.paidAmount,
+          visaTypeName: caseRecord.visaType?.name || null,
+        },
+        issuedDocument,
+        template: {
+          label: templateMeta.label,
+          fileName: templateMeta.file,
+          available: templateMeta.exists,
+        },
+        releasedToClient: isCclReleasedToClient(caseRecord, ccl),
+        stageVisible: isCclStageVisibleToCandidate(caseRecord),
+      },
+    });
+  } catch (err) {
+    console.error("getCandidateCcl:", err);
+    res.status(500).json({ status: "error", message: err.message, data: null });
+  }
+};
+
+/** Candidate: download Client Care Letter document (attached template or uploaded file) */
+export const downloadCandidateCcl = async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+    let caseRecord = await findCaseForUser(req.tenantDb, userId);
+    if (!caseRecord) {
+      return res.status(404).json({ status: "error", message: "No case found", data: null });
+    }
+
+    const { ccl: syncedCcl, caseRecord: syncedCase } = await syncCclReleaseForApprovedFees({
+      tenantDb: req.tenantDb,
+      caseRecord,
+      performedBy: null,
+      organisationId: organisationIdFromReq(req),
+    });
+    caseRecord = syncedCase || caseRecord;
+    let ccl =
+      syncedCcl ||
+      (await req.tenantDb.CaseCclRecord.findOne({ where: { caseId: caseRecord.id } }));
+
+    if (!isCclReleasedToClient(caseRecord, ccl)) {
+      return res.status(403).json({
+        status: "error",
+        message: "Client Care Letter is not available for your case yet",
+        data: null,
+      });
+    }
+
+    if (ccl && !ccl.issuedDocumentId) {
+      await attachCclTemplateToCase({
+        tenantDb: req.tenantDb,
+        caseRecord,
+        ccl,
+        performedBy: null,
+        visaTypeName: caseRecord.visaType?.name,
+      });
+      await ccl.reload();
+    }
+
+    if (!ccl?.issuedDocumentId) {
+      const template = resolveCclTemplate(caseRecord.visaType?.name || "");
+      if (!template.exists) {
+        return res.status(404).json({
+          status: "error",
+          message: "Client Care Letter file not found",
+          data: null,
+        });
+      }
+      return res.download(template.absolutePath, template.file);
+    }
+
+    const document = await req.tenantDb.Document.findByPk(ccl.issuedDocumentId);
+    if (!document?.documentPath) {
+      return res.status(404).json({
+        status: "error",
+        message: "Client Care Letter file not found",
+        data: null,
+      });
+    }
+
+    const absolutePath = path.resolve(document.documentPath);
+    if (!fs.existsSync(absolutePath)) {
+      return res.status(404).json({
+        status: "error",
+        message: "Client Care Letter file not found on server",
+        data: null,
+      });
+    }
+
+    return res.download(
+      absolutePath,
+      document.userFileName || document.documentName || "client-care-letter.docx",
+    );
+  } catch (err) {
+    console.error("downloadCandidateCcl:", err);
+    res.status(500).json({ status: "error", message: err.message, data: null });
+  }
+};
+
+/** Candidate: accept Client Care Letter (checkbox confirmation) */
+export const acceptCcl = async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+    let caseRecord = await findCaseForUser(req.tenantDb, userId);
+    if (!caseRecord) {
+      return res.status(404).json({ status: "error", message: "No case found", data: null });
+    }
+
+    const { ccl: syncedCcl, caseRecord: syncedCase } = await syncCclReleaseForApprovedFees({
+      tenantDb: req.tenantDb,
+      caseRecord,
+      performedBy: userId,
+      organisationId: organisationIdFromReq(req),
+    });
+    caseRecord = syncedCase || caseRecord;
+    let ccl =
+      syncedCcl ||
+      (await req.tenantDb.CaseCclRecord.findOne({ where: { caseId: caseRecord.id } }));
+
+    if (!isCclReleasedToClient(caseRecord, ccl)) {
       return res.status(400).json({
         status: "error",
         message: "Client Care Letter has not been issued yet",
         data: null,
+      });
+    }
+
+    if (ccl && ccl.status !== "issued" && ccl.status !== "signed") {
+      await ccl.update({ status: "issued", issuedAt: ccl.issuedAt || new Date() });
+      await ccl.reload();
+    }
+
+    if (!ccl || (ccl.status !== "issued" && ccl.status !== "signed")) {
+      return res.status(400).json({
+        status: "error",
+        message: "Client Care Letter has not been issued yet",
+        data: null,
+      });
+    }
+
+    if (ccl.status === "signed") {
+      return res.status(200).json({
+        status: "success",
+        message: "Client Care Letter already accepted",
+        data: { ccl, paid: ["paid", "Paid"].includes(caseRecord.amountStatus) },
       });
     }
 
@@ -492,7 +689,7 @@ export const acceptCcl = async (req, res) => {
     });
 
     const paid =
-      caseRecord.amountStatus === "paid" ||
+      ["paid", "Paid"].includes(caseRecord.amountStatus) ||
       (Number(caseRecord.totalAmount) > 0 &&
         Number(caseRecord.paidAmount) >= Number(caseRecord.totalAmount));
 
@@ -620,30 +817,46 @@ export const getDecisionDocuments = async (req, res) => {
 export const getCandidatePaymentSchedule = async (req, res) => {
   try {
     const userId = req.user?.userId;
-    const caseRecord = await findCaseForUser(req.tenantDb, userId);
+    let caseRecord = await findCaseForUser(req.tenantDb, userId);
     if (!caseRecord) {
       return res.status(404).json({ status: "error", message: "No case found", data: null });
     }
 
-    const ccl = await req.tenantDb.CaseCclRecord.findOne({ where: { caseId: caseRecord.id } });
-    const visibleStatuses = new Set(["issued", "signed", "accepted"]);
-    const approved = ccl && visibleStatuses.has(ccl.status);
+    const { ccl: syncedCcl, caseRecord: syncedCase } = await syncCclReleaseForApprovedFees({
+      tenantDb: req.tenantDb,
+      caseRecord,
+      performedBy: null,
+      organisationId: organisationIdFromReq(req),
+    });
+    caseRecord = syncedCase || caseRecord;
+    const ccl =
+      syncedCcl ||
+      (await req.tenantDb.CaseCclRecord.findOne({ where: { caseId: caseRecord.id } }));
 
-    if (!approved) {
+    const approved = isCclReleasedToClient(caseRecord, ccl);
+    const totalFee = resolveCaseFeeTotal(caseRecord, ccl);
+    const paidAmount = Number(caseRecord.paidAmount) || 0;
+
+    if (!approved || totalFee <= 0) {
       return res.status(200).json({
         status: "success",
         data: {
           visible: false,
-          message: "Payment schedule will appear after your caseworker and admin approve your Client Care Letter fees.",
+          message:
+            totalFee <= 0 && approved
+              ? "Your fees are approved but no payment amount is set yet. Your caseworker will confirm the total shortly."
+              : "Payment schedule will appear after your caseworker and admin approve your Client Care Letter fees.",
           caseId: caseRecord.caseId,
           cclStatus: ccl?.status || "pending",
+          amountStatus: caseRecord.amountStatus,
         },
       });
     }
 
-    const installments = Array.isArray(ccl.installmentPlan) ? ccl.installmentPlan : [];
-    const totalFee = Number(ccl.feeAmount) || Number(caseRecord.totalAmount) || 0;
-    const paidAmount = Number(caseRecord.paidAmount) || 0;
+    const installments =
+      ccl && Array.isArray(ccl.installmentPlan) && ccl.installmentPlan.length > 0
+        ? ccl.installmentPlan
+        : [{ label: "Full fee", amount: totalFee, dueDate: null }];
 
     res.status(200).json({
       status: "success",
@@ -656,11 +869,13 @@ export const getCandidatePaymentSchedule = async (req, res) => {
         balanceDue: Math.max(0, totalFee - paidAmount),
         amountStatus: caseRecord.amountStatus,
         installments,
-        ccl: {
-          status: ccl.status,
-          issuedAt: ccl.issuedAt,
-          signedAt: ccl.signedAt,
-        },
+        ccl: ccl
+          ? {
+              status: ccl.status,
+              issuedAt: ccl.issuedAt,
+              signedAt: ccl.signedAt,
+            }
+          : null,
       },
     });
   } catch (err) {
