@@ -5,6 +5,7 @@ import { seedPlans } from './seeders/plan.seeder.js';
 import seedAdmin from './seeders/admin.seeder.js';
 import { seedRolesForDb } from './seeders/role.seeder.js';
 import { seedPermissionsForDb } from './seeders/permission.seeder.js';
+import { seedPlatformRbacForDb } from './seeders/platformRbac.seeder.js';
 import {
   createTenantPostgresDatabase,
   ensureTenantPostgresDatabase,
@@ -71,6 +72,7 @@ async function bootstrapPlatform() {
     // Seed Platform Level RBAC (needed for Superadmins)
     await seedRolesForDb(platformDb);
     await seedPermissionsForDb(platformDb);
+    await seedPlatformRbacForDb(platformDb);
 
     await platformDb.sequelize.query(
       'ALTER TABLE "organisations" ADD COLUMN IF NOT EXISTS "database_name" VARCHAR(63);',

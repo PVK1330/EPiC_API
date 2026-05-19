@@ -21,6 +21,11 @@ export default (sequelize, DataTypes) => {
         allowNull: false,
         defaultValue: "active",
       },
+      scope: {
+        type: DataTypes.STRING(20),
+        allowNull: false,
+        defaultValue: "tenant",
+      },
     },
     {
       tableName: "roles",

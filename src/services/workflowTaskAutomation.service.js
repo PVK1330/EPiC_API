@@ -20,7 +20,7 @@ function dueDateInDays(days = 3) {
   return d.toISOString().split("T")[0];
 }
 
-async function getActiveAdminIds(tenantDb) {
+export async function getActiveAdminIds(tenantDb) {
   const adminRole = await tenantDb.Role.findOne({
     where: { name: { [Op.iLike]: "admin" } },
     attributes: ["id"],

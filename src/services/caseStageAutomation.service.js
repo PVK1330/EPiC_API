@@ -118,6 +118,15 @@ export async function applyCaseStageChange({
     organisationId,
   }).catch((err) => console.error("syncWorkflowTasksForStage:", err));
 
+  const { runStageEntryHooks } = await import("./caseWorkflowExtended.service.js");
+  await runStageEntryHooks({
+    tenantDb,
+    caseRecord,
+    nextStage,
+    performedBy,
+    organisationId,
+  }).catch((err) => console.error("runStageEntryHooks:", err));
+
   return { previousStage, nextStage };
 }
 

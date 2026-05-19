@@ -955,14 +955,159 @@ export const getCaseWorkflowBundle = async (req, res) => {
       resolveTemplate(req.tenantDb, caseRecord.visaTypeId),
     ]);
 
+    const { getWorkflowMeta } = await import("../../../services/caseWorkflowExtended.service.js");
+
     res.status(200).json({
       status: "success",
       data: {
         caseStage: resolveCaseStage(caseRecord),
         dataCapture: { template, submission },
         ccl,
+        workflowMeta: getWorkflowMeta(caseRecord),
+        biometricsDate: caseRecord.biometricsDate,
       },
     });
+  } catch (err) {
+    res.status(500).json({ status: "error", message: err.message, data: null });
+  }
+};
+
+export const getDraftReviewState = async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+    const caseRecord = await findCaseForUser(req.tenantDb, userId);
+    if (!caseRecord) {
+      return res.status(404).json({ status: "error", message: "No case found", data: null });
+    }
+    const { getDraftReviewState: loadState } = await import(
+      "../../../services/caseWorkflowExtended.service.js"
+    );
+    const data = await loadState(req.tenantDb, caseRecord, userId);
+    res.status(200).json({ status: "success", data });
+  } catch (err) {
+    res.status(500).json({ status: "error", message: err.message, data: null });
+  }
+};
+
+export const submitDraftReviewResponse = async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+    const { approved } = req.body;
+    if (typeof approved !== "boolean") {
+      return res.status(400).json({ status: "error", message: "approved (boolean) is required", data: null });
+    }
+    const caseRecord = await findCaseForUser(req.tenantDb, userId);
+    if (!caseRecord) {
+      return res.status(404).json({ status: "error", message: "No case found", data: null });
+    }
+    const { submitDraftReviewResponse: submit } = await import(
+      "../../../services/caseWorkflowExtended.service.js"
+    );
+    const result = await submit({
+      tenantDb: req.tenantDb,
+      caseRecord,
+      candidateId: userId,
+      approved,
+    });
+    if (!result.ok) {
+      return res.status(result.status || 400).json({ status: "error", message: result.message, data: null });
+    }
+    res.status(200).json({ status: "success", data: result });
+  } catch (err) {
+    res.status(500).json({ status: "error", message: err.message, data: null });
+  }
+};
+
+export const getBiometricAvailability = async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+    const caseRecord = await findCaseForUser(req.tenantDb, userId);
+    if (!caseRecord) {
+      return res.status(404).json({ status: "error", message: "No case found", data: null });
+    }
+    const { getWorkflowMeta } = await import("../../../services/caseWorkflowExtended.service.js");
+    res.status(200).json({
+      status: "success",
+      data: {
+        caseStage: resolveCaseStage(caseRecord),
+        availability: getWorkflowMeta(caseRecord).biometricAvailability || null,
+        slot: getWorkflowMeta(caseRecord).biometricSlot || null,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ status: "error", message: err.message, data: null });
+  }
+};
+
+export const submitBiometricAvailability = async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+    const caseRecord = await findCaseForUser(req.tenantDb, userId);
+    if (!caseRecord) {
+      return res.status(404).json({ status: "error", message: "No case found", data: null });
+    }
+    const { submitBiometricAvailability: submit } = await import(
+      "../../../services/caseWorkflowExtended.service.js"
+    );
+    const result = await submit({
+      tenantDb: req.tenantDb,
+      caseRecord,
+      candidateId: userId,
+      payload: req.body,
+    });
+    if (!result.ok) {
+      return res.status(result.status || 400).json({ status: "error", message: result.message, data: null });
+    }
+    res.status(200).json({ status: "success", data: result });
+  } catch (err) {
+    res.status(500).json({ status: "error", message: err.message, data: null });
+  }
+};
+
+export const confirmBiometricSlot = async (req, res) => {
+  try {
+    const caseRecord = await findCaseByRef(req.tenantDb, req.params.caseId);
+    if (!caseRecord) {
+      return res.status(404).json({ status: "error", message: "Case not found", data: null });
+    }
+    const { confirmBiometricSlot: confirm } = await import(
+      "../../../services/caseWorkflowExtended.service.js"
+    );
+    const result = await confirm({
+      tenantDb: req.tenantDb,
+      caseRecord,
+      performedBy: req.user?.userId,
+      organisationId: organisationIdFromReq(req),
+      slot: req.body,
+    });
+    if (!result.ok) {
+      return res.status(result.status || 400).json({ status: "error", message: result.message, data: null });
+    }
+    res.status(200).json({ status: "success", data: result });
+  } catch (err) {
+    res.status(500).json({ status: "error", message: err.message, data: null });
+  }
+};
+
+export const recordVisaPortalUpdate = async (req, res) => {
+  try {
+    const caseRecord = await findCaseByRef(req.tenantDb, req.params.caseId);
+    if (!caseRecord) {
+      return res.status(404).json({ status: "error", message: "Case not found", data: null });
+    }
+    const { recordVisaPortalUpdate: record } = await import(
+      "../../../services/caseWorkflowExtended.service.js"
+    );
+    const result = await record({
+      tenantDb: req.tenantDb,
+      caseRecord,
+      performedBy: req.user?.userId,
+      payload: req.body,
+    });
+    if (!result.ok) {
+      return res.status(result.status || 400).json({ status: "error", message: result.message, data: null });
+    }
+    res.status(200).json({ status: "success", data: result });
   } catch (err) {
     res.status(500).json({ status: "error", message: err.message, data: null });
   }

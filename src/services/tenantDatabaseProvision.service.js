@@ -169,6 +169,9 @@ export async function syncTenantDatabaseSchema(databaseName) {
   await tenantDb.sequelize.query(
     'ALTER TABLE organisations ADD COLUMN IF NOT EXISTS smtp_settings JSONB DEFAULT NULL',
   );
+  await tenantDb.sequelize.query(
+    "ALTER TABLE cases ADD COLUMN IF NOT EXISTS workflow_meta JSONB DEFAULT '{}'::jsonb",
+  );
   evictTenantDb(databaseName);
 }
 

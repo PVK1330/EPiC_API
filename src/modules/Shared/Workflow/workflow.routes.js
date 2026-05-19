@@ -22,6 +22,10 @@ router.post("/ccl/confirm-signed", requireCandidate, workflowController.confirmC
 router.get("/payments/schedule", requireCandidate, workflowController.getCandidatePaymentSchedule);
 router.get("/my-tasks", requireCandidate, workflowController.getCandidateTasks);
 router.patch("/my-tasks/:taskId/complete", requireCandidate, workflowController.completeCandidateTask);
+router.get("/draft-review", requireCandidate, workflowController.getDraftReviewState);
+router.post("/draft-review", requireCandidate, workflowController.submitDraftReviewResponse);
+router.get("/biometric-availability", requireCandidate, workflowController.getBiometricAvailability);
+router.post("/biometric-availability", requireCandidate, workflowController.submitBiometricAvailability);
 
 // Caseworker / Admin
 const staff = checkRole([ROLES.ADMIN, ROLES.CASEWORKER]);
@@ -34,5 +38,7 @@ router.post("/cases/:caseId/ccl/propose", staff, workflowController.proposeCclFe
 router.post("/cases/:caseId/ccl/issue", staff, workflowController.issueCcl);
 router.patch("/cases/:caseId/ccl/fee-review", adminOnly, workflowController.reviewCclFees);
 router.get("/ccl/pending-approvals", adminOnly, workflowController.listCclFeePendingApprovals);
+router.post("/cases/:caseId/biometric-slot", staff, workflowController.confirmBiometricSlot);
+router.post("/cases/:caseId/visa-portal-update", staff, workflowController.recordVisaPortalUpdate);
 
 export default router;

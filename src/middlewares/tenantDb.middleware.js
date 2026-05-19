@@ -1,6 +1,6 @@
 import platformDb from "../models/index.js";
 import { getTenantDb } from "../services/tenantDb.service.js";
-import { isSuperAdminRole } from "../utils/tenantScope.js";
+import { isPlatformStaffUser } from "../utils/tenantScope.js";
 import { ROLES, hasFullAccessRole } from "./role.middleware.js";
 import { ensureAdminHasAllPermissions } from "../seeders/permission.seeder.js";
 
@@ -10,7 +10,7 @@ import { ensureAdminHasAllPermissions } from "../seeders/permission.seeder.js";
  */
 export async function attachTenantDb(req, res, next) {
   try {
-    if (isSuperAdminRole(req.user?.role_id)) {
+    if (isPlatformStaffUser(req.user)) {
       req.tenantDb = null;
       return next();
     }
