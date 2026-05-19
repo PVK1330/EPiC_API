@@ -153,15 +153,50 @@ const STAGE_TASK_MATRIX = {
     caseworkers: [{ title: "Monitor CCL acceptance and payments", priority: "medium", dueInDays: 5 }],
   },
   ccl_payment_received: {
-    caseworkers: [{ title: "Confirm signed CCL and payment — advance to submission", priority: "high", dueInDays: 2 }],
+    caseworkers: [
+      {
+        title: "Submit application on Visa Portal",
+        priority: "high",
+        dueInDays: 3,
+      },
+    ],
   },
   application_submitted: {
-    caseworkers: [{ title: "Record Home Office submission reference", priority: "medium", dueInDays: 2 }],
+    caseworkers: [
+      {
+        title: "Request candidate biometric availability",
+        priority: "high",
+        dueInDays: 2,
+      },
+    ],
+    candidates: [
+      {
+        title: "Provide biometrics appointment availability",
+        priority: "high",
+        dueInDays: 5,
+        notify: true,
+        message:
+          "Please submit your preferred location, date, and time for your biometrics appointment in the portal.",
+      },
+    ],
   },
   biometrics_booked: {
-    caseworkers: [{ title: "Send biometrics instructions to client", priority: "high", dueInDays: 2 }],
+    caseworkers: [
+      {
+        title: "Book biometrics slot and send confirmation to client",
+        priority: "high",
+        dueInDays: 2,
+      },
+    ],
   },
   biometrics_confirmation_sent: {
+    caseworkers: [
+      {
+        title: "Upload biometric documents to Visa Portal",
+        priority: "high",
+        dueInDays: 2,
+      },
+    ],
     candidates: [
       {
         title: "Attend biometrics appointment",
@@ -173,7 +208,13 @@ const STAGE_TASK_MATRIX = {
     ],
   },
   documents_uploaded: {
-    caseworkers: [{ title: "Verify pre-biometrics document bundle", priority: "medium", dueInDays: 3 }],
+    caseworkers: [
+      {
+        title: "Check visa portal email and record Home Office reply",
+        priority: "high",
+        dueInDays: 3,
+      },
+    ],
   },
   awaiting_decision: {
     caseworkers: [{ title: "Monitor Home Office decision status", priority: "low", dueInDays: 14 }],

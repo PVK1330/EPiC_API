@@ -3,10 +3,15 @@ import {
   getStepById,
   STAGE_TO_LEGACY_STATUS,
 } from "../constants/immigrationCaseProcess.js";
+import {
+  buildDocumentLookupMap,
+  findDocumentForChecklistItem,
+} from "../utils/documentMatch.utils.js";
 import { recordStatusChange, recordTimelineEntry } from "./caseTimeline.service.js";
 import { sendWorkflowStageEmail } from "./workflowEmail.service.js";
 import { notifyWorkflowStageChange } from "./workflowNotifications.service.js";
 import { syncWorkflowTasksForStage } from "./workflowTaskAutomation.service.js";
+import { onEnterDraftApplicationReview } from "./caseWorkflowProcess.service.js";
 
 const UPLOADED_STATUSES = new Set(["uploaded", "under_review", "approved"]);
 
@@ -21,14 +26,23 @@ async function getRequiredChecklistStatus(tenantDb, caseRecord) {
   const docs = await tenantDb.Document.findAll({
     where: { caseId: caseRecord.id },
   });
-  const byType = new Map(docs.map((d) => [d.documentType, d]));
+
+  const candidateId = caseRecord.candidateId;
+  if (candidateId) {
+    const orphanDocs = await tenantDb.Document.findAll({
+      where: { userId: candidateId, caseId: null },
+    });
+    docs.push(...orphanDocs);
+  }
+
+  const docLookup = buildDocumentLookupMap(docs);
 
   let hasRejected = false;
   let allApproved = true;
   let complete = true;
 
   for (const item of checklist) {
-    const doc = byType.get(item.documentType);
+    const doc = findDocumentForChecklistItem(item, docLookup);
     if (!doc || !UPLOADED_STATUSES.has(doc.status)) {
       complete = false;
       allApproved = false;
@@ -116,6 +130,12 @@ export async function applyCaseStageChange({
     organisationId,
   }).catch((err) => console.error("syncWorkflowTasksForStage:", err));
 
+  if (nextStageId === "draft_application_review") {
+    await onEnterDraftApplicationReview(tenantDb, caseRecord).catch((err) =>
+      console.error("onEnterDraftApplicationReview:", err),
+    );
+  }
+
   return { previousStage, nextStage: nextStageId };
 }
 
@@ -150,7 +170,7 @@ export async function evaluateCaseStageAfterEvent({
 
   if (trigger === "document_reviewed" || trigger === "document_uploaded") {
     if (currentStage === "data_capture_initial_docs" && checklist.complete && !checklist.hasRejected) {
-      return applyCaseStageChange({
+      await applyCaseStageChange({
         tenantDb,
         caseRecord,
         nextStageId: "application_preparation",
@@ -158,17 +178,44 @@ export async function evaluateCaseStageAfterEvent({
         reason: "Mandatory documents received — application preparation started",
         organisationId,
       });
+      await caseRecord.reload();
     }
 
-    if (["document_review", "application_preparation"].includes(currentStage) && checklist.allApproved) {
-      return applyCaseStageChange({
-        tenantDb,
-        caseRecord,
-        nextStageId: "draft_application_review",
-        performedBy,
-        reason: "All required documents approved — draft review",
-        organisationId,
-      });
+    if (checklist.allApproved && !checklist.hasRejected) {
+      const stageAfterUpload = resolveCaseStage(caseRecord);
+      const draftStep = getStepById("draft_application_review");
+      const currentStep = getStepById(stageAfterUpload);
+
+      if (
+        currentStep &&
+        draftStep &&
+        currentStep.order < draftStep.order &&
+        ["data_capture_initial_docs", "application_preparation", "document_review"].includes(
+          stageAfterUpload,
+        )
+      ) {
+        if (stageAfterUpload === "data_capture_initial_docs") {
+          await applyCaseStageChange({
+            tenantDb,
+            caseRecord,
+            nextStageId: "application_preparation",
+            performedBy,
+            reason: "Required documents approved — application preparation",
+            organisationId,
+            sendEmail: false,
+          });
+          await caseRecord.reload();
+        }
+
+        return applyCaseStageChange({
+          tenantDb,
+          caseRecord,
+          nextStageId: "draft_application_review",
+          performedBy,
+          reason: "All required documents approved — draft application review",
+          organisationId,
+        });
+      }
     }
   }
 

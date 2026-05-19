@@ -225,8 +225,10 @@ export const getCaseChecklist = async (req, res) => {
 
     // Calculate completion percentage
     const requiredCount = checklistWithStatus.filter(i => i.isRequired).length;
-    const completedCount = checklistWithStatus.filter(i => 
-      i.isRequired && (i.status === 'uploaded' || i.status === 'approved')
+    const completedCount = checklistWithStatus.filter(
+      (i) =>
+        i.isRequired &&
+        ["uploaded", "under_review", "approved"].includes(i.status),
     ).length;
     const completionPercentage = requiredCount > 0 
       ? Math.round((completedCount / requiredCount) * 100) 

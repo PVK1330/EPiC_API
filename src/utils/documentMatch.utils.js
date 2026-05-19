@@ -36,3 +36,23 @@ export function findDocumentForChecklistItem(item, lookupMap) {
   }
   return null;
 }
+
+/** Resolve uploaded type/label to the checklist row's canonical documentType. */
+export function resolveChecklistDocumentType(checklistItems = [], documentType, userFileName) {
+  if (!Array.isArray(checklistItems) || !checklistItems.length) {
+    return documentType || "General";
+  }
+  const candidates = [documentType, userFileName].filter(Boolean).map(normalizeDocKey);
+  for (const item of checklistItems) {
+    const keys = [item.documentType, item.documentName]
+      .filter(Boolean)
+      .map(normalizeDocKey);
+    if (candidates.some((c) => keys.includes(c))) {
+      return item.documentType;
+    }
+    if (candidates.some((c) => keys.some((k) => k.includes(c) || c.includes(k)))) {
+      return item.documentType;
+    }
+  }
+  return documentType || "General";
+}

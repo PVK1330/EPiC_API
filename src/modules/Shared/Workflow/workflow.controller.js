@@ -14,6 +14,15 @@ import {
   createTasksOnDataCaptureRejected,
 } from "../../../services/workflowTaskAutomation.service.js";
 import {
+  getWorkflowState,
+  submitDraftReviewDecision,
+  recordVisaPortalSubmission,
+  submitBiometricAvailability,
+  sendBiometricSlotToCandidate,
+  recordBiometricDocumentsUploaded,
+  recordVisaPortalReply,
+} from "../../../services/caseWorkflowProcess.service.js";
+import {
   submitCclFeeProposal,
   reviewCclFeeProposal,
 } from "../../../services/cclFeeProposal.service.js";
@@ -29,6 +38,7 @@ import {
 } from "../../../services/cclTemplate.service.js";
 import path from "path";
 import fs from "fs";
+import { buildCandidateCclApprovalTimeline } from "../../../utils/cclApprovalTimeline.utils.js";
 
 function organisationIdFromReq(req) {
   const id = req.user?.organisation_id;
@@ -517,19 +527,22 @@ export const getCandidateCcl = async (req, res) => {
       "",
     );
 
+    const plainCcl = ccl ? ccl.get({ plain: true }) : null;
+    const caseSummary = {
+      id: caseRecord.id,
+      caseId: caseRecord.caseId,
+      caseStage: resolveCaseStage(caseRecord),
+      amountStatus: caseRecord.amountStatus,
+      totalAmount: caseRecord.totalAmount,
+      paidAmount: caseRecord.paidAmount,
+      visaTypeName: caseRecord.visaType?.name || null,
+    };
+
     res.status(200).json({
       status: "success",
       data: {
-        ccl: ccl ? ccl.get({ plain: true }) : null,
-        case: {
-          id: caseRecord.id,
-          caseId: caseRecord.caseId,
-          caseStage: resolveCaseStage(caseRecord),
-          amountStatus: caseRecord.amountStatus,
-          totalAmount: caseRecord.totalAmount,
-          paidAmount: caseRecord.paidAmount,
-          visaTypeName: caseRecord.visaType?.name || null,
-        },
+        ccl: plainCcl,
+        case: caseSummary,
         issuedDocument,
         template: {
           label: templateMeta.label,
@@ -538,6 +551,7 @@ export const getCandidateCcl = async (req, res) => {
         },
         releasedToClient: isCclReleasedToClient(caseRecord, ccl),
         stageVisible: isCclStageVisibleToCandidate(caseRecord),
+        approvalSteps: buildCandidateCclApprovalTimeline(plainCcl, caseSummary),
       },
     });
   } catch (err) {
@@ -981,11 +995,299 @@ export const getCaseWorkflowBundle = async (req, res) => {
       status: "success",
       data: {
         caseStage: resolveCaseStage(caseRecord),
+        workflowState: getWorkflowState(caseRecord),
         dataCapture: { template, submission },
         ccl,
       },
     });
   } catch (err) {
+    res.status(500).json({ status: "error", message: err.message, data: null });
+  }
+};
+
+/** Candidate: workflow process status (draft review, biometrics, etc.) */
+export const getCandidateWorkflowProcess = async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+    const caseRecord = await findCaseForUser(req.tenantDb, userId);
+    if (!caseRecord) {
+      return res.status(404).json({ status: "error", message: "No case found", data: null });
+    }
+
+    const app = await req.tenantDb.CandidateApplication.findOne({ where: { userId } });
+
+    res.status(200).json({
+      status: "success",
+      data: {
+        caseId: caseRecord.caseId,
+        caseStage: resolveCaseStage(caseRecord),
+        workflowState: getWorkflowState(caseRecord),
+        application: app
+          ? {
+              status: app.status,
+              isLocked: app.isLocked,
+              submittedAt: app.submittedAt,
+            }
+          : null,
+      },
+    });
+  } catch (err) {
+    console.error("getCandidateWorkflowProcess:", err);
+    res.status(500).json({ status: "error", message: err.message, data: null });
+  }
+};
+
+/** Candidate: confirm or reject draft application (Yes / No) */
+export const submitCandidateDraftReview = async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+    const { confirmed } = req.body;
+    if (typeof confirmed !== "boolean") {
+      return res.status(400).json({
+        status: "error",
+        message: "confirmed must be true (Yes) or false (No)",
+        data: null,
+      });
+    }
+
+    const caseRecord = await findCaseForUser(req.tenantDb, userId);
+    if (!caseRecord) {
+      return res.status(404).json({ status: "error", message: "No case found", data: null });
+    }
+
+    const result = await submitDraftReviewDecision({
+      tenantDb: req.tenantDb,
+      caseRecord,
+      confirmed,
+      performedBy: userId,
+      organisationId: organisationIdFromReq(req),
+    });
+
+    if (!result.ok) {
+      return res.status(result.status || 400).json({
+        status: "error",
+        message: result.message,
+        data: null,
+      });
+    }
+
+    await caseRecord.reload();
+
+    res.status(200).json({
+      status: "success",
+      data: {
+        confirmed,
+        unlocked: result.unlocked || false,
+        caseStage: resolveCaseStage(caseRecord),
+        workflowState: getWorkflowState(caseRecord),
+      },
+    });
+  } catch (err) {
+    console.error("submitCandidateDraftReview:", err);
+    res.status(500).json({ status: "error", message: err.message, data: null });
+  }
+};
+
+/** Candidate: submit biometric appointment availability */
+export const submitCandidateBiometricAvailability = async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+    const { preferredLocation, preferredDate, preferredTime, notes } = req.body;
+
+    const caseRecord = await findCaseForUser(req.tenantDb, userId);
+    if (!caseRecord) {
+      return res.status(404).json({ status: "error", message: "No case found", data: null });
+    }
+
+    const result = await submitBiometricAvailability({
+      tenantDb: req.tenantDb,
+      caseRecord,
+      preferredLocation,
+      preferredDate,
+      preferredTime,
+      notes,
+      performedBy: userId,
+      organisationId: organisationIdFromReq(req),
+    });
+
+    if (!result.ok) {
+      return res.status(result.status || 400).json({
+        status: "error",
+        message: result.message,
+        data: null,
+      });
+    }
+
+    await caseRecord.reload();
+
+    res.status(200).json({
+      status: "success",
+      data: {
+        caseStage: resolveCaseStage(caseRecord),
+        workflowState: getWorkflowState(caseRecord),
+      },
+    });
+  } catch (err) {
+    console.error("submitCandidateBiometricAvailability:", err);
+    res.status(500).json({ status: "error", message: err.message, data: null });
+  }
+};
+
+/** Staff: mark application submitted on visa portal */
+export const staffRecordVisaPortalSubmission = async (req, res) => {
+  try {
+    const caseRecord = await findCaseByRef(req.tenantDb, req.params.caseId);
+    if (!caseRecord) {
+      return res.status(404).json({ status: "error", message: "Case not found", data: null });
+    }
+
+    const result = await recordVisaPortalSubmission({
+      tenantDb: req.tenantDb,
+      caseRecord,
+      reference: req.body?.reference || req.body?.submissionReference,
+      performedBy: req.user?.userId,
+      organisationId: organisationIdFromReq(req),
+    });
+
+    if (!result.ok) {
+      return res.status(result.status || 400).json({
+        status: "error",
+        message: result.message,
+        data: null,
+      });
+    }
+
+    await caseRecord.reload();
+
+    res.status(200).json({
+      status: "success",
+      data: {
+        caseStage: resolveCaseStage(caseRecord),
+        workflowState: getWorkflowState(caseRecord),
+      },
+    });
+  } catch (err) {
+    console.error("staffRecordVisaPortalSubmission:", err);
+    res.status(500).json({ status: "error", message: err.message, data: null });
+  }
+};
+
+/** Staff: send booked biometric slot to candidate */
+export const staffSendBiometricSlot = async (req, res) => {
+  try {
+    const caseRecord = await findCaseByRef(req.tenantDb, req.params.caseId);
+    if (!caseRecord) {
+      return res.status(404).json({ status: "error", message: "Case not found", data: null });
+    }
+
+    const { location, appointmentDate, appointmentTime, instructions } = req.body;
+    const result = await sendBiometricSlotToCandidate({
+      tenantDb: req.tenantDb,
+      caseRecord,
+      location,
+      appointmentDate,
+      appointmentTime,
+      instructions,
+      performedBy: req.user?.userId,
+      organisationId: organisationIdFromReq(req),
+    });
+
+    if (!result.ok) {
+      return res.status(result.status || 400).json({
+        status: "error",
+        message: result.message,
+        data: null,
+      });
+    }
+
+    await caseRecord.reload();
+
+    res.status(200).json({
+      status: "success",
+      data: {
+        caseStage: resolveCaseStage(caseRecord),
+        workflowState: getWorkflowState(caseRecord),
+      },
+    });
+  } catch (err) {
+    console.error("staffSendBiometricSlot:", err);
+    res.status(500).json({ status: "error", message: err.message, data: null });
+  }
+};
+
+/** Staff: confirm biometric documents uploaded */
+export const staffRecordBiometricDocsUploaded = async (req, res) => {
+  try {
+    const caseRecord = await findCaseByRef(req.tenantDb, req.params.caseId);
+    if (!caseRecord) {
+      return res.status(404).json({ status: "error", message: "Case not found", data: null });
+    }
+
+    const result = await recordBiometricDocumentsUploaded({
+      tenantDb: req.tenantDb,
+      caseRecord,
+      performedBy: req.user?.userId,
+      organisationId: organisationIdFromReq(req),
+    });
+
+    if (!result.ok) {
+      return res.status(result.status || 400).json({
+        status: "error",
+        message: result.message,
+        data: null,
+      });
+    }
+
+    await caseRecord.reload();
+
+    res.status(200).json({
+      status: "success",
+      data: {
+        caseStage: resolveCaseStage(caseRecord),
+        workflowState: getWorkflowState(caseRecord),
+      },
+    });
+  } catch (err) {
+    console.error("staffRecordBiometricDocsUploaded:", err);
+    res.status(500).json({ status: "error", message: err.message, data: null });
+  }
+};
+
+/** Staff: record visa portal email reply */
+export const staffRecordVisaPortalReply = async (req, res) => {
+  try {
+    const caseRecord = await findCaseByRef(req.tenantDb, req.params.caseId);
+    if (!caseRecord) {
+      return res.status(404).json({ status: "error", message: "Case not found", data: null });
+    }
+
+    const result = await recordVisaPortalReply({
+      tenantDb: req.tenantDb,
+      caseRecord,
+      replySummary: req.body?.replySummary || req.body?.summary,
+      performedBy: req.user?.userId,
+      organisationId: organisationIdFromReq(req),
+    });
+
+    if (!result.ok) {
+      return res.status(result.status || 400).json({
+        status: "error",
+        message: result.message,
+        data: null,
+      });
+    }
+
+    await caseRecord.reload();
+
+    res.status(200).json({
+      status: "success",
+      data: {
+        caseStage: resolveCaseStage(caseRecord),
+        workflowState: getWorkflowState(caseRecord),
+      },
+    });
+  } catch (err) {
+    console.error("staffRecordVisaPortalReply:", err);
     res.status(500).json({ status: "error", message: err.message, data: null });
   }
 };

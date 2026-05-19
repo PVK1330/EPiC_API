@@ -12,6 +12,7 @@ import {
   buildDocumentLookupMap,
   findDocumentForChecklistItem,
   normalizeDocKey,
+  resolveChecklistDocumentType,
 } from '../../../utils/documentMatch.utils.js';
 
 const documentsColumnMetadataByDb = new Map();
@@ -87,6 +88,8 @@ export const uploadDocuments = async (req, res) => {
     const userFileName = req.body?.userFileName;
     const expiryDate = req.body?.expiryDate || null;
     const notes = req.body?.notes || null;
+    let resolvedDocumentType = documentType || "General";
+
     const uploadedFiles = req.files;
 
     if (!uploadedFiles || uploadedFiles.length === 0) {
@@ -182,10 +185,29 @@ export const uploadDocuments = async (req, res) => {
 
     const { hasNotesColumn } = await getDocumentAttributes(req.tenantDb);
 
+    if (numericCaseId && caseRecord?.visaTypeId && req.tenantDb.DocumentChecklist) {
+      const checklistRows = await req.tenantDb.DocumentChecklist.findAll({
+        where: { visaTypeId: caseRecord.visaTypeId },
+      });
+      resolvedDocumentType = resolveChecklistDocumentType(
+        checklistRows.map((r) => r.get({ plain: true })),
+        documentType,
+        userFileName,
+      );
+    }
+
     let caseDocsForMatch = [];
     if (numericCaseId) {
+      const docWhere = caseRecord?.candidateId
+        ? {
+            [Op.or]: [
+              { caseId: numericCaseId },
+              { userId: caseRecord.candidateId, caseId: null },
+            ],
+          }
+        : { caseId: numericCaseId };
       caseDocsForMatch = await req.tenantDb.Document.findAll({
-        where: { caseId: numericCaseId },
+        where: docWhere,
         order: [["uploadedAt", "DESC"]],
       });
     }
@@ -207,7 +229,7 @@ export const uploadDocuments = async (req, res) => {
 
       const systemDocumentName = generateSystemDocumentName(
         file.originalname,
-        documentType,
+        resolvedDocumentType,
         index,
       );
       const targetPath = path.join(targetDir, systemDocumentName);
@@ -236,7 +258,7 @@ export const uploadDocuments = async (req, res) => {
       }
 
       let document = findDocumentForChecklistItem(
-        { documentType, documentName: userFileName },
+        { documentType: resolvedDocumentType, documentName: userFileName },
         caseDocLookup,
       );
 
@@ -258,7 +280,7 @@ export const uploadDocuments = async (req, res) => {
           where: {
             userId,
             caseId: null,
-            documentType,
+            documentType: resolvedDocumentType,
           },
           order: [["uploadedAt", "DESC"]],
         });
@@ -293,12 +315,15 @@ export const uploadDocuments = async (req, res) => {
         document = await req.tenantDb.Document.create({
           userId,
           caseId: numericCaseId || null,
-          documentType: documentType || "General",
+          documentType: resolvedDocumentType,
           ...uploadMeta,
         });
       }
 
       caseDocLookup.set(normalizeDocKey(document.documentType), document);
+      if (userFileName) {
+        caseDocLookup.set(normalizeDocKey(userFileName), document);
+      }
 
       uploadedDocuments.push({
         id: document.id,
@@ -754,6 +779,14 @@ export const updateDocumentStatus = async (req, res) => {
     try {
       if (document.caseId) {
         caseData = await req.tenantDb.Case.findByPk(document.caseId);
+      } else if (document.userId) {
+        caseData = await req.tenantDb.Case.findOne({
+          where: { candidateId: document.userId },
+          order: [["created_at", "DESC"]],
+        });
+        if (caseData) {
+          await document.update({ caseId: caseData.id });
+        }
       }
       const docNotificationData = {
         id: document.id,
