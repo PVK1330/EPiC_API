@@ -10,6 +10,8 @@ import * as paymentController from './payment.controller.js';
 import * as moduleController from './module.controller.js';
 import * as announcementController from './superadminAnnouncement.controller.js';
 import { getPlatformSmtpSettings } from '../Admin/Settings/smtp.settings.controller.js';
+import * as platformSettingsController from './platformSettings.controller.js';
+import { handlePlatformLogoUpload, handlePlatformFaviconUpload } from '../../middlewares/upload.middleware.js';
 
 const router = express.Router();
 
@@ -71,6 +73,22 @@ router.get('/analytics', (req, res) => {
 });
 
 router.get('/smtp-settings', getPlatformSmtpSettings);
+
+// ── Platform Settings ────────────────────────────────────────────────────────
+// Identity
+router.get('/settings/identity',   platformSettingsController.getIdentitySettings);
+router.patch('/settings/identity', platformSettingsController.updateIdentitySettings);
+router.post('/settings/identity/logo',    handlePlatformLogoUpload,    platformSettingsController.uploadPlatformLogo);
+router.post('/settings/identity/favicon', handlePlatformFaviconUpload, platformSettingsController.uploadPlatformFavicon);
+
+// Connectivity (SMTP + S3)
+router.get('/settings/connectivity',            platformSettingsController.getConnectivitySettings);
+router.patch('/settings/connectivity',          platformSettingsController.updateConnectivitySettings);
+router.post('/settings/connectivity/smtp/test', platformSettingsController.testSmtpConnection);
+
+// Security
+router.get('/settings/security',   platformSettingsController.getSecuritySettings);
+router.patch('/settings/security', platformSettingsController.updateSecuritySettings);
 
 router.get('/modules', moduleController.getAllModules);
 router.post('/modules', moduleController.createModule);

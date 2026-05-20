@@ -161,3 +161,46 @@ export const handleCclTemplateUpload = (req, res, next) => {
     });
   });
 };
+
+// ── Platform branding (logo + favicon) ──────────────────────────────────────
+const platformBrandDir = 'uploads/platform/';
+if (!fs.existsSync(platformBrandDir)) {
+  fs.mkdirSync(platformBrandDir, { recursive: true });
+}
+
+const platformBrandStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    cb(null, platformBrandDir);
+  },
+  filename: (req, file, cb) => {
+    // field name is either "logo" or "favicon" — use it as the stable filename
+    // so re-uploading replaces the previous file predictably
+    const field = file.fieldname === 'favicon' ? 'favicon' : 'logo';
+    const ext = path.extname(file.originalname).toLowerCase() || '.png';
+    cb(null, `platform-${field}${ext}`);
+  },
+});
+
+const platformBrandUpload = multer({
+  storage: platformBrandStorage,
+  limits: { fileSize: 2 * 1024 * 1024 }, // 2 MB
+  fileFilter: (_req, file, cb) => {
+    const allowed = ['.png', '.jpg', '.jpeg', '.webp', '.svg', '.ico'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowed.includes(ext)) { cb(null, true); return; }
+    cb(new Error('Image must be PNG, JPG, WEBP, SVG, or ICO.'));
+  },
+});
+
+const makePlatformBrandHandler = (field) => (req, res, next) => {
+  platformBrandUpload.single(field)(req, res, (err) => {
+    if (!err) return next();
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({ status: 'error', message: 'File too large (max 2 MB).', data: null });
+    }
+    return res.status(400).json({ status: 'error', message: err.message || 'Upload failed', data: null });
+  });
+};
+
+export const handlePlatformLogoUpload    = makePlatformBrandHandler('logo');
+export const handlePlatformFaviconUpload = makePlatformBrandHandler('favicon');
