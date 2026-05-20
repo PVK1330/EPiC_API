@@ -224,4 +224,35 @@ export class CandidateService {
     await candidate.update({ status: "inactive" });
     return true;
   }
+
+  async getCandidateApplication(userId) {
+    const candidate = await this.repository.findById(userId);
+    if (!candidate) throw new Error("Candidate not found");
+    
+    const application = await this.repository.findApplicationByUserId(userId);
+    return application || null;
+  }
+
+  async updateCandidateApplication(userId, applicationData) {
+    const candidate = await this.repository.findById(userId);
+    if (!candidate) throw new Error("Candidate not found");
+
+    const application = await this.repository.transaction(async (t) => {
+      let app = await this.repository.findApplicationByUserId(userId, t);
+      
+      if (app) {
+        app = await this.repository.updateApplication(app, applicationData, t);
+      } else {
+        app = await this.repository.createApplication({
+          userId,
+          ...applicationData,
+          organisation_id: candidate.organisation_id
+        }, t);
+      }
+
+      return app;
+    });
+
+    return application;
+  }
 }

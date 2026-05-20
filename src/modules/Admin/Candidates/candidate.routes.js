@@ -13,5 +13,7 @@ router.get("/:id", controller.getCandidateById);
 router.patch("/:id", validateCandidate, controller.updateCandidate);
 router.delete("/:id", controller.deleteCandidate);
 router.post("/:id/reset-password", controller.resetCandidatePassword);
+router.get("/:id/application", controller.getCandidateApplication);
+router.put("/:id/application", controller.updateCandidateApplication);
 
 export default router;

@@ -67,3 +67,21 @@ export const resetCandidatePassword = catchAsync(async (req, res) => {
   
   return ApiResponse.success(res, "Password reset successfully");
 });
+
+// Get Candidate Application
+export const getCandidateApplication = catchAsync(async (req, res) => {
+  const { id } = req.params;
+  const service = new CandidateService(req.tenantDb);
+  const application = await service.getCandidateApplication(id);
+  
+  return ApiResponse.success(res, "Candidate application retrieved successfully", { application });
+});
+
+// Update Candidate Application
+export const updateCandidateApplication = catchAsync(async (req, res) => {
+  const { id } = req.params;
+  const service = new CandidateService(req.tenantDb);
+  const application = await service.updateCandidateApplication(id, req.body);
+  
+  return ApiResponse.success(res, "Candidate application updated successfully", { application });
+});
