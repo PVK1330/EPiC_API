@@ -4,6 +4,7 @@ import { Router } from 'express';
 import authRoutes from '../modules/Auth/auth.routes.js';
 import userRoutes from '../modules/Auth/user.routes.js';
 import adminRoutes from '../modules/Admin/Dashboard/admin.routes.js';
+import adminAnnouncementRoutes from '../modules/Admin/Announcements/admin.announcements.routes.js';
 import adminSettingsRoutes from '../modules/Admin/Settings/admin.settings.routes.js';
 import adminDocumentChecklistRoutes from '../modules/Admin/Settings/admin.documentChecklist.routes.js';
 import adminCandidateRoutes from '../modules/Admin/Candidates/candidate.routes.js';
@@ -59,6 +60,7 @@ router.use('/admin/audit-logs', auditLogRoutes);
 router.use('/admin/candidates', adminCandidateRoutes);
 router.use('/admin/document-checklists', adminDocumentChecklistRoutes);
 router.use('/admin/licence', adminLicenceRoutes);
+router.use('/admin/announcements', adminAnnouncementRoutes);
 router.use('/admin', adminRoutes);
 
 // Caseworker

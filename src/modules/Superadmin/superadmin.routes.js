@@ -8,6 +8,7 @@ import * as subscriptionController from './subscription.controller.js';
 import * as invoiceController from './invoice.controller.js';
 import * as paymentController from './payment.controller.js';
 import * as moduleController from './module.controller.js';
+import * as announcementController from './superadminAnnouncement.controller.js';
 import { getPlatformSmtpSettings } from '../Admin/Settings/smtp.settings.controller.js';
 
 const router = express.Router();
@@ -23,6 +24,8 @@ router.get('/platform-roles', teamController.listPlatformRoles);
 router.post('/platform-roles', requirePlatformPermission('platform.team.manage'), teamController.createPlatformRole);
 router.patch('/platform-roles/:id', requirePlatformPermission('platform.team.manage'), teamController.updatePlatformRole);
 router.delete('/platform-roles/:id', requirePlatformPermission('platform.team.manage'), teamController.deletePlatformRole);
+
+router.post('/announcements', announcementController.createPlatformAnnouncement);
 
 router.get('/organisations', orgController.listOrganisations);
 router.get('/organisations/:id', orgController.getOrganisationById);
