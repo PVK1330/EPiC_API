@@ -21,9 +21,12 @@ export function getWorkflowMeta(caseRecord) {
 }
 
 async function saveWorkflowMeta(tenantDb, caseRecord, patch) {
-  const next = { ...getWorkflowMeta(caseRecord), ...patch };
-  await caseRecord.update({ workflowMeta: next });
-  return next;
+  const nextMeta = { ...getWorkflowMeta(caseRecord), ...patch };
+  const nextState = { ...(caseRecord.workflowState || {}), ...patch };
+  await caseRecord.update({ workflowMeta: nextMeta, workflowState: nextState });
+  caseRecord.workflowMeta = nextMeta;
+  caseRecord.workflowState = nextState;
+  return nextMeta;
 }
 
 async function lockCandidateApplication(tenantDb, candidateId, locked) {

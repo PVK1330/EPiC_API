@@ -5,8 +5,15 @@ import {
   reviewCclFeeProposal,
 } from '../../../services/cclFeeProposal.service.js';
 import { syncCclReleaseForApprovedFees } from '../../../services/cclCandidateRelease.service.js';
-import { evaluateCaseStageAfterEvent } from '../../../services/caseStageAutomation.service.js';
+import { evaluateCaseStageAfterEvent, applyCaseStageChange } from '../../../services/caseStageAutomation.service.js';
 import { recordTimelineEntry } from '../../../services/caseTimeline.service.js';
+import {
+  assertSubmissionGate,
+  resolveCaseStage,
+  getStepById,
+  normalizeCaseStage,
+  isValidCaseStage,
+} from '../../../constants/immigrationCaseProcess.js';
 
 const MANUAL_PAYMENT_METHOD_MAP = {
   bank_transfer: 'bank_transfer',
@@ -424,10 +431,38 @@ export const updateCaseStatus = async (req, res) => {
       });
     }
 
-    // Update case with new values
+    const previousStage = resolveCaseStage(caseData);
+    let nextStage = caseStage !== undefined ? normalizeCaseStage(caseStage) : undefined;
+
+    if (nextStage !== undefined && nextStage !== previousStage) {
+      if (!isValidCaseStage(nextStage)) {
+        return res.status(400).json({
+          status: "error",
+          message: "Valid caseStage is required",
+          data: null,
+        });
+      }
+
+      const gate = await assertSubmissionGate(req.tenantDb, caseData, nextStage);
+      if (!gate.ok) {
+        return res.status(400).json({
+          status: "error",
+          message: gate.message,
+          data: null,
+        });
+      }
+    }
+
+    const previousState = {
+      status: caseData.status,
+      caseStage: caseData.caseStage,
+      priority: caseData.priority
+    };
+
+    // Update case with other new values
     const updateData = {};
-    if (status !== undefined) updateData.status = status;
-    if (caseStage !== undefined) updateData.caseStage = caseStage;
+    if (status !== undefined && (nextStage === undefined || nextStage === previousStage)) updateData.status = status;
+    if (caseStage !== undefined && (nextStage === undefined || nextStage === previousStage)) updateData.caseStage = caseStage;
     if (priority !== undefined) updateData.priority = priority;
     if (assignedcaseworkerId !== undefined) {
       const cwIds = Array.isArray(assignedcaseworkerId) ? assignedcaseworkerId : (assignedcaseworkerId ? [assignedcaseworkerId] : []);
@@ -437,7 +472,24 @@ export const updateCaseStatus = async (req, res) => {
     if (submissionDate !== undefined) updateData.submissionDate = submissionDate;
     if (decisionDate !== undefined) updateData.decisionDate = decisionDate;
 
-    await caseData.update(updateData);
+    if (Object.keys(updateData).length > 0) {
+      await caseData.update(updateData);
+    }
+
+    if (nextStage !== undefined && nextStage !== previousStage) {
+      if (nextStage === "biometrics_booked" && !caseData.biometricsDate) {
+        await caseData.update({ biometricsDate: new Date() });
+      }
+      await applyCaseStageChange({
+        tenantDb: req.tenantDb,
+        caseRecord: caseData,
+        nextStageId: nextStage,
+        performedBy: req.user?.id,
+        reason: `Workflow moved to: ${getStepById(nextStage)?.title || nextStage}`,
+        sendEmail: true,
+        organisationId: req.user?.organisation_id ?? null,
+      });
+    }
 
     // Add timeline entry
     await req.tenantDb.CaseTimeline.create({
@@ -445,15 +497,11 @@ export const updateCaseStatus = async (req, res) => {
       actionType: 'status_changed',
       description: `Case status/stage updated`,
       performedBy: req.user?.id,
-      previousValue: JSON.stringify({
-        status: caseData.status,
-        caseStage: caseData.caseStage,
-        priority: caseData.priority
-      }),
+      previousValue: JSON.stringify(previousState),
       newValue: JSON.stringify({
-        status: status || caseData.status,
-        caseStage: caseStage || caseData.caseStage,
-        priority: priority || caseData.priority
+        status: status || previousState.status,
+        caseStage: caseStage || previousState.caseStage,
+        priority: priority || previousState.priority
       })
     });
 

@@ -32,14 +32,50 @@ export function isPlatformStaffUser(user) {
   return user != null && (user.organisation_id == null || user.organisation_id === "");
 }
 
-/** DB-per-tenant: no row-level org filter needed on case queries. */
-export function caseWhereForRequest(_req) {
-  return {};
+/** Organisation id from JWT (null = platform / unscoped within tenant DB). */
+export function organisationIdFromRequest(req) {
+  const raw = req?.user?.organisation_id;
+  if (raw == null || raw === "") return null;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-/** @deprecated DB-per-tenant — returns `where` unchanged. */
-export function mergeCaseWhere(_req, where = {}) {
-  return where;
+function organisationScopeCondition(orgId) {
+  if (orgId == null) return null;
+  return {
+    [Op.or]: [{ organisation_id: orgId }, { organisation_id: null }],
+  };
+}
+
+/** Restrict Sequelize `where` to the requester's organisation (plus legacy null rows). */
+export function applyOrganisationScope(where = {}, orgId) {
+  const scope = organisationScopeCondition(orgId);
+  if (!scope) return where;
+  if (!where || Object.keys(where).length === 0) return scope;
+  return { [Op.and]: [where, scope] };
+}
+
+/** Case list filter for the current admin/caseworker session. */
+export function mergeCaseWhere(req, where = {}) {
+  return applyOrganisationScope(where, organisationIdFromRequest(req));
+}
+
+/** User list filter for the current organisation. */
+export function mergeUserWhere(req, where = {}) {
+  return applyOrganisationScope(where, organisationIdFromRequest(req));
+}
+
+/** @deprecated alias */
+export function caseWhereForRequest(req) {
+  return mergeCaseWhere(req, {});
+}
+
+/** True when a user row belongs to the requester's organisation (or is legacy unscoped). */
+export function userBelongsToOrganisation(user, orgId) {
+  if (orgId == null || !user) return true;
+  const rowOrg = user.organisation_id;
+  if (rowOrg == null || rowOrg === "") return true;
+  return Number(rowOrg) === orgId;
 }
 
 /**

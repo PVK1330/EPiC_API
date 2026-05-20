@@ -87,6 +87,15 @@ function normaliseLabel(...parts) {
     .trim();
 }
 
+function mimeTypeFromPath(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  if (ext === ".pdf") return "application/pdf";
+  if (ext === ".docx") {
+    return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  }
+  return "application/octet-stream";
+}
+
 export function resolveCclTemplate(visaTypeName = "", petitionTypeName = "") {
   const haystack = normaliseLabel(visaTypeName, petitionTypeName);
   const rule = TEMPLATE_RULES.find((r) => r.match(haystack)) || DEFAULT_RULE;
@@ -137,12 +146,15 @@ export async function attachCclTemplateToCase({
     }
   }
 
+  let visaRow = null;
+  if (caseRecord.visaTypeId && tenantDb.VisaType) {
+    visaRow = await tenantDb.VisaType.findByPk(caseRecord.visaTypeId, {
+      attributes: ["id", "name", "cclTemplatePath", "cclTemplateName"],
+    });
+  }
+
   const visaName =
-    visaTypeName ||
-    caseRecord.visaType?.name ||
-    (caseRecord.visaTypeId
-      ? (await tenantDb.VisaType?.findByPk(caseRecord.visaTypeId, { attributes: ["name"] }))?.name
-      : null);
+    visaTypeName || caseRecord.visaType?.name || visaRow?.name || null;
 
   let petitionName = petitionTypeName;
   if (!petitionName && caseRecord.petitionTypeId && tenantDb.PetitionType) {
@@ -151,10 +163,24 @@ export async function attachCclTemplateToCase({
     )?.name;
   }
 
-  const template = resolveCclTemplate(visaName, petitionName);
-  if (!template.exists) {
-    console.warn("CCL template missing:", template.absolutePath);
-    return { document: null, template };
+  let template = null;
+  const customPath = visaRow?.cclTemplatePath;
+  if (customPath && fs.existsSync(customPath)) {
+    template = {
+      id: "custom_visa_template",
+      file: path.basename(customPath),
+      label: visaRow.cclTemplateName || `Custom CCL (${visaName || "visa"})`,
+      absolutePath: path.resolve(customPath),
+      exists: true,
+      visaTypeName: visaName,
+      custom: true,
+    };
+  } else {
+    template = resolveCclTemplate(visaName, petitionName);
+    if (!template.exists) {
+      console.warn("CCL template missing:", template.absolutePath);
+      return { document: null, template };
+    }
   }
 
   const caseFolder = path.join("uploads", "caseimages", String(caseRecord.id), "ccl");
@@ -177,7 +203,7 @@ export async function attachCclTemplateToCase({
     userFileName: safeBase,
     documentPath: destPath.replace(/\\/g, "/"),
     documentCategory: "legal",
-    mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    mimeType: mimeTypeFromPath(destPath),
     fileSize: fs.statSync(destPath).size,
     status: "approved",
     uploadedBy: performedBy,

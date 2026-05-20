@@ -16,6 +16,51 @@ function interpolate(template, vars) {
   return String(template).replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] ?? "");
 }
 
+function parseAssignedCaseworkerIds(caseRecord) {
+  const raw = caseRecord?.assignedcaseworkerId ?? caseRecord?.assignedCaseworkerId;
+  if (!raw) return [];
+  if (Array.isArray(raw)) {
+    return raw.map(Number).filter((n) => Number.isFinite(n) && n > 0);
+  }
+  if (typeof raw === "object" && raw !== null) {
+    const ids = raw.ids ?? raw.caseworkers ?? Object.values(raw);
+    if (Array.isArray(ids)) {
+      return ids.map(Number).filter((n) => Number.isFinite(n) && n > 0);
+    }
+  }
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? [n] : [];
+}
+
+function fullName(user, fallback = "") {
+  if (!user) return fallback;
+  const name = `${user.first_name || ""} ${user.last_name || ""}`.trim();
+  return name || fallback;
+}
+
+function formatBiometricsDate(caseRecord) {
+  if (caseRecord.biometricsDate) {
+    return new Date(caseRecord.biometricsDate).toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
+  }
+  const ws =
+    caseRecord?.workflowState && typeof caseRecord.workflowState === "object"
+      ? caseRecord.workflowState
+      : {};
+  const bookedDate = ws?.biometrics?.bookedSlot?.appointmentDate;
+  if (bookedDate) {
+    return new Date(bookedDate).toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
+  }
+  return "TBC";
+}
+
 async function loadCaseContext(tenantDb, caseRecord) {
   const candidate = caseRecord.candidateId
     ? await tenantDb.User.findByPk(caseRecord.candidateId, {
@@ -25,7 +70,22 @@ async function loadCaseContext(tenantDb, caseRecord) {
   const visaType = caseRecord.visaTypeId
     ? await tenantDb.VisaType.findByPk(caseRecord.visaTypeId, { attributes: ["id", "name"] })
     : null;
-  return { candidate, visaType };
+
+  const cwIds = parseAssignedCaseworkerIds(caseRecord);
+  const caseworker = cwIds.length
+    ? await tenantDb.User.findByPk(cwIds[0], {
+        attributes: ["id", "first_name", "last_name", "email"],
+      })
+    : null;
+
+  const sponsorUserId = caseRecord.sponsorId || caseRecord.businessId || null;
+  const sponsor = sponsorUserId
+    ? await tenantDb.User.findByPk(sponsorUserId, {
+        attributes: ["id", "first_name", "last_name", "email"],
+      })
+    : null;
+
+  return { candidate, visaType, caseworker, sponsor };
 }
 
 /**
@@ -46,21 +106,24 @@ export async function sendWorkflowStageEmail({
     });
     if (!row?.subject) return { sent: false, reason: "no_template" };
 
-    const { candidate, visaType } = await loadCaseContext(tenantDb, caseRecord);
+    const { candidate, visaType, caseworker, sponsor } = await loadCaseContext(
+      tenantDb,
+      caseRecord,
+    );
     if (!candidate?.email) return { sent: false, reason: "no_email" };
 
     const vars = {
-      client_name: `${candidate.first_name || ""} ${candidate.last_name || ""}`.trim() || "Client",
+      client_name: fullName(candidate, "Client"),
       case_ref: caseRecord.caseId || String(caseRecord.id),
       visa_type: visaType?.name || "your application",
       firm_name: process.env.FIRM_NAME || "VisaFlow",
-      biometrics_date: caseRecord.biometricsDate
-        ? new Date(caseRecord.biometricsDate).toLocaleDateString("en-GB")
-        : "TBC",
+      biometrics_date: formatBiometricsDate(caseRecord),
       amount:
         caseRecord.totalAmount != null
           ? `£${Number(caseRecord.totalAmount).toFixed(2)}`
           : "",
+      caseworker_name: fullName(caseworker, "Your Caseworker"),
+      employer_name: fullName(sponsor, "Employer"),
     };
 
     const subject = interpolate(row.subject, vars);
@@ -71,7 +134,10 @@ export async function sendWorkflowStageEmail({
       to: candidate.email,
       subject,
       text: body,
-      html: '<div style="font-family:sans-serif;line-height:1.6;white-space:pre-wrap">' + body + '</div>',
+      html:
+        '<div style="font-family:sans-serif;line-height:1.6;white-space:pre-wrap">' +
+        body +
+        "</div>",
     });
 
     if (!result.sent) {

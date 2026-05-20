@@ -5,6 +5,8 @@ import fs from 'fs';
 import path from 'path';
 
 import { ROLES } from '../../../middlewares/role.middleware.js';
+import platformDb from '../../../models/index.js';
+import { toPublicAssetUrl } from '../../../services/stripeTenant.service.js';
 
 
 
@@ -98,7 +100,7 @@ export const getMe = async (req, res) => {
 
     const prefs = await getOrCreatePreferences(req.tenantDb, user.id);
 
-
+    const organisation = await loadOrganisationForRequest(req);
 
     const plain = user.toJSON();
 
@@ -109,6 +111,8 @@ export const getMe = async (req, res) => {
       message: "Settings loaded.",
 
       data: {
+
+        organisation,
 
         profile: {
 
@@ -1176,6 +1180,89 @@ export const getPaymentSetting = async (req, res) => {
   }
 };
 
+async function loadOrganisationForRequest(req) {
+  const orgId = req.user?.organisation_id;
+  if (!orgId || !req.tenantDb?.Organisation) return null;
+  const row = await req.tenantDb.Organisation.findByPk(orgId);
+  if (!row) return null;
+  const plain = row.toJSON ? row.toJSON() : row;
+  return {
+    id: plain.id,
+    name: plain.name,
+    slug: plain.slug,
+    logoUrl: toPublicAssetUrl(plain.logoUrl),
+  };
+}
+
+/** GET organisation branding — any authenticated tenant user (header logo) */
+export const getOrganisationBranding = async (req, res) => {
+  try {
+    const organisation = await loadOrganisationForRequest(req);
+    res.status(200).json({
+      status: "success",
+      data: {
+        organisation: organisation || { logoUrl: null, name: null },
+      },
+    });
+  } catch (error) {
+    console.error("getOrganisationBranding error:", error);
+    res.status(500).json({ status: "error", message: "Internal server error" });
+  }
+};
+
+/** GET organisation branding for current tenant (admin settings) */
+export const getOrganisation = async (req, res) => {
+  try {
+    if (!(await requireAdmin(req, res))) return;
+    const organisation = await loadOrganisationForRequest(req);
+    if (!organisation) {
+      return res.status(404).json({ status: "error", message: "Organisation not found", data: null });
+    }
+    res.status(200).json({ status: "success", data: { organisation } });
+  } catch (error) {
+    console.error("getOrganisation error:", error);
+    res.status(500).json({ status: "error", message: "Internal server error" });
+  }
+};
+
+/** POST organisation logo (multipart field: logo) */
+export const uploadOrganisationLogo = async (req, res) => {
+  try {
+    if (!(await requireAdmin(req, res))) return;
+    const orgId = req.user?.organisation_id;
+    if (!orgId) {
+      return res.status(400).json({ status: "error", message: "Organisation context required" });
+    }
+    if (!req.file?.path) {
+      return res.status(400).json({ status: "error", message: "Logo file is required" });
+    }
+
+    const relativePath = req.file.path.replace(/\\/g, "/");
+
+    await req.tenantDb.Organisation.update({ logoUrl: relativePath }, { where: { id: orgId } });
+
+    try {
+      await platformDb.Organisation.update({ logoUrl: relativePath }, { where: { id: orgId } });
+    } catch (syncErr) {
+      console.warn("Platform organisation logo sync skipped:", syncErr.message);
+    }
+
+    res.status(200).json({
+      status: "success",
+      message: "Organisation logo updated",
+      data: {
+        organisation: {
+          id: orgId,
+          logoUrl: toPublicAssetUrl(relativePath),
+        },
+      },
+    });
+  } catch (error) {
+    console.error("uploadOrganisationLogo error:", error);
+    res.status(500).json({ status: "error", message: error.message || "Internal server error" });
+  }
+};
+
 export const updatePaymentSetting = async (req, res) => {
   try {
     if (!(await requireAdmin(req, res))) return;
@@ -1192,6 +1279,7 @@ export const updatePaymentSetting = async (req, res) => {
       invoice_prefix,
       stripe_public_key,
       stripe_secret_key,
+      stripe_webhook_secret,
       paypal_client_id,
       paypal_secret,
       razorpay_key_id,
@@ -1207,6 +1295,8 @@ export const updatePaymentSetting = async (req, res) => {
       invoice_prefix: invoice_prefix !== undefined ? invoice_prefix : setting.invoice_prefix,
       stripe_public_key: stripe_public_key !== undefined ? stripe_public_key : setting.stripe_public_key,
       stripe_secret_key: stripe_secret_key !== undefined ? stripe_secret_key : setting.stripe_secret_key,
+      stripe_webhook_secret:
+        stripe_webhook_secret !== undefined ? stripe_webhook_secret : setting.stripe_webhook_secret,
       paypal_client_id: paypal_client_id !== undefined ? paypal_client_id : setting.paypal_client_id,
       paypal_secret: paypal_secret !== undefined ? paypal_secret : setting.paypal_secret,
       razorpay_key_id: razorpay_key_id !== undefined ? razorpay_key_id : setting.razorpay_key_id,

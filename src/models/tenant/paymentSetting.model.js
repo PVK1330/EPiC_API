@@ -35,6 +35,10 @@ export default (sequelize, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: true,
       },
+      stripe_webhook_secret: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
       paypal_client_id: {
         type: DataTypes.STRING,
         allowNull: true,

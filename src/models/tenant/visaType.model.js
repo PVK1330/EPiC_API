@@ -16,6 +16,16 @@ export default (sequelize, DataTypes) => {
         allowNull: false,
         defaultValue: 0,
       },
+      cclTemplatePath: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+        field: "ccl_template_path",
+      },
+      cclTemplateName: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+        field: "ccl_template_name",
+      },
     },
     {
       tableName: "visa_types",

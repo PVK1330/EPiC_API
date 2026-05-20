@@ -41,6 +41,11 @@ export default (sequelize, DataTypes) => {
         type: DataTypes.STRING(63),
         allowNull: true,
       },
+      logoUrl: {
+        type: DataTypes.STRING(500),
+        allowNull: true,
+        field: "logo_url",
+      },
     },
     {
       tableName: "organisations",

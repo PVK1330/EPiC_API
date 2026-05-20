@@ -1,5 +1,33 @@
+import fs from 'fs';
+import path from 'path';
 import { Op } from 'sequelize';
 import { ROLES } from '../../../middlewares/role.middleware.js';
+
+function mapVisaType(row) {
+  const plain = row?.get ? row.get({ plain: true }) : row;
+  const templatePath = plain.ccl_template_path ?? plain.cclTemplatePath ?? null;
+  const templateName = plain.ccl_template_name ?? plain.cclTemplateName ?? null;
+  return {
+    id: plain.id,
+    name: plain.name,
+    sort_order: plain.sort_order,
+    ccl_template_path: templatePath,
+    ccl_template_name: templateName,
+    cclTemplatePath: templatePath,
+    cclTemplateName: templateName,
+  };
+}
+
+function deleteTemplateFileIfExists(filePath) {
+  if (!filePath) return;
+  const normalized = filePath.replace(/\\/g, '/');
+  if (!normalized.startsWith('uploads/ccl-templates/')) return;
+  try {
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  } catch (err) {
+    console.warn('deleteTemplateFileIfExists:', err.message);
+  }
+}
 
 function getUserId(req) {
   return req.user?.userId ?? req.user?.id;
@@ -30,7 +58,7 @@ export const listVisaTypes = async (req, res) => {
     res.status(200).json({
       status: "success",
       message: "Visa types retrieved.",
-      data: { visa_types: rows.map((r) => ({ id: r.id, name: r.name, sort_order: r.sort_order })) },
+      data: { visa_types: rows.map(mapVisaType) },
     });
   } catch (error) {
     console.error("listVisaTypes error:", error);
@@ -60,7 +88,7 @@ export const createVisaType = async (req, res) => {
     res.status(201).json({
       status: "success",
       message: "Visa type created.",
-      data: { visa_type: { id: row.id, name: row.name, sort_order: row.sort_order } },
+      data: { visa_type: mapVisaType(row) },
     });
   } catch (error) {
     console.error("createVisaType error:", error);
@@ -104,7 +132,7 @@ export const updateVisaType = async (req, res) => {
     res.status(200).json({
       status: "success",
       message: "Visa type updated.",
-      data: { visa_type: { id: row.id, name: row.name, sort_order: row.sort_order } },
+      data: { visa_type: mapVisaType(row) },
     });
   } catch (error) {
     console.error("updateVisaType error:", error);
@@ -123,6 +151,7 @@ export const deleteVisaType = async (req, res) => {
     if (!row) {
       return res.status(404).json({ status: "error", message: "Visa type not found", data: null });
     }
+    deleteTemplateFileIfExists(row.cclTemplatePath);
     await row.destroy();
     res.status(200).json({ status: "success", message: "Visa type deleted.", data: null });
   } catch (error) {
@@ -138,17 +167,90 @@ export const dropdownVisaType = async (req, res) => {
     if (!userId) {
       return res.status(401).json({ status: "error", message: "Authentication required.", data: null });
     }
-    const rows = await req.tenantDb.VisaType.findAll({ 
+    const rows = await req.tenantDb.VisaType.findAll({
       order: [["sort_order", "ASC"], ["id", "ASC"]],
-      attributes: ['id', 'name', 'sort_order']
     });
     res.status(200).json({
       status: "success",
       message: "Visa types retrieved.",
-      data: { visa_types: rows },
+      data: { visa_types: rows.map(mapVisaType) },
     });
   } catch (error) {
     console.error("dropdownVisaType error:", error);
+    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
+  }
+};
+
+export const uploadCclTemplate = async (req, res) => {
+  try {
+    if (!(await requireAdmin(req, res))) return;
+    const id = parseInt(req.params.id, 10);
+    if (Number.isNaN(id)) {
+      return res.status(400).json({ status: "error", message: "Invalid id", data: null });
+    }
+    if (!req.file) {
+      return res.status(400).json({ status: "error", message: "No file uploaded", data: null });
+    }
+
+    const row = await req.tenantDb.VisaType.findByPk(id);
+    if (!row) {
+      if (req.file.path && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+      return res.status(404).json({ status: "error", message: "Visa type not found", data: null });
+    }
+
+    deleteTemplateFileIfExists(row.cclTemplatePath);
+
+    const storedPath = req.file.path.replace(/\\/g, "/");
+    const displayName = path.basename(req.file.originalname);
+
+    await row.update({
+      cclTemplatePath: storedPath,
+      cclTemplateName: displayName,
+    });
+    await row.reload();
+
+    res.status(200).json({
+      status: "success",
+      message: "CCL template uploaded.",
+      data: { visa_type: mapVisaType(row) },
+    });
+  } catch (error) {
+    console.error("uploadCclTemplate error:", error);
+    if (req.file?.path && fs.existsSync(req.file.path)) {
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch {
+        /* ignore */
+      }
+    }
+    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
+  }
+};
+
+export const deleteCclTemplate = async (req, res) => {
+  try {
+    if (!(await requireAdmin(req, res))) return;
+    const id = parseInt(req.params.id, 10);
+    if (Number.isNaN(id)) {
+      return res.status(400).json({ status: "error", message: "Invalid id", data: null });
+    }
+
+    const row = await req.tenantDb.VisaType.findByPk(id);
+    if (!row) {
+      return res.status(404).json({ status: "error", message: "Visa type not found", data: null });
+    }
+
+    deleteTemplateFileIfExists(row.cclTemplatePath);
+    await row.update({ cclTemplatePath: null, cclTemplateName: null });
+    await row.reload();
+
+    res.status(200).json({
+      status: "success",
+      message: "CCL template removed.",
+      data: { visa_type: mapVisaType(row) },
+    });
+  } catch (error) {
+    console.error("deleteCclTemplate error:", error);
     res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
   }
 };

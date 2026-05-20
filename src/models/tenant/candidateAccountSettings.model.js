@@ -41,6 +41,22 @@ export default (sequelize, DataTypes) => {
         type: DataTypes.DATE,
         allowNull: true,
       },
+      stripe_customer_id: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+      },
+      stripe_subscription_id: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+      },
+      subscription_status: {
+        type: DataTypes.STRING(64),
+        allowNull: true,
+      },
+      subscription_current_period_end: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
     },
     {
       tableName: "candidate_account_settings",

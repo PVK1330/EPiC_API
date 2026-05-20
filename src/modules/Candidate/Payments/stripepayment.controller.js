@@ -1,6 +1,6 @@
 import Stripe from 'stripe';
 import { Op } from 'sequelize';
-import { notifyPaymentReceived } from '../../../services/notification.service.js';
+import { notifyPaymentReceived, NotificationTypes } from '../../../services/notification.service.js';
 import { createWorkflowTask } from '../../../services/workflowTaskAutomation.service.js';
 import { evaluateCaseStageAfterEvent } from '../../../services/caseStageAutomation.service.js';
 import {
@@ -10,6 +10,15 @@ import {
 } from '../../../services/cclCandidateRelease.service.js';
 import platformDb from '../../../models/index.js';
 import { getTenantDb } from '../../../services/tenantDb.service.js';
+import {
+  getStripeForRequest,
+  getStripeForTenant,
+  buildStripeMetadata,
+  constructStripeWebhookEvent,
+  resolveTenantDbFromStripeObject,
+  syncSubscriptionToCandidate,
+  notifyCandidatePaymentEvent,
+} from '../../../services/stripeTenant.service.js';
 
 async function getActiveAdminIds(tenantDb) {
   const adminRole = await tenantDb.Role.findOne({
@@ -177,15 +186,6 @@ async function finalizeStripePaymentForUser({ userId, paymentIntent, caseRef = n
   return { tenantDb, caseRecord, recorded };
 }
 
-let stripeInstance = null;
-
-const getStripe = () => {
-  if (!stripeInstance) {
-    stripeInstance = new Stripe(process.env.STRIPE_SECRET_KEY);
-  }
-  return stripeInstance;
-};
-
 const resolveTenantDbForUser = async (userId) => {
   if (!userId) return null;
   const user = await platformDb.User.findByPk(userId, { attributes: ['organisation_id'] });
@@ -198,7 +198,7 @@ const resolveTenantDbForUser = async (userId) => {
 // Create Payment Intent (optional amount — defaults to case balance due)
 export const createPaymentIntent = async (req, res) => {
   try {
-    const stripe = getStripe();
+    const { stripe } = await getStripeForRequest(req);
     const {
       amount: bodyAmount,
       currency = "gbp",
@@ -241,11 +241,11 @@ export const createPaymentIntent = async (req, res) => {
       payment_method: payment_method_id,
       confirmation_method: "manual",
       confirm: payment_method_id ? true : false,
-      metadata: {
+      metadata: buildStripeMetadata(req, {
         userId: userId ? String(userId) : "",
         ...caseMeta,
         ...metadata,
-      },
+      }),
       automatic_payment_methods: {
         enabled: true,
         allow_redirects: "never",
@@ -276,15 +276,14 @@ export const createPaymentIntent = async (req, res) => {
 /** Candidate: Stripe Checkout for approved CCL balance */
 export const createCaseCheckoutSession = async (req, res) => {
   try {
-    if (!process.env.STRIPE_SECRET_KEY) {
+    const { stripe, settings } = await getStripeForRequest(req);
+    if (!settings.stripe_secret_key) {
       return res.status(503).json({
         status: "error",
-        message: "Stripe is not configured on the server",
+        message: "Stripe is not configured for this organisation. Add keys in Admin → Payment Config.",
         data: null,
       });
     }
-
-    const stripe = getStripe();
     const userId = req.user?.userId;
     const tenantDb = req.tenantDb;
     const resolved = await resolveCandidateCaseForPayment(tenantDb, userId);
@@ -324,11 +323,11 @@ export const createCaseCheckoutSession = async (req, res) => {
       ],
       success_url: `${frontend}/candidate/payments?payment=success&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${frontend}/candidate/payments?payment=cancelled`,
-      metadata: {
+      metadata: buildStripeMetadata(req, {
         userId: String(userId),
         caseId: caseRecord.caseId || String(caseRecord.id),
         numericCaseId: String(caseRecord.id),
-      },
+      }),
     });
 
     res.status(200).json({
@@ -354,7 +353,7 @@ export const createCaseCheckoutSession = async (req, res) => {
 /** After redirect from Stripe Checkout — record payment if webhook has not run yet */
 export const verifyCheckoutSession = async (req, res) => {
   try {
-    const stripe = getStripe();
+    const { stripe } = await getStripeForRequest(req);
     const { session_id } = req.params;
     const userId = req.user?.userId;
 
@@ -426,7 +425,7 @@ export const verifyCheckoutSession = async (req, res) => {
 // Confirm Payment
 export const confirmPayment = async (req, res) => {
   try {
-    const stripe = getStripe();
+    const { stripe } = await getStripeForRequest(req);
     const { payment_intent_id, payment_method_id } = req.body;
 
     if (!payment_intent_id) {
@@ -498,7 +497,7 @@ export const confirmPayment = async (req, res) => {
 // Get Payment Status
 export const getPaymentStatus = async (req, res) => {
   try {
-    const stripe = getStripe();
+    const { stripe } = await getStripeForRequest(req);
     const { payment_intent_id } = req.params;
 
     if (!payment_intent_id) {
@@ -546,7 +545,7 @@ export const getPaymentStatus = async (req, res) => {
 // Cancel Payment
 export const cancelPayment = async (req, res) => {
   try {
-    const stripe = getStripe();
+    const { stripe } = await getStripeForRequest(req);
     const { payment_intent_id } = req.body;
 
     if (!payment_intent_id) {
@@ -582,7 +581,7 @@ export const cancelPayment = async (req, res) => {
 // Create Setup Intent for saving payment methods
 export const createSetupIntent = async (req, res) => {
   try {
-    const stripe = getStripe();
+    const { stripe } = await getStripeForRequest(req);
     const { customer_id } = req.body;
 
     const setupIntent = await stripe.setupIntents.create({
@@ -609,22 +608,20 @@ export const createSetupIntent = async (req, res) => {
   }
 };
 
-// Stripe Webhook Handler
+// Stripe Webhook Handler — verifies with tenant webhook secret from event metadata when present
 export const handleWebhook = async (req, res) => {
-  const stripe = getStripe();
   const sig = req.headers["stripe-signature"];
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
   let event;
-
   try {
-    event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+    event = await constructStripeWebhookEvent(req.body, sig);
   } catch (err) {
-    console.log(`Webhook signature verification failed.`, err.message);
+    console.log("Webhook signature verification failed.", err.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
-  // Handle the event
+  const { tenantDb } = await resolveTenantDbFromStripeObject(event.data?.object || {});
+
   switch (event.type) {
     // Payment Events
     case "payment_intent.succeeded": {
@@ -650,10 +647,12 @@ export const handleWebhook = async (req, res) => {
       if (session.payment_status === "paid" && session.metadata?.userId) {
         try {
           const userId = Number(session.metadata.userId);
-          const stripe = getStripe();
+          const ctx = tenantDb
+            ? { stripe: (await getStripeForTenant(tenantDb)).stripe }
+            : null;
           const paymentIntentId = session.payment_intent;
-          if (paymentIntentId) {
-            const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+          if (paymentIntentId && ctx?.stripe) {
+            const paymentIntent = await ctx.stripe.paymentIntents.retrieve(paymentIntentId);
             await finalizeStripePaymentForUser({
               userId,
               paymentIntent,
@@ -667,61 +666,132 @@ export const handleWebhook = async (req, res) => {
       break;
     }
 
-    case "payment_intent.payment_failed":
+    case "payment_intent.payment_failed": {
       const failedPayment = event.data.object;
-      console.log("PaymentIntent failed!", failedPayment.id);
-      // TODO: Handle failed payment, notify user, etc.
+      if (tenantDb && failedPayment.metadata?.userId) {
+        await notifyCandidatePaymentEvent(
+          tenantDb,
+          Number(failedPayment.metadata.userId),
+          {
+            title: "Payment failed",
+            message:
+              failedPayment.last_payment_error?.message ||
+              "Your card payment could not be completed. Please try again or use another method.",
+          },
+        );
+      }
       break;
+    }
 
-    case "payment_intent.canceled":
+    case "payment_intent.canceled": {
       const canceledPayment = event.data.object;
-      console.log("PaymentIntent was canceled!", canceledPayment.id);
-      // TODO: Handle canceled payment
+      if (tenantDb && canceledPayment.metadata?.userId) {
+        await notifyCandidatePaymentEvent(
+          tenantDb,
+          Number(canceledPayment.metadata.userId),
+          {
+            title: "Payment canceled",
+            message: "A pending payment was canceled before completion.",
+            type: NotificationTypes.INFO,
+          },
+        );
+      }
       break;
+    }
 
-    // Invoice Events
-    case "invoice.payment_succeeded":
+    case "invoice.payment_succeeded": {
       const successInvoice = event.data.object;
-      console.log("Invoice payment succeeded!", successInvoice.id);
-      // TODO: Handle successful invoice payment, extend subscription
+      if (tenantDb && successInvoice.subscription) {
+        try {
+          const { stripe } = await getStripeForTenant(tenantDb);
+          const sub = await stripe.subscriptions.retrieve(successInvoice.subscription);
+          await syncSubscriptionToCandidate(tenantDb, sub);
+        } catch (err) {
+          console.error("invoice.payment_succeeded:", err);
+        }
+      }
       break;
+    }
 
-    case "invoice.payment_failed":
+    case "invoice.payment_failed": {
       const failedInvoice = event.data.object;
-      console.log("Invoice payment failed!", failedInvoice.id);
-      // TODO: Handle failed invoice payment, notify user
+      if (tenantDb) {
+        const userId = Number(failedInvoice.metadata?.userId);
+        if (userId) {
+          await notifyCandidatePaymentEvent(tenantDb, userId, {
+            title: "Subscription payment failed",
+            message:
+              "We could not process your subscription payment. Please update your payment method in the portal.",
+          });
+        }
+      }
       break;
+    }
 
-    case "invoice.upcoming":
+    case "invoice.upcoming": {
       const upcomingInvoice = event.data.object;
-      console.log("Invoice upcoming!", upcomingInvoice.id);
-      // TODO: Send payment reminder email
+      if (tenantDb) {
+        const userId = Number(upcomingInvoice.metadata?.userId);
+        if (userId) {
+          await notifyCandidatePaymentEvent(tenantDb, userId, {
+            title: "Upcoming payment",
+            message: "A subscription payment is due soon. No action is needed if your card is up to date.",
+            type: NotificationTypes.INFO,
+          });
+        }
+      }
       break;
+    }
 
-    // Subscription Events
-    case "customer.subscription.created":
+    case "customer.subscription.created": {
       const createdSubscription = event.data.object;
-      console.log("Subscription created!", createdSubscription.id);
-      // TODO: Handle new subscription, update database
+      if (tenantDb) {
+        await syncSubscriptionToCandidate(tenantDb, createdSubscription);
+      }
       break;
+    }
 
-    case "customer.subscription.updated":
+    case "customer.subscription.updated": {
       const updatedSubscription = event.data.object;
-      console.log("Subscription updated!", updatedSubscription.id);
-      // TODO: Handle subscription changes, update database
+      if (tenantDb) {
+        await syncSubscriptionToCandidate(tenantDb, updatedSubscription);
+      }
       break;
+    }
 
-    case "customer.subscription.deleted":
+    case "customer.subscription.deleted": {
       const deletedSubscription = event.data.object;
-      console.log("Subscription deleted!", deletedSubscription.id);
-      // TODO: Handle subscription cancellation, update database
+      if (tenantDb) {
+        await syncSubscriptionToCandidate(tenantDb, {
+          ...deletedSubscription,
+          status: "canceled",
+        });
+        const userId = Number(deletedSubscription.metadata?.userId);
+        if (userId) {
+          await notifyCandidatePaymentEvent(tenantDb, userId, {
+            title: "Subscription ended",
+            message: "Your subscription has been canceled.",
+            type: NotificationTypes.INFO,
+          });
+        }
+      }
       break;
+    }
 
-    case "customer.subscription.trial_will_end":
+    case "customer.subscription.trial_will_end": {
       const trialEnding = event.data.object;
-      console.log("Trial ending soon!", trialEnding.id);
-      // TODO: Send trial ending reminder
+      if (tenantDb) {
+        const userId = Number(trialEnding.metadata?.userId);
+        if (userId) {
+          await notifyCandidatePaymentEvent(tenantDb, userId, {
+            title: "Trial ending soon",
+            message: "Your trial period is ending shortly. Please ensure your payment method is ready.",
+            type: NotificationTypes.INFO,
+          });
+        }
+      }
       break;
+    }
 
     // Customer Events
     case "customer.created":
@@ -771,7 +841,7 @@ export const handleWebhook = async (req, res) => {
 // Refund Payment
 export const createRefund = async (req, res) => {
   try {
-    const stripe = getStripe();
+    const { stripe } = await getStripeForRequest(req);
     const { payment_intent_id, amount, reason } = req.body;
 
     if (!payment_intent_id) {
@@ -812,7 +882,7 @@ export const createRefund = async (req, res) => {
 // Create Subscription
 export const createSubscription = async (req, res) => {
   try {
-    const stripe = getStripe();
+    const { stripe } = await getStripeForRequest(req);
     const {
       customer_id,
       price_id,
@@ -852,10 +922,10 @@ export const createSubscription = async (req, res) => {
         payment_method_types: ["card"],
       },
       expand: ["latest_invoice.payment_intent"],
-      metadata: {
-        userId: req.user?.userId || null,
+      metadata: buildStripeMetadata(req, {
+        userId: req.user?.userId ? String(req.user.userId) : "",
         ...metadata,
-      },
+      }),
     });
 
     res.status(200).json({
@@ -883,7 +953,7 @@ export const createSubscription = async (req, res) => {
 // Renew Subscription
 export const renewSubscription = async (req, res) => {
   try {
-    const stripe = getStripe();
+    const { stripe } = await getStripeForRequest(req);
     const { subscription_id, payment_method_id } = req.body;
 
     if (!subscription_id) {
@@ -957,7 +1027,7 @@ export const renewSubscription = async (req, res) => {
 // Cancel Subscription
 export const cancelSubscription = async (req, res) => {
   try {
-    const stripe = getStripe();
+    const { stripe } = await getStripeForRequest(req);
     const { subscription_id, cancel_at_period_end = true } = req.body;
 
     if (!subscription_id) {
@@ -1001,7 +1071,7 @@ export const cancelSubscription = async (req, res) => {
 // Get Subscription Status
 export const getSubscriptionStatus = async (req, res) => {
   try {
-    const stripe = getStripe();
+    const { stripe } = await getStripeForRequest(req);
     const { subscription_id } = req.params;
 
     if (!subscription_id) {
@@ -1048,7 +1118,7 @@ export const getSubscriptionStatus = async (req, res) => {
 // Update Subscription (change plan, quantity, etc.)
 export const updateSubscription = async (req, res) => {
   try {
-    const stripe = getStripe();
+    const { stripe } = await getStripeForRequest(req);
     const { subscription_id, price_id, quantity = 1, metadata = {} } = req.body;
 
     if (!subscription_id || !price_id) {

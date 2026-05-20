@@ -172,6 +172,12 @@ export async function syncTenantDatabaseSchema(databaseName) {
   await tenantDb.sequelize.query(
     "ALTER TABLE cases ADD COLUMN IF NOT EXISTS workflow_meta JSONB DEFAULT '{}'::jsonb",
   );
+  await tenantDb.sequelize.query(
+    "ALTER TABLE visa_types ADD COLUMN IF NOT EXISTS ccl_template_path VARCHAR(255) DEFAULT NULL",
+  );
+  await tenantDb.sequelize.query(
+    "ALTER TABLE visa_types ADD COLUMN IF NOT EXISTS ccl_template_name VARCHAR(255) DEFAULT NULL",
+  );
   evictTenantDb(databaseName);
 }
 

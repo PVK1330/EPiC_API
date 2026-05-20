@@ -158,6 +158,50 @@ export async function evaluateCaseStageAfterEvent({
   const currentStage = resolveCaseStage(caseRecord);
   const checklist = await getRequiredChecklistStatus(tenantDb, caseRecord);
 
+  // Auto-mark CCL payment received (legacy stage id) when signed/accepted and fully paid
+  if (trigger === "payment_received" && currentStage === "client_care_letter") {
+    const ccl = await tenantDb.CaseCclRecord?.findOne({ where: { caseId: caseRecord.id } });
+    const cclSigned = ccl && (ccl.status === "signed" || ccl.status === "accepted");
+    const amountStatus = String(caseRecord.amountStatus || "").toLowerCase();
+    const fullyPaid =
+      amountStatus === "paid" ||
+      (Number(caseRecord.totalAmount) > 0 &&
+        Number(caseRecord.paidAmount) >= Number(caseRecord.totalAmount));
+
+    if (cclSigned && fullyPaid && caseRecord.caseStage !== "ccl_payment_received") {
+      const result = await applyCaseStageChange({
+        tenantDb,
+        caseRecord,
+        nextStageId: "ccl_payment_received",
+        performedBy,
+        reason: "Client Care Letter accepted and payment fully received",
+        organisationId,
+      });
+
+      if (!result) {
+        await caseRecord.update({ caseStage: "ccl_payment_received" });
+        await recordTimelineEntry({
+          tenantDb,
+          caseId: caseRecord.id,
+          actionType: "status_change",
+          description: "CCL payment received — ready for visa portal submission",
+          performedBy,
+          visibility: "internal",
+        });
+        await caseRecord.reload();
+        await syncWorkflowTasksForStage({
+          tenantDb,
+          caseRecord,
+          stageId: "ccl_payment_received",
+          performedBy,
+          organisationId,
+        }).catch((err) => console.error("syncWorkflowTasksForStage:", err));
+        return { previousStage: currentStage, nextStage: "client_care_letter", legacyStage: "ccl_payment_received" };
+      }
+      return result;
+    }
+  }
+
   if (trigger === "document_rejected" && ["document_review", "application_preparation", "data_capture_initial_docs"].includes(currentStage)) {
     if (currentStage !== "further_information_request") {
       return applyCaseStageChange({

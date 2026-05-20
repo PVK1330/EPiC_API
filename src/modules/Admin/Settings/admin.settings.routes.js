@@ -5,7 +5,7 @@ import * as visaController from './visa.controller.js';
 import * as petitionTypeController from './petitionType.controller.js';
 import { verifyTokenAndTenant } from '../../../middlewares/authStack.middleware.js';
 import { checkRole, ROLES } from '../../../middlewares/role.middleware.js';
-import { handleProfilePicUpload } from '../../../middlewares/upload.middleware.js';
+import { handleProfilePicUpload, handleCclTemplateUpload, handleOrganisationLogoUpload } from '../../../middlewares/upload.middleware.js';
 
 const router = Router();
 
@@ -13,6 +13,11 @@ const router = Router();
 router.use(verifyTokenAndTenant);
 router.get("/visa-types/dropdown", checkRole([ROLES.ADMIN, ROLES.CASEWORKER, ROLES.BUSINESS, ROLES.CANDIDATE]), visaController.dropdownVisaType);
 router.get("/petition-types/dropdown", checkRole([ROLES.ADMIN, ROLES.CASEWORKER]), petitionTypeController.dropdownPetitionType);
+router.get(
+  "/organisation/branding",
+  checkRole([ROLES.ADMIN, ROLES.CASEWORKER, ROLES.BUSINESS, ROLES.CANDIDATE]),
+  adminSettingsController.getOrganisationBranding,
+);
 
 // Admin-only routes
 router.use(checkRole([ROLES.ADMIN]));
@@ -26,6 +31,8 @@ router.get("/visa-types", visaController.listVisaTypes);
 router.post("/visa-types", visaController.createVisaType);
 router.patch("/visa-types/:id", visaController.updateVisaType);
 router.delete("/visa-types/:id", visaController.deleteVisaType);
+router.post("/visa-types/:id/ccl-template", handleCclTemplateUpload, visaController.uploadCclTemplate);
+router.delete("/visa-types/:id/ccl-template", visaController.deleteCclTemplate);
 
 router.get("/petition-types", petitionTypeController.listPetitionTypes);
 router.post("/petition-types", petitionTypeController.createPetitionType);
@@ -49,6 +56,9 @@ router.delete("/sla-rules/:id", adminSettingsController.deleteSlaRule);
 
 router.get("/payment-settings", adminSettingsController.getPaymentSetting);
 router.put("/payment-settings", adminSettingsController.updatePaymentSetting);
+
+router.get("/organisation", adminSettingsController.getOrganisation);
+router.post("/organisation/logo", handleOrganisationLogoUpload, adminSettingsController.uploadOrganisationLogo);
 
 router.get("/smtp-settings", smtpSettingsController.getSmtpSettings);
 router.put("/smtp-settings", smtpSettingsController.updateSmtpSettings);

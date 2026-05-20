@@ -1,8 +1,9 @@
--- Workflow email templates (Standard Immigration Case Process)
+-- Update existing workflow email templates with professional copy
 INSERT INTO "email_templates" ("template_key", "subject", "body", "createdAt", "updatedAt")
-SELECT t.k, t.s, t.b, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-FROM (VALUES
-  ('data_capture_request', '[{{firm_name}}] Data Capture Sheet & Initial Documents Request', 'Dear {{client_name}},
+VALUES
+  ('data_capture_request',
+   '[{{firm_name}}] Data Capture Sheet & Initial Documents Request',
+   'Dear {{client_name}},
 
 I hope you are well.
 
@@ -22,8 +23,11 @@ Once we have received the completed Data Capture Sheet and supporting documents,
 If you have any questions or require any assistance completing the form, please do not hesitate to contact us. We will be happy to assist.
 
 Kind regards,
-{{caseworker_name}}'),
-  ('draft_application_review', '[{{firm_name}}] Draft Application Review', 'Dear {{client_name}},
+{{caseworker_name}}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+
+  ('draft_application_review',
+   '[{{firm_name}}] Draft Application Review',
+   'Dear {{client_name}},
 
 Please find attached the draft version of your application form for your review.
 
@@ -34,8 +38,11 @@ Once you confirm that all details are correct, we will proceed with the submissi
 If you have any questions or require any clarification, please do not hesitate to contact us.
 
 Kind regards,
-{{caseworker_name}}'),
-  ('ccl_issued', '[{{firm_name}}] Client Care Letter', 'Dear {{client_name}},
+{{caseworker_name}}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+
+  ('ccl_issued',
+   '[{{firm_name}}] Client Care Letter',
+   'Dear {{client_name}},
 
 Please see attached a Client Care letter.
 
@@ -48,8 +55,11 @@ Please let us know if you have any questions.
 Thank You.
 
 Kind Regards,
-{{caseworker_name}}'),
-  ('biometrics_confirmation', '[{{firm_name}}] Appointment Confirmation', 'Hi {{client_name}},
+{{caseworker_name}}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+
+  ('biometrics_confirmation',
+   '[{{firm_name}}] Appointment Confirmation',
+   'Hi {{client_name}},
 
 Your visa application has been submitted and paid for, and your biometric appointment has been scheduled for {{biometrics_date}}.
 
@@ -74,8 +84,11 @@ If you have any questions or concerns, please let me know.
 Thankyou!
 
 Kind Regards,
-{{caseworker_name}}'),
-  ('decision_communicated', '[{{firm_name}}] Visa Decision', 'Hi {{client_name}},
+{{caseworker_name}}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+
+  ('decision_communicated',
+   '[{{firm_name}}] Visa Decision',
+   'Hi {{client_name}},
 
 Hope you are well.
 
@@ -90,8 +103,11 @@ Please refer to the email below for further details.
 If you have any queries, please let me know.
 
 Kind Regards,
-{{caseworker_name}}'),
-  ('case_closure', '[{{firm_name}}] Case Closure Letter', 'Hello {{client_name}},
+{{caseworker_name}}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+
+  ('case_closure',
+   '[{{firm_name}}] Case Closure Letter',
+   'Hello {{client_name}},
 
 Please find enclosed the case closure letter for your records. We kindly request that you review, sign, and return the document to us at your convenience.
 
@@ -107,8 +123,9 @@ Should you require any assistance in the future, please do not hesitate to conta
 Thank you once again.
 
 Kind regards,
-{{caseworker_name}}')
-) AS t(k, s, b)
-WHERE NOT EXISTS (
-  SELECT 1 FROM "email_templates" e WHERE e."template_key" = t.k
-);
+{{caseworker_name}}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+ON CONFLICT ("template_key")
+DO UPDATE SET
+  subject = EXCLUDED.subject,
+  body = EXCLUDED.body,
+  "updatedAt" = CURRENT_TIMESTAMP;

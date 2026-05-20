@@ -48,8 +48,10 @@ export async function setWorkflowState(tenantDb, caseRecord, patch) {
       ...(patch.biometrics || {}),
     },
   };
-  await caseRecord.update({ workflowState: next });
+  const nextMeta = { ...(caseRecord.workflowMeta || {}), ...patch };
+  await caseRecord.update({ workflowState: next, workflowMeta: nextMeta });
   caseRecord.workflowState = next;
+  caseRecord.workflowMeta = nextMeta;
   return next;
 }
 
@@ -186,12 +188,25 @@ export async function recordVisaPortalSubmission({
   organisationId = null,
 }) {
   const stage = resolveCaseStage(caseRecord);
-  if (!["ccl_payment_received", "ccl_issued", "application_submitted"].includes(stage)) {
+  if (!["client_care_letter", "ccl_payment_received", "ccl_issued", "application_submitted"].includes(stage)) {
     return {
       ok: false,
       status: 400,
       message: "Application can only be marked submitted after CCL and payment are complete",
     };
+  }
+
+  if (stage === "client_care_letter") {
+    const ccl = await tenantDb.CaseCclRecord?.findOne({ where: { caseId: caseRecord.id } });
+    const cclOk = ccl && (ccl.status === "signed" || ccl.status === "accepted");
+    const paid = caseRecord.amountStatus === "paid" || (Number(caseRecord.totalAmount) > 0 && Number(caseRecord.paidAmount) >= Number(caseRecord.totalAmount));
+    if (!cclOk || !paid) {
+      return {
+        ok: false,
+        status: 400,
+        message: "Application can only be marked submitted after CCL and payment are complete",
+      };
+    }
   }
 
   const now = new Date().toISOString();
@@ -236,15 +251,53 @@ export async function submitBiometricAvailability({
   preferredDate,
   preferredTime,
   notes,
+  candidateTimezone = "UTC",
   performedBy,
   organisationId = null,
 }) {
-  const stage = resolveCaseStage(caseRecord);
-  if (stage !== "application_submitted" && stage !== "biometrics_booked") {
+  const ws = getWorkflowState(caseRecord);
+  let stage = resolveCaseStage(caseRecord);
+  const visaPortalSubmitted = Boolean(ws.visaPortal?.submittedAt);
+
+  const pastBiometricsPhase = [
+    "biometrics_confirmation_sent",
+    "documents_uploaded",
+    "awaiting_decision",
+    "decision_communicated",
+    "case_closure",
+  ].includes(stage);
+
+  if (pastBiometricsPhase) {
     return {
       ok: false,
       status: 400,
-      message: "Biometric availability can only be submitted after the application is submitted",
+      message:
+        "Biometric availability is no longer required — your case has already moved past this step.",
+    };
+  }
+
+  if (!["application_submitted", "biometrics_booked"].includes(stage)) {
+    if (visaPortalSubmitted) {
+      await applyCaseStageChange({
+        tenantDb,
+        caseRecord,
+        nextStageId: "application_submitted",
+        performedBy,
+        reason: "Sync stage with recorded visa portal submission before biometric availability",
+        organisationId,
+        sendEmail: false,
+      });
+      await caseRecord.reload();
+      stage = resolveCaseStage(caseRecord);
+    }
+  }
+
+  if (!["application_submitted", "biometrics_booked"].includes(stage)) {
+    return {
+      ok: false,
+      status: 400,
+      message:
+        "Your caseworker must confirm that your application was submitted on the visa portal before you can send biometrics availability. If they have already done this, refresh the page and try again.",
     };
   }
 
@@ -260,6 +313,7 @@ export async function submitBiometricAvailability({
     preferredLocation: preferredLocation.trim(),
     preferredDate,
     preferredTime: preferredTime.trim(),
+    preferredTimezone: candidateTimezone || "UTC",
     notes: notes?.trim() || null,
     submittedAt: new Date().toISOString(),
   };
@@ -272,7 +326,7 @@ export async function submitBiometricAvailability({
     tenantDb,
     caseId: caseRecord.id,
     actionType: "biometric_availability",
-    description: `Candidate availability: ${preferredLocation}, ${preferredDate} ${preferredTime}`,
+    description: `Candidate availability: ${preferredLocation}, ${preferredDate} ${preferredTime} (${availability.preferredTimezone})`,
     performedBy,
     visibility: "internal",
     metadata: availability,
@@ -306,6 +360,22 @@ export async function submitBiometricAvailability({
       dueInDays: 2,
       organisationId,
     });
+  }
+
+  if (caseRecord.candidateId) {
+    await notifyUser(tenantDb, caseRecord.candidateId, {
+      tenantDb,
+      type: NotificationTypes.SUCCESS,
+      priority: NotificationPriority.HIGH,
+      title: "Biometrics availability received",
+      message: `Thank you — we recorded your preference for ${preferredLocation.trim()} on ${preferredDate} at ${preferredTime.trim()}. Your caseworker will book your appointment and confirm the details.`,
+      actionType: "biometric_availability_submitted",
+      entityId: caseRecord.id,
+      entityType: "case",
+      metadata: { caseId: caseRecord.caseId || caseLabel },
+      sendEmail: true,
+      organisationId,
+    }).catch(() => {});
   }
 
   if (stage === "application_submitted") {

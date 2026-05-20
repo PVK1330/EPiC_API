@@ -7,6 +7,13 @@ import { createUserOnPlatformAndTenant } from '../../../services/userSync.servic
 import { sendTenantCaseworkerWelcomeEmail } from '../../../services/tenantUserMail.service.js';
 import platformDb from '../../../models/index.js';
 import { isPlatformEmailTaken, normalizePlatformEmail } from '../../../utils/platformUserEmail.js';
+import {
+  applyOrganisationScope,
+  mergeCaseWhere,
+  mergeUserWhere,
+  organisationIdFromRequest,
+  userBelongsToOrganisation,
+} from '../../../utils/tenantScope.js';
 
 const CASEWORKER_ROLE = ROLES.CASEWORKER;
 
@@ -17,7 +24,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 export const getDepartments = async (req, res) => {
   try {
     const departments = await req.tenantDb.Department.findAll({
-      where: { is_active: true },
+      where: applyOrganisationScope({ is_active: true }, organisationIdFromRequest(req)),
       order: [['name', 'ASC']],
       attributes: ['name'],
       raw: true
@@ -273,6 +280,147 @@ function caseworkerInclude(req) {
   ];
 }
 
+function parseAssignedCaseworkerIds(caseRecord) {
+  const raw = caseRecord?.assignedcaseworkerId ?? caseRecord?.assignedCaseworkerId;
+  if (!raw) return [];
+  if (Array.isArray(raw)) {
+    return raw.map(Number).filter((n) => Number.isFinite(n) && n > 0);
+  }
+  if (typeof raw === "object" && raw !== null) {
+    const ids = raw.ids ?? raw.caseworkers ?? Object.values(raw);
+    if (Array.isArray(ids)) {
+      return ids.map(Number).filter((n) => Number.isFinite(n) && n > 0);
+    }
+  }
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? [n] : [];
+}
+
+function caseAssignedToCaseworker(caseRecord, caseworkerId) {
+  return parseAssignedCaseworkerIds(caseRecord).includes(Number(caseworkerId));
+}
+
+function extractAssignedCandidates(cases = []) {
+  const byId = new Map();
+  for (const c of cases) {
+    const row = c?.toJSON ? c.toJSON() : c;
+    const cand = row.candidate;
+    if (!cand?.id) continue;
+    if (!byId.has(cand.id)) {
+      byId.set(cand.id, {
+        id: cand.id,
+        first_name: cand.first_name,
+        last_name: cand.last_name,
+        email: cand.email,
+        caseCount: 1,
+      });
+    } else {
+      byId.get(cand.id).caseCount += 1;
+    }
+  }
+  return [...byId.values()].sort((a, b) => {
+    const an = `${a.last_name || ""} ${a.first_name || ""}`.trim().toLowerCase();
+    const bn = `${b.last_name || ""} ${b.first_name || ""}`.trim().toLowerCase();
+    return an.localeCompare(bn);
+  });
+}
+
+async function loadOrganisationCases(req, extraWhere = {}) {
+  return req.tenantDb.Case.findAll({
+    where: mergeCaseWhere(req, { deleted_at: null, ...extraWhere }),
+    attributes: [
+      "id",
+      "caseId",
+      "status",
+      "caseStage",
+      "targetSubmissionDate",
+      "assignedcaseworkerId",
+      "candidateId",
+      "visaTypeId",
+      "organisation_id",
+    ],
+    include: [
+      {
+        model: req.tenantDb.User,
+        as: "candidate",
+        attributes: ["id", "first_name", "last_name", "email"],
+        required: false,
+      },
+      {
+        model: req.tenantDb.VisaType,
+        as: "visaType",
+        attributes: ["id", "name"],
+        required: false,
+      },
+    ],
+    order: [["updated_at", "DESC"]],
+  });
+}
+
+function computeCaseMetrics(cases = []) {
+  const now = new Date();
+  const finishedStatuses = new Set(["Completed", "Approved", "Closed", "Cancelled"]);
+  const completedStatuses = new Set(["Completed", "Approved", "Closed"]);
+  const inProgressStatuses = new Set(["In Progress", "Drafting", "Under Review", "Submitted"]);
+  const pendingStatuses = new Set(["Pending", "Docs Pending", "Lead"]);
+
+  const totalCases = cases.length;
+  const completedCases = cases.filter((c) => completedStatuses.has(c.status)).length;
+  const inProgressCases = cases.filter((c) => inProgressStatuses.has(c.status)).length;
+  const pendingCases = cases.filter((c) => pendingStatuses.has(c.status)).length;
+  const overdueCases = cases.filter((c) => {
+    const isNotFinished = !finishedStatuses.has(c.status);
+    const target = c.targetSubmissionDate ? new Date(c.targetSubmissionDate) : null;
+    return isNotFinished && target && target < now;
+  }).length;
+
+  const completionRate =
+    totalCases > 0 ? Number(((completedCases / totalCases) * 100).toFixed(1)) : 0;
+
+  return {
+    totalCases,
+    completedCases,
+    inProgressCases,
+    pendingCases,
+    overdueCases,
+    completionRate,
+  };
+}
+
+function mapCaseForCaseworkerDetail(caseRow, now = new Date()) {
+  const plain = caseRow?.toJSON ? caseRow.toJSON() : caseRow;
+  const finishedStatuses = new Set(["Completed", "Approved", "Closed", "Cancelled"]);
+  const completedStatuses = new Set(["Completed", "Approved", "Closed"]);
+  const target = plain.targetSubmissionDate ? new Date(plain.targetSubmissionDate) : null;
+  const isOverdue =
+    !finishedStatuses.has(plain.status) && target && target < now;
+
+  const candidate = plain.candidate
+    ? {
+        id: plain.candidate.id,
+        first_name: plain.candidate.first_name,
+        last_name: plain.candidate.last_name,
+        email: plain.candidate.email,
+      }
+    : null;
+
+  const visaType = plain.visaType
+    ? { id: plain.visaType.id, name: plain.visaType.name }
+    : null;
+
+  return {
+    id: plain.id,
+    caseId: plain.caseId,
+    status: plain.status,
+    caseStage: plain.caseStage,
+    targetSubmissionDate: plain.targetSubmissionDate,
+    isOverdue,
+    isCompleted: completedStatuses.has(plain.status),
+    candidate,
+    visaType,
+  };
+}
+
 // Create Caseworker
 export const createCaseworker = async (req, res) => {
   const t = await req.tenantDb.sequelize.transaction();
@@ -507,22 +655,24 @@ export const getAllCaseworkers = async (req, res) => {
     const limitNum = parseInt(limit, 10) || 10;
     const offset = (pageNum - 1) * limitNum;
 
-    const whereClause = {
-      role_id: CASEWORKER_ROLE,
-    };
-
+    let userFilters = { role_id: CASEWORKER_ROLE };
+    if (status) userFilters.status = status;
     if (search) {
-      whereClause[Op.or] = [
-        { first_name: { [Op.iLike]: `%${search}%` } },
-        { last_name: { [Op.iLike]: `%${search}%` } },
-        { email: { [Op.iLike]: `%${search}%` } },
-        { mobile: { [Op.iLike]: `%${search}%` } },
-      ];
+      userFilters = {
+        [Op.and]: [
+          userFilters,
+          {
+            [Op.or]: [
+              { first_name: { [Op.iLike]: `%${search}%` } },
+              { last_name: { [Op.iLike]: `%${search}%` } },
+              { email: { [Op.iLike]: `%${search}%` } },
+              { mobile: { [Op.iLike]: `%${search}%` } },
+            ],
+          },
+        ],
+      };
     }
-
-    if (status) {
-      whereClause.status = status;
-    }
+    const whereClause = mergeUserWhere(req, userFilters);
 
     // Build include clause for filtering by department
     const includeClause = caseworkerInclude(req);
@@ -552,17 +702,13 @@ export const getAllCaseworkers = async (req, res) => {
       subQuery: false,
     });
 
-    // Add performance metrics to each caseworker
-    const allCases = await req.tenantDb.Case.findAll({
-      where: { deleted_at: null },
-      attributes: ['id', 'status', 'assignedcaseworkerId', 'targetSubmissionDate']
-    });
+    const orgId = organisationIdFromRequest(req);
+    const allCases = await loadOrganisationCases(req);
 
     const caseworkersWithMetrics = caseworkers.map((caseworker) => {
-      const assignedCases = allCases.filter(c => {
-        const assignedIds = Array.isArray(c.assignedcaseworkerId) ? c.assignedcaseworkerId : [];
-        return assignedIds.includes(caseworker.id);
-      });
+      const assignedCases = allCases.filter((c) =>
+        caseAssignedToCaseworker(c, caseworker.id),
+      );
 
       const now = new Date();
       const totalCases = assignedCases.length;
@@ -587,13 +733,15 @@ export const getAllCaseworkers = async (req, res) => {
       ).length;
 
       const caseworkerData = caseworker.toJSON();
+      const assignedCandidates = extractAssignedCandidates(assignedCases);
       caseworkerData.performance = {
         totalCases,
         completedCases,
         inProgressCases,
         pendingCases,
         overdueCases,
-        completionRate: totalCases > 0 ? ((completedCases / totalCases) * 100).toFixed(1) : 0
+        assignedCandidates: assignedCandidates.length,
+        completionRate: totalCases > 0 ? ((completedCases / totalCases) * 100).toFixed(1) : 0,
       };
 
       return caseworkerData;
@@ -603,6 +751,7 @@ export const getAllCaseworkers = async (req, res) => {
       status: "success",
       message: "Caseworkers retrieved successfully",
       data: {
+        organisationId: orgId,
         caseworkers: caseworkersWithMetrics,
         pagination: {
           total: count,
@@ -626,10 +775,19 @@ export const getAllCaseworkers = async (req, res) => {
 // Get Caseworker by ID
 export const getCaseworkerById = async (req, res) => {
   try {
-    const { id } = req.params;
+    const caseworkerId = parseInt(req.params.id, 10);
+    if (Number.isNaN(caseworkerId)) {
+      return res.status(400).json({
+        status: "error",
+        message: "Invalid caseworker id",
+        data: null,
+      });
+    }
+
+    const orgId = organisationIdFromRequest(req);
 
     const caseworker = await req.tenantDb.User.findOne({
-      where: { id, role_id: CASEWORKER_ROLE },
+      where: mergeUserWhere(req, { id: caseworkerId, role_id: CASEWORKER_ROLE }),
       attributes: {
         exclude: [
           "password",
@@ -643,7 +801,7 @@ export const getCaseworkerById = async (req, res) => {
       include: caseworkerInclude(req),
     });
 
-    if (!caseworker) {
+    if (!caseworker || !userBelongsToOrganisation(caseworker, orgId)) {
       return res.status(404).json({
         status: "error",
         message: "Caseworker not found",
@@ -651,10 +809,33 @@ export const getCaseworkerById = async (req, res) => {
       });
     }
 
+    const allActiveCases = await loadOrganisationCases(req);
+
+    const assignedCases = allActiveCases.filter((c) =>
+      caseAssignedToCaseworker(c, caseworkerId),
+    );
+
+    const now = new Date();
+    const cases = assignedCases.map((c) => mapCaseForCaseworkerDetail(c, now));
+    const candidates = extractAssignedCandidates(assignedCases);
+    const metrics = {
+      ...computeCaseMetrics(assignedCases),
+      assignedCandidates: candidates.length,
+    };
+
+    const caseworkerJson = caseworker.toJSON();
+    caseworkerJson.performance = metrics;
+
     res.status(200).json({
       status: "success",
       message: "Caseworker retrieved successfully",
-      data: { caseworker },
+      data: {
+        organisationId: orgId,
+        caseworker: caseworkerJson,
+        metrics,
+        candidates,
+        cases,
+      },
     });
   } catch (error) {
     console.error("Get Caseworker by ID Error:", error);

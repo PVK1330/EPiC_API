@@ -45,6 +45,27 @@ function organisationIdFromReq(req) {
   return id != null ? Number(id) : null;
 }
 
+async function resolveUserTimezone(tenantDb, userId) {
+  if (!tenantDb || !userId) return "UTC";
+  const sponsorPref = tenantDb.SponsorUserPreference
+    ? await tenantDb.SponsorUserPreference.findOne({
+        where: { userId },
+        attributes: ["timezone"],
+      })
+    : null;
+  const sponsorTz = sponsorPref?.timezone ? String(sponsorPref.timezone).trim() : "";
+  if (sponsorTz) return sponsorTz;
+
+  const adminPref = tenantDb.AdminUserPreference
+    ? await tenantDb.AdminUserPreference.findOne({
+        where: { user_id: userId },
+        attributes: ["timezone"],
+      })
+    : null;
+  const adminTz = adminPref?.timezone ? String(adminPref.timezone).trim() : "";
+  return adminTz || "UTC";
+}
+
 function normalizeInstallments(installments = []) {
   if (!Array.isArray(installments)) return [];
   return installments.map((row, i) => ({
@@ -450,11 +471,15 @@ export const listCclFeePendingApprovals = async (req, res) => {
     }
 
     const cases = await req.tenantDb.Case.findAll({
-      where: { caseStage: "ccl_fee_admin_review" },
       include: [
         { model: req.tenantDb.User, as: "candidate", attributes: ["id", "first_name", "last_name", "email"] },
         { model: req.tenantDb.VisaType, as: "visaType", attributes: ["id", "name"] },
-        { model: req.tenantDb.CaseCclRecord, as: "cclRecord", required: true },
+        {
+          model: req.tenantDb.CaseCclRecord,
+          as: "cclRecord",
+          required: true,
+          where: { status: "fee_proposed" },
+        },
       ],
       order: [["updated_at", "DESC"]],
     });
@@ -1015,12 +1040,14 @@ export const getCandidateWorkflowProcess = async (req, res) => {
     }
 
     const app = await req.tenantDb.CandidateApplication.findOne({ where: { userId } });
+    const timezone = await resolveUserTimezone(req.tenantDb, userId);
 
     res.status(200).json({
       status: "success",
       data: {
         caseId: caseRecord.caseId,
         caseStage: resolveCaseStage(caseRecord),
+        timezone,
         workflowState: getWorkflowState(caseRecord),
         application: app
           ? {
@@ -1093,6 +1120,7 @@ export const submitCandidateBiometricAvailability = async (req, res) => {
   try {
     const userId = req.user?.userId;
     const { preferredLocation, preferredDate, preferredTime, notes } = req.body;
+    const candidateTimezone = await resolveUserTimezone(req.tenantDb, userId);
 
     const caseRecord = await findCaseForUser(req.tenantDb, userId);
     if (!caseRecord) {
@@ -1106,6 +1134,7 @@ export const submitCandidateBiometricAvailability = async (req, res) => {
       preferredDate,
       preferredTime,
       notes,
+      candidateTimezone,
       performedBy: userId,
       organisationId: organisationIdFromReq(req),
     });

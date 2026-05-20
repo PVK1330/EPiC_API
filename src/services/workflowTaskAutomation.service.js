@@ -57,6 +57,7 @@ export async function createWorkflowTask({
   dueInDays = 3,
   organisationId = null,
   skipIfExists = true,
+  skipAssigneeNotification = false,
 }) {
   if (!tenantDb || !caseRecord || !assigneeId || !title) return null;
 
@@ -84,11 +85,13 @@ export async function createWorkflowTask({
   });
 
   const plain = task.get({ plain: true });
-  await notifyTaskAssigned(tenantDb, assigneeId, {
-    ...plain,
-    organisationId,
-    metadata: { caseId: caseLabel, taskId: task.id },
-  }).catch(() => {});
+  if (!skipAssigneeNotification) {
+    await notifyTaskAssigned(tenantDb, assigneeId, {
+      ...plain,
+      organisationId,
+      metadata: { caseId: caseLabel, taskId: task.id },
+    }).catch(() => {});
+  }
 
   return task;
 }
@@ -306,6 +309,7 @@ export async function syncWorkflowTasksForStage({
       priority: spec.priority,
       dueInDays: spec.dueInDays,
       organisationId,
+      skipAssigneeNotification: spec.notify === true,
     });
     if (t) created.push(t);
 

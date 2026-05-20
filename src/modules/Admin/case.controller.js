@@ -16,7 +16,10 @@ import {
   STAGE_TO_LEGACY_STATUS,
   LEGACY_STATUS_TO_STAGE,
   DEFAULT_CASE_STAGE,
+  assertSubmissionGate,
+  normalizeCaseStage,
 } from '../../constants/immigrationCaseProcess.js';
+import { applyCaseStageChange } from '../../services/caseStageAutomation.service.js';
 
 
 // Helper function to generate next case ID like #CAS-001 securely
@@ -107,6 +110,9 @@ export const createCase = async (req, res) => {
 
     const caseId = await generateCaseId(req.tenantDb);
 
+    const reqDeptId = req.body.departmentId !== undefined ? req.body.departmentId : req.body.department;
+    const parsedDeptId = reqDeptId !== undefined && reqDeptId !== null && reqDeptId !== '' ? parseInt(reqDeptId, 10) : null;
+
     const newCase = await req.tenantDb.Case.create({
       caseId,
       organisation_id: organisationId,
@@ -123,7 +129,7 @@ export const createCase = async (req, res) => {
       receiptNumber: receiptNumber || null,
       nationality: nationality || null,
       jobTitle: jobTitle || null,
-      departmentId: departmentId || null,
+      departmentId: parsedDeptId,
       assignedcaseworkerId: cwIds,
       salaryOffered: salaryOffered || 0,
       totalAmount: totalAmount || 0,
@@ -483,6 +489,7 @@ export const updateCase = async (req, res) => {
       petitionTypeId,
       priority,
       status,
+      caseStage,
       targetSubmissionDate,
       lcaNumber,
       receiptNumber,
@@ -502,6 +509,31 @@ export const updateCase = async (req, res) => {
     const oldStatus = caseData.status;
     console.log("Update Case - Old status:", oldStatus, "New status:", status);
 
+    const previousStage = resolveCaseStage(caseData);
+    let nextStage = caseStage !== undefined ? normalizeCaseStage(caseStage) : undefined;
+
+    if (nextStage !== undefined && nextStage !== previousStage) {
+      if (!isValidCaseStage(nextStage)) {
+        return res.status(400).json({
+          status: "error",
+          message: "Valid caseStage is required",
+          data: null,
+        });
+      }
+
+      const gate = await assertSubmissionGate(req.tenantDb, caseData, nextStage);
+      if (!gate.ok) {
+        return res.status(400).json({
+          status: "error",
+          message: gate.message,
+          data: null,
+        });
+      }
+    }
+
+    const reqDeptId = departmentId !== undefined ? departmentId : req.body.department;
+    const parsedDeptId = reqDeptId !== undefined ? (reqDeptId !== null && reqDeptId !== '' ? parseInt(reqDeptId, 10) : null) : undefined;
+
     const updateData = {
       candidateId: candidateId !== undefined ? candidateId : caseData.candidateId,
       sponsorId: sponsorId !== undefined ? sponsorId : caseData.sponsorId,
@@ -509,13 +541,14 @@ export const updateCase = async (req, res) => {
       visaTypeId: visaTypeId !== undefined ? visaTypeId : caseData.visaTypeId,
       petitionTypeId: petitionTypeId !== undefined ? petitionTypeId : caseData.petitionTypeId,
       priority: priority || caseData.priority,
-      status: status || caseData.status,
+      status: (status && (nextStage === undefined || nextStage === previousStage)) ? status : caseData.status,
+      caseStage: (caseStage && (nextStage === undefined || nextStage === previousStage)) ? caseStage : caseData.caseStage,
       targetSubmissionDate: targetSubmissionDate || caseData.targetSubmissionDate,
       lcaNumber: lcaNumber !== undefined ? lcaNumber : caseData.lcaNumber,
       receiptNumber: receiptNumber !== undefined ? receiptNumber : caseData.receiptNumber,
       nationality: nationality !== undefined ? nationality : caseData.nationality,
       jobTitle: jobTitle !== undefined ? jobTitle : caseData.jobTitle,
-      departmentId: departmentId !== undefined ? departmentId : caseData.departmentId,
+      departmentId: parsedDeptId !== undefined ? parsedDeptId : caseData.departmentId,
       assignedcaseworkerId: cwIds.length > 0 ? cwIds : caseData.assignedcaseworkerId,
       salaryOffered: salaryOffered !== undefined ? salaryOffered : caseData.salaryOffered,
       totalAmount: totalAmount !== undefined ? totalAmount : caseData.totalAmount,
@@ -526,6 +559,23 @@ export const updateCase = async (req, res) => {
 
     await caseData.update(updateData);
     console.log("Update Case - Update successful");
+
+    if (nextStage !== undefined && nextStage !== previousStage) {
+      if (nextStage === "biometrics_booked" && !caseData.biometricsDate) {
+        await caseData.update({ biometricsDate: new Date() });
+      }
+      await applyCaseStageChange({
+        tenantDb: req.tenantDb,
+        caseRecord: caseData,
+        nextStageId: nextStage,
+        performedBy: req.user?.userId,
+        reason: `Workflow moved to: ${getStepById(nextStage)?.title || nextStage}`,
+        sendEmail: true,
+        organisationId: req.user?.organisation_id ?? null,
+      });
+    }
+
+    await caseData.reload();
 
     // Record Timeline Entry for status change
     if (status && status !== oldStatus) {
