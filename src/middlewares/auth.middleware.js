@@ -51,6 +51,13 @@ export const verifyToken = async (req, res, next) => {
       }
     }
 
+    if (user.password_changed_at) {
+      const tokenIssuedAt = decoded.iat * 1000;
+      if (new Date(user.password_changed_at).getTime() > tokenIssuedAt) {
+        return ApiResponse.unauthorized(res, "Session expired due to password change. Please log in again.");
+      }
+    }
+
     user.userId = user.id;
     req.user = user;
     next();

@@ -97,6 +97,10 @@ export default (sequelize, DataTypes) => {
                 type: DataTypes.JSON,
                 allowNull: true,
             },
+            password_changed_at: {
+                type: DataTypes.DATE,
+                allowNull: true,
+            },
             profile_pic: {
                 type: DataTypes.STRING(500),
                 allowNull: true,

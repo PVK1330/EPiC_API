@@ -11,7 +11,8 @@ import * as moduleController from './module.controller.js';
 import * as announcementController from './superadminAnnouncement.controller.js';
 import { getPlatformSmtpSettings } from '../Admin/Settings/smtp.settings.controller.js';
 import * as platformSettingsController from './platformSettings.controller.js';
-import { handlePlatformLogoUpload, handlePlatformFaviconUpload } from '../../middlewares/upload.middleware.js';
+import * as profileController from './superadminProfile.controller.js';
+import { handlePlatformLogoUpload, handlePlatformFaviconUpload, handleSuperadminAvatarUpload } from '../../middlewares/upload.middleware.js';
 
 const router = express.Router();
 
@@ -98,5 +99,14 @@ router.put('/modules/:id', moduleController.updateModule);
 router.delete('/modules/:id', moduleController.deleteModule);
 router.get('/plans/:planId/modules', moduleController.getModulesByPlan);
 router.put('/plans/:planId/modules', moduleController.updatePlanModules);
+
+// ── Superadmin Profile ───────────────────────────────────────────────────────
+router.get('/profile',                                    profileController.getSuperadminProfile);
+router.patch('/profile',                                  profileController.updateSuperadminProfile);
+router.post('/profile/avatar', handleSuperadminAvatarUpload, profileController.uploadSuperadminAvatar);
+router.patch('/profile/password',                         profileController.changeSuperadminPassword);
+router.post('/profile/2fa/setup',                         profileController.setup2FAForSuperadmin);
+router.post('/profile/2fa/verify',                        profileController.verify2FASetupForSuperadmin);
+router.post('/profile/2fa/disable',                       profileController.disable2FAForSuperadmin);
 
 export default router;

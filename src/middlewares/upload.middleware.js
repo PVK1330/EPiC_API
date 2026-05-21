@@ -204,3 +204,41 @@ const makePlatformBrandHandler = (field) => (req, res, next) => {
 
 export const handlePlatformLogoUpload    = makePlatformBrandHandler('logo');
 export const handlePlatformFaviconUpload = makePlatformBrandHandler('favicon');
+
+const superadminAvatarDir = 'uploads/superadmin/';
+if (!fs.existsSync(superadminAvatarDir)) {
+  fs.mkdirSync(superadminAvatarDir, { recursive: true });
+}
+
+const superadminAvatarStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    cb(null, superadminAvatarDir);
+  },
+  filename: (req, file, cb) => {
+    const userId = req.user?.id || 'sa';
+    const ext = path.extname(file.originalname).toLowerCase() || '.png';
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    cb(null, `superadmin-${userId}-${uniqueSuffix}${ext}`);
+  },
+});
+
+const superadminAvatarUpload = multer({
+  storage: superadminAvatarStorage,
+  limits: { fileSize: 2 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = ['.png', '.jpg', '.jpeg', '.webp'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowed.includes(ext)) { cb(null, true); return; }
+    cb(new Error('Avatar must be PNG, JPG, or WEBP.'));
+  },
+});
+
+export const handleSuperadminAvatarUpload = (req, res, next) => {
+  superadminAvatarUpload.single('avatar')(req, res, (err) => {
+    if (!err) return next();
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({ status: 'error', message: 'Avatar file too large (max 2 MB).', data: null });
+    }
+    return res.status(400).json({ status: 'error', message: err.message || 'Avatar upload failed', data: null });
+  });
+};
