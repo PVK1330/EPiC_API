@@ -15,6 +15,12 @@ router.get("/export", workloadController.exportWorkloadCSV);
 // Workload Overview
 router.get("/overview", workloadController.getWorkloadOverview);
 
+// Pending Tasks
+router.get("/pending-tasks", workloadController.getPendingTasks);
+
+// Deadline Monitor
+router.get("/deadline-monitor", workloadController.getDeadlineMonitor);
+
 // Individual Caseworker Workload
 router.get("/caseworker/:caseworkerId", workloadController.getCaseworkerWorkload);
 

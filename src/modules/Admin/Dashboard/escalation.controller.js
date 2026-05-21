@@ -123,7 +123,7 @@ export const createEscalation = async (req, res) => {
     // Send notification to assigned admin
     if (assignedAdminId) {
       try {
-        await notifyEscalationCreated(assignedAdminId, {
+        await notifyEscalationCreated(req.tenantDb, assignedAdminId, {
           id: escalation.id,
           title: trigger,
           caseId: caseId,
@@ -275,7 +275,7 @@ export const updateEscalation = async (req, res) => {
       }
     }
 
-    await req.tenantDb.Escalation.update(updateData);
+    await req.tenantDb.Escalation.update(updateData, { where: { id } });
 
     // Send notification when escalation is resolved
     if (status && (status === "Resolved" || status === "Closed") && oldStatus !== status) {
@@ -288,7 +288,7 @@ export const updateEscalation = async (req, res) => {
       
       if (userIdsToNotify.length > 0) {
         try {
-          await notifyEscalationResolved(userIdsToNotify, {
+          await notifyEscalationResolved(req.tenantDb, userIdsToNotify, {
             id: escalation.id,
             title: escalation.trigger,
             caseId: escalation.caseId,
@@ -346,7 +346,7 @@ export const deleteEscalation = async (req, res) => {
       });
     }
 
-    await req.tenantDb.Escalation.destroy();
+    await escalation.destroy();
 
     res.status(200).json({
       status: "success",
@@ -500,10 +500,13 @@ export const assignEscalation = async (req, res) => {
       });
     }
 
-    await req.tenantDb.Escalation.update({
-      assignedAdminId,
-      assignedAdminName: `${admin.first_name} ${admin.last_name}`,
-    });
+    await req.tenantDb.Escalation.update(
+      {
+        assignedAdminId,
+        assignedAdminName: `${admin.first_name} ${admin.last_name}`,
+      },
+      { where: { id } }
+    );
 
     const updatedEscalation = await req.tenantDb.Escalation.findByPk(id, {
       include: [
