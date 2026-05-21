@@ -292,77 +292,169 @@ export const register = catchAsync(async (req, res) => {
     country_code,
     mobile,
     role_id,
+    date_of_birth,
+    organisation_id: bodyOrgId,
   } = req.body;
 
-  if (!first_name || !last_name) {
-    return ApiResponse.badRequest(res, "First name and last name are required");
+  // ── Basic field presence ──────────────────────────────────────────────────
+  if (!first_name || !String(first_name).trim()) {
+    return ApiResponse.badRequest(res, "First name is required");
+  }
+  if (!last_name || !String(last_name).trim()) {
+    return ApiResponse.badRequest(res, "Last name is required");
+  }
+  if (!email || !String(email).trim()) {
+    return ApiResponse.badRequest(res, "Email is required");
   }
 
+  // ── Email format ──────────────────────────────────────────────────────────
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(String(email).trim())) {
+    return ApiResponse.badRequest(res, "Invalid email address");
+  }
+
+  // ── Password ──────────────────────────────────────────────────────────────
   if (!password || password.length < 8) {
     return ApiResponse.badRequest(res, "Password must be at least 8 characters");
+  }
+
+  // ── Mobile number ─────────────────────────────────────────────────────────
+  if (!mobile || !String(mobile).trim()) {
+    return ApiResponse.badRequest(res, "Mobile number is required");
+  }
+  const mobileStr = String(mobile).trim().replace(/\s+/g, "");
+  // Must be 7–15 digits (E.164 body, without country code)
+  if (!/^\d{7,15}$/.test(mobileStr)) {
+    return ApiResponse.badRequest(
+      res,
+      "Mobile number must be between 7 and 15 digits and contain only numbers",
+    );
+  }
+  if (!country_code || !String(country_code).trim()) {
+    return ApiResponse.badRequest(res, "Country code is required (e.g. +44)");
+  }
+  // Country code: optional leading +, then 1–4 digits
+  if (!/^\+?\d{1,4}$/.test(String(country_code).trim())) {
+    return ApiResponse.badRequest(res, "Invalid country code (e.g. +44, +91)");
+  }
+
+  // ── Date of birth ─────────────────────────────────────────────────────────
+  if (date_of_birth) {
+    const dob = new Date(date_of_birth);
+    if (isNaN(dob.getTime())) {
+      return ApiResponse.badRequest(res, "Invalid date of birth");
+    }
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (dob >= today) {
+      return ApiResponse.badRequest(res, "Date of birth cannot be today or a future date");
+    }
+    // Must be at least 16 years old
+    const minAge = new Date(today);
+    minAge.setFullYear(minAge.getFullYear() - 16);
+    if (dob > minAge) {
+      return ApiResponse.badRequest(res, "You must be at least 16 years old to register");
+    }
+  }
+
+  // ── Role ──────────────────────────────────────────────────────────────────
+  const parsedRoleId = Number(role_id);
+  const validRoles = [1, 2, 3, 4];
+  if (!validRoles.includes(parsedRoleId)) {
+    return ApiResponse.badRequest(res, "Invalid role. Allowed values: 1 (candidate), 2 (caseworker), 3 (admin), 4 (business)");
+  }
+
+  // ── Resolve organisation / tenant DB ──────────────────────────────────────
+  // If a body organisation_id is supplied (e.g. from a plain /register call
+  // without a subdomain), inject it into the organisation context so
+  // resolveTenantDbForAuth can pick it up.
+  if (bodyOrgId && !req.organisationContext?.organisation) {
+    const org = await platformDb.Organisation.findByPk(bodyOrgId, {
+      attributes: ["id", "slug", "name", "database_name", "status"],
+    });
+    if (!org) {
+      return ApiResponse.notFound(res, "Organisation not found. Please check your organisation ID.");
+    }
+    if (org.status === "suspended") {
+      return ApiResponse.error(res, "This organisation is suspended. Please contact support.", 403);
+    }
+    if (!org.database_name) {
+      return ApiResponse.error(res, "Organisation database not provisioned. Contact your administrator.", 503);
+    }
+    // Attach so resolveTenantDbForAuth uses it
+    req.organisationContext = req.organisationContext || {};
+    req.organisationContext.organisation = org;
+  }
+
+  let orgId, tenantDb;
+  try {
+    ({ orgId, tenantDb } = await resolveTenantDbForAuth(req));
+  } catch (err) {
+    const status = err.status || 400;
+    return ApiResponse.error(res, err.message, status);
   }
 
   if (!tenantDb) {
     return ApiResponse.error(
       res,
-      "Registration unavailable. Use your organisation sign-up URL or ask an administrator to create your organisation.",
+      "Registration unavailable. Please provide a valid organisation_id or use your organisation sign-up URL.",
       503,
     );
   }
 
+  // ── Duplicate checks ──────────────────────────────────────────────────────
   const emailNorm = normalizePlatformEmail(email);
   if (await isPlatformEmailTaken(platformDb, emailNorm, orgId)) {
-    return ApiResponse.badRequest(res, "Email already exists for this organisation");
+    return ApiResponse.badRequest(res, "An account with this email already exists for this organisation");
   }
 
   const mobileExists = await platformDb.User.findOne({
-    where: { country_code, mobile },
+    where: { country_code: String(country_code).trim(), mobile: mobileStr },
   });
-
   if (mobileExists) {
-    return ApiResponse.badRequest(res, "Mobile number already exists");
+    return ApiResponse.badRequest(res, "An account with this mobile number already exists");
   }
 
   const { UnverifiedUser } = tenantDb;
-  const unverifiedEmailExists = await UnverifiedUser.findOne({ where: { email } });
+  const unverifiedEmailExists = await UnverifiedUser.findOne({ where: { email: emailNorm } });
   if (unverifiedEmailExists) {
-    return ApiResponse.badRequest(res, "Registration already in progress. Please verify your OTP or request a new one.", { email, pending_verification: true });
+    return ApiResponse.badRequest(
+      res,
+      "Registration already in progress for this email. Please verify your OTP or request a new one.",
+      { email: emailNorm, pending_verification: true },
+    );
   }
 
   const unverifiedMobileExists = await UnverifiedUser.findOne({
-    where: { country_code, mobile },
+    where: { country_code: String(country_code).trim(), mobile: mobileStr },
   });
   if (unverifiedMobileExists) {
-    return ApiResponse.badRequest(res, "Mobile number already registered and pending OTP verification.");
+    return ApiResponse.badRequest(res, "This mobile number is already pending OTP verification.");
   }
 
-  const validRoles = [1, 2, 3, 4];
-  if (!validRoles.includes(role_id)) {
-    return ApiResponse.badRequest(res, "Invalid role_id (allowed: 1,2,3,4)");
-  }
-
-  const { orgId: registrationOrgId } = await resolveTenantDbForAuth(req);
+  // ── Create unverified user & send OTP ─────────────────────────────────────
   const hashedPassword = await bcrypt.hash(password, 10);
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
   const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
 
   await UnverifiedUser.create({
-    first_name,
-    last_name,
-    email,
+    first_name: String(first_name).trim(),
+    last_name: String(last_name).trim(),
+    email: emailNorm,
     password: hashedPassword,
-    country_code,
-    mobile,
-    role_id,
+    country_code: String(country_code).trim(),
+    mobile: mobileStr,
+    role_id: parsedRoleId,
+    date_of_birth: date_of_birth || null,
     otp_code: otp,
     otp_expiry: otpExpiry,
     temp_password: null,
-    organisation_id: registrationOrgId,
+    organisation_id: orgId,
   });
 
   const mailResult = await sendTransactionalEmail({
-    organisationId: registrationOrgId,
-    to: email,
+    organisationId: orgId,
+    to: emailNorm,
     subject: "Elite Pic - OTP Verification",
     html: generateOTPTemplate(otp),
   });
@@ -376,9 +468,9 @@ export const register = catchAsync(async (req, res) => {
     );
   }
 
-  return ApiResponse.created(res, "User registered successfully", {
-    email: email,
-    otp_sent: true
+  return ApiResponse.created(res, "User registered successfully. Please check your email for the OTP.", {
+    email: emailNorm,
+    otp_sent: true,
   });
 });
 

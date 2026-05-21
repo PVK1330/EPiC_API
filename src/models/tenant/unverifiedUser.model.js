@@ -55,6 +55,10 @@ export default (sequelize, DataTypes) => {
                 type: DataTypes.TEXT,
                 allowNull: true,
             },
+            date_of_birth: {
+                type: DataTypes.DATEONLY,
+                allowNull: true,
+            },
             role_id: {
                 type: DataTypes.INTEGER,
                 allowNull: false,
@@ -64,6 +68,16 @@ export default (sequelize, DataTypes) => {
                 },
                 onUpdate: "CASCADE",
                 onDelete: "CASCADE",
+            },
+            organisation_id: {
+                type: DataTypes.INTEGER,
+                allowNull: true,
+                references: {
+                    model: "organisations",
+                    key: "id",
+                },
+                onUpdate: "CASCADE",
+                onDelete: "SET NULL",
             },
         },
         {

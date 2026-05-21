@@ -7,15 +7,15 @@ const router = Router();
 const withOrgContext = [attachOrganisationContext];
 
 router.post("/register", ...withOrgContext, auth.register);
-router.post("/verify-otp", ...withOrgContext, auth.verifyOTP); // unverified user
-router.post("/resend-otp", ...withOrgContext, auth.resendOTP); // unverified user
+router.post("/verify-otp", ...withOrgContext, auth.verifyOTP); 
+router.post("/resend-otp", ...withOrgContext, auth.resendOTP); 
 router.post("/login", ...withOrgContext, auth.login);
 router.post("/logout", auth.logout);
 router.post("/forgot-password", ...withOrgContext, auth.forgotPassword);
 router.post("/verify-reset-otp", ...withOrgContext, auth.verifyResetOTP);
 router.post("/set-password", ...withOrgContext, auth.setPassword);
-router.post("/resendOtpUser", auth.resendOtpUser); // user table
-router.post("/verifyOtpUser", auth.verifyOtpUser); // user table
+router.post("/resendOtpUser", auth.resendOtpUser);
+router.post("/verifyOtpUser", auth.verifyOtpUser);
 router.post("/send-password-change-otp", verifyTokenAndTenant, auth.sendPasswordChangeOtp);
 
 // 2FA routes
