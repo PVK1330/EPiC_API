@@ -1,5 +1,6 @@
 import seedPermissionsForDb from "../seeders/permission.seeder.js";
 import { seedApplicationFieldSettingsForDb } from "../seeders/applicationFieldSettings.seeder.js";
+import { seedWorkflowEmailTemplatesForDb } from "../seeders/workflowEmailTemplates.seeder.js";
 
 const TENANT_ROLES = [
   { id: 1, name: "candidate" },
@@ -70,6 +71,7 @@ export async function seedTenantDefaults(tenantDb) {
 
   await ensureApplicationFieldTables(tenantDb);
   await seedApplicationFieldSettingsForDb(tenantDb);
+  await seedWorkflowEmailTemplatesForDb(tenantDb);
 }
 
 /** Ensure application field tables exist (migration + Sequelize sync safety net). */

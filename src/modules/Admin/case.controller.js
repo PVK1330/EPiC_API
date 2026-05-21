@@ -245,8 +245,10 @@ export const getCasesWithFilters = async (req, res) => {
     if (candidateId) whereClause.candidateId = candidateId;
     if (sponsorId) whereClause.sponsorId = sponsorId;
 
+    const scopedWhere = mergeCaseWhere(req, whereClause);
+
     const { count, rows: cases } = await req.tenantDb.Case.findAndCountAll({
-      where: whereClause,
+      where: scopedWhere,
       order: [["created_at", "DESC"]],
       limit: parseInt(limit),
       offset: parseInt(offset),
@@ -267,7 +269,7 @@ export const getCasesWithFilters = async (req, res) => {
           attributes: ['id', 'name']
         },
         {
-          model: req.tenantDb.VisaType,
+          model: req.tenantDb.PetitionType,
           as: 'petitionType',
           attributes: ['id', 'name']
         }
@@ -301,7 +303,7 @@ export const getCasesWithFilters = async (req, res) => {
 // Get All Cases with Statistics
 export const getAllCases = async (req, res) => {
   try {
-    const { page = 1, limit = 10, search, status, priority, visaType } = req.query;
+    const { page = 1, limit = 10, search, status, priority, visaType, visaTypeId } = req.query;
     const offset = (page - 1) * limit;
 
     const whereClause = {};
@@ -316,10 +318,16 @@ export const getAllCases = async (req, res) => {
 
     if (status) whereClause.status = status;
     if (priority) whereClause.priority = priority;
-    if (visaType) whereClause.visaType = visaType;
+    const visaFilter = visaTypeId || visaType;
+    if (visaFilter) {
+      const parsed = parseInt(visaFilter, 10);
+      if (!Number.isNaN(parsed)) whereClause.visaTypeId = parsed;
+    }
+
+    const scopedWhere = mergeCaseWhere(req, whereClause);
 
     const { count, rows: cases } = await req.tenantDb.Case.findAndCountAll({
-      where: whereClause,
+      where: scopedWhere,
       order: [["created_at", "DESC"]],
       limit: parseInt(limit),
       offset: parseInt(offset),
@@ -347,11 +355,17 @@ export const getAllCases = async (req, res) => {
       ]
     });
 
-    // Get case statistics
-    const totalCount = await req.tenantDb.Case.count({ where: {} });
-    const pendingCount = await req.tenantDb.Case.count({ where: { status: 'Pending' } });
-    const approvedCount = await req.tenantDb.Case.count({ where: { status: 'Completed' } });
-    const rejectedCount = await req.tenantDb.Case.count({ where: { status: 'Cancelled' } });
+    const statsWhere = mergeCaseWhere(req, {});
+    const totalCount = await req.tenantDb.Case.count({ where: statsWhere });
+    const pendingCount = await req.tenantDb.Case.count({
+      where: mergeCaseWhere(req, { status: 'Pending' }),
+    });
+    const approvedCount = await req.tenantDb.Case.count({
+      where: mergeCaseWhere(req, { status: 'Completed' }),
+    });
+    const rejectedCount = await req.tenantDb.Case.count({
+      where: mergeCaseWhere(req, { status: 'Cancelled' }),
+    });
 
     res.status(200).json({
       status: "success",
@@ -728,7 +742,7 @@ export const getCaseWorkflow = async (_req, res) => {
 export const getPipelineCases = async (req, res) => {
   try {
     const cases = await req.tenantDb.Case.findAll({
-      where: {},
+      where: mergeCaseWhere(req, {}),
       include: [
         {
           model: req.tenantDb.User,
@@ -773,7 +787,6 @@ export const updatePipelineStage = async (req, res) => {
     const { id } = req.params;
     const { caseStage, status } = req.body;
 
-    const { normalizeCaseStage } = await import("../../constants/immigrationCaseProcess.js");
     let nextStage = normalizeCaseStage(caseStage);
     if (!nextStage && status) {
       nextStage = LEGACY_STATUS_TO_STAGE[status] || null;
@@ -798,7 +811,6 @@ export const updatePipelineStage = async (req, res) => {
 
     const previousStage = resolveCaseStage(caseData);
 
-    const { assertSubmissionGate } = await import("../../constants/immigrationCaseProcess.js");
     const gate = await assertSubmissionGate(req.tenantDb, caseData, nextStage);
     if (!gate.ok) {
       return res.status(400).json({
@@ -812,18 +824,20 @@ export const updatePipelineStage = async (req, res) => {
       await caseData.update({ biometricsDate: new Date() });
     }
 
-    const { applyCaseStageChange } = await import("../../services/caseStageAutomation.service.js");
-
     if (previousStage !== nextStage) {
-      await applyCaseStageChange({
-        tenantDb: req.tenantDb,
-        caseRecord: caseData,
-        nextStageId: nextStage,
-        performedBy: req.user?.userId,
-        reason: `Workflow moved to: ${getStepById(nextStage)?.title || nextStage}`,
-        sendEmail: true,
-        organisationId: req.user?.organisation_id ?? null,
-      });
+      try {
+        await applyCaseStageChange({
+          tenantDb: req.tenantDb,
+          caseRecord: caseData,
+          nextStageId: nextStage,
+          performedBy: req.user?.userId,
+          reason: `Workflow moved to: ${getStepById(nextStage)?.title || nextStage}`,
+          sendEmail: true,
+          organisationId: req.user?.organisation_id ?? null,
+        });
+      } catch (stageErr) {
+        console.error("applyCaseStageChange (pipeline):", stageErr);
+      }
     }
 
     await caseData.reload();
@@ -865,7 +879,7 @@ export const exportCases = async (req, res) => {
     }
 
     const cases = await req.tenantDb.Case.findAll({
-      where: whereClause,
+      where: mergeCaseWhere(req, whereClause),
       include: [
         {
           model: req.tenantDb.User,

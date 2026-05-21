@@ -119,6 +119,7 @@ export async function createTenantPostgresDatabase(databaseName) {
 
 import { runTenantMigrations } from "../migrations/run.js";
 import { evictTenantDb, getTenantDb } from "./tenantDb.service.js";
+import { seedTenantDefaults } from "./tenantSeed.service.js";
 
 /**
  * Create tenant DB when missing (registry may reference a dropped database).
@@ -177,6 +178,9 @@ export async function syncTenantDatabaseSchema(databaseName) {
   );
   await tenantDb.sequelize.query(
     "ALTER TABLE visa_types ADD COLUMN IF NOT EXISTS ccl_template_name VARCHAR(255) DEFAULT NULL",
+  );
+  await seedTenantDefaults(tenantDb).catch((err) =>
+    console.warn("seedTenantDefaults:", err.message),
   );
   evictTenantDb(databaseName);
 }

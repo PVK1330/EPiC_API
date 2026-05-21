@@ -91,26 +91,30 @@ export async function applyCaseStageChange({
   });
 
   if (sendEmail) {
-    const emailResult = await sendWorkflowStageEmail({
-      tenantDb,
-      caseRecord,
-      stageId: nextStage,
-      organisationId,
-    });
-    if (emailResult?.sent) {
-      await recordTimelineEntry({
+    try {
+      const emailResult = await sendWorkflowStageEmail({
         tenantDb,
-        caseId: caseRecord.id,
-        actionType: "communication_sent",
-        description: `Workflow email sent (${emailResult.templateKey})`,
-        performedBy,
-        metadata: {
-          templateKey: emailResult.templateKey,
-          recipientEmail: emailResult.to,
-          emailSent: true,
-        },
-        visibility: "internal",
+        caseRecord,
+        stageId: nextStage,
+        organisationId,
       });
+      if (emailResult?.sent) {
+        await recordTimelineEntry({
+          tenantDb,
+          caseId: caseRecord.id,
+          actionType: "communication_sent",
+          description: `Workflow email sent (${emailResult.templateKey})`,
+          performedBy,
+          metadata: {
+            templateKey: emailResult.templateKey,
+            recipientEmail: emailResult.to,
+            emailSent: true,
+          },
+          visibility: "internal",
+        }).catch((err) => console.error("recordTimelineEntry (email):", err));
+      }
+    } catch (emailErr) {
+      console.error("sendWorkflowStageEmail failed (stage change continues):", emailErr);
     }
   }
 

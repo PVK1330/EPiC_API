@@ -200,22 +200,33 @@ export async function assertSubmissionGate(tenantDb, caseRecord, nextStageId) {
   const ccl = await tenantDb.CaseCclRecord?.findOne({
     where: { caseId: caseRecord.id },
   });
-  const cclOk = ccl && (ccl.status === "signed" || ccl.status === "accepted");
-  const paid =
-    caseRecord.amountStatus === "paid" ||
-    (Number(caseRecord.totalAmount) > 0 &&
-      Number(caseRecord.paidAmount) >= Number(caseRecord.totalAmount));
+  const cclIssued = Boolean(ccl?.issuedDocumentId || ccl?.issuedAt);
+  const cclSigned =
+    ccl &&
+    (ccl.status === "signed" || ccl.status === "accepted") &&
+    Boolean(ccl.signedDocumentId || ccl.signedAt);
+  const cclOk = cclIssued && cclSigned;
 
+  const total = Number(caseRecord.totalAmount) || 0;
+  const paidAmt = Number(caseRecord.paidAmount) || 0;
+  const amountStatus = String(caseRecord.amountStatus || "").toLowerCase();
+  const paid =
+    amountStatus === "paid" ||
+    amountStatus === "partial" ||
+    (total > 0 && paidAmt >= total) ||
+    (total > 0 && paidAmt > 0);
+
+  const failures = [];
   if (!cclOk) {
-    return {
-      ok: false,
-      message: "Cannot advance: Client Care Letter not accepted by candidate.",
-    };
+    failures.push("Client Care Letter must be uploaded and signed by the candidate");
   }
   if (!paid) {
+    failures.push("case fees must be paid or partially paid before submission");
+  }
+  if (failures.length) {
     return {
       ok: false,
-      message: "Cannot advance: payment outstanding.",
+      message: `${failures.join("; ")}.`,
     };
   }
   return { ok: true };

@@ -213,15 +213,25 @@ export const saveDataCaptureSubmission = async (req, res) => {
         performedBy: userId,
         visibility: "public",
       });
-      await applyCaseStageChange({
-        tenantDb: req.tenantDb,
-        caseRecord,
-        nextStageId: "application_preparation",
-        performedBy: userId,
-        organisationId: organisationIdFromReq(req),
-        reason: "Data Capture Sheet submitted by client",
-        sendEmail: false,
-      });
+
+      await caseRecord.reload();
+      const currentStage = resolveCaseStage(caseRecord);
+      if (currentStage === "data_capture_initial_docs") {
+        try {
+          await applyCaseStageChange({
+            tenantDb: req.tenantDb,
+            caseRecord,
+            nextStageId: "application_preparation",
+            performedBy: userId,
+            organisationId: organisationIdFromReq(req),
+            reason: "Data Capture Sheet submitted by client — application preparation started",
+            sendEmail: false,
+          });
+          await caseRecord.reload();
+        } catch (stageErr) {
+          console.error("DCS submit stage automation:", stageErr);
+        }
+      }
     }
 
     res.status(200).json({

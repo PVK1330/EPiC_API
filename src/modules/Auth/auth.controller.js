@@ -26,6 +26,7 @@ import {
   mirrorAuthFieldsToTenantByEmail,
   syncUserToPlatformAndTenant,
 } from '../../services/userSync.service.js';
+import { permissionNamesToModuleIds } from '../../constants/platformModules.js';
 
 const RESET_TOKEN_EXPIRY = '10m';
 const RESET_TOKEN_PURPOSE = 'password_reset';
@@ -59,7 +60,7 @@ function buildLoginUserResponse(user, roleMeta) {
     last_name: user.last_name,
     email: user.email,
     role_id: user.role_id,
-    role_name: ROLE_NAMES[user.role_id] || roleName,
+    role_name: roleName,
     role: panelRole,
     organisation_id: user.organisation_id,
     status: user.status,
@@ -112,7 +113,26 @@ async function resolveTenantDbForAuth(req) {
 
 async function resolveAllowedModules(user) {
   if (isSuperAdminRole(user.role_id)) return ['*'];
-  if (!user.organisation_id) return [];
+  if (isPlatformStaffUser(user)) {
+    try {
+      const role = await platformDb.Role.findByPk(user.role_id, {
+        attributes: ['id', 'name'],
+        include: [
+          {
+            model: platformDb.Permission,
+            as: 'permissions',
+            attributes: ['name'],
+            through: { attributes: [] },
+          },
+        ],
+      });
+      const permNames = (role?.permissions || []).map((p) => p.name).filter(Boolean);
+      return permissionNamesToModuleIds(permNames);
+    } catch (err) {
+      console.error('resolveAllowedModules (platform staff):', err);
+      return [];
+    }
+  }
   try {
     const subscription = await platformDb.Subscription.findOne({
       where: {
