@@ -1,49 +1,67 @@
-import jwt from 'jsonwebtoken';
+import jwt from "jsonwebtoken";
+import platformDb from "../models/index.js";
+import ApiResponse from "../utils/apiResponse.js";
 
-export const verifyToken = (req, res, next) => {
+/**
+ * Global token verification against Platform DB users registry.
+ */
+export const verifyToken = async (req, res, next) => {
   try {
-    // Validate JWT_SECRET is configured
-    if (!process.env.JWT_SECRET) {
-      console.error('CRITICAL: JWT_SECRET environment variable is not configured');
-      return res.status(500).json({
-        status: 'error',
-        message: 'Server configuration error',
-        data: null,
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return ApiResponse.unauthorized(res, "Missing or invalid authorization header");
+    }
+
+    const token = authHeader.split(" ")[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || "epic-secret-key");
+
+    const user = await platformDb.User.findByPk(decoded.id);
+    if (!user) {
+      return ApiResponse.unauthorized(res, "User not found");
+    }
+
+    if (user.status !== "active") {
+      return ApiResponse.forbidden(res, "User account is " + user.status);
+    }
+
+    if (user.organisation_id && user.role_id !== 5) {
+      const org = await platformDb.Organisation.findByPk(user.organisation_id, {
+        attributes: ['status'],
+        include: [
+          {
+            model: platformDb.Subscription,
+            as: 'subscriptions',
+            where: { status: { [platformDb.Sequelize.Op.in]: ['active', 'trial'] } },
+            required: false,
+          },
+        ],
       });
+
+      if (org?.status === 'suspended') {
+        return ApiResponse.forbidden(res, 'Your organisation subscription has expired. Please contact your administrator.');
+      }
+
+      if (!org?.subscriptions || org.subscriptions.length === 0) {
+        const expiredSub = await platformDb.Subscription.findOne({
+          where: { organisation_id: user.organisation_id, status: 'expired' },
+        });
+        if (expiredSub) {
+          return ApiResponse.forbidden(res, 'Your organisation subscription has expired. Please contact your administrator.');
+        }
+      }
     }
 
-    let token = null;
-
-    // 1. Check Authorization Header (Bearer Token)
-    const authHeader = req.headers['authorization'];
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      token = authHeader.split(' ')[1];
+    if (user.password_changed_at) {
+      const tokenIssuedAt = decoded.iat * 1000;
+      if (new Date(user.password_changed_at).getTime() > tokenIssuedAt) {
+        return ApiResponse.unauthorized(res, "Session expired due to password change. Please log in again.");
+      }
     }
 
-    // 2. Fallback to Cookies if no header (Useful for browser requests/testing)
-    if (!token && req.cookies) {
-      token = req.cookies.token;
-    }
-
-    if (!token) {
-      // Use 401 for authentication issues
-      return res.status(401).json({
-        status: 'error',
-        message: 'Authentication required. No token provided.',
-        data: null,
-      });
-    }
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded; // { userId, email, role_id, role_name }
+    user.userId = user.id;
+    req.user = user;
     next();
   } catch (err) {
-    console.error('verifyToken - Error:', err.message);
-    const status = err.name === 'TokenExpiredError' ? 401 : 401; // Always 401 for auth failures
-    return res.status(status).json({
-      status: 'error',
-      message: err.name === 'TokenExpiredError' ? 'Token expired' : 'Invalid or expired token.',
-      data: null,
-    });
+    return ApiResponse.unauthorized(res, "Token is invalid or expired");
   }
 };

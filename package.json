@@ -5,30 +5,36 @@
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
-    "migrate": "node src/migrations/run.js"
+    "migrate": "node src/migrations/run.js all",
+    "migrate:platform": "node src/migrations/run.js platform",
+    "migrate:tenants": "node src/migrations/run.js tenants",
+    "seed:modules": "node src/scripts/seedModules.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "module",
   "dependencies": {
+    "archiver": "^7.0.1",
     "bcryptjs": "^3.0.3",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "dotenv": "^17.4.1",
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
+    "lru-cache": "^11.3.6",
     "multer": "^2.1.1",
     "nodemailer": "^8.0.5",
     "pdfmake": "^0.2.15",
     "pg": "^8.20.0",
     "pg-hstore": "^2.3.4",
-    "pm2": "^5.4.2",
+    "pm2": "^6.0.14",
     "qrcode": "^1.5.4",
     "sequelize": "^6.37.8",
     "socket.io": "^4.8.3",
     "speakeasy": "^2.0.0",
-    "stripe": "^22.0.1"
+    "stripe": "^22.0.1",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "nodemon": "^3.1.14"

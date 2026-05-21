@@ -1,9 +1,10 @@
 import { Server } from "socket.io";
 import jwt from "jsonwebtoken";
-import db from "../models/index.js";
-import { userRoom, threadRoom } from "./messagingRealtime.js";
+import platformDb from "../models/index.js";
+import { getTenantDb } from "../services/tenantDb.service.js";
+import { userRoom, threadRoom, orgRoom } from "./messagingRealtime.js";
 import { registerIO } from "./ioRegistry.js";
-import { getFrontendOrigins } from "../config/frontendOrigins.js";
+import { isAllowedFrontendOrigin } from "../config/frontendOrigins.js";
 
 function extractSocketToken(socket) {
   const authToken = socket.handshake.auth?.token;
@@ -34,7 +35,13 @@ function extractSocketToken(socket) {
 export function initSocketIO(httpServer, app) {
   const io = new Server(httpServer, {
     cors: {
-      origin: getFrontendOrigins(),
+      origin: (origin, callback) => {
+        if (isAllowedFrontendOrigin(origin)) {
+          callback(null, true);
+        } else {
+          callback(new Error(`CORS blocked origin: ${origin}`));
+        }
+      },
       methods: ["GET", "POST"],
       credentials: true,
     },
@@ -69,6 +76,11 @@ export function initSocketIO(httpServer, app) {
     }
     socket.join(userRoom(uid));
 
+    const orgId = socket.user.organisation_id != null ? Number(socket.user.organisation_id) : null;
+    if (orgId && !Number.isNaN(orgId)) {
+      socket.join(orgRoom(orgId));
+    }
+
     socket.on("thread:subscribe", async (payload, ack) => {
       const reply = (result) => {
         if (typeof ack === "function") ack(result);
@@ -78,7 +90,17 @@ export function initSocketIO(httpServer, app) {
         if (!Number.isFinite(conversationId) || conversationId <= 0) {
           return reply({ ok: false, error: "conversationId is required" });
         }
-        const conv = await db.Conversation.findByPk(conversationId);
+        if (!orgId || Number.isNaN(orgId)) {
+          return reply({ ok: false, error: "Organisation context required" });
+        }
+        const org = await platformDb.Organisation.findByPk(orgId, {
+          attributes: ["database_name"],
+        });
+        if (!org?.database_name) {
+          return reply({ ok: false, error: "Tenant database not provisioned" });
+        }
+        const tenantDb = getTenantDb(org.database_name);
+        const conv = await tenantDb.Conversation.findByPk(conversationId);
         if (!conv) {
           return reply({ ok: false, error: "Conversation not found" });
         }

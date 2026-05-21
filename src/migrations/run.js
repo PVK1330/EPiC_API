@@ -1,37 +1,213 @@
 /**
- * Runs SQL migrations in order (filenames sorted).
- * Usage: node src/migrations/run.js
+ * SQL migrations for platform (registry) and tenant databases.
+ *
+ * Usage:
+ *   node src/migrations/run.js platform     — platform DB only (organisations + users)
+ *   node src/migrations/run.js tenants      — all tenant DBs listed on organisations
+ *   node src/migrations/run.js all          — platform then every tenant (default)
  */
 import { readFileSync, readdirSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
-import db from "../models/index.js";
+import { Op } from "sequelize";
+import platformDb from "../models/index.js";
+import { getTenantDb } from "../services/tenantDb.service.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-async function run() {
-  const files = readdirSync(__dirname)
-    .filter((f) => f.endsWith(".sql"))
-    .sort();
+/** Platform registry bootstrap order. */
+const PLATFORM_BOOTSTRAP_ORDER = [
+  "002_roles.sql",
+  "003_permissions.sql",
+  "004_role_permissions.sql",
+  "005_users.sql",
+  "001_organisations.sql",
+  "platform_001_registry.sql",
+  "20260514120000-add-organisations-database-name.sql",
+];
 
-  if (files.length === 0) {
-    console.log("No .sql migrations found in", __dirname);
-    process.exit(0);
+/** Tenant bootstrap order (users must exist before organisation FK alters in later files). */
+const TENANT_BOOTSTRAP_ORDER = [
+  "002_roles.sql",
+  "003_permissions.sql",
+  "004_role_permissions.sql",
+  "005_users.sql",
+  "001_organisations.sql",
+  "20260421120002-create-departments.sql",
+  "006_core_business_tables.sql",
+  "20260516150000-create-application-field-settings.sql",
+];
+
+function listSqlFiles(subDir) {
+  const fullPath = join(__dirname, subDir);
+  try {
+    return readdirSync(fullPath)
+      .filter((f) => f.endsWith(".sql"))
+      .sort()
+      .map((f) => join(subDir, f));
+  } catch (e) {
+    console.warn(`Warning: Could not read directory ${fullPath}`);
+    return [];
   }
-
-  for (const file of files) {
-    const full = join(__dirname, file);
-    const sql = readFileSync(full, "utf8");
-    console.log("Running:", file);
-    await db.sequelize.query(sql);
-    console.log("OK:", file);
-  }
-
-  await db.sequelize.close();
-  console.log("Migrations finished.");
 }
 
-run().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+function listOrderedSqlFiles(subDir, bootstrapOrder) {
+  const fullPath = join(__dirname, subDir);
+  let all;
+  try {
+    all = readdirSync(fullPath).filter((f) => f.endsWith(".sql"));
+  } catch (e) {
+    console.warn(`Warning: Could not read directory ${fullPath}`);
+    return [];
+  }
+
+  const bootstrap = bootstrapOrder
+    .filter((f) => all.includes(f))
+    .map((f) => join(subDir, f));
+  const bootstrapSet = new Set(bootstrapOrder);
+  const rest = all
+    .filter((f) => !bootstrapSet.has(f))
+    .sort()
+    .map((f) => join(subDir, f));
+
+  return [...bootstrap, ...rest];
+}
+
+function listPlatformSqlFiles() {
+  return listOrderedSqlFiles("superadmin", PLATFORM_BOOTSTRAP_ORDER);
+}
+
+function listTenantSqlFiles() {
+  return listOrderedSqlFiles("tenants", TENANT_BOOTSTRAP_ORDER);
+}
+
+/** Stable migration keys across Windows/Linux (always forward slashes). */
+function migrationKey(file) {
+  return String(file).replace(/\\/g, "/");
+}
+
+async function runSqlFiles(sequelize, files, label) {
+  if (!files.length) {
+    console.log(`No ${label} migrations found.`);
+    return;
+  }
+
+  // Ensure migration tracking table exists
+  await sequelize.query(`
+    CREATE TABLE IF NOT EXISTS migration_history (
+      id SERIAL PRIMARY KEY,
+      filename VARCHAR(255) NOT NULL UNIQUE,
+      executed_at TIMESTAMP DEFAULT NOW()
+    );
+  `);
+
+  await sequelize.query(`
+    UPDATE migration_history
+    SET filename = REPLACE(filename, '\\', '/')
+    WHERE filename LIKE '%\\%';
+  `);
+
+  const seen = new Set();
+  for (const file of files) {
+    const key = migrationKey(file);
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    const existingRows = await sequelize.query(
+      "SELECT id FROM migration_history WHERE filename = $1 LIMIT 1",
+      { bind: [key], type: sequelize.QueryTypes.SELECT },
+    );
+    const existing = Array.isArray(existingRows) ? existingRows[0] : null;
+
+    if (existing) {
+      continue;
+    }
+
+    const sql = readFileSync(join(__dirname, file), "utf8");
+    console.log(`[${label}] Running:`, key);
+
+    await sequelize.query(sql);
+
+    await sequelize.query(
+      `INSERT INTO migration_history (filename) VALUES ($1)
+       ON CONFLICT (filename) DO NOTHING`,
+      { bind: [key] },
+    );
+
+    console.log(`[${label}] OK:`, key);
+  }
+}
+
+export async function runPlatformMigrations() {
+  console.log("\n--- Running Platform Migrations ---");
+  await platformDb.sequelize.authenticate();
+  const files = listPlatformSqlFiles();
+  await runSqlFiles(platformDb.sequelize, files, "platform");
+}
+
+export async function runTenantMigrations(specificDatabaseName = null) {
+  const tenantFiles = listTenantSqlFiles();
+  if (!tenantFiles.length) {
+    console.log("No tenant migrations found.");
+    return;
+  }
+
+  if (specificDatabaseName) {
+    console.log(`\n--- Running Migrations for Specific Tenant: ${specificDatabaseName} ---`);
+    const tenantDb = getTenantDb(specificDatabaseName);
+    await tenantDb.sequelize.authenticate();
+    await runSqlFiles(tenantDb.sequelize, tenantFiles, specificDatabaseName);
+    return;
+  }
+
+  const orgs = await platformDb.Organisation.findAll({
+    where: { database_name: { [Op.ne]: null } },
+    attributes: ["id", "slug", "database_name"],
+  });
+
+  for (const org of orgs) {
+    if (!org.database_name) continue;
+    console.log(`\n--- Tenant: ${org.slug} (${org.database_name}) ---`);
+    const tenantDb = getTenantDb(org.database_name);
+    await tenantDb.sequelize.authenticate();
+    await runSqlFiles(tenantDb.sequelize, tenantFiles, org.slug);
+  }
+}
+
+async function run() {
+  const mode = (process.argv[2] || "all").toLowerCase();
+
+  try {
+    if (mode === "platform") {
+      await runPlatformMigrations();
+    } else if (mode === "tenants") {
+      await platformDb.sequelize.authenticate();
+      await runTenantMigrations();
+    } else if (mode === "all") {
+      await runPlatformMigrations();
+      await runTenantMigrations();
+    } else {
+      console.error(`Unknown mode "${mode}". Use: platform | tenants | all`);
+      process.exit(1);
+    }
+
+    console.log("\nMigrations finished.");
+  } catch (err) {
+    console.error("\nMigration failed:");
+    console.error(err);
+    process.exit(1);
+  } finally {
+    // Only close if we are running as a standalone script
+    if (process.argv[1].endsWith('run.js')) {
+        await platformDb.sequelize.close();
+    }
+  }
+}
+
+// Only auto-run if called directly
+if (process.argv[1] && (process.argv[1].endsWith('run.js') || process.argv[1].endsWith('run'))) {
+    run().catch((err) => {
+      console.error(err);
+      process.exit(1);
+    });
+}
