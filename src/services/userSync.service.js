@@ -66,6 +66,35 @@ export async function syncUserToPlatformAndTenant(tenantDb, userId, updates) {
 }
 
 /**
+ * Mirror profile/auth fields to the platform registry only (tenant row already updated).
+ * Times out quickly so API handlers are not blocked by a slow central DB connection.
+ */
+export async function syncUserToPlatformOnly(userId, updates, timeoutMs = 4000) {
+  if (!updates || Object.keys(updates).length === 0) return;
+
+  const syncPromise = platformDb.User.update(updates, { where: { id: userId } });
+
+  if (!timeoutMs || timeoutMs <= 0) {
+    await syncPromise;
+    return;
+  }
+
+  let timer;
+  const timeoutPromise = new Promise((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`Platform user sync timed out after ${timeoutMs}ms`)),
+      timeoutMs,
+    );
+  });
+
+  try {
+    await Promise.race([syncPromise, timeoutPromise]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
  * Register a tenant-only user on the platform registry (legacy rows created before sync).
  * Preserves tenant user id when the platform PK is free; otherwise creates a new platform row.
  */

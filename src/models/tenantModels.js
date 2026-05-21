@@ -221,6 +221,8 @@ export function buildDb(sequelize) {
   db.AuditLog.belongsTo(db.User, { foreignKey: "user_id", as: "user" });
   db.VisaType.hasMany(db.DocumentChecklist, { foreignKey: "visaTypeId", as: "documentChecklists" });
   db.DocumentChecklist.belongsTo(db.VisaType, { foreignKey: "visaTypeId", as: "visaType" });
+  db.Case.hasMany(db.DocumentChecklist, { foreignKey: "caseId", as: "documentChecklists" });
+  db.DocumentChecklist.belongsTo(db.Case, { foreignKey: "caseId", as: "case" });
   db.DataCaptureTemplate.belongsTo(db.VisaType, { foreignKey: "visaTypeId", as: "visaType" });
   db.VisaType.hasMany(db.DataCaptureTemplate, { foreignKey: "visaTypeId", as: "dataCaptureTemplates" });
   db.DataCaptureSubmission.belongsTo(db.Case, { foreignKey: "caseId", as: "case" });

@@ -124,7 +124,7 @@ export default (sequelize, DataTypes) => {
             indexes: [
                 {
                     unique: true,
-                    fields: ["country_code", "mobile"],
+                    fields: ["country_code", "mobile", "organisation_id"],
                 },
             ],
         }

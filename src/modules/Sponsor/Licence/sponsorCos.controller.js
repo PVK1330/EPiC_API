@@ -1,6 +1,6 @@
 import { Op } from 'sequelize';
 import { sendTransactionalEmail } from '../../../services/mail.service.js';
-import { generateNotificationEmailTemplate } from '../../../utils/emailTemplate.js';
+import { generateNotificationEmailTemplate } from '../../../utils/emailTemplates.js';
 import { notifyAdmins, createNotification, NotificationTypes, NotificationPriority } from '../../../services/notification.service.js';
 
 const INACTIVE = ['Cancelled', 'Closed', 'Rejected'];

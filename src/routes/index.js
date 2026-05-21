@@ -36,6 +36,7 @@ import { taskRoutes, documentRoutes, notificationRoutes } from '../modules/Share
 import applicationFieldsRoutes from '../modules/Shared/Cases/applicationFields.routes.js';
 import messageRoutes from '../modules/Shared/Messages/message.routes.js';
 import appointmentRoutes from '../modules/Shared/Appointments/appointment.routes.js';
+import calendarRoutes from '../modules/Shared/Calendar/calendar.routes.js';
 import microsoftRoutes from '../modules/Shared/Integrations/microsoft.routes.js';
 import teamsMeetingRoutes from '../modules/Shared/Integrations/teamsMeeting.routes.js';
 import escalationRoutes from '../modules/Shared/Cases/escalation.routes.js';
@@ -80,6 +81,7 @@ router.use('/business', sponsorPanelRoutes);
 router.use('/candidate', candidatePanelRoutes);
 router.use('/workflow', workflowRoutes);
 router.use('/appointments', appointmentRoutes);
+router.use('/calendar', calendarRoutes);
 router.use('/microsoft', microsoftRoutes);
 router.use('/teams-meetings', teamsMeetingRoutes);
 router.use('/cases/reschedule', rescheduleRoutes);

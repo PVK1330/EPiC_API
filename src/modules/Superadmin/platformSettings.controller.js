@@ -22,6 +22,12 @@ import {
   decryptValue,
   maskValue,
 } from "../../services/settings.service.js";
+import {
+  clearMailTransportCache,
+  loadPlatformSmtpConfig,
+  sendTransactionalEmail,
+} from "../../services/mail.service.js";
+import { generateDiagnosticTemplate } from "../../utils/emailTemplates.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -148,7 +154,9 @@ export const updateConnectivitySettings = catchAsync(async (req, res) => {
 
   const smtpUpdates = {};
   for (const field of SMTP_FIELDS) {
-    if (smtp[field] !== undefined) smtpUpdates[field] = smtp[field];
+    if (smtp[field] === undefined) continue;
+    if (field === "password" && (!smtp[field] || smtp[field] === maskValue())) continue;
+    smtpUpdates[field] = smtp[field];
   }
 
   const s3Updates = {};
@@ -162,6 +170,7 @@ export const updateConnectivitySettings = catchAsync(async (req, res) => {
 
   if (Object.keys(smtpUpdates).length > 0) {
     await upsertNamespacedSettings("smtp", smtpUpdates);
+    clearMailTransportCache();
   }
   if (Object.keys(s3Updates).length > 0) {
     await upsertNamespacedSettings("s3", s3Updates);
@@ -193,6 +202,7 @@ export const testSmtpConnection = catchAsync(async (req, res) => {
     host,
     port,
     secure,
+    ...( !secure && port === 587 ? { requireTLS: true } : {} ),
     auth: { user: username, pass: password },
   });
 
@@ -202,6 +212,55 @@ export const testSmtpConnection = catchAsync(async (req, res) => {
   } catch (err) {
     return ApiResponse.success(res, "SMTP connection failed", { ok: false, error: err.message });
   }
+});
+
+/**
+ * POST /superadmin/settings/connectivity/smtp/send-test
+ * Sends a real message using the same path as org welcome emails (mail.service).
+ */
+export const sendSmtpTestEmail = catchAsync(async (req, res) => {
+  const to = String(req.body?.to || "").trim().toLowerCase();
+  if (!to || !to.includes("@")) {
+    return ApiResponse.badRequest(res, "A valid recipient email (to) is required");
+  }
+
+  const config = await loadPlatformSmtpConfig();
+  if (!config?.user || !config?.pass) {
+    return ApiResponse.badRequest(
+      res,
+      "SMTP is not configured. Save host, username, and password under Connectivity first.",
+    );
+  }
+
+  const smtpOwner = config.user;
+
+  const result = await sendTransactionalEmail({
+    to,
+    subject: "EPiC — SMTP test email",
+    text: "This is a test email from EPiC platform SMTP. If you received it, transactional mail is working.",
+    html: generateDiagnosticTemplate({ source: config.source, message: "This is a test email from EPiC platform SMTP." }),
+    failureContext: "Superadmin Connectivity — Send test email",
+    forcePlatformSmtp: true,
+  });
+
+  if (!result.sent) {
+    return ApiResponse.success(res, "Test email could not be sent", {
+      ok: false,
+      error: result.error || result.reason || "send_failed",
+      usedSource: result.usedSource,
+      ownerNotified: Boolean(result.ownerNotified),
+      smtpOwnerInbox: smtpOwner,
+    });
+  }
+
+  return ApiResponse.success(res, `Test email sent to ${to}`, {
+    ok: true,
+    deliveryStatus: result.deliveryStatus || "accepted_by_smtp",
+    messageId: result.messageId,
+    usedSource: result.usedSource,
+    from: config.from || config.user,
+    recipient: to,
+  });
 });
 
 // ---------------------------------------------------------------------------

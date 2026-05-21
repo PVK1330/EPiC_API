@@ -35,6 +35,12 @@ export class CandidateRepository {
           as: "application",
           required: false,
         },
+        {
+          model: this.tenantDb.Case,
+          as: "cases",
+          required: false,
+          attributes: ["id", "caseId", "status", "caseStage", "nationality", "visaTypeId"],
+        },
       ],
     });
   }

@@ -1,9 +1,9 @@
 import { sendTransactionalEmail } from "./mail.service.js";
 import { generateCandidateWelcomeTemplate } from "../utils/emailTemplates.js";
-import { resolveOrganisationLoginUrl } from "./tenantUserMail.service.js";
+import { resolveOrganisationLoginUrls } from "./tenantUserMail.service.js";
 
 export async function sendCandidateWelcomeEmail({ user, plainPassword, organisationId }) {
-  const loginUrl = await resolveOrganisationLoginUrl(organisationId);
+  const { loginUrl, mainLoginUrl } = await resolveOrganisationLoginUrls(organisationId);
 
   const candidateName =
     [user.first_name, user.last_name].filter(Boolean).join(" ").trim() || "Client";
@@ -13,6 +13,7 @@ export async function sendCandidateWelcomeEmail({ user, plainPassword, organisat
     email: user.email,
     password: plainPassword,
     loginUrl,
+    mainLoginUrl,
   });
 
   const result = await sendTransactionalEmail({

@@ -17,6 +17,16 @@ export default (sequelize, DataTypes) => {
         },
         comment: "Visa type this checklist applies to"
       },
+      caseId: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        field: 'case_id',
+        references: {
+          model: 'cases',
+          key: 'id'
+        },
+        comment: "Case this checklist item belongs to (if customized)"
+      },
       documentType: {
         type: DataTypes.STRING(100),
         allowNull: false,
@@ -72,6 +82,9 @@ export default (sequelize, DataTypes) => {
         },
         {
           fields: ['category']
+        },
+        {
+          fields: ['case_id']
         }
       ]
     }

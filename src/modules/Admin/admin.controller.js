@@ -90,6 +90,7 @@ export const createAdmin = catchAsync(async (req, res) => {
     is_email_verified: true,
     is_otp_verified: true,
     status: status || 'active',
+    temp_password: 'pending_reset',
     organisation_id: organisationId,
   });
 

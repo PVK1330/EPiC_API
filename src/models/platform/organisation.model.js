@@ -58,6 +58,8 @@ export default (sequelize, DataTypes) => {
     {
       tableName: "organisations",
       timestamps: true,
+      paranoid: true,
+      deletedAt: "deleted_at",
     }
   );
 

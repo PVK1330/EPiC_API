@@ -7,6 +7,7 @@ import path from 'path';
 import { ROLES } from '../../../middlewares/role.middleware.js';
 import platformDb from '../../../models/index.js';
 import { toPublicAssetUrl } from '../../../services/stripeTenant.service.js';
+import { seedTenantOrganisation } from '../../../services/tenantSeed.service.js';
 
 
 
@@ -1183,7 +1184,13 @@ export const getPaymentSetting = async (req, res) => {
 async function loadOrganisationForRequest(req) {
   const orgId = req.user?.organisation_id;
   if (!orgId || !req.tenantDb?.Organisation) return null;
-  const row = await req.tenantDb.Organisation.findByPk(orgId);
+  let row = await req.tenantDb.Organisation.findByPk(orgId);
+  if (!row) {
+    const platformOrg = await platformDb.Organisation.findByPk(orgId);
+    if (platformOrg) {
+      row = await seedTenantOrganisation(req.tenantDb, platformOrg);
+    }
+  }
   if (!row) return null;
   const plain = row.toJSON ? row.toJSON() : row;
   return {

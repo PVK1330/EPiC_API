@@ -1,5 +1,5 @@
 import { sendRescheduleEmail } from '../../../services/email.service.js';
-import { generateRescheduleEmailTemplate } from '../../../utils/emailTemplate.js';
+import { generateNotificationEmailTemplate } from '../../../utils/emailTemplates.js';
 import { ROLES } from '../../../middlewares/role.middleware.js';
 
 // Reschedule case
@@ -118,7 +118,15 @@ export const rescheduleCase = async (req, res) => {
 
     // Send email to candidate
     if (candidate && candidate.email) {
-      const emailHtml = generateRescheduleEmailTemplate(caseData, changes, candidate.first_name);
+      const emailHtml = generateNotificationEmailTemplate({
+        recipientName: candidate.first_name,
+        title: "Case Schedule Updated",
+        message: "Your case timeline has been updated by the caseworker. Please review the changes below.",
+        notificationType: "schedule_update",
+        metadata: {
+          "Changes": changes.map(c => `${c.field}: ${c.oldValue || 'None'} -> ${c.newValue}`).join(" | ")
+        }
+      });
       await sendRescheduleEmail({
         to: candidate.email,
         html: emailHtml,
@@ -128,7 +136,15 @@ export const rescheduleCase = async (req, res) => {
 
     // Send email to sponsor
     if (sponsor && sponsor.email && sponsor.email !== candidate?.email) {
-      const emailHtml = generateRescheduleEmailTemplate(caseData, changes, sponsor.first_name);
+      const emailHtml = generateNotificationEmailTemplate({
+        recipientName: sponsor.first_name,
+        title: "Case Schedule Updated",
+        message: "Your case timeline has been updated by the caseworker. Please review the changes below.",
+        notificationType: "schedule_update",
+        metadata: {
+          "Changes": changes.map(c => `${c.field}: ${c.oldValue || 'None'} -> ${c.newValue}`).join(" | ")
+        }
+      });
       await sendRescheduleEmail({
         to: sponsor.email,
         html: emailHtml,

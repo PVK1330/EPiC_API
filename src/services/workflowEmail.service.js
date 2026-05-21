@@ -1,4 +1,8 @@
 import { sendTransactionalEmail } from "./mail.service.js";
+import {
+  buildDataCaptureSheetAttachment,
+  resolveDataCaptureTemplate,
+} from "./dataCaptureSheet.service.js";
 
 /** Workflow stage → email_templates.template_key */
 export const STAGE_EMAIL_TEMPLATE = {
@@ -96,6 +100,8 @@ export async function sendWorkflowStageEmail({
   caseRecord,
   stageId,
   organisationId = null,
+  attachments = null,
+  extraVars = null,
 }) {
   const templateKey = STAGE_EMAIL_TEMPLATE[stageId];
   if (!templateKey || !tenantDb?.EmailTemplateSetting) return { sent: false };
@@ -112,6 +118,27 @@ export async function sendWorkflowStageEmail({
     );
     if (!candidate?.email) return { sent: false, reason: "no_email" };
 
+    let mailAttachments = Array.isArray(attachments) ? [...attachments] : [];
+    if (templateKey === "data_capture_request" && mailAttachments.length === 0) {
+      const dcsTemplate = await resolveDataCaptureTemplate(
+        tenantDb,
+        caseRecord.visaTypeId,
+      );
+      if (dcsTemplate) {
+        const sheet = buildDataCaptureSheetAttachment({
+          template: dcsTemplate,
+          caseRecord,
+          candidate,
+          visaTypeName: visaType?.name || "",
+        });
+        if (sheet) mailAttachments = [sheet];
+      }
+    }
+
+    const portalBase =
+      process.env.FRONTEND_URL?.split(",")[0]?.trim() || "http://localhost:5173";
+    const portalRoot = portalBase.replace(/\/$/, "");
+
     const vars = {
       client_name: fullName(candidate, "Client"),
       case_ref: caseRecord.caseId || String(caseRecord.id),
@@ -124,10 +151,20 @@ export async function sendWorkflowStageEmail({
           : "",
       caseworker_name: fullName(caseworker, "Your Caseworker"),
       employer_name: fullName(sponsor, "Employer"),
+      portal_link: `${portalRoot}/candidate/dashboard`,
+      data_capture_link: `${portalRoot}/candidate/data-capture-sheet`,
+      ...(extraVars && typeof extraVars === "object" ? extraVars : {}),
     };
 
     const subject = interpolate(row.subject, vars);
-    const body = interpolate(row.body || "", vars);
+    let body = interpolate(row.body || "", vars);
+
+    if (templateKey === "data_capture_request") {
+      const link = vars.data_capture_link;
+      if (link && !body.includes(link)) {
+        body += `\n\nAlternatively, you can complete the Data Capture Sheet online: ${link}`;
+      }
+    }
 
     const result = await sendTransactionalEmail({
       organisationId,
@@ -136,15 +173,24 @@ export async function sendWorkflowStageEmail({
       text: body,
       html:
         '<div style="font-family:sans-serif;line-height:1.6;white-space:pre-wrap">' +
-        body +
+        body.replace(/\n/g, "<br>") +
         "</div>",
+      attachments: mailAttachments.length ? mailAttachments : null,
+      failureContext: `workflow_email:${templateKey}`,
     });
 
     if (!result.sent) {
       return { sent: false, reason: result.reason || result.error };
     }
 
-    return { sent: true, to: candidate.email, templateKey, usedSource: result.usedSource };
+    return {
+      sent: true,
+      to: candidate.email,
+      templateKey,
+      usedSource: result.usedSource,
+      attachmentIncluded: mailAttachments.length > 0,
+      attachmentFilename: mailAttachments[0]?.filename || null,
+    };
   } catch (err) {
     console.error("sendWorkflowStageEmail error:", err.message);
     return { sent: false, error: err.message };

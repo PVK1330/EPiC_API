@@ -9,7 +9,7 @@ import {
   NotificationPriority,
 } from './notification.service.js';
 import { sendTransactionalEmail } from './mail.service.js';
-import { generateNotificationEmailTemplate } from '../utils/emailTemplate.js';
+import { generateNotificationEmailTemplate } from '../utils/emailTemplates.js';
 
 const ROLE_NAME_TO_ID = {
   candidate: ROLES.CANDIDATE,

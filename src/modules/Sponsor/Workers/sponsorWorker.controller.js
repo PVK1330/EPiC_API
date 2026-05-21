@@ -1,6 +1,6 @@
 import bcrypt from 'bcryptjs';
 import { sendTransactionalEmail } from '../../../services/mail.service.js';
-import { generateCredentialsTemplate, generateNotificationEmailTemplate } from '../../../utils/emailTemplate.js';
+import { generateCredentialsTemplate, generateNotificationEmailTemplate } from '../../../utils/emailTemplates.js';
 import crypto from 'crypto';
 import { generateCaseId } from '../../../utils/case.utils.js';
 import { notifyAdmins, createNotification, NotificationTypes, NotificationPriority } from '../../../services/notification.service.js';

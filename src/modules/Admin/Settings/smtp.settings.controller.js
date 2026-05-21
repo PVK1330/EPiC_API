@@ -1,12 +1,13 @@
 import platformDb from "../../../models/index.js";
 import {
-  getPlatformSmtpConfig,
+  loadPlatformSmtpConfig,
   isSmtpConfigComplete,
   maskSmtpConfigForClient,
   parseOrganisationSmtpSettings,
   sendTransactionalEmail,
   verifyMailTransport,
 } from "../../../services/mail.service.js";
+import { generateDiagnosticTemplate } from "../../../utils/emailTemplates.js";
 
 function getOrganisationId(req) {
   const id = req.user?.organisation_id;
@@ -69,7 +70,7 @@ export async function getSmtpSettings(req, res) {
 
     const orgRaw = org.smtp_settings || {};
     const orgConfig = parseOrganisationSmtpSettings(orgRaw);
-    const platformConfig = getPlatformSmtpConfig();
+    const platformConfig = await loadPlatformSmtpConfig();
     const platformReady = isSmtpConfigComplete(platformConfig);
 
     const activeSource = isSmtpConfigComplete(orgConfig)
@@ -182,7 +183,7 @@ export async function testSmtpSettings(req, res) {
       organisationId: orgId,
       to,
       subject: "EPiC — SMTP test",
-      html: `<p>This is a test email from your organisation mail settings (source: <strong>${verify.source}</strong>).</p>`,
+      html: generateDiagnosticTemplate({ source: verify.source, message: "This is a test email from your organisation mail settings." }),
       text: `SMTP test (${verify.source})`,
     });
 
@@ -207,7 +208,7 @@ export async function testSmtpSettings(req, res) {
 
 export async function getPlatformSmtpSettings(req, res) {
   try {
-    const platformConfig = getPlatformSmtpConfig();
+    const platformConfig = await loadPlatformSmtpConfig();
     return res.json({
       status: "success",
       data: {
@@ -215,7 +216,9 @@ export async function getPlatformSmtpSettings(req, res) {
           hasPassword: Boolean(platformConfig?.pass),
         }),
         configured: isSmtpConfigComplete(platformConfig),
-        note: "Platform SMTP is configured in the API server environment (.env). Organisations without custom SMTP use these credentials.",
+        note: platformConfig?.source === "platform_db"
+          ? "Platform SMTP is loaded from Superadmin → Settings → Connectivity."
+          : "Platform SMTP is loaded from API server environment (.env). Organisations without custom SMTP use these credentials.",
       },
     });
   } catch (err) {

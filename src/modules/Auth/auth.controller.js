@@ -639,6 +639,7 @@ export const login = catchAsync(async (req, res) => {
     },
     token,
     allowedModules,
+    force_password_reset: !!user.temp_password,
   });
 });
 
@@ -794,12 +795,14 @@ export const setPassword = catchAsync(async (req, res) => {
   user.password = hashedPassword;
   user.password_reset_otp = null;
   user.password_reset_otp_expiry = null;
+  user.temp_password = null;
   await user.save();
   if (tenantDb) {
     await mirrorAuthFieldsToTenantByEmail(tenantDb, user, {
       password: hashedPassword,
       password_reset_otp: null,
       password_reset_otp_expiry: null,
+      temp_password: null,
     });
   } else {
     await mirrorPlatformUserById(user.id);

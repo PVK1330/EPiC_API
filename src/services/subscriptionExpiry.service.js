@@ -1,6 +1,7 @@
 import { Op } from "sequelize";
 import platformDb from "../models/index.js";
 import { sendTransactionalEmail } from "./mail.service.js";
+import { generateSubscriptionExpiryTemplate } from "../utils/emailTemplates.js";
 
 export async function checkAndExpireSubscriptions() {
   try {
@@ -33,15 +34,12 @@ export async function checkAndExpireSubscriptions() {
           organisationId: subscription.organisation.id,
           to: subscription.organisation.primaryEmail,
           subject: "EPiC - Subscription Expired",
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #C8102E;">Subscription Expired</h2>
-              <p>Dear ${subscription.organisation.name},</p>
-              <p>Your subscription has expired. Your account has been suspended.</p>
-              <p>Please contact support to renew your subscription and restore access.</p>
-              <p>Best regards,<br/>The EPiC Team</p>
-            </div>
-          `,
+          html: generateSubscriptionExpiryTemplate({
+            organisationName: subscription.organisation.name,
+            daysRemaining: 0,
+            loginUrl: process.env.FRONTEND_URL || "http://localhost:5173",
+            type: subscription.status
+          }),
         });
       }
     }
@@ -74,15 +72,12 @@ export async function checkAndExpireSubscriptions() {
           organisationId: subscription.organisation.id,
           to: subscription.organisation.primaryEmail,
           subject: `EPiC - Subscription Expiring in ${daysLeft} Days`,
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #C8102E;">Subscription Expiring Soon</h2>
-              <p>Dear ${subscription.organisation.name},</p>
-              <p>Your subscription will expire in <strong>${daysLeft} days</strong>.</p>
-              <p>Please renew your subscription to avoid service interruption.</p>
-              <p>Best regards,<br/>The EPiC Team</p>
-            </div>
-          `,
+          html: generateSubscriptionExpiryTemplate({
+            organisationName: subscription.organisation.name,
+            daysRemaining: daysLeft,
+            loginUrl: process.env.FRONTEND_URL || "http://localhost:5173",
+            type: subscription.status
+          }),
         });
       }
     }
@@ -113,15 +108,12 @@ export async function checkAndExpireSubscriptions() {
           organisationId: subscription.organisation.id,
           to: subscription.organisation.primaryEmail,
           subject: "EPiC - Subscription Expires Tomorrow",
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #C8102E;">Urgent: Subscription Expires Tomorrow</h2>
-              <p>Dear ${subscription.organisation.name},</p>
-              <p>Your subscription will expire <strong>tomorrow</strong>.</p>
-              <p>Please renew immediately to maintain uninterrupted access.</p>
-              <p>Best regards,<br/>The EPiC Team</p>
-            </div>
-          `,
+          html: generateSubscriptionExpiryTemplate({
+            organisationName: subscription.organisation.name,
+            daysRemaining: 1,
+            loginUrl: process.env.FRONTEND_URL || "http://localhost:5173",
+            type: subscription.status
+          }),
         });
       }
     }

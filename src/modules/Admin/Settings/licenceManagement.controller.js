@@ -1,5 +1,5 @@
 import { sendTransactionalEmail } from '../../../services/mail.service.js';
-import { generateNotificationEmailTemplate } from '../../../utils/emailTemplate.js';
+import { generateNotificationEmailTemplate } from '../../../utils/emailTemplates.js';
 import { 
     notifyLicenceInfoRequested, 
     notifyLicenceStatusChanged, 

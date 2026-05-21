@@ -4,10 +4,52 @@ import { CandidateRepository } from './candidate.repository.js';
 import { generateStrongPassword } from '../../../utils/passwordGenerator.js';
 import { notifyUserCreated } from '../../../services/notification.service.js';
 import { ROLES } from '../../../middlewares/role.middleware.js';
-import { createUserOnPlatformAndTenant } from '../../../services/userSync.service.js';
+import {
+  createUserOnPlatformAndTenant,
+  syncUserToPlatformOnly,
+} from '../../../services/userSync.service.js';
 import { sendCandidateWelcomeEmail } from '../../../services/candidateMail.service.js';
 import { ensureCandidateEnquiryCase } from '../../../services/candidateOnboarding.service.js';
 import { DEFAULT_CASE_STAGE } from '../../../constants/immigrationCaseProcess.js';
+import { sanitizeApplicationPayload } from '../../../utils/applicationPayload.util.js';
+
+const APPLICATION_PAYLOAD_USER_KEYS = new Set([
+  'first_name',
+  'last_name',
+  'email',
+  'country_code',
+  'mobile',
+  'caseworkerId',
+]);
+
+/** Split admin PUT body into user profile vs application columns. */
+function splitApplicationUpdatePayload(data) {
+  const payload = data && typeof data === 'object' ? { ...data } : {};
+  const userPatch = {};
+
+  if (payload.first_name !== undefined) {
+    userPatch.first_name = String(payload.first_name).trim();
+  }
+  if (payload.last_name !== undefined) {
+    userPatch.last_name = String(payload.last_name).trim();
+  }
+  if (payload.email !== undefined) {
+    userPatch.email = String(payload.email).trim().toLowerCase();
+  }
+  if (payload.country_code !== undefined) {
+    userPatch.country_code = String(payload.country_code).trim();
+  }
+  if (payload.mobile !== undefined) {
+    userPatch.mobile = String(payload.mobile).trim().replace(/\s/g, '');
+  }
+
+  const caseworkerId = payload.caseworkerId;
+  for (const key of APPLICATION_PAYLOAD_USER_KEYS) {
+    delete payload[key];
+  }
+
+  return { userPatch, applicationPatch: payload, caseworkerId };
+}
 
 export class CandidateService {
   constructor(tenantDb) {
@@ -61,7 +103,7 @@ export class CandidateService {
       if (application && typeof application === "object") {
         await this.repository.createApplication({
           userId: newUser.id,
-          ...application,
+          ...sanitizeApplicationPayload(application),
           organisation_id,
         }, t);
 
@@ -99,13 +141,11 @@ export class CandidateService {
       });
     }
 
-    if (!password) {
-      sendCandidateWelcomeEmail({
-        user: candidate,
-        plainPassword: generatedPassword,
-        organisationId: organisation_id,
-      }).catch((err) => console.error("Candidate welcome email:", err));
-    }
+    sendCandidateWelcomeEmail({
+      user: candidate,
+      plainPassword: generatedPassword,
+      organisationId: organisation_id,
+    }).catch((err) => console.error("Candidate welcome email:", err));
 
     // Background notification
     notifyUserCreated(this.repository.tenantDb, ROLES.ADMIN, {
@@ -193,9 +233,16 @@ export class CandidateService {
       if (application && typeof application === "object") {
         const existingApp = await this.repository.findApplicationByUserId(id, t);
         if (existingApp) {
-          await this.repository.updateApplication(existingApp, application, t);
+          await this.repository.updateApplication(
+            existingApp,
+            sanitizeApplicationPayload(application),
+            t,
+          );
         } else {
-          await this.repository.createApplication({ userId: id, ...application }, t);
+          await this.repository.createApplication(
+            { userId: id, ...sanitizeApplicationPayload(application) },
+            t,
+          );
         }
 
         // Sync Case logic
@@ -237,22 +284,97 @@ export class CandidateService {
     const candidate = await this.repository.findById(userId);
     if (!candidate) throw new Error("Candidate not found");
 
-    const application = await this.repository.transaction(async (t) => {
-      let app = await this.repository.findApplicationByUserId(userId, t);
-      
-      if (app) {
-        app = await this.repository.updateApplication(app, applicationData, t);
-      } else {
-        app = await this.repository.createApplication({
-          userId,
-          ...applicationData,
-          organisation_id: candidate.organisation_id
-        }, t);
+    const { userPatch, applicationPatch, caseworkerId } =
+      splitApplicationUpdatePayload(applicationData);
+    const sanitizedApplication = sanitizeApplicationPayload(applicationPatch);
+
+    if (userPatch.email && userPatch.email !== candidate.email) {
+      const exists = await this.repository.findByEmail(userPatch.email, userId);
+      if (exists) throw new Error("Email already exists");
+    }
+
+    const cc = userPatch.country_code ?? candidate.country_code;
+    const mob = userPatch.mobile ?? candidate.mobile;
+    if (
+      (userPatch.country_code !== undefined || userPatch.mobile !== undefined) &&
+      (cc !== candidate.country_code || mob !== candidate.mobile)
+    ) {
+      const exists = await this.repository.findByMobile(cc, mob, userId);
+      if (exists) throw new Error("Mobile number already exists");
+    }
+
+    await this.repository.transaction(async (t) => {
+      if (Object.keys(userPatch).length > 0) {
+        await candidate.update(userPatch, { transaction: t });
       }
 
-      return app;
+      let app = await this.repository.findApplicationByUserId(userId, t);
+
+      if (app) {
+        await this.repository.updateApplication(app, sanitizedApplication, t);
+      } else {
+        app = await this.repository.createApplication(
+          {
+            userId,
+            ...sanitizedApplication,
+            organisation_id: candidate.organisation_id,
+          },
+          t,
+        );
+      }
+
+      const existingCase = await this.repository.findCaseByCandidateId(userId, t);
+      let visaTypeId = existingCase?.visaTypeId ?? null;
+      const visaName = sanitizedApplication.visaType;
+      if (visaName) {
+        const vt = await this.repository.findVisaTypeByName(visaName, t);
+        if (vt) visaTypeId = vt.id;
+      }
+
+      const casePatch = {};
+      if (visaTypeId != null) casePatch.visaTypeId = visaTypeId;
+      if (sanitizedApplication.nationality !== undefined) {
+        casePatch.nationality = sanitizedApplication.nationality;
+      }
+      if (caseworkerId != null && caseworkerId !== '') {
+        const cwId = Number(caseworkerId);
+        if (Number.isFinite(cwId)) {
+          casePatch.assignedcaseworkerId = [cwId];
+        }
+      }
+
+      if (existingCase && Object.keys(casePatch).length > 0) {
+        await this.repository.updateCase(existingCase, casePatch, t);
+      }
     });
 
-    return application;
+    if (Object.keys(userPatch).length > 0) {
+      syncUserToPlatformOnly(userId, userPatch).catch((err) => {
+        console.error('Platform user sync after client update:', err?.message || err);
+      });
+    }
+
+    await candidate.reload({
+      include: [
+        {
+          model: this.repository.tenantDb.Role,
+          as: 'role',
+          attributes: ['id', 'name'],
+        },
+        {
+          model: this.repository.tenantDb.CandidateApplication,
+          as: 'application',
+          required: false,
+        },
+        {
+          model: this.repository.tenantDb.Case,
+          as: 'cases',
+          required: false,
+          attributes: ['id', 'caseId', 'status', 'caseStage', 'nationality', 'visaTypeId'],
+        },
+      ],
+    });
+
+    return candidate;
   }
 }

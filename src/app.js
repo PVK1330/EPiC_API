@@ -25,6 +25,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());       // must be BEFORE any route that reads req.cookies
 app.use('/uploads', express.static('uploads'));
+app.use('/assets', express.static('assets'));
 
 // API Routes
 app.use('/api', routes);
@@ -43,6 +44,7 @@ app.use((err, req, res, _next) => {
   res.status(err?.status || 500).json({
     status: 'error',
     message: err?.message || 'Internal server error',
+    errors: err?.errors,
   });
 });
 

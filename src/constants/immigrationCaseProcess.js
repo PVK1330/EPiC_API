@@ -189,6 +189,21 @@ export function isAtOrPastSubmissionStage(stageId) {
   return order >= gateOrder && gateOrder > 0;
 }
 
+/** Fee schedule / payment ready for submission gate (matches Case.amountStatus ENUM). */
+export function isCaseFeeSatisfied(caseRecord) {
+  const total = Number(caseRecord?.totalAmount) || 0;
+  const paidAmt = Number(caseRecord?.paidAmount) || 0;
+  const amountStatus = String(caseRecord?.amountStatus || "").toLowerCase();
+
+  return (
+    amountStatus === "approved" ||
+    amountStatus === "paid" ||
+    amountStatus === "partial" ||
+    (total > 0 && paidAmt >= total) ||
+    (total > 0 && paidAmt > 0)
+  );
+}
+
 /**
  * Rule 1 — block pipeline moves at/after submission until CCL accepted and payment received.
  */
@@ -207,14 +222,7 @@ export async function assertSubmissionGate(tenantDb, caseRecord, nextStageId) {
     Boolean(ccl.signedDocumentId || ccl.signedAt);
   const cclOk = cclIssued && cclSigned;
 
-  const total = Number(caseRecord.totalAmount) || 0;
-  const paidAmt = Number(caseRecord.paidAmount) || 0;
-  const amountStatus = String(caseRecord.amountStatus || "").toLowerCase();
-  const paid =
-    amountStatus === "paid" ||
-    amountStatus === "partial" ||
-    (total > 0 && paidAmt >= total) ||
-    (total > 0 && paidAmt > 0);
+  const paid = isCaseFeeSatisfied(caseRecord);
 
   const failures = [];
   if (!cclOk) {

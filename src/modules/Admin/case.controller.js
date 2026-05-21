@@ -4,7 +4,7 @@ import { createTasksOnCaseworkerAssignment } from '../../services/workflowTaskAu
 import { generateCaseId } from '../../utils/case.utils.js';
 import { mergeCaseWhere, assertUsersInOrganisation } from '../../utils/tenantScope.js';
 import { recordAuditLog } from '../../services/audit.service.js';
-import { recordCaseCreated, recordStatusChange, recordAssignmentChange } from '../../services/caseTimeline.service.js';
+import { recordCaseCreated, recordStatusChange, recordAssignmentChange, recordTimelineEntry } from '../../services/caseTimeline.service.js';
 import { sendWorkflowStageEmail } from '../../services/workflowEmail.service.js';
 import {
   IMMIGRATION_CASE_STEPS,
@@ -1044,6 +1044,7 @@ export const assignCase = async (req, res) => {
       reason,
       priority,
       notes: internalNotes,
+      feeAmount,
     } = req.body;
 
     const caseData = (await req.tenantDb.Case.findOne({ where: { caseId: id } })) || 
@@ -1108,6 +1109,93 @@ export const assignCase = async (req, res) => {
           organisationId: req.user?.organisation_id ?? null,
         }).catch((err) => console.error('createTasksOnCaseworkerAssignment:', err));
       }
+    }
+
+    const parsedFee = parseFloat(feeAmount);
+    if (!Number.isNaN(parsedFee) && parsedFee > 0) {
+      const performedBy = req.user?.userId;
+      const organisationId = req.user?.organisation_id ?? null;
+      const installmentPlan = [
+        { label: "Full Payment", amount: parsedFee, dueDate: null },
+      ];
+      const cclDefaults = {
+        status: "issued",
+        feeAmount: parsedFee,
+        installmentPlan,
+        proposedBy: performedBy,
+        proposedAt: new Date(),
+        issuedBy: performedBy,
+        issuedAt: new Date(),
+        adminReviewedBy: performedBy,
+        adminReviewedAt: new Date(),
+        adminReviewNotes: "Fees set by administrator on caseworker assignment",
+      };
+
+      const [ccl] = await req.tenantDb.CaseCclRecord.findOrCreate({
+        where: { caseId: caseData.id },
+        defaults: cclDefaults,
+      });
+
+      if (ccl.status !== "issued" && ccl.status !== "signed") {
+        await ccl.update(cclDefaults);
+      }
+
+      await caseData.update({
+        totalAmount: parsedFee,
+        amountStatus: "Approved",
+      });
+
+      if (resolveCaseStage(caseData) !== "client_care_letter") {
+        await applyCaseStageChange({
+          tenantDb: req.tenantDb,
+          caseRecord: caseData,
+          nextStageId: "client_care_letter",
+          performedBy,
+          reason: "CCL fees set on caseworker assignment — Client Care Letter released",
+          sendEmail: true,
+          organisationId,
+        });
+      }
+
+      await recordTimelineEntry({
+        tenantDb: req.tenantDb,
+        caseId: caseData.id,
+        actionType: "communication_sent",
+        description: "Client Care Letter and fee schedule sent to client (Direct Admin Setup)",
+        performedBy,
+        metadata: { feeAmount: parsedFee, installments: installmentPlan },
+        visibility: "public",
+      });
+
+      await caseData.reload({
+        include: req.tenantDb.VisaType
+          ? [{ model: req.tenantDb.VisaType, as: "visaType", attributes: ["id", "name"] }]
+          : [],
+      });
+      await ccl.reload();
+
+      const { attachCclTemplateToCase } = await import("../../services/cclTemplate.service.js");
+      await attachCclTemplateToCase({
+        tenantDb: req.tenantDb,
+        caseRecord: caseData,
+        ccl,
+        performedBy,
+      }).catch((err) => console.error("attachCclTemplateToCase:", err));
+
+      const { notifyCclFeeApproved } = await import("../../services/workflowNotifications.service.js");
+      await notifyCclFeeApproved({
+        tenantDb: req.tenantDb,
+        caseRecord: caseData,
+        ccl,
+        organisationId,
+      }).catch((err) => console.error("notifyCclFeeApproved:", err));
+
+      const { createVisaPortalSubmissionTasks } = await import("../../services/caseWorkflowExtended.service.js");
+      await createVisaPortalSubmissionTasks({
+        tenantDb: req.tenantDb,
+        caseRecord: caseData,
+        createdBy: performedBy,
+      }).catch((err) => console.error("createVisaPortalSubmissionTasks:", err));
     }
 
     res.status(200).json({

@@ -1,5 +1,5 @@
 import { sendTransactionalEmail } from './mail.service.js';
-import { generateNotificationEmailTemplate } from '../utils/emailTemplate.js';
+import { generateNotificationEmailTemplate } from '../utils/emailTemplates.js';
 
 const sendNotificationEmailToUser = async (tenantDb, userId, notification, organisationId = null) => {
   const user = await tenantDb.User.findByPk(userId, {

@@ -4,6 +4,26 @@ import {
   findDocumentForChecklistItem,
 } from "../../../utils/documentMatch.utils.js";
 
+async function resolveCaseByParam(tenantDb, caseIdParam) {
+  if (!caseIdParam) return null;
+
+  let caseRecord = null;
+  let numericCaseId = null;
+
+  if (!Number.isNaN(parseInt(caseIdParam, 10))) {
+    caseRecord = await tenantDb.Case.findByPk(parseInt(caseIdParam, 10));
+    if (caseRecord) numericCaseId = caseRecord.id;
+  }
+
+  if (!caseRecord) {
+    caseRecord = await tenantDb.Case.findOne({ where: { caseId: caseIdParam } });
+    if (caseRecord) numericCaseId = caseRecord.id;
+  }
+
+  if (!caseRecord) return null;
+  return { caseRecord, numericCaseId };
+}
+
 /**
  * Get document checklist for a specific visa type
  */
@@ -20,7 +40,7 @@ export const getChecklistByVisaType = async (req, res) => {
     }
 
     const checklist = await req.tenantDb.DocumentChecklist.findAll({
-      where: { visaTypeId },
+      where: { visaTypeId, caseId: null },
       order: [['sortOrder', 'ASC'], ['category', 'ASC']]
     });
 
@@ -180,11 +200,19 @@ export const getCaseChecklist = async (req, res) => {
       });
     }
 
-    // Get checklist for this visa type
-    const checklist = await req.tenantDb.DocumentChecklist.findAll({
-      where: { visaTypeId: caseData.visaTypeId },
-      order: [['sortOrder', 'ASC'], ['category', 'ASC']]
+    let checklist = await req.tenantDb.DocumentChecklist.findAll({
+      where: { caseId: numericCaseId },
+      order: [['sortOrder', 'ASC'], ['category', 'ASC']],
     });
+
+    let isCustomized = true;
+    if (checklist.length === 0) {
+      isCustomized = false;
+      checklist = await req.tenantDb.DocumentChecklist.findAll({
+        where: { visaTypeId: caseData.visaTypeId, caseId: null },
+        order: [['sortOrder', 'ASC'], ['category', 'ASC']],
+      });
+    }
 
     const candidateId = caseData.candidateId;
     const docWhere = candidateId
@@ -236,9 +264,10 @@ export const getCaseChecklist = async (req, res) => {
 
     res.status(200).json({
       status: "success",
-      message: "Case document checklist retrieved successfully",
+      message: "Case checklist retrieved",
       data: {
         caseId: numericCaseId,
+        isCustomized,
         checklist: grouped,
         completionPercentage,
         total: checklistWithStatus.length,
@@ -282,6 +311,7 @@ export const createChecklistItem = async (req, res) => {
 
     const checklistItem = await req.tenantDb.DocumentChecklist.create({
       visaTypeId,
+      caseId: null,
       documentType,
       documentName,
       description,
@@ -399,7 +429,7 @@ export const getAllChecklists = async (req, res) => {
   try {
     const { visaTypeId } = req.query;
 
-    const whereClause = {};
+    const whereClause = { caseId: null };
     if (visaTypeId) {
       whereClause.visaTypeId = visaTypeId;
     }
@@ -423,5 +453,189 @@ export const getAllChecklists = async (req, res) => {
       data: null,
       error: error.message,
     });
+  }
+};
+
+/**
+ * Copy visa-type default checklist into case-specific records.
+ */
+export const initializeCaseChecklist = async (req, res) => {
+  try {
+    const resolved = await resolveCaseByParam(req.tenantDb, req.params.caseId);
+    if (!resolved) {
+      return res.status(404).json({ status: "error", message: "Case not found", data: null });
+    }
+
+    const { caseRecord, numericCaseId } = resolved;
+
+    if (!caseRecord.visaTypeId) {
+      return res.status(400).json({
+        status: "error",
+        message: "Case has no visa type assigned",
+        data: null,
+      });
+    }
+
+    const existing = await req.tenantDb.DocumentChecklist.count({
+      where: { caseId: numericCaseId },
+    });
+    if (existing > 0) {
+      return res.status(400).json({
+        status: "error",
+        message: "Case checklist is already customized",
+        data: null,
+      });
+    }
+
+    const templates = await req.tenantDb.DocumentChecklist.findAll({
+      where: { visaTypeId: caseRecord.visaTypeId, caseId: null },
+      order: [['sortOrder', 'ASC'], ['category', 'ASC']],
+    });
+
+    if (!templates.length) {
+      return res.status(400).json({
+        status: "error",
+        message: "No default checklist template found for this visa type",
+        data: null,
+      });
+    }
+
+    const created = await req.tenantDb.DocumentChecklist.bulkCreate(
+      templates.map((item) => ({
+        visaTypeId: caseRecord.visaTypeId,
+        caseId: numericCaseId,
+        documentType: item.documentType,
+        documentName: item.documentName,
+        description: item.description,
+        isRequired: item.isRequired,
+        sortOrder: item.sortOrder,
+        category: item.category,
+      })),
+    );
+
+    res.status(201).json({
+      status: "success",
+      message: "Case checklist initialized from visa type template",
+      data: { count: created.length, items: created },
+    });
+  } catch (error) {
+    console.error("Initialize Case Checklist Error:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error",
+      data: null,
+      error: error.message,
+    });
+  }
+};
+
+export const createCaseChecklistItem = async (req, res) => {
+  try {
+    const resolved = await resolveCaseByParam(req.tenantDb, req.params.caseId);
+    if (!resolved) {
+      return res.status(404).json({ status: "error", message: "Case not found", data: null });
+    }
+
+    const { caseRecord, numericCaseId } = resolved;
+    const {
+      documentType,
+      documentName,
+      description,
+      isRequired,
+      sortOrder,
+      category,
+    } = req.body;
+
+    if (!documentType || !documentName) {
+      return res.status(400).json({
+        status: "error",
+        message: "documentType and documentName are required",
+        data: null,
+      });
+    }
+
+    const customizedCount = await req.tenantDb.DocumentChecklist.count({
+      where: { caseId: numericCaseId },
+    });
+    if (customizedCount === 0) {
+      return res.status(400).json({
+        status: "error",
+        message: "Initialize the case checklist before adding items",
+        data: null,
+      });
+    }
+
+    const item = await req.tenantDb.DocumentChecklist.create({
+      visaTypeId: caseRecord.visaTypeId,
+      caseId: numericCaseId,
+      documentType,
+      documentName,
+      description: description || null,
+      isRequired: isRequired !== undefined ? isRequired : true,
+      sortOrder: sortOrder !== undefined ? sortOrder : 0,
+      category: category || "other",
+    });
+
+    res.status(201).json({
+      status: "success",
+      message: "Case checklist item created",
+      data: item,
+    });
+  } catch (error) {
+    console.error("Create Case Checklist Item Error:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error",
+      data: null,
+      error: error.message,
+    });
+  }
+};
+
+export const updateCaseChecklistItem = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const item = await req.tenantDb.DocumentChecklist.findByPk(id);
+    if (!item || !item.caseId) {
+      return res.status(404).json({ status: "error", message: "Custom item not found", data: null });
+    }
+
+    const {
+      documentType,
+      documentName,
+      description,
+      isRequired,
+      sortOrder,
+      category,
+    } = req.body;
+
+    const updateData = {};
+    if (documentType !== undefined) updateData.documentType = documentType;
+    if (documentName !== undefined) updateData.documentName = documentName;
+    if (description !== undefined) updateData.description = description;
+    if (isRequired !== undefined) updateData.isRequired = isRequired;
+    if (sortOrder !== undefined) updateData.sortOrder = sortOrder;
+    if (category !== undefined) updateData.category = category;
+
+    await item.update(updateData);
+
+    res.status(200).json({ status: "success", data: item });
+  } catch (err) {
+    res.status(500).json({ status: "error", message: err.message });
+  }
+};
+
+export const deleteCaseChecklistItem = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const item = await req.tenantDb.DocumentChecklist.findByPk(id);
+    if (!item || !item.caseId) {
+      return res.status(404).json({ status: "error", message: "Custom item not found", data: null });
+    }
+
+    await item.destroy();
+    res.status(200).json({ status: "success", message: "Item deleted successfully" });
+  } catch (err) {
+    res.status(500).json({ status: "error", message: err.message });
   }
 };

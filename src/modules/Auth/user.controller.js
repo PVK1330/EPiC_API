@@ -2,6 +2,7 @@ import { Op } from 'sequelize';
 import bcrypt from 'bcryptjs';
 import path from 'path';
 import fs from 'fs';
+import platformDb from '../../models/index.js';
 
 // Get user profile
 export const profile = async (req, res) => {
@@ -187,7 +188,15 @@ export const changeOwnPassword = async (req, res) => {
       });
     }
 
-    const full = await req.tenantDb.User.findOne({ where: { id: userId } });
+    let full = null;
+    if (req.tenantDb) {
+      full = await req.tenantDb.User.findOne({ where: { id: userId } });
+    }
+    if (!full) {
+      // Fallback to platform DB (handles superadmins and unmirrored users)
+      full = await platformDb.User.findOne({ where: { id: userId } });
+    }
+
     if (!full) {
       return res.status(404).json({
         status: "error",
@@ -197,7 +206,13 @@ export const changeOwnPassword = async (req, res) => {
     }
 
     const hashed = await bcrypt.hash(new_password, 12);
-    await full.update({ password: hashed });
+    await full.update({ password: hashed, temp_password: null });
+    
+    // Ensure both databases are in sync
+    if (req.tenantDb) {
+      await req.tenantDb.User.update({ password: hashed, temp_password: null }, { where: { id: userId } }).catch(()=>{});
+    }
+    await platformDb.User.update({ password: hashed, temp_password: null }, { where: { id: userId } }).catch(()=>{});
 
     res.status(200).json({
       status: "success",

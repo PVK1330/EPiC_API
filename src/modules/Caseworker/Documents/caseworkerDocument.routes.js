@@ -13,7 +13,11 @@ import {
 } from '../../Shared/Documents/document.controller.js';
 import {
   getCaseChecklist,
-  getChecklistByVisaType
+  getChecklistByVisaType,
+  initializeCaseChecklist,
+  createCaseChecklistItem,
+  updateCaseChecklistItem,
+  deleteCaseChecklistItem,
 } from '../../Admin/Settings/documentChecklist.controller.js';
 
 const router = express.Router();
@@ -36,29 +40,17 @@ router.get('/download/:documentId',
   downloadDocument
 );
 
-router.get('/:documentId',
-  getDocumentById
-);
+// Document Checklist routes (before /:documentId)
+router.get('/checklist/case/:caseId', getCaseChecklist);
+router.get('/checklist/visa/:visaTypeId', getChecklistByVisaType);
+router.post('/checklist/case/:caseId/initialize', initializeCaseChecklist);
+router.post('/checklist/case/:caseId/items', createCaseChecklistItem);
+router.put('/checklist/items/:id', updateCaseChecklistItem);
+router.delete('/checklist/items/:id', deleteCaseChecklistItem);
 
-router.put('/:documentId',
-  updateDocument
-);
-
-router.delete('/:documentId',
-  deleteDocument
-);
-
-router.patch('/status/:documentId',
-  updateDocumentStatus
-);
-
-// Document Checklist routes
-router.get('/checklist/case/:caseId',
-  getCaseChecklist
-);
-
-router.get('/checklist/visa/:visaTypeId',
-  getChecklistByVisaType
-);
+router.get('/:documentId', getDocumentById);
+router.put('/:documentId', updateDocument);
+router.delete('/:documentId', deleteDocument);
+router.patch('/status/:documentId', updateDocumentStatus);
 
 export default router;

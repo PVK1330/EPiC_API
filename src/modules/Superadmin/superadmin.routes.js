@@ -32,6 +32,7 @@ router.post('/announcements', announcementController.createPlatformAnnouncement)
 router.get('/organisations', orgController.listOrganisations);
 router.get('/organisations/:id', orgController.getOrganisationById);
 router.post('/organisations', orgController.createOrganisation);
+router.post('/organisations/with-admin', orgController.createOrganisationWithAdmin);
 router.patch('/organisations/:id', orgController.updateOrganisation);
 router.delete('/organisations/:id', orgController.deleteOrganisation);
 router.post('/organisations/:id/suspend', orgController.suspendOrganisation);
@@ -85,6 +86,7 @@ router.post('/settings/identity/favicon', handlePlatformFaviconUpload, platformS
 router.get('/settings/connectivity',            platformSettingsController.getConnectivitySettings);
 router.patch('/settings/connectivity',          platformSettingsController.updateConnectivitySettings);
 router.post('/settings/connectivity/smtp/test', platformSettingsController.testSmtpConnection);
+router.post('/settings/connectivity/smtp/send-test', platformSettingsController.sendSmtpTestEmail);
 
 // Security
 router.get('/settings/security',   platformSettingsController.getSecuritySettings);

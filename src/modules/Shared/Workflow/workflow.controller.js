@@ -2,6 +2,7 @@ import { Op } from "sequelize";
 import { resolveCaseStage, STAGE_TO_LEGACY_STATUS } from "../../../constants/immigrationCaseProcess.js";
 import { applyCaseStageChange } from "../../../services/caseStageAutomation.service.js";
 import { sendWorkflowStageEmail } from "../../../services/workflowEmail.service.js";
+import { buildDataCaptureSheetAttachment } from "../../../services/dataCaptureSheet.service.js";
 import { recordTimelineEntry } from "../../../services/caseTimeline.service.js";
 import { ROLES } from "../../../middlewares/role.middleware.js";
 import {
@@ -297,11 +298,35 @@ export const sendDataCaptureRequest = async (req, res) => {
       status: STAGE_TO_LEGACY_STATUS.data_capture_initial_docs,
     });
 
+    const candidate = caseRecord.candidateId
+      ? await req.tenantDb.User.findByPk(caseRecord.candidateId, {
+          attributes: ["id", "first_name", "last_name", "email"],
+        })
+      : null;
+
+    const visaType = caseRecord.visaTypeId
+      ? await req.tenantDb.VisaType.findByPk(caseRecord.visaTypeId, {
+          attributes: ["id", "name"],
+        })
+      : null;
+
+    const sheetAttachment = template
+      ? buildDataCaptureSheetAttachment({
+          template,
+          caseRecord,
+          candidate,
+          visaTypeName: visaType?.name || "",
+        })
+      : null;
+
+    const emailAttachments = sheetAttachment ? [sheetAttachment] : null;
+
     const emailResult = await sendWorkflowStageEmail({
       tenantDb: req.tenantDb,
       caseRecord,
       stageId: "data_capture_initial_docs",
       organisationId: organisationIdFromReq(req),
+      attachments: emailAttachments,
     });
 
     await recordTimelineEntry({
@@ -310,7 +335,11 @@ export const sendDataCaptureRequest = async (req, res) => {
       actionType: "communication_sent",
       description: "Data Capture Sheet request sent to client",
       performedBy: req.user?.userId,
-      metadata: { emailSent: emailResult.sent },
+      metadata: {
+        emailSent: emailResult.sent,
+        attachmentIncluded: Boolean(sheetAttachment),
+        attachmentFilename: sheetAttachment?.filename || null,
+      },
       visibility: "public",
     });
 

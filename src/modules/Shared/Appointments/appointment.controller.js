@@ -1,14 +1,14 @@
 import { Op } from 'sequelize';
 
 import { sendAppointmentEmail } from '../../../services/email.service.js';
-import { generateAppointmentTemplate } from '../../../utils/emailTemplate.js';
-import { ROLES } from '../../../middlewares/role.middleware.js';
+import { generateAppointmentTemplate } from '../../../utils/emailTemplates.js';
+import { ROLES, hasFullAccessRole } from '../../../middlewares/role.middleware.js';
 
 // Get appointments for the current user; admins see all appointments
 export const getMyAppointments = async (req, res) => {
   try {
     const userId = req.user.userId;
-    const isAdmin = req.user.role_name === 'admin';
+    const isAdmin = hasFullAccessRole(req.user.role_id);
 
     const where = isAdmin
       ? {}

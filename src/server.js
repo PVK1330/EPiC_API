@@ -80,6 +80,12 @@ async function bootstrapPlatform() {
     await platformDb.sequelize.query(
       'ALTER TABLE "organisations" ADD COLUMN IF NOT EXISTS "smtp_settings" JSONB DEFAULT NULL;',
     );
+    await platformDb.sequelize.query(
+      'ALTER TABLE "organisations" ADD COLUMN IF NOT EXISTS "deleted_at" TIMESTAMPTZ;',
+    );
+    await platformDb.sequelize.query(
+      'CREATE INDEX IF NOT EXISTS idx_organisations_deleted_at ON organisations (deleted_at);',
+    );
 
     await seedPlans();
     await seedModules();
