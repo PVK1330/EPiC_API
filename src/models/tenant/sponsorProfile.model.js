@@ -37,7 +37,7 @@ export default (sequelize, DataTypes) => {
             licenceRating: {
                 type: DataTypes.STRING(50),
                 allowNull: true,
-                values: ['Gold', 'Silver', 'Bronze'],
+                values: ['A', 'B'],
             },
             industrySector: {
                 type: DataTypes.STRING(255),
@@ -183,6 +183,10 @@ export default (sequelize, DataTypes) => {
             },
             level1Users: {
                 type: DataTypes.JSON,
+                allowNull: true,
+            },
+            level2Users: {
+                type: DataTypes.JSONB,
                 allowNull: true,
             },
             sponsorLetter: {

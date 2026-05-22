@@ -5,12 +5,13 @@ import {
   listWorkerEvents,
   updateWorkerEvent,
 } from './workerEvent.controller.js';
+import { upload } from '../../../middlewares/upload.middleware.js';
 
 const router = Router();
 
 router.get("/", listWorkerEvents);
-router.post("/", createWorkerEvent);
-router.put("/:id", updateWorkerEvent);
+router.post("/", upload.single('evidenceFile'), createWorkerEvent);
+router.put("/:id", upload.single('evidenceFile'), updateWorkerEvent);
 router.delete("/:id", deleteWorkerEvent);
 
 export default router;

@@ -286,6 +286,26 @@ export default (sequelize, DataTypes) => {
                 type: DataTypes.ENUM('Yes', 'No'),
                 allowNull: true,
             },
+            cosNumber: {
+                type: DataTypes.STRING(100),
+                allowNull: true,
+            },
+            socCode: {
+                type: DataTypes.STRING(50),
+                allowNull: true,
+            },
+            contractType: {
+                type: DataTypes.STRING(100),
+                allowNull: true,
+            },
+            workLocation: {
+                type: DataTypes.STRING(255),
+                allowNull: true,
+            },
+            workingHours: {
+                type: DataTypes.STRING(100),
+                allowNull: true,
+            },
             
             // Custom fields for admin-defined questions
             customResponses: {

@@ -38,6 +38,7 @@ export const addSponsoredWorker = async (req, res) => {
       email, phone, address, city,
       jobTitle, department, startDate, salary,
       visaType, visaNumber, visaExpiryDate, cosNumber,
+      socCode, contractType, workLocation, workingHours,
       previousVisa, notes
     } = req.body;
 
@@ -89,6 +90,11 @@ export const addSponsoredWorker = async (req, res) => {
       sponsored: 'Yes',
       status: 'submitted',
       submittedAt: new Date(),
+      cosNumber,
+      socCode,
+      contractType,
+      workLocation,
+      workingHours,
       organisation_id: organisationId,
     }, { transaction });
 
@@ -454,7 +460,7 @@ export const getSponsoredWorkerDetails = async (req, res) => {
             {
               model: req.tenantDb.CandidateApplication,
               as: 'application',
-              attributes: ['id', 'gender', 'dob', 'nationality', 'passportNumber', 'visaType', 'visaEndDate', 'address']
+              attributes: ['id', 'gender', 'dob', 'nationality', 'passportNumber', 'visaType', 'visaEndDate', 'address', 'cosNumber', 'socCode', 'contractType', 'workLocation', 'workingHours']
             }
           ]
         }
@@ -552,7 +558,12 @@ export const updateSponsoredWorker = async (req, res) => {
       passportNumber: updateData.passportNumber,
       visaType: updateData.visaType,
       visaEndDate: updateData.visaExpiryDate,
-      address: updateData.address
+      address: updateData.address,
+      cosNumber: updateData.cosNumber,
+      socCode: updateData.socCode,
+      contractType: updateData.contractType,
+      workLocation: updateData.workLocation,
+      workingHours: updateData.workingHours
     }, { where: { userId: id }, transaction });
 
     // Update Case

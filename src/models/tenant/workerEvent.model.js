@@ -52,6 +52,18 @@ export default (sequelize, DataTypes) => {
         allowNull: false,
         defaultValue: "pending",
       },
+      reportedBy: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+      },
+      evidenceFile: {
+        type: DataTypes.STRING(500),
+        allowNull: true,
+      },
+      dateReportedToSms: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
       description: {
         type: DataTypes.TEXT,
         allowNull: true,
