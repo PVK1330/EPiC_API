@@ -8,8 +8,10 @@ const router = Router();
 router.use(verifyTokenAndTenant);
 router.use(checkRole([ROLES.ADMIN]));
 
-router.get("/", auditLogController.getAuditLogs);
-router.get("/actions", auditLogController.getAuditActionTypes);
-router.get("/export", auditLogController.exportAuditLogs);
+// Stats summary — must be before /:id style routes
+router.get('/stats',   auditLogController.getAuditStats);
+router.get('/actions', auditLogController.getAuditActionTypes);
+router.get('/export',  auditLogController.exportAuditLogs);
+router.get('/',        auditLogController.getAuditLogs);
 
 export default router;
