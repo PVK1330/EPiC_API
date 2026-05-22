@@ -49,6 +49,7 @@ import DocumentChecklistModel from "./tenant/documentChecklist.model.js";
 import DataCaptureTemplateModel from "./tenant/dataCaptureTemplate.model.js";
 import DataCaptureSubmissionModel from "./tenant/dataCaptureSubmission.model.js";
 import CaseCclRecordModel from "./tenant/caseCclRecord.model.js";
+import SponsorChangeRequestModel from "./tenant/sponsorChangeRequest.model.js";
 
 /**
  * Register all models and associations on a Sequelize instance (main or tenant DB).
@@ -106,6 +107,7 @@ export function buildDb(sequelize) {
   db.CalendarMeeting = CalendarMeetingModel(sequelize, Sequelize.DataTypes);
   db.SponsorUserPreference = SponsorUserPreferenceModel(sequelize, Sequelize.DataTypes);
   db.WorkerEvent = WorkerEventModel(sequelize, Sequelize.DataTypes);
+  db.SponsorChangeRequest = SponsorChangeRequestModel(sequelize, Sequelize.DataTypes);
 
   // Associations (Same as before)
   db.Conversation.belongsTo(db.User, { foreignKey: "participantOneId", as: "participantOne" });
@@ -231,6 +233,11 @@ export function buildDb(sequelize) {
   db.Case.hasOne(db.DataCaptureSubmission, { foreignKey: "caseId", as: "dataCaptureSubmission" });
   db.Case.hasOne(db.CaseCclRecord, { foreignKey: "caseId", as: "cclRecord" });
   db.CaseCclRecord.belongsTo(db.Case, { foreignKey: "caseId", as: "case" });
+
+  db.SponsorChangeRequest.belongsTo(db.User, { foreignKey: "sponsorId", as: "sponsor" });
+  db.SponsorChangeRequest.belongsTo(db.User, { foreignKey: "requestedBy", as: "requester" });
+  db.SponsorChangeRequest.belongsTo(db.User, { foreignKey: "reportedBy", as: "reporter" });
+  db.SponsorChangeRequest.belongsTo(db.Organisation, { foreignKey: "organisationId", as: "organisation" });
 
   return db;
 }

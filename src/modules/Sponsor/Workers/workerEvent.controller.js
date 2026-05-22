@@ -7,7 +7,14 @@ import {
 
 const addDays = (dateString, days) => {
   const date = new Date(dateString);
-  date.setDate(date.getDate() + days);
+  let count = 0;
+  while (count < days) {
+    date.setDate(date.getDate() + 1);
+    const day = date.getDay();
+    if (day !== 0 && day !== 6) {
+      count++;
+    }
+  }
   return date;
 };
 
@@ -127,7 +134,7 @@ export const listWorkerEvents = async (req, res) => {
 export const createWorkerEvent = async (req, res) => {
   try {
     const sponsorId = req.user.userId;
-    const { workerId, eventType, eventDate, description } = req.body;
+    const { workerId, eventType, eventDate, description, reportedBy, dateReportedToSms } = req.body;
 
     if (!workerId || !eventType || !eventDate) {
       return res.status(400).json({ status: "error", message: "workerId, eventType and eventDate are required" });
@@ -143,6 +150,8 @@ export const createWorkerEvent = async (req, res) => {
 
     const deadlineDate = toISODate(addDays(eventDate, 10));
     const organisationId = req.user?.organisation_id != null ? Number(req.user.organisation_id) : null;
+    const evidenceFile = req.file ? req.file.path.replace(/\\/g, '/') : null;
+
     const newEvent = await req.tenantDb.WorkerEvent.create({
       sponsorId,
       workerId,
@@ -153,6 +162,9 @@ export const createWorkerEvent = async (req, res) => {
       reportedDate: null,
       status: resolveStatus(null, deadlineDate),
       description: description || null,
+      reportedBy: reportedBy || null,
+      evidenceFile: evidenceFile,
+      dateReportedToSms: dateReportedToSms ? new Date(dateReportedToSms) : null,
       organisation_id: organisationId,
     });
 
