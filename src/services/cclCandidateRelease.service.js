@@ -17,12 +17,14 @@ export function isFeesApprovedForClient(caseRecord) {
   return ["Approved", "Paid", "approved", "paid"].includes(s);
 }
 
-/** Resolve payable total from case row and/or CCL proposal. */
+/** Resolve payable total from case row, admin CCL fee (proposedAmount), and/or CCL record. */
 export function resolveCaseFeeTotal(caseRecord, ccl) {
   const fromCase = Number(caseRecord?.totalAmount);
   const fromCcl = Number(ccl?.feeAmount);
+  const fromAdminCcl = Number(caseRecord?.proposedAmount);
   if (Number.isFinite(fromCase) && fromCase > 0) return fromCase;
   if (Number.isFinite(fromCcl) && fromCcl > 0) return fromCcl;
+  if (Number.isFinite(fromAdminCcl) && fromAdminCcl > 0) return fromAdminCcl;
   const plan = ccl?.installmentPlan;
   if (Array.isArray(plan) && plan.length > 0) {
     return plan.reduce((sum, row) => sum + (Number.parseFloat(row.amount) || 0), 0);

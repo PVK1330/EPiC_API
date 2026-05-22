@@ -4,7 +4,7 @@ import { notifyTaskAssigned } from '../../../services/notification.service.js';
 // Constants
 const PRIORITIES = ["low", "medium", "high"];
 const STATUSES = ["pending", "in-progress", "completed"];
-const FILTER_OPTIONS = ["all", "today_due", "overdue", "completed"];
+const FILTER_OPTIONS = ["all", "due_soon", "today_due", "overdue", "completed"];
 
 
 function fullName(user) {
@@ -670,6 +670,15 @@ export const getTasksByUserId = async (req, res) => {
     if (filter === "overdue") {
       // Past due date, not completed
       where.due_date = { [req.tenantDb.Sequelize.Op.lt]: today };
+      where.status = { [req.tenantDb.Sequelize.Op.ne]: "completed" };
+
+    } else if (filter === "due_soon") {
+      const in48h = new Date();
+      in48h.setHours(in48h.getHours() + 48);
+      where.due_date = {
+        [req.tenantDb.Sequelize.Op.gte]: today,
+        [req.tenantDb.Sequelize.Op.lte]: in48h,
+      };
       where.status = { [req.tenantDb.Sequelize.Op.ne]: "completed" };
 
     } else if (filter === "today_due") {

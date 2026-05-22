@@ -191,7 +191,7 @@ export async function notifyCclFeeApproved({
       type: NotificationTypes.PAYMENT_RECEIVED,
       priority: NotificationPriority.HIGH,
       title: `Client Care Letter & payment schedule — ${caseLabel}`,
-      message: `Your fees (£${fee}) have been approved. You can now view your payment schedule and accept the Client Care Letter in the portal.`,
+      message: `Your Client Care Letter (CCL) fee is £${fee}. This is the amount you need to pay. Review your CCL and complete payment from the Payments section when ready.`,
       actionType: "ccl_issued",
       entityId: caseRecord.id,
       entityType: "case",

@@ -35,15 +35,14 @@ export const rescheduleCase = async (req, res) => {
       });
     }
 
-    // Check if case is assigned to this caseworker or created by this caseworker
+    // Check if case is assigned to this caseworker
     const assignedCaseworkerIds = caseData.assignedcaseworkerId || [];
     const isAssigned = assignedCaseworkerIds.includes(userId);
-    const isCreatedByUser = caseData.createdById === userId;
 
-    if (!isAssigned && !isCreatedByUser) {
+    if (!isAssigned) {
       return res.status(403).json({
         status: "error",
-        message: "Access denied. You can only reschedule cases assigned to you or created by you.",
+        message: "Access denied. You can only reschedule cases assigned to you.",
         data: null,
       });
     }
@@ -203,12 +202,11 @@ export const getRescheduleHistory = async (req, res) => {
 
     const assignedCaseworkerIds = caseData.assignedcaseworkerId || [];
     const isAssigned = assignedCaseworkerIds.includes(userId);
-    const isCreatedByUser = caseData.createdById === userId;
 
-    if (!isAssigned && !isCreatedByUser) {
+    if (!isAssigned) {
       return res.status(403).json({
         status: "error",
-        message: "Access denied. You can only view reschedule history for cases assigned to you or created by you.",
+        message: "Access denied. You can only view reschedule history for cases assigned to you.",
         data: null,
       });
     }
@@ -258,19 +256,12 @@ export const getAllRescheduleHistory = async (req, res) => {
       });
     }
 
-    // Get all cases assigned to this caseworker or created by this caseworker
+    // Get all cases assigned to this caseworker
     const assignedCases = await req.tenantDb.Case.findAll({
       where: {
-        [req.tenantDb.Sequelize.Op.or]: [
-          {
-            assignedcaseworkerId: {
-              [req.tenantDb.Sequelize.Op.contains]: [userId]
-            }
-          },
-          {
-            createdById: userId
-          }
-        ]
+        assignedcaseworkerId: {
+          [req.tenantDb.Sequelize.Op.contains]: [userId]
+        }
       },
       attributes: ['id']
     });

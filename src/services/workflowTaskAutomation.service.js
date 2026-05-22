@@ -1,5 +1,6 @@
 import { Op } from "sequelize";
 import { getStepById } from "../constants/immigrationCaseProcess.js";
+import { isFeesApprovedForClient } from "./cclCandidateRelease.service.js";
 import { notifyTaskAssigned, notifyUser, NotificationTypes, NotificationPriority } from "./notification.service.js";
 
 function parseCaseworkerIds(caseRecord) {
@@ -265,6 +266,13 @@ export async function syncWorkflowTasksForStage({
   const candidateId = caseRecord.candidateId;
 
   for (const spec of rules.admins || []) {
+    if (
+      stageId === "client_care_letter" &&
+      isFeesApprovedForClient(caseRecord) &&
+      /approve ccl fee/i.test(spec.title || "")
+    ) {
+      continue;
+    }
     for (const adminId of adminIds) {
       if (adminId === performedBy) continue;
       const t = await createWorkflowTask({
@@ -282,6 +290,13 @@ export async function syncWorkflowTasksForStage({
   }
 
   for (const spec of rules.caseworkers || []) {
+    if (
+      stageId === "client_care_letter" &&
+      isFeesApprovedForClient(caseRecord) &&
+      /propose ccl fees/i.test(spec.title || "")
+    ) {
+      continue;
+    }
     for (const cwId of caseworkerIds) {
       if (cwId === performedBy) continue;
       const t = await createWorkflowTask({
@@ -333,6 +348,22 @@ export async function syncWorkflowTasksForStage({
   return created;
 }
 
+/** Mark pending workflow tasks complete by title pattern (optional assignee filter). */
+export async function completePendingWorkflowTasks(
+  tenantDb,
+  { caseId, titlePattern, assigneeId = null },
+) {
+  if (!tenantDb || !caseId || !titlePattern) return 0;
+  const where = {
+    case_id: caseId,
+    status: "pending",
+    title: { [Op.iLike]: titlePattern },
+  };
+  if (assigneeId != null) where.assigned_to = assigneeId;
+  const [count] = await tenantDb.Task.update({ status: "completed" }, { where });
+  return count;
+}
+
 /** When admin assigns a new caseworker to a case. */
 export async function createTasksOnCaseworkerAssignment({
   tenantDb,
@@ -340,19 +371,24 @@ export async function createTasksOnCaseworkerAssignment({
   newCaseworkerIds,
   assignedBy = null,
   organisationId = null,
+  assignToNames = null,
+  reason = null,
 }) {
   if (!tenantDb || !caseRecord || !newCaseworkerIds?.length) return [];
   const caseLabel = caseRecord.caseId || `#${caseRecord.id}`;
   const step = getStepById(caseRecord.caseStage);
   const stageTitle = step?.title || "case";
+  const namesLabel = assignToNames?.trim() || `${newCaseworkerIds.length} caseworker(s)`;
+  const reasonSnippet = reason?.trim() ? ` — ${reason.trim()}` : "";
 
   const created = [];
+
   for (const cwId of newCaseworkerIds) {
     const t = await createWorkflowTask({
       tenantDb,
       caseRecord,
       assigneeId: cwId,
-      title: `New case assigned — ${caseLabel} (${stageTitle})`,
+      title: `You are assigned to case ${caseLabel} (${stageTitle})`,
       createdBy: assignedBy || cwId,
       priority: "high",
       dueInDays: 2,
@@ -360,6 +396,44 @@ export async function createTasksOnCaseworkerAssignment({
     });
     if (t) created.push(t);
   }
+
+  const adminIds = await getActiveAdminIds(tenantDb);
+  const assignerIsAdmin = assignedBy && adminIds.includes(Number(assignedBy));
+
+  if (assignerIsAdmin && assignedBy) {
+    const adminTask = await createWorkflowTask({
+      tenantDb,
+      caseRecord,
+      assigneeId: assignedBy,
+      title: `Confirm caseworker assignment — ${caseLabel}`,
+      createdBy: assignedBy,
+      priority: "medium",
+      dueInDays: 1,
+      organisationId,
+      skipAssigneeNotification: true,
+    });
+    if (adminTask) created.push(adminTask);
+
+    await notifyUser(tenantDb, assignedBy, {
+      tenantDb,
+      type: NotificationTypes.INFO,
+      priority: NotificationPriority.MEDIUM,
+      title: `Caseworkers assigned — ${caseLabel}`,
+      message: `You assigned ${namesLabel} to case ${caseLabel}${reasonSnippet}. Caseworkers have been notified.`,
+      actionType: "case_assignment_confirmed",
+      entityId: caseRecord.id,
+      entityType: "case",
+      metadata: {
+        caseId: caseLabel,
+        caseworkerIds: newCaseworkerIds,
+        assignToNames: namesLabel,
+        reason: reason?.trim() || null,
+      },
+      sendEmail: false,
+      organisationId,
+    }).catch(() => {});
+  }
+
   return created;
 }
 

@@ -32,7 +32,7 @@ export const memoryUpload = multer({
   },
 });
 
-export const handleProfilePicUpload = memoryUpload.single('profile_pic');
+export const handleProfilePicUpload = upload.single('profile_pic');
 
 export const handleDocumentUpload = (req, res, next) => {
   upload.array("files", 10)(req, res, (err) => {

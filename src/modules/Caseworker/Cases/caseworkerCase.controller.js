@@ -949,7 +949,7 @@ export const getCaseDetails = async (req, res) => {
           required: false
         },
         {
-          model: CaseCommunication,
+          model: req.tenantDb.CaseCommunication,
           as: 'communications',
           include: [
             {
@@ -994,28 +994,37 @@ export const getCaseDetails = async (req, res) => {
     }
 
     // Calculate payment summary
-    const totalFee = caseData.totalAmount;
-    const totalPaid = caseData.payments.reduce((sum, payment) => {
+    const payments = Array.isArray(caseData.payments) ? caseData.payments : [];
+    const documents = Array.isArray(caseData.documents) ? caseData.documents : [];
+    const totalFee = Number(caseData.totalAmount) || 0;
+    const totalPaid = payments.reduce((sum, payment) => {
       return payment.paymentStatus === 'completed' ? sum + parseFloat(payment.amount) : sum;
     }, 0);
     const outstandingBalance = totalFee - totalPaid;
 
     // Calculate document summary
     const documentSummary = {
-      total: caseData.documents.length,
-      missing: caseData.documents.filter(doc => doc.status === 'missing').length,
-      uploaded: caseData.documents.filter(doc => doc.status === 'uploaded').length,
-      underReview: caseData.documents.filter(doc => doc.status === 'under_review').length,
-      approved: caseData.documents.filter(doc => doc.status === 'approved').length,
-      rejected: caseData.documents.filter(doc => doc.status === 'rejected').length
+      total: documents.length,
+      missing: documents.filter(doc => doc.status === 'missing').length,
+      uploaded: documents.filter(doc => doc.status === 'uploaded').length,
+      underReview: documents.filter(doc => doc.status === 'under_review').length,
+      approved: documents.filter(doc => doc.status === 'approved').length,
+      rejected: documents.filter(doc => doc.status === 'rejected').length
     };
 
     // Get assigned caseworkers details
-    const caseworkerIds = caseData.assignedcaseworkerId || [];
-    const caseworkers = await req.tenantDb.User.findAll({
+    const rawCwIds = caseData.assignedcaseworkerId;
+    const caseworkerIds = Array.isArray(rawCwIds)
+      ? rawCwIds.map(Number).filter((id) => Number.isFinite(id) && id > 0)
+      : rawCwIds != null && rawCwIds !== ""
+        ? [Number(rawCwIds)].filter((id) => Number.isFinite(id) && id > 0)
+        : [];
+    const caseworkers = caseworkerIds.length
+      ? await req.tenantDb.User.findAll({
       where: { id: caseworkerIds },
-      attributes: ['id', 'first_name', 'last_name', 'email']
-    });
+      attributes: ['id', 'first_name', 'last_name', 'email'],
+    })
+      : [];
 
     // Structure the response for frontend tabs
     const response = {
@@ -1030,7 +1039,11 @@ export const getCaseDetails = async (req, res) => {
           caseStage: caseData.caseStage,
           applicationType: caseData.applicationType,
           targetSubmissionDate: caseData.targetSubmissionDate,
+          proposedAmount: caseData.proposedAmount ?? null,
           biometricsDate: caseData.biometricsDate,
+          biometricLocation: caseData.biometricLocation ?? null,
+          biometricTime: caseData.biometricTime ?? null,
+          biometricDay: caseData.biometricDay ?? null,
           submissionDate: caseData.submissionDate,
           decisionDate: caseData.decisionDate,
           created_at: caseData.created_at,
@@ -1068,6 +1081,7 @@ export const getCaseDetails = async (req, res) => {
           totalFee: totalFee,
           totalPaid: totalPaid,
           outstandingBalance: outstandingBalance,
+          proposedAmount: caseData.proposedAmount ?? null,
           salaryOffered: caseData.salaryOffered,
           payments: caseData.payments
         },

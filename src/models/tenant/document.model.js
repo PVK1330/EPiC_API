@@ -109,6 +109,12 @@ export default (sequelize, DataTypes) => {
         allowNull: true,
         comment: "Notes from document review"
       },
+      rejectionReason: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        field: "rejection_reason",
+        comment: "Reason provided when document was rejected",
+      },
       isRequired: {
         type: DataTypes.BOOLEAN,
         allowNull: false,

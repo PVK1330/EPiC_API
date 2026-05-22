@@ -542,6 +542,11 @@ export const notifyCaseAssigned = async (tenantDb, caseworkerId, caseData) => {
   const safeCaseId = caseData?.caseId || caseData?.id || 'Unknown';
   const safeCandidateName = caseData?.candidateName || 'a candidate';
   const safeVisaType = caseData?.visaType || 'Not specified';
+  const amount = Number.parseFloat(caseData?.proposedAmount);
+  const feeSuffix =
+    Number.isFinite(amount) && amount > 0
+      ? ` CCL fee (candidate must pay): £${amount.toLocaleString("en-GB", { minimumFractionDigits: 2 })}.`
+      : "";
   
   return await createNotification({
     tenantDb,
@@ -549,7 +554,7 @@ export const notifyCaseAssigned = async (tenantDb, caseworkerId, caseData) => {
     type: NotificationTypes.CASE_ASSIGNED,
     priority: NotificationPriority.HIGH,
     title: `New Case Assigned: ${safeCaseId}`,
-    message: `You have been assigned to case ${safeCaseId} for ${safeCandidateName}.`,
+    message: `You have been assigned to case ${safeCaseId} for ${safeCandidateName}.${feeSuffix}`,
     actionType: 'case_assignment',
     entityId: caseData?.id || null,
     entityType: 'case',
@@ -694,6 +699,88 @@ export const notifyPaymentOverdue = async (tenantDb, userId, paymentData) => {
  * @param {number} userId - User ID to notify
  * @param {Object} documentData - Document information
  */
+/** Confirmation to candidate after they submit a document. */
+export const notifyDocumentSubmittedToCandidate = async (tenantDb, userId, documentData) => {
+  const safeFileName = documentData?.fileName || "your document";
+  const safeCaseId = documentData?.caseId || "your case";
+
+  return await createNotification({
+    tenantDb,
+    userId,
+    type: NotificationTypes.SUCCESS,
+    priority: NotificationPriority.MEDIUM,
+    title: "Document submitted successfully",
+    message: `Your document "${safeFileName}" has been successfully submitted for case ${safeCaseId}. Our team will review it shortly.`,
+    actionType: "document_submitted",
+    entityId: documentData?.id || null,
+    entityType: "document",
+    metadata: {
+      fileName: safeFileName,
+      caseId: safeCaseId,
+    },
+    sendEmail: true,
+  });
+};
+
+/** Alias for document submission confirmation (Task 6). */
+export const notifyDocumentSubmitted = notifyDocumentSubmittedToCandidate;
+
+/** Notify assigned caseworker(s) of admin-proposed fee shown to the candidate. */
+export const notifyProposedAmountToCaseworker = async (
+  tenantDb,
+  userId,
+  { caseId, proposedAmount, caseRecordId = null },
+) => {
+  const safeCaseId = caseId || "the case";
+  const amount = Number.parseFloat(proposedAmount);
+  const formatted =
+    Number.isFinite(amount) && amount >= 0
+      ? `£${amount.toLocaleString("en-GB", { minimumFractionDigits: 2 })}`
+      : String(proposedAmount);
+
+  return await createNotification({
+    tenantDb,
+    userId,
+    type: NotificationTypes.INFO,
+    priority: NotificationPriority.HIGH,
+    title: `CCL fee set — ${safeCaseId}`,
+    message: `Admin set the Client Care Letter (CCL) fee for ${safeCaseId} to ${formatted}. The candidate must pay this amount. Open the case Overview or Payments tab.`,
+    actionType: "proposed_amount_set",
+    entityId: caseRecordId,
+    entityType: "case",
+    metadata: { caseId: safeCaseId, proposedAmount: amount },
+    sendEmail: true,
+  });
+};
+
+/** Notify candidate of admin-proposed fee (visible without CCL approval gate). */
+export const notifyProposedAmountToCandidate = async (
+  tenantDb,
+  userId,
+  { caseId, proposedAmount, caseRecordId = null },
+) => {
+  const safeCaseId = caseId || "your case";
+  const amount = Number.parseFloat(proposedAmount);
+  const formatted =
+    Number.isFinite(amount) && amount >= 0
+      ? `£${amount.toLocaleString("en-GB", { minimumFractionDigits: 2 })}`
+      : String(proposedAmount);
+
+  return await createNotification({
+    tenantDb,
+    userId,
+    type: NotificationTypes.INFO,
+    priority: NotificationPriority.HIGH,
+    title: `CCL fee — ${safeCaseId}`,
+    message: `Your Client Care Letter (CCL) fee for ${safeCaseId} is ${formatted}. This is the amount you need to pay — review your CCL and pay from Payments when ready.`,
+    actionType: "proposed_amount_set",
+    entityId: caseRecordId,
+    entityType: "case",
+    metadata: { caseId: safeCaseId, proposedAmount: amount },
+    sendEmail: true,
+  });
+};
+
 export const notifyDocumentUploaded = async (tenantDb, userId, documentData) => {
   const safeFileName = documentData?.fileName || 'Unknown file';
   const safeCaseId = documentData?.caseId || 'your case';
@@ -727,6 +814,9 @@ export const notifyDocumentReviewed = async (tenantDb, userId, documentData, sta
   const safeFileName = documentData?.fileName || 'Unknown file';
   const safeCaseId = documentData?.caseId || 'your case';
   const safeStatus = status || 'Unknown';
+  const rejectionNote = documentData?.rejectionReason
+    ? ` Reason: ${documentData.rejectionReason}`
+    : '';
   
   return await createNotification({
     tenantDb,
@@ -734,7 +824,7 @@ export const notifyDocumentReviewed = async (tenantDb, userId, documentData, sta
     type: NotificationTypes.DOCUMENT_REVIEWED,
     priority: NotificationPriority.MEDIUM,
     title: `Document Reviewed: ${safeFileName}`,
-    message: `Your document "${safeFileName}" has been reviewed. Status: ${safeStatus}.`,
+    message: `Your document "${safeFileName}" has been reviewed. Status: ${safeStatus}.${rejectionNote}`,
     actionType: 'document_review',
     entityId: documentData?.id || null,
     entityType: 'document',

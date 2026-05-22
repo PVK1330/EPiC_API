@@ -8,7 +8,8 @@ import { rowsToXlsxBuffer, xlsxBufferToRows } from '../../../utils/excelExport.u
 import { generateStrongPassword } from '../../../utils/passwordGenerator.js';
 import { generateCaseId } from '../../../utils/case.utils.js';
 import { getWorkflowState } from '../../../services/caseWorkflowProcess.service.js';
-import { resolveCaseStage } from '../../../constants/immigrationCaseProcess.js';
+import { resolveCaseStage, DEFAULT_CASE_STAGE } from '../../../constants/immigrationCaseProcess.js';
+import { syncWorkflowTasksForStage } from '../../../services/workflowTaskAutomation.service.js';
 
 /**
  * Every form field that a candidate can save / submit.
@@ -608,6 +609,22 @@ export const submitApplication = async (req, res) => {
       message: 'Application submitted successfully.',
       data: { application },
     });
+
+    // Run async workflow tasks generation after transaction completes
+    try {
+      const caseRecordAfter = await req.tenantDb.Case.findOne({ where: { candidateId: userId } });
+      if (caseRecordAfter) {
+        await syncWorkflowTasksForStage({
+          tenantDb: req.tenantDb,
+          caseRecord: caseRecordAfter,
+          stageId: DEFAULT_CASE_STAGE,
+          performedBy: userId,
+          organisationId: req.user?.organisation_id ? Number(req.user.organisation_id) : null,
+        });
+      }
+    } catch (taskErr) {
+      console.error('Error syncing workflow tasks after application submit:', taskErr);
+    }
   } catch (err) {
     console.error('submitApplication error:', err);
     res.status(500).json({

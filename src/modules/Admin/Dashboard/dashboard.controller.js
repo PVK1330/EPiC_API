@@ -888,12 +888,196 @@ export const exportDashboardPDF = async (req, res) => {
   }
 };
 
+/** Due within 48 hours and overdue cases/tasks for admin & caseworker dashboards */
+export const getDueOverdueTasks = async (req, res) => {
+  try {
+    const userId = req.user?.userId ?? req.user?.id;
+    const roleId = Number(req.user?.role_id);
+    const now = new Date();
+    const in48h = new Date(now.getTime() + 48 * 60 * 60 * 1000);
+    const todayStr = now.toISOString().split("T")[0];
+    const in48hStr = in48h.toISOString().split("T")[0];
+
+    const caseWhere = {
+      deleted_at: null,
+      status: { [Op.notIn]: ["Completed", "Closed", "Cancelled", "Approved"] },
+    };
+
+    if (roleId === 2 && userId) {
+      caseWhere[Op.or] = [
+        req.tenantDb.sequelize.literal(
+          `"assignedcaseworkerId"::jsonb @> '${JSON.stringify([Number(userId)])}'::jsonb`,
+        ),
+        req.tenantDb.sequelize.literal(
+          `"assignedcaseworkerId"::jsonb ? '${Number(userId)}'`,
+        ),
+      ];
+    }
+
+    const cases = await req.tenantDb.Case.findAll({
+      where: caseWhere,
+      attributes: [
+        "id",
+        "caseId",
+        "targetSubmissionDate",
+        "status",
+        "caseStage",
+        "priority",
+        "candidateId",
+        "assignedcaseworkerId",
+      ],
+      include: [
+        {
+          model: req.tenantDb.User,
+          as: "candidate",
+          attributes: ["first_name", "last_name"],
+          required: false,
+        },
+      ],
+      order: [["targetSubmissionDate", "ASC"]],
+      limit: 100,
+    });
+
+    const dueCases = [];
+    const overdueCases = [];
+    for (const c of cases) {
+      const raw = c.targetSubmissionDate;
+      if (!raw) continue;
+      const d = new Date(raw);
+      const cwRaw = c.assignedcaseworkerId;
+      const cwCount = Array.isArray(cwRaw)
+        ? cwRaw.length
+        : cwRaw
+          ? 1
+          : 0;
+      const row = {
+        id: c.id,
+        caseId: c.caseId,
+        targetSubmissionDate: raw,
+        status: c.status,
+        caseStage: c.caseStage,
+        priority: c.priority,
+        candidateName: c.candidate
+          ? `${c.candidate.first_name || ""} ${c.candidate.last_name || ""}`.trim()
+          : "Unknown",
+        type: "case",
+        needsAssignment: cwCount === 0,
+        actionLink:
+          cwCount === 0
+            ? `/admin/assign?caseId=${encodeURIComponent(c.caseId || "")}`
+            : `/admin/cases/${encodeURIComponent(c.caseId || "")}`,
+      };
+      if (d < new Date(todayStr)) {
+        overdueCases.push(row);
+      } else if (raw <= in48hStr) {
+        dueCases.push(row);
+      }
+    }
+
+    const taskWhere = {
+      status: { [Op.notIn]: ["completed", "done", "cancelled"] },
+    };
+    if (roleId === 2 && userId) {
+      taskWhere.assigned_to = userId;
+    }
+
+    const tasks = await safeDashboardQuery(
+      req.tenantDb.Task.findAll({
+        where: taskWhere,
+        attributes: ["id", "title", "due_date", "status", "priority", "case_id"],
+        include: [
+          {
+            model: req.tenantDb.Case,
+            as: "case",
+            attributes: ["caseId"],
+            required: false,
+          },
+        ],
+        order: [["due_date", "ASC"]],
+        limit: 100,
+      }),
+      [],
+      "dueOverdue tasks",
+    );
+
+    const rolePrefix = roleId === 2 ? "caseworker" : "admin";
+
+    const resolveTaskActionLink = (taskRow) => {
+      const title = String(taskRow.title || "").toLowerCase();
+      const ref = taskRow.caseId;
+      if (title.includes("assign caseworker") || title.includes("review enquiry")) {
+        return ref ? `/admin/assign?caseId=${encodeURIComponent(ref)}` : "/admin/assign";
+      }
+      if (title.includes("data capture")) {
+        return ref ? `/admin/cases/${encodeURIComponent(ref)}` : `/${rolePrefix}/cases`;
+      }
+      if (title.includes("ccl") || title.includes("client care")) {
+        return ref ? `/admin/cases/${encodeURIComponent(ref)}` : `/${rolePrefix}/cases`;
+      }
+      if (title.includes("biometric")) {
+        return ref ? `/admin/cases/${encodeURIComponent(ref)}` : `/${rolePrefix}/cases`;
+      }
+      return ref
+        ? `/${rolePrefix}/cases/${encodeURIComponent(ref)}`
+        : `/${rolePrefix}/cases`;
+    };
+
+    const dueTasks = [];
+    const overdueTasks = [];
+    for (const t of tasks) {
+      if (!t.due_date) continue;
+      const d = new Date(t.due_date);
+      const caseRef = t.case?.caseId || null;
+      const row = {
+        id: t.id,
+        title: t.title,
+        dueDate: t.due_date,
+        status: t.status,
+        priority: t.priority,
+        caseId: caseRef,
+        type: "task",
+        actionLink: resolveTaskActionLink({ title: t.title, caseId: caseRef }),
+      };
+      if (d < now) {
+        overdueTasks.push(row);
+      } else if (d <= in48h) {
+        dueTasks.push(row);
+      }
+    }
+
+    res.status(200).json({
+      status: "success",
+      message: "Due and overdue items retrieved",
+      data: {
+        dueCases: dueCases.slice(0, 10),
+        overdueCases: overdueCases.slice(0, 10),
+        dueTasks: dueTasks.slice(0, 10),
+        overdueTasks: overdueTasks.slice(0, 10),
+        counts: {
+          dueCases: dueCases.length,
+          overdueCases: overdueCases.length,
+          dueTasks: dueTasks.length,
+          overdueTasks: overdueTasks.length,
+        },
+      },
+    });
+  } catch (error) {
+    console.error("getDueOverdueTasks:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Failed to load due and overdue items",
+      error: error.message,
+    });
+  }
+};
+
 export default {
   getDashboardStats,
   getRecentCases,
   getRecentTasks,
   getRecentActivities,
   getQuickActions,
+  getDueOverdueTasks,
   exportDashboardSnapshot,
   exportDashboardPDF
 };

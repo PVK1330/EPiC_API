@@ -1,5 +1,5 @@
 import { Op } from "sequelize";
-import { resolveCaseStage } from "../constants/immigrationCaseProcess.js";
+import { resolveCaseStage, getStageOrder } from "../constants/immigrationCaseProcess.js";
 import { applyCaseStageChange } from "./caseStageAutomation.service.js";
 import { recordTimelineEntry } from "./caseTimeline.service.js";
 import {
@@ -7,6 +7,7 @@ import {
   syncWorkflowTasksForStage,
 } from "./workflowTaskAutomation.service.js";
 import { notifyUser, NotificationTypes, NotificationPriority } from "./notification.service.js";
+import { sendWorkflowStageEmail } from "./workflowEmail.service.js";
 
 const EMPTY_STATE = {
   draftReview: { confirmed: null, confirmedAt: null },
@@ -391,6 +392,253 @@ export async function submitBiometricAvailability({
   }
 
   return { ok: true };
+}
+
+/**
+ * Admin/caseworker books biometrics when moving to biometrics_booked (no prior availability required).
+ */
+export async function bookBiometricDirect({
+  tenantDb,
+  caseRecord,
+  location,
+  appointmentDate,
+  appointmentDay,
+  appointmentTime,
+  instructions,
+  performedBy,
+  organisationId = null,
+}) {
+  if (!location?.trim() || !appointmentDate || !appointmentTime?.trim()) {
+    return {
+      ok: false,
+      status: 400,
+      message: "Location, date, and time are required for the biometric appointment",
+    };
+  }
+
+  const bookedSlot = {
+    location: location.trim(),
+    appointmentDate,
+    appointmentDay: appointmentDay?.trim() || null,
+    appointmentTime: appointmentTime.trim(),
+    instructions: instructions?.trim() || null,
+    sentToCandidateAt: new Date().toISOString(),
+    bookedBy: performedBy,
+  };
+
+  await setWorkflowState(tenantDb, caseRecord, { biometrics: { bookedSlot } });
+  await caseRecord.update({
+    biometricsDate: appointmentDate,
+    biometricLocation: location.trim(),
+    biometricTime: appointmentTime.trim(),
+    biometricDay: appointmentDay?.trim() || null,
+  });
+
+  await recordTimelineEntry({
+    tenantDb,
+    caseId: caseRecord.id,
+    actionType: "biometric_slot_sent",
+    description: `Biometrics booked: ${location}, ${appointmentDay || ""} ${appointmentDate} ${appointmentTime}`.trim(),
+    performedBy,
+    visibility: "public",
+    metadata: bookedSlot,
+  });
+
+  const caseLabel = caseRecord.caseId || `#${caseRecord.id}`;
+  if (caseRecord.candidateId) {
+    await createWorkflowTask({
+      tenantDb,
+      caseRecord,
+      assigneeId: caseRecord.candidateId,
+      title: `Attend biometrics — ${caseLabel}`,
+      createdBy: performedBy,
+      priority: "high",
+      dueInDays: 7,
+      organisationId,
+    });
+    await notifyUser(tenantDb, caseRecord.candidateId, {
+      tenantDb,
+      type: NotificationTypes.INFO,
+      priority: NotificationPriority.HIGH,
+      title: "Biometrics appointment booked",
+      message: `Your biometrics appointment is scheduled for ${appointmentDay ? `${appointmentDay}, ` : ""}${appointmentDate} at ${appointmentTime}. Location: ${location.trim()}.`,
+      actionType: "biometric_appointment",
+      entityId: caseRecord.id,
+      entityType: "case",
+      metadata: { caseId: caseLabel, ...bookedSlot },
+      sendEmail: true,
+      organisationId,
+    }).catch(() => {});
+  }
+
+  const stage = resolveCaseStage(caseRecord);
+  if (stage !== "biometrics_booked") {
+    await applyCaseStageChange({
+      tenantDb,
+      caseRecord,
+      nextStageId: "biometrics_booked",
+      performedBy,
+      reason: "Biometrics appointment booked",
+      organisationId,
+      sendEmail: false,
+    });
+  }
+
+  await caseRecord.reload();
+  const dayLabel = appointmentDay?.trim() || "";
+  const dateLabel = appointmentDate
+    ? new Date(appointmentDate).toLocaleDateString("en-GB", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      })
+    : "";
+  await sendWorkflowStageEmail({
+    tenantDb,
+    caseRecord,
+    stageId: "biometrics_booked",
+    organisationId,
+    extraVars: {
+      biometrics_location: location.trim(),
+      biometrics_day: dayLabel,
+      biometrics_time: appointmentTime.trim(),
+      biometrics_date: dateLabel,
+      appointment_instructions: instructions?.trim() || "",
+    },
+  }).catch((err) => console.error("biometrics_booked email:", err));
+
+  return { ok: true, nextStage: "biometrics_booked", bookedSlot };
+}
+
+/** True when staff have booked an appointment (workflow state or case columns). */
+export function hasBiometricAppointmentBooked(caseRecord, ws = null) {
+  const state = ws ?? getWorkflowState(caseRecord);
+  if (state.biometrics?.bookedSlot) return true;
+  if (caseRecord?.biometricLocation?.trim()) return true;
+  if (caseRecord?.biometricsDate) return true;
+  return false;
+}
+
+function effectiveBiometricBookedSlot(caseRecord, ws) {
+  if (ws.biometrics?.bookedSlot) return ws.biometrics.bookedSlot;
+  if (!hasBiometricAppointmentBooked(caseRecord, ws)) return null;
+  return {
+    location: caseRecord.biometricLocation?.trim() || "Biometrics centre",
+    appointmentDate: caseRecord.biometricsDate,
+    appointmentDay: caseRecord.biometricDay?.trim() || null,
+    appointmentTime: caseRecord.biometricTime?.trim() || null,
+    hydratedFromCase: true,
+  };
+}
+
+async function completePendingBiometricAttendTasks(tenantDb, caseRecord, candidateId) {
+  if (!candidateId || !caseRecord?.id) return;
+  await tenantDb.Task.update(
+    { status: "completed" },
+    {
+      where: {
+        case_id: caseRecord.id,
+        assigned_to: candidateId,
+        status: "pending",
+        title: { [Op.iLike]: "%attend biometrics%" },
+      },
+    },
+  );
+}
+
+async function syncCandidateApplicationAfterBiometrics(tenantDb, caseRecord) {
+  const candidateId = caseRecord.candidateId;
+  if (!candidateId || !tenantDb.CandidateApplication) return;
+  const app = await tenantDb.CandidateApplication.findOne({ where: { userId: candidateId } });
+  if (!app) return;
+  if (app.status === "submitted") {
+    await app.update({ status: "under_review" });
+  }
+}
+
+/** Candidate confirms they attended the biometrics appointment. */
+export async function markBiometricAttendedByCandidate({
+  tenantDb,
+  caseRecord,
+  performedBy,
+  organisationId = null,
+}) {
+  await caseRecord.reload();
+
+  const ws = getWorkflowState(caseRecord);
+  const stage = resolveCaseStage(caseRecord);
+  const awaitingOrder = getStageOrder("awaiting_decision");
+
+  if (getStageOrder(stage) >= awaitingOrder) {
+    return { ok: true, nextStage: stage, alreadyDone: true };
+  }
+
+  if (!hasBiometricAppointmentBooked(caseRecord, ws)) {
+    return {
+      ok: false,
+      status: 400,
+      message: "No biometrics appointment is booked for this case yet",
+    };
+  }
+
+  const bookedSlot = effectiveBiometricBookedSlot(caseRecord, ws);
+  const biometricsPatch = {
+    ...ws.biometrics,
+    attendedAt: new Date().toISOString(),
+    attendedBy: performedBy,
+  };
+  if (bookedSlot && !ws.biometrics?.bookedSlot) {
+    biometricsPatch.bookedSlot = bookedSlot;
+  }
+
+  await setWorkflowState(tenantDb, caseRecord, { biometrics: biometricsPatch });
+
+  await recordTimelineEntry({
+    tenantDb,
+    caseId: caseRecord.id,
+    actionType: "biometric_attended",
+    description: "Candidate confirmed biometrics attendance",
+    performedBy,
+    visibility: "public",
+  });
+
+  await applyCaseStageChange({
+    tenantDb,
+    caseRecord,
+    nextStageId: "awaiting_decision",
+    performedBy,
+    reason: "Candidate attended biometrics — awaiting decision",
+    organisationId,
+    sendEmail: false,
+  });
+
+  await completePendingBiometricAttendTasks(tenantDb, caseRecord, performedBy);
+  await syncCandidateApplicationAfterBiometrics(tenantDb, caseRecord);
+
+  const caseLabel = caseRecord.caseId || `#${caseRecord.id}`;
+  const notifyIds = new Set([
+    ...(await getActiveAdminIds(tenantDb)),
+    ...parseCaseworkerIds(caseRecord),
+  ]);
+
+  for (const uid of notifyIds) {
+    if (uid === performedBy) continue;
+    await notifyUser(tenantDb, uid, {
+      tenantDb,
+      type: NotificationTypes.CASE_STATUS_CHANGED,
+      priority: NotificationPriority.HIGH,
+      title: `Biometrics attended — ${caseLabel}`,
+      message: `The candidate has confirmed they attended their biometrics appointment. Case is now awaiting decision.`,
+      actionType: "biometric_attended",
+      entityId: caseRecord.id,
+      entityType: "case",
+      metadata: { caseId: caseLabel },
+      sendEmail: true,
+      organisationId,
+    }).catch(() => {});
+  }
+
+  return { ok: true, nextStage: "awaiting_decision" };
 }
 
 /** Caseworker books slot and sends confirmation to candidate. */

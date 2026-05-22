@@ -65,6 +65,7 @@ function buildLoginUserResponse(user, roleMeta) {
     organisation_id: user.organisation_id,
     status: user.status,
     two_factor_enabled: user.two_factor_enabled,
+    profile_pic: user.profile_pic || user.avatar_url || null,
   };
 }
 

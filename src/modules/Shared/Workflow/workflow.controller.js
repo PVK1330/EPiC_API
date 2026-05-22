@@ -1,5 +1,9 @@
 import { Op } from "sequelize";
-import { resolveCaseStage, STAGE_TO_LEGACY_STATUS } from "../../../constants/immigrationCaseProcess.js";
+import {
+  resolveCaseStage,
+  STAGE_TO_LEGACY_STATUS,
+  getStageOrder,
+} from "../../../constants/immigrationCaseProcess.js";
 import { applyCaseStageChange } from "../../../services/caseStageAutomation.service.js";
 import { sendWorkflowStageEmail } from "../../../services/workflowEmail.service.js";
 import { buildDataCaptureSheetAttachment } from "../../../services/dataCaptureSheet.service.js";
@@ -20,8 +24,11 @@ import {
   recordVisaPortalSubmission,
   submitBiometricAvailability,
   sendBiometricSlotToCandidate,
+  bookBiometricDirect,
   recordBiometricDocumentsUploaded,
   recordVisaPortalReply,
+  markBiometricAttendedByCandidate,
+  hasBiometricAppointmentBooked,
 } from "../../../services/caseWorkflowProcess.service.js";
 import {
   submitCclFeeProposal,
@@ -987,9 +994,39 @@ export const getCandidateTasks = async (req, res) => {
       ],
     });
 
+    const caseIds = [...new Set(rows.map((r) => r.case_id).filter(Boolean))];
+    const caseRows =
+      caseIds.length > 0
+        ? await req.tenantDb.Case.findAll({
+            where: { id: caseIds },
+            attributes: [
+              "id",
+              "caseId",
+              "caseStage",
+              "proposedAmount",
+              "totalAmount",
+              "paidAmount",
+              "amountStatus",
+              "biometricLocation",
+              "biometricTime",
+              "biometricDay",
+              "biometricsDate",
+            ],
+          })
+        : [];
+    const caseById = Object.fromEntries(caseRows.map((c) => [c.id, c.get({ plain: true })]));
+
     const tasks = rows.map((row) => {
       const plain = row.get({ plain: true });
       const caseRef = plain.case?.caseId || (plain.case_id ? `#${plain.case_id}` : null);
+      const caseRow = plain.case_id ? caseById[plain.case_id] : null;
+      const title = plain.title || "";
+      const isBiometricAttend = /attend biometrics/i.test(title);
+      const isCclPayment =
+        /pay ccl fee/i.test(title) ||
+        (/client care|ccl/i.test(title) && /pay|fee/i.test(title));
+      const feeFromCase =
+        caseRow?.proposedAmount ?? caseRow?.totalAmount ?? null;
       return {
         id: plain.id,
         title: plain.title,
@@ -998,9 +1035,21 @@ export const getCandidateTasks = async (req, res) => {
         due_date: plain.due_date,
         case_id: plain.case_id,
         caseRef,
+        isCclPayment,
+        cclFeeAmount: feeFromCase != null ? Number(feeFromCase) : null,
         isDataCapture:
           /data capture sheet/i.test(plain.title || "") ||
           plain.title?.toLowerCase().includes("data capture"),
+        isBiometricAttend,
+        biometricDetails: isBiometricAttend && caseRow
+          ? {
+              location: caseRow.biometricLocation,
+              date: caseRow.biometricsDate,
+              time: caseRow.biometricTime,
+              day: caseRow.biometricDay,
+              caseStage: resolveCaseStage(caseRow),
+            }
+          : null,
       };
     });
 
@@ -1026,6 +1075,42 @@ export const completeCandidateTask = async (req, res) => {
     const task = await req.tenantDb.Task.findByPk(taskId);
     if (!task || task.assigned_to !== userId) {
       return res.status(404).json({ status: "error", message: "Task not found", data: null });
+    }
+
+    const isBiometricAttend = /attend biometrics/i.test(task.title || "");
+
+    if (isBiometricAttend && task.case_id) {
+      const caseRecord = await req.tenantDb.Case.findByPk(task.case_id);
+      if (!caseRecord) {
+        return res.status(404).json({ status: "error", message: "Case not found", data: null });
+      }
+
+      const result = await markBiometricAttendedByCandidate({
+        tenantDb: req.tenantDb,
+        caseRecord,
+        performedBy: userId,
+        organisationId: organisationIdFromReq(req),
+      });
+
+      if (!result.ok) {
+        return res.status(result.status || 400).json({
+          status: "error",
+          message: result.message,
+          data: null,
+        });
+      }
+
+      await task.update({ status: "completed" });
+      await caseRecord.reload();
+
+      return res.status(200).json({
+        status: "success",
+        message: "Biometrics attendance recorded",
+        data: {
+          task: task.get({ plain: true }),
+          caseStage: resolveCaseStage(caseRecord),
+        },
+      });
     }
 
     await task.update({ status: "completed" });
@@ -1060,6 +1145,11 @@ export const getCaseWorkflowBundle = async (req, res) => {
       data: {
         caseStage: resolveCaseStage(caseRecord),
         workflowState: getWorkflowState(caseRecord),
+        biometricLocation: caseRecord.biometricLocation,
+        biometricTime: caseRecord.biometricTime,
+        biometricDay: caseRecord.biometricDay,
+        biometricsDate: caseRecord.biometricsDate,
+        proposedAmount: caseRecord.proposedAmount,
         dataCapture: { template, submission },
         ccl,
       },
@@ -1080,14 +1170,29 @@ export const getCandidateWorkflowProcess = async (req, res) => {
 
     const app = await req.tenantDb.CandidateApplication.findOne({ where: { userId } });
     const timezone = await resolveUserTimezone(req.tenantDb, userId);
+    const workflowState = getWorkflowState(caseRecord);
+    const caseStage = resolveCaseStage(caseRecord);
+    const hasBiometricAppointment = hasBiometricAppointmentBooked(caseRecord, workflowState);
+    const biometricAttended = Boolean(workflowState.biometrics?.attendedAt);
+    const canMarkBiometricAttended =
+      hasBiometricAppointment &&
+      !biometricAttended &&
+      getStageOrder(caseStage) < getStageOrder("awaiting_decision");
 
     res.status(200).json({
       status: "success",
       data: {
         caseId: caseRecord.caseId,
-        caseStage: resolveCaseStage(caseRecord),
+        caseStage,
+        proposedAmount: caseRecord.proposedAmount,
+        biometricLocation: caseRecord.biometricLocation,
+        biometricTime: caseRecord.biometricTime,
+        biometricDay: caseRecord.biometricDay,
+        biometricsDate: caseRecord.biometricsDate,
+        hasBiometricAppointment,
+        canMarkBiometricAttended,
         timezone,
-        workflowState: getWorkflowState(caseRecord),
+        workflowState,
         application: app
           ? {
               status: app.status,
@@ -1201,6 +1306,68 @@ export const submitCandidateBiometricAvailability = async (req, res) => {
   }
 };
 
+/** Candidate: confirm biometrics attendance → awaiting decision */
+export const candidateMarkBiometricAttended = async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+    const caseRecord = await findCaseForUser(req.tenantDb, userId);
+    if (!caseRecord) {
+      return res.status(404).json({ status: "error", message: "No case found", data: null });
+    }
+
+    const result = await markBiometricAttendedByCandidate({
+      tenantDb: req.tenantDb,
+      caseRecord,
+      performedBy: userId,
+      organisationId: organisationIdFromReq(req),
+    });
+
+    if (!result.ok) {
+      return res.status(result.status || 400).json({
+        status: "error",
+        message: result.message,
+        data: null,
+      });
+    }
+
+    await caseRecord.reload();
+
+    const app = await req.tenantDb.CandidateApplication.findOne({
+      where: { userId },
+    });
+
+    res.status(200).json({
+      status: "success",
+      message: "Biometrics attendance recorded",
+      data: {
+        caseStage: resolveCaseStage(caseRecord),
+        caseStatus: caseRecord.status,
+        workflowState: getWorkflowState(caseRecord),
+        proposedAmount: caseRecord.proposedAmount,
+        biometricLocation: caseRecord.biometricLocation,
+        biometricTime: caseRecord.biometricTime,
+        biometricDay: caseRecord.biometricDay,
+        biometricsDate: caseRecord.biometricsDate,
+        hasBiometricAppointment: hasBiometricAppointmentBooked(
+          caseRecord,
+          getWorkflowState(caseRecord),
+        ),
+        canMarkBiometricAttended: false,
+        application: app
+          ? {
+              status: app.status,
+              isLocked: app.isLocked,
+              submittedAt: app.submittedAt,
+            }
+          : null,
+      },
+    });
+  } catch (err) {
+    console.error("candidateMarkBiometricAttended:", err);
+    res.status(500).json({ status: "error", message: err.message, data: null });
+  }
+};
+
 /** Staff: mark application submitted on visa portal */
 export const staffRecordVisaPortalSubmission = async (req, res) => {
   try {
@@ -1248,14 +1415,33 @@ export const staffSendBiometricSlot = async (req, res) => {
       return res.status(404).json({ status: "error", message: "Case not found", data: null });
     }
 
-    const { location, appointmentDate, appointmentTime, instructions } = req.body;
-    const result = await sendBiometricSlotToCandidate({
-      tenantDb: req.tenantDb,
-      caseRecord,
+    const {
       location,
       appointmentDate,
       appointmentTime,
+      appointmentDay,
+      biometricDay,
+      biometricLocation,
+      biometricDate,
+      biometricTime,
       instructions,
+      biometricInstructions,
+    } = req.body;
+
+    const slotLocation = biometricLocation || location;
+    const slotDate = biometricDate || appointmentDate;
+    const slotTime = biometricTime || appointmentTime;
+    const slotDay = biometricDay || appointmentDay;
+    const slotInstructions = biometricInstructions || instructions;
+
+    const result = await bookBiometricDirect({
+      tenantDb: req.tenantDb,
+      caseRecord,
+      location: slotLocation,
+      appointmentDate: slotDate,
+      appointmentDay: slotDay,
+      appointmentTime: slotTime,
+      instructions: slotInstructions,
       performedBy: req.user?.userId,
       organisationId: organisationIdFromReq(req),
     });

@@ -51,13 +51,13 @@ export const getMessages = async (req, res) => {
         { 
           model: req.tenantDb.User, 
           as: "sender", 
-          attributes: ["id", "first_name", "last_name", "role_id"],
+          attributes: ["id", "first_name", "last_name", "role_id", "profile_pic"],
           include: [{ model: req.tenantDb.Role, as: 'role', attributes: ['name'] }]
         },
         { 
           model: req.tenantDb.User, 
           as: "receiver", 
-          attributes: ["id", "first_name", "last_name", "role_id"],
+          attributes: ["id", "first_name", "last_name", "role_id", "profile_pic"],
           include: [{ model: req.tenantDb.Role, as: 'role', attributes: ['name'] }]
         }
       ]
@@ -146,13 +146,13 @@ export const sendMessage = async (req, res) => {
         { 
           model: req.tenantDb.User, 
           as: "sender", 
-          attributes: ["id", "first_name", "last_name", "role_id"],
+          attributes: ["id", "first_name", "last_name", "role_id", "profile_pic"],
           include: [{ model: req.tenantDb.Role, as: 'role', attributes: ['name'] }]
         },
         { 
           model: req.tenantDb.User, 
           as: "receiver", 
-          attributes: ["id", "first_name", "last_name", "role_id"],
+          attributes: ["id", "first_name", "last_name", "role_id", "profile_pic"],
           include: [{ model: req.tenantDb.Role, as: 'role', attributes: ['name'] }]
         }
       ]
@@ -199,13 +199,13 @@ export const getRecentConversations = async (req, res) => {
         { 
           model: req.tenantDb.User, 
           as: "participantOne", 
-          attributes: ["id", "first_name", "last_name", "role_id"],
+          attributes: ["id", "first_name", "last_name", "role_id", "organisation_id", "profile_pic"],
           include: [{ model: req.tenantDb.Role, as: 'role', attributes: ['name'] }]
         },
         { 
           model: req.tenantDb.User, 
           as: "participantTwo", 
-          attributes: ["id", "first_name", "last_name", "role_id"],
+          attributes: ["id", "first_name", "last_name", "role_id", "organisation_id", "profile_pic"],
           include: [{ model: req.tenantDb.Role, as: 'role', attributes: ['name'] }]
         },
         { model: req.tenantDb.Case, as: "case", attributes: ["id", "caseId"] }
@@ -218,7 +218,12 @@ export const getRecentConversations = async (req, res) => {
       if (!otherUser) continue;
 
       // Enforce organisation boundary check (allow superadmin to see all, but isolate tenants)
-      if (req.user.role_id !== 5 && otherUser.organisation_id !== organisationId) {
+      if (
+        req.user.role_id !== 5 &&
+        organisationId != null &&
+        otherUser.organisation_id != null &&
+        Number(otherUser.organisation_id) !== Number(organisationId)
+      ) {
         continue;
       }
 
@@ -259,7 +264,7 @@ export const getChatUsers = async (req, res) => {
           id: { [Op.ne]: userId },
           organisation_id: organisationId
         },
-        attributes: ['id', 'first_name', 'last_name', 'email', 'role_id'],
+        attributes: ['id', 'first_name', 'last_name', 'email', 'role_id', 'profile_pic'],
         include: [{ model: req.tenantDb.Role, as: 'role', attributes: ['name'] }]
       });
       return res.status(200).json({ status: "success", message: "Chat users retrieved successfully", data: { count: chatUsers.length, users: chatUsers } });
@@ -333,7 +338,7 @@ export const getChatUsers = async (req, res) => {
         id: { [Op.in]: Array.from(allowedUserIds) },
         organisation_id: organisationId
       },
-      attributes: ['id', 'first_name', 'last_name', 'email', 'role_id'],
+      attributes: ['id', 'first_name', 'last_name', 'email', 'role_id', 'profile_pic'],
       include: [
         { model: req.tenantDb.Role, as: 'role', attributes: ['name'] }
       ]

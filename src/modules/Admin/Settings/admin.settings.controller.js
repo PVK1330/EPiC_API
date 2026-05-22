@@ -128,7 +128,7 @@ export const getMe = async (req, res) => {
           mobile: plain.mobile,
 
           phone: buildPhoneDisplay(plain.country_code, plain.mobile),
-
+          profile_pic: plain.profile_pic ? `${process.env.BASE_URL || ''}/${plain.profile_pic.replace(/\\/g, '/')}` : null,
           avatar_url: prefs.avatar_url ? `${process.env.BASE_URL || ''}/${prefs.avatar_url.replace(/\\/g, '/')}` : null,
 
           role_id: plain.role_id,
@@ -336,7 +336,7 @@ export const patchMe = async (req, res) => {
 
       }
 
-      await req.tenantDb.User.update(profileUpdates);
+      await user.update(profileUpdates);
 
     }
 
@@ -371,7 +371,7 @@ export const patchMe = async (req, res) => {
           mobile: plain.mobile,
 
           phone: buildPhoneDisplay(plain.country_code, plain.mobile),
-
+          profile_pic: plain.profile_pic ? `${process.env.BASE_URL || ''}/${plain.profile_pic.replace(/\\/g, '/')}` : null,
           avatar_url: prefs.avatar_url ? `${process.env.BASE_URL || ''}/${prefs.avatar_url.replace(/\\/g, '/')}` : null,
 
           role_id: plain.role_id,

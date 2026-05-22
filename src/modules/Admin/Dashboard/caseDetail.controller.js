@@ -6,6 +6,7 @@ import {
 } from '../../../services/cclFeeProposal.service.js';
 import { syncCclReleaseForApprovedFees } from '../../../services/cclCandidateRelease.service.js';
 import { evaluateCaseStageAfterEvent, applyCaseStageChange } from '../../../services/caseStageAutomation.service.js';
+import { bookBiometricDirect } from '../../../services/caseWorkflowProcess.service.js';
 import { recordTimelineEntry } from '../../../services/caseTimeline.service.js';
 import {
   assertSubmissionGate,
@@ -326,6 +327,10 @@ export const getCaseDetails = async (req, res) => {
           applicationType: caseData.applicationType,
           targetSubmissionDate: caseData.targetSubmissionDate,
           biometricsDate: caseData.biometricsDate,
+          biometricLocation: caseData.biometricLocation,
+          biometricTime: caseData.biometricTime,
+          biometricDay: caseData.biometricDay,
+          proposedAmount: caseData.proposedAmount,
           submissionDate: caseData.submissionDate,
           decisionDate: caseData.decisionDate,
           created_at: caseData.created_at,
@@ -410,7 +415,20 @@ export const getCaseDetails = async (req, res) => {
 export const updateCaseStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, caseStage, priority, assignedcaseworkerId, biometricsDate, submissionDate, decisionDate } = req.body;
+    const {
+      status,
+      caseStage,
+      priority,
+      assignedcaseworkerId,
+      biometricsDate,
+      submissionDate,
+      decisionDate,
+      biometricLocation,
+      biometricDate,
+      biometricTime,
+      biometricDay,
+      biometricInstructions,
+    } = req.body;
     
     if (!id) {
       return res.status(400).json({
@@ -476,7 +494,30 @@ export const updateCaseStatus = async (req, res) => {
       await caseData.update(updateData);
     }
 
-    if (nextStage !== undefined && nextStage !== previousStage) {
+    if (
+      nextStage === "biometrics_booked" &&
+      (biometricLocation || biometricDate || biometricTime)
+    ) {
+      const bookResult = await bookBiometricDirect({
+        tenantDb: req.tenantDb,
+        caseRecord: caseData,
+        location: biometricLocation,
+        appointmentDate: biometricDate || biometricsDate,
+        appointmentDay: biometricDay,
+        appointmentTime: biometricTime,
+        instructions: biometricInstructions,
+        performedBy: req.user?.userId ?? req.user?.id,
+        organisationId: req.user?.organisation_id ?? null,
+      });
+      if (!bookResult.ok) {
+        return res.status(bookResult.status || 400).json({
+          status: "error",
+          message: bookResult.message,
+          data: null,
+        });
+      }
+      await caseData.reload();
+    } else if (nextStage !== undefined && nextStage !== previousStage) {
       if (nextStage === "biometrics_booked" && !caseData.biometricsDate) {
         await caseData.update({ biometricsDate: new Date() });
       }
@@ -484,11 +525,12 @@ export const updateCaseStatus = async (req, res) => {
         tenantDb: req.tenantDb,
         caseRecord: caseData,
         nextStageId: nextStage,
-        performedBy: req.user?.id,
+        performedBy: req.user?.userId ?? req.user?.id,
         reason: `Workflow moved to: ${getStepById(nextStage)?.title || nextStage}`,
         sendEmail: true,
         organisationId: req.user?.organisation_id ?? null,
       });
+      await caseData.reload();
     }
 
     // Add timeline entry

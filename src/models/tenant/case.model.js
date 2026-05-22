@@ -140,10 +140,33 @@ const CaseModel = (sequelize, DataTypes) => {
       type: DataTypes.TEXT,
       allowNull: true,
     },
+    proposedAmount: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: true,
+      field: "proposed_amount",
+      comment: "Admin-set CCL fee amount the candidate must pay (mirrors issued CaseCclRecord.feeAmount)",
+    },
     biometricsDate: {
       type: DataTypes.DATEONLY,
       allowNull: true,
       comment: "Date for biometrics appointment"
+    },
+    biometricLocation: {
+      type: DataTypes.STRING(500),
+      allowNull: true,
+      field: "biometric_location",
+    },
+    biometricTime: {
+      type: DataTypes.STRING(64),
+      allowNull: true,
+      field: "biometric_time",
+      comment: "Time slot for biometrics appointment",
+    },
+    biometricDay: {
+      type: DataTypes.STRING(32),
+      allowNull: true,
+      field: "biometric_day",
+      comment: "Day of week label for biometrics appointment",
     },
     submissionDate: {
       type: DataTypes.DATEONLY,

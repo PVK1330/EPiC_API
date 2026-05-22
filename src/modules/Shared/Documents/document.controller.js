@@ -3,7 +3,11 @@ import fs from 'fs';
 import archiver from 'archiver';
 import { Op } from 'sequelize';
 
-import { notifyDocumentUploaded, notifyDocumentReviewed } from '../../../services/notification.service.js';
+import {
+  notifyDocumentUploaded,
+  notifyDocumentReviewed,
+  notifyDocumentSubmittedToCandidate,
+} from '../../../services/notification.service.js';
 import {
   evaluateCaseStageAfterEvent,
   recordDocumentReviewTimeline,
@@ -80,6 +84,8 @@ const getDocumentAttributes = async (tenantDb) => {
   const columns = await documentsColumnMetadataByDb.get(dbKey);
   const hasNotesColumn = Boolean(columns?.notes);
 
+  const hasRejectionColumn = Boolean(columns?.rejection_reason);
+
   const attributes = [
     'id',
     'userId',
@@ -107,8 +113,11 @@ const getDocumentAttributes = async (tenantDb) => {
   if (hasNotesColumn) {
     attributes.splice(12, 0, 'notes');
   }
+  if (hasRejectionColumn) {
+    attributes.push('rejectionReason');
+  }
 
-  return { attributes, hasNotesColumn };
+  return { attributes, hasNotesColumn, hasRejectionColumn };
 };
 
 // Upload documents with system-generated document names
@@ -416,7 +425,7 @@ export const uploadDocuments = async (req, res) => {
           }
         }
 
-        // Candidate upload: notify all admins for review
+        // Candidate upload: notify admins for review + confirmation to candidate
         if (roleId === 1) {
           const admins = await req.tenantDb.User.findAll({
             where: { role_id: 3, status: "active" },
@@ -427,6 +436,13 @@ export const uploadDocuments = async (req, res) => {
               ...docNotificationData,
               uploadedBy: uploaderName,
             });
+          }
+          if (userId === req.user.userId) {
+            await notifyDocumentSubmittedToCandidate(
+              req.tenantDb,
+              userId,
+              docNotificationData,
+            );
           }
         }
 
@@ -784,7 +800,7 @@ export const deleteDocument = async (req, res) => {
 export const updateDocumentStatus = async (req, res) => {
   try {
     const { documentId } = req.params;
-    const { status, reviewNotes } = req.body;
+    const { status, reviewNotes, rejectionReason } = req.body;
     const roleId = Number(req.user?.role_id);
 
     if (roleId === 1) {
@@ -804,6 +820,19 @@ export const updateDocumentStatus = async (req, res) => {
       });
     }
 
+    const rejectionText = (rejectionReason ?? "").trim();
+    const reasonText =
+      status === "rejected"
+        ? rejectionText || (reviewNotes ?? "").trim()
+        : (reviewNotes ?? "").trim();
+    if (status === "rejected" && !rejectionText) {
+      return res.status(400).json({
+        status: "error",
+        message: "rejectionReason is required when rejecting a document",
+        data: null,
+      });
+    }
+
     const document = await req.tenantDb.Document.findByPk(documentId);
     if (!document) {
       return res.status(404).json({
@@ -814,12 +843,20 @@ export const updateDocumentStatus = async (req, res) => {
       });
     }
 
-    await document.update({
+    const { hasRejectionColumn } = await getDocumentAttributes(req.tenantDb);
+    const updatePayload = {
       status,
-      reviewNotes,
+      reviewNotes: status === "rejected" ? reasonText : reviewNotes,
       reviewedBy: req.user.userId,
-      reviewedAt: new Date()
-    });
+      reviewedAt: new Date(),
+    };
+    if (hasRejectionColumn && status === "rejected") {
+      updatePayload.rejectionReason = reasonText;
+    } else if (hasRejectionColumn) {
+      updatePayload.rejectionReason = null;
+    }
+
+    await document.update(updatePayload);
 
     let caseData = null;
     let stageAdvance = null;
@@ -840,6 +877,7 @@ export const updateDocumentStatus = async (req, res) => {
         id: document.id,
         fileName: document.userFileName || document.documentName,
         caseId: caseData ? caseData.caseId : null,
+        rejectionReason: document.rejectionReason || reasonText || null,
       };
 
       if (document.userId !== req.user.userId) {

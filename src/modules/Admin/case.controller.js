@@ -1,11 +1,21 @@
 import { Op } from 'sequelize';
-import { notifyCaseAssigned, notifyCaseStatusChanged } from '../../services/notification.service.js';
-import { createTasksOnCaseworkerAssignment } from '../../services/workflowTaskAutomation.service.js';
+import {
+  notifyCaseAssigned,
+  notifyCaseStatusChanged,
+  notifyProposedAmountToCandidate,
+} from '../../services/notification.service.js';
+import {
+  createTasksOnCaseworkerAssignment,
+  createWorkflowTask,
+  syncWorkflowTasksForStage,
+  completePendingWorkflowTasks,
+} from '../../services/workflowTaskAutomation.service.js';
 import { generateCaseId } from '../../utils/case.utils.js';
 import { mergeCaseWhere, assertUsersInOrganisation } from '../../utils/tenantScope.js';
 import { recordAuditLog } from '../../services/audit.service.js';
 import { recordCaseCreated, recordStatusChange, recordAssignmentChange, recordTimelineEntry } from '../../services/caseTimeline.service.js';
 import { sendWorkflowStageEmail } from '../../services/workflowEmail.service.js';
+import { applyAdminCclFeeOnCase } from '../../services/adminCclFeeSetup.service.js';
 import {
   IMMIGRATION_CASE_STEPS,
   STAGE_GUIDANCE,
@@ -20,6 +30,7 @@ import {
   normalizeCaseStage,
 } from '../../constants/immigrationCaseProcess.js';
 import { applyCaseStageChange } from '../../services/caseStageAutomation.service.js';
+import { bookBiometricDirect } from '../../services/caseWorkflowProcess.service.js';
 
 
 // Helper function to generate next case ID like #CAS-001 securely
@@ -53,10 +64,12 @@ export const createCase = async (req, res) => {
       notes,
       nationality,
       jobTitle,
-      departmentId
+      departmentId,
+      proposedAmount,
     } = req.body;
 
     const cwIds = Array.isArray(assignedcaseworkerId) ? assignedcaseworkerId : (assignedcaseworkerId ? [assignedcaseworkerId] : []);
+    const parsedProposedOnCreate = parseFloat(proposedAmount);
 
     // Field-wise validation
     const errors = [];
@@ -64,7 +77,7 @@ export const createCase = async (req, res) => {
     if (candidateId === undefined || candidateId === null || candidateId === '') errors.push("candidateId is required");
     if (sponsorId === undefined || sponsorId === null || sponsorId === '') errors.push("sponsorId is required");
     if (visaTypeId === undefined || visaTypeId === null || visaTypeId === '') errors.push("visaTypeId is required");
-    if (!cwIds.length) errors.push("assignedcaseworkerId is required");
+    // Caseworker optional at creation — admin task prompts assignment
     if (targetSubmissionDate === undefined || targetSubmissionDate === null || targetSubmissionDate === '') errors.push("targetSubmissionDate is required");
     if (totalAmount === undefined || totalAmount === null) errors.push("totalAmount is required");
 
@@ -130,13 +143,46 @@ export const createCase = async (req, res) => {
       nationality: nationality || null,
       jobTitle: jobTitle || null,
       departmentId: parsedDeptId,
-      assignedcaseworkerId: cwIds,
+      assignedcaseworkerId: cwIds.length > 0 ? cwIds : [],
       salaryOffered: salaryOffered || 0,
       totalAmount: totalAmount || 0,
       paidAmount: paidAmount || 0,
       notes: notes || "",
       businessId: businessId || sponsorId, // Ensure businessId is set
+      proposedAmount:
+        !Number.isNaN(parsedProposedOnCreate) && parsedProposedOnCreate >= 0
+          ? parsedProposedOnCreate
+          : null,
     });
+
+    if (!Number.isNaN(parsedProposedOnCreate) && parsedProposedOnCreate > 0) {
+      try {
+        await applyAdminCclFeeOnCase({
+          tenantDb: req.tenantDb,
+          caseRecord: newCase,
+          feeAmount: parsedProposedOnCreate,
+          performedBy: req.user?.userId,
+          organisationId,
+          reviewNotes: "CCL fee set by administrator on case creation",
+        });
+        await newCase.reload();
+      } catch (cclErr) {
+        console.error("applyAdminCclFeeOnCase (createCase):", cclErr);
+      }
+    }
+
+    // Admin task: review enquiry and assign caseworker (when case is unassigned)
+    try {
+      await syncWorkflowTasksForStage({
+        tenantDb: req.tenantDb,
+        caseRecord: newCase,
+        stageId: DEFAULT_CASE_STAGE,
+        performedBy: req.user?.userId,
+        organisationId,
+      });
+    } catch (stageTaskErr) {
+      console.error("syncWorkflowTasksForStage (createCase):", stageTaskErr);
+    }
 
     // Send notifications to assigned caseworkers
     if (cwIds.length > 0) {
@@ -169,6 +215,7 @@ export const createCase = async (req, res) => {
         newCaseworkerIds: cwIds,
         assignedBy: req.user?.userId,
         organisationId,
+        reason: notes || "Initial case creation assignment",
       }).catch((err) => console.error('createTasksOnCaseworkerAssignment:', err));
     }
 
@@ -785,7 +832,15 @@ export const getPipelineCases = async (req, res) => {
 export const updatePipelineStage = async (req, res) => {
   try {
     const { id } = req.params;
-    const { caseStage, status } = req.body;
+    const {
+      caseStage,
+      status,
+      biometricLocation,
+      biometricDate,
+      biometricTime,
+      biometricDay,
+      biometricInstructions,
+    } = req.body;
 
     let nextStage = normalizeCaseStage(caseStage);
     if (!nextStage && status) {
@@ -820,11 +875,30 @@ export const updatePipelineStage = async (req, res) => {
       });
     }
 
-    if (nextStage === "biometrics_booked" && !caseData.biometricsDate) {
-      await caseData.update({ biometricsDate: new Date() });
-    }
-
-    if (previousStage !== nextStage) {
+    if (
+      nextStage === "biometrics_booked" &&
+      (biometricLocation || biometricDate || biometricTime)
+    ) {
+      const bookResult = await bookBiometricDirect({
+        tenantDb: req.tenantDb,
+        caseRecord: caseData,
+        location: biometricLocation,
+        appointmentDate: biometricDate,
+        appointmentDay: biometricDay,
+        appointmentTime: biometricTime,
+        instructions: biometricInstructions,
+        performedBy: req.user?.userId,
+        organisationId: req.user?.organisation_id ?? null,
+      });
+      if (!bookResult.ok) {
+        return res.status(bookResult.status || 400).json({
+          status: "error",
+          message: bookResult.message,
+          data: null,
+        });
+      }
+      await caseData.reload();
+    } else if (previousStage !== nextStage) {
       try {
         await applyCaseStageChange({
           tenantDb: req.tenantDb,
@@ -838,6 +912,9 @@ export const updatePipelineStage = async (req, res) => {
       } catch (stageErr) {
         console.error("applyCaseStageChange (pipeline):", stageErr);
       }
+      await caseData.reload();
+    } else if (nextStage === "biometrics_booked" && !caseData.biometricsDate) {
+      await caseData.update({ biometricsDate: new Date() });
     }
 
     await caseData.reload();
@@ -1045,6 +1122,7 @@ export const assignCase = async (req, res) => {
       priority,
       notes: internalNotes,
       feeAmount,
+      proposedAmount,
     } = req.body;
 
     const caseData = (await req.tenantDb.Case.findOne({ where: { caseId: id } })) || 
@@ -1067,23 +1145,67 @@ export const assignCase = async (req, res) => {
       ? [caseData.notes, ...noteLines].filter(Boolean).join("\n")
       : caseData.notes;
 
-    const updates = {
-      assignedcaseworkerId: cwIds,
-      notes: updatedNotes,
-    };
-    if (priority) updates.priority = priority;
-
     const oldCwIds = Array.isArray(caseData.assignedcaseworkerId)
       ? caseData.assignedcaseworkerId
       : caseData.assignedcaseworkerId
         ? [caseData.assignedcaseworkerId]
         : [];
+    const normalizedCwIds = Array.isArray(cwIds)
+      ? cwIds.map(Number).filter((id) => Number.isFinite(id) && id > 0)
+      : cwIds != null && cwIds !== ""
+        ? [Number(cwIds)].filter((id) => Number.isFinite(id) && id > 0)
+        : [];
+
+    const updates = {
+      assignedcaseworkerId: normalizedCwIds,
+      notes: updatedNotes,
+    };
+    if (priority) updates.priority = priority;
+
+    const parsedProposed = parseFloat(proposedAmount);
+    if (!Number.isNaN(parsedProposed) && parsedProposed >= 0) {
+      updates.proposedAmount = parsedProposed;
+    }
+    const hadNoCaseworker = oldCwIds.length === 0;
+    const nowHasCaseworker = normalizedCwIds.length > 0;
 
     await caseData.update(updates);
     await caseData.reload();
 
+    if (nowHasCaseworker && hadNoCaseworker) {
+      await completePendingWorkflowTasks(req.tenantDb, {
+        caseId: caseData.id,
+        titlePattern: "%Review enquiry and assign caseworker%",
+      }).catch((err) => console.error("complete assign enquiry tasks:", err));
+
+      const currentStage = resolveCaseStage(caseData);
+      if (currentStage === "client_enquiry") {
+        try {
+          await applyCaseStageChange({
+            tenantDb: req.tenantDb,
+            caseRecord: caseData,
+            nextStageId: "admin_assignment",
+            performedBy: req.user?.userId,
+            reason: reason || "Caseworker assigned",
+            sendEmail: true,
+            organisationId: req.user?.organisation_id ?? null,
+          });
+          await caseData.reload();
+          await syncWorkflowTasksForStage({
+            tenantDb: req.tenantDb,
+            caseRecord: caseData,
+            stageId: "admin_assignment",
+            performedBy: req.user?.userId,
+            organisationId: req.user?.organisation_id ?? null,
+          });
+        } catch (stageErr) {
+          console.error("assignCase stage advance:", stageErr);
+        }
+      }
+    }
+
     // Notify assigned caseworkers
-    if (cwIds && cwIds.length > 0) {
+    if (normalizedCwIds.length > 0) {
       const candidate = await req.tenantDb.User.findByPk(caseData.candidateId);
       const visaType = await req.tenantDb.VisaType.findByPk(caseData.visaTypeId);
       const notifData = {
@@ -1091,9 +1213,10 @@ export const assignCase = async (req, res) => {
         caseId: caseData.caseId,
         candidateName: candidate ? `${candidate.first_name || ''} ${candidate.last_name || ''}`.trim() : 'Unknown Candidate',
         visaType: visaType ? visaType.name : 'Not specified',
+        proposedAmount: caseData.proposedAmount ?? parsedProposed ?? null,
       };
-      const newCwIds = cwIds.filter((id) => !oldCwIds.includes(id));
-      for (const cwId of cwIds) {
+      const newCwIds = normalizedCwIds.filter((id) => !oldCwIds.includes(id));
+      for (const cwId of normalizedCwIds) {
         try {
           await notifyCaseAssigned(req.tenantDb, cwId, notifData);
         } catch (notifErr) {
@@ -1107,95 +1230,53 @@ export const assignCase = async (req, res) => {
           newCaseworkerIds: newCwIds,
           assignedBy: req.user?.userId,
           organisationId: req.user?.organisation_id ?? null,
+          assignToNames: assignToName || null,
+          reason: reason || null,
         }).catch((err) => console.error('createTasksOnCaseworkerAssignment:', err));
       }
     }
 
     const parsedFee = parseFloat(feeAmount);
-    if (!Number.isNaN(parsedFee) && parsedFee > 0) {
+    const adminCclFee =
+      !Number.isNaN(parsedProposed) && parsedProposed > 0
+        ? parsedProposed
+        : !Number.isNaN(parsedFee) && parsedFee > 0
+          ? parsedFee
+          : null;
+
+    if (adminCclFee != null) {
       const performedBy = req.user?.userId;
       const organisationId = req.user?.organisation_id ?? null;
-      const installmentPlan = [
-        { label: "Full Payment", amount: parsedFee, dueDate: null },
-      ];
-      const cclDefaults = {
-        status: "issued",
-        feeAmount: parsedFee,
-        installmentPlan,
-        proposedBy: performedBy,
-        proposedAt: new Date(),
-        issuedBy: performedBy,
-        issuedAt: new Date(),
-        adminReviewedBy: performedBy,
-        adminReviewedAt: new Date(),
-        adminReviewNotes: "Fees set by administrator on caseworker assignment",
-      };
-
-      const [ccl] = await req.tenantDb.CaseCclRecord.findOrCreate({
-        where: { caseId: caseData.id },
-        defaults: cclDefaults,
-      });
-
-      if (ccl.status !== "issued" && ccl.status !== "signed") {
-        await ccl.update(cclDefaults);
-      }
-
-      await caseData.update({
-        totalAmount: parsedFee,
-        amountStatus: "Approved",
-      });
-
-      if (resolveCaseStage(caseData) !== "client_care_letter") {
-        await applyCaseStageChange({
+      try {
+        await applyAdminCclFeeOnCase({
           tenantDb: req.tenantDb,
           caseRecord: caseData,
-          nextStageId: "client_care_letter",
+          feeAmount: adminCclFee,
           performedBy,
-          reason: "CCL fees set on caseworker assignment — Client Care Letter released",
-          sendEmail: true,
           organisationId,
+          reviewNotes:
+            reason?.trim() ||
+            internalNotes?.trim() ||
+            "CCL fee set by administrator on caseworker assignment",
         });
+        await caseData.reload();
+      } catch (cclSetupErr) {
+        console.error("applyAdminCclFeeOnCase (assignCase):", cclSetupErr);
       }
-
-      await recordTimelineEntry({
-        tenantDb: req.tenantDb,
-        caseId: caseData.id,
-        actionType: "communication_sent",
-        description: "Client Care Letter and fee schedule sent to client (Direct Admin Setup)",
-        performedBy,
-        metadata: { feeAmount: parsedFee, installments: installmentPlan },
-        visibility: "public",
-      });
-
-      await caseData.reload({
-        include: req.tenantDb.VisaType
-          ? [{ model: req.tenantDb.VisaType, as: "visaType", attributes: ["id", "name"] }]
-          : [],
-      });
-      await ccl.reload();
-
-      const { attachCclTemplateToCase } = await import("../../services/cclTemplate.service.js");
-      await attachCclTemplateToCase({
-        tenantDb: req.tenantDb,
-        caseRecord: caseData,
-        ccl,
-        performedBy,
-      }).catch((err) => console.error("attachCclTemplateToCase:", err));
-
-      const { notifyCclFeeApproved } = await import("../../services/workflowNotifications.service.js");
-      await notifyCclFeeApproved({
-        tenantDb: req.tenantDb,
-        caseRecord: caseData,
-        ccl,
-        organisationId,
-      }).catch((err) => console.error("notifyCclFeeApproved:", err));
-
-      const { createVisaPortalSubmissionTasks } = await import("../../services/caseWorkflowExtended.service.js");
-      await createVisaPortalSubmissionTasks({
-        tenantDb: req.tenantDb,
-        caseRecord: caseData,
-        createdBy: performedBy,
-      }).catch((err) => console.error("createVisaPortalSubmissionTasks:", err));
+    } else if (
+      !Number.isNaN(parsedProposed) &&
+      parsedProposed > 0 &&
+      caseData.candidateId
+    ) {
+      try {
+        await notifyProposedAmountToCandidate(req.tenantDb, caseData.candidateId, {
+          caseId: caseData.caseId,
+          proposedAmount: parsedProposed,
+          caseRecordId: caseData.id,
+        });
+      } catch (feeErr) {
+        console.error("proposedAmount notify on assignCase:", feeErr);
+      }
     }
 
     res.status(200).json({

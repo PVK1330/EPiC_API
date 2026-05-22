@@ -3,6 +3,7 @@ import {
   buildDataCaptureSheetAttachment,
   resolveDataCaptureTemplate,
 } from "./dataCaptureSheet.service.js";
+import { wrapEpicEmail } from "../utils/epicEmailLayout.js";
 
 /** Workflow stage → email_templates.template_key */
 export const STAGE_EMAIL_TEMPLATE = {
@@ -10,6 +11,7 @@ export const STAGE_EMAIL_TEMPLATE = {
   draft_application_review: "draft_application_review",
   client_care_letter: "ccl_issued",
   ccl_issued: "ccl_issued",
+  biometrics_booked: "biometrics_confirmation",
   biometrics_confirmation_sent: "biometrics_confirmation",
   decision_communicated: "decision_communicated",
   case_closure: "case_closure",
@@ -166,15 +168,105 @@ export async function sendWorkflowStageEmail({
       }
     }
 
+    let bodyHtml = "";
+
+    if (templateKey === "biometrics_confirmation") {
+      const loc = vars.biometrics_location;
+      const day = vars.biometrics_day;
+      const time = vars.biometrics_time;
+      const date = vars.biometrics_date || vars.biometrics_date;
+      const instructions = vars.appointment_instructions;
+
+      // Build styled appointment card for email
+      const dateDisplay = [day, date].filter(Boolean).join(", ") || "TBC";
+
+      const appointmentRows = [
+        { icon: "📍", label: "Location", value: loc || "TBC" },
+        { icon: "📅", label: "Date", value: dateDisplay },
+        { icon: "🕐", label: "Time", value: time || "TBC" },
+      ];
+
+      const appointmentTableRows = appointmentRows
+        .map(
+          (row) => `
+          <tr>
+            <td style="padding: 12px 16px; border-bottom: 1px solid #f1f5f9; width: 110px; color: #64748b; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; vertical-align: top;">
+              ${row.icon} &nbsp;${row.label}
+            </td>
+            <td style="padding: 12px 16px; border-bottom: 1px solid #f1f5f9; color: #0f172a; font-size: 14px; font-weight: 700; vertical-align: top;">
+              ${row.value}
+            </td>
+          </tr>`
+        )
+        .join("");
+
+      const instructionsHtml = instructions
+        ? `<div style="margin-top: 20px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 16px;">
+             <p style="margin: 0 0 6px 0; font-size: 12px; font-weight: 700; color: #92400e; text-transform: uppercase; letter-spacing: 0.5px;">⚠️ &nbsp;Instructions</p>
+             <p style="margin: 0; font-size: 14px; color: #78350f; line-height: 1.6;">${instructions}</p>
+           </div>`
+        : "";
+
+      bodyHtml = `
+        <p style="font-size: 15px; color: #475569; line-height: 1.6; margin: 0 0 24px 0;">
+          Dear ${vars.client_name},<br><br>
+          Your biometrics appointment has been confirmed for case <strong>${vars.case_ref}</strong>. Please find your appointment details below.
+        </p>
+
+        <div style="border: 2px solid #dbeafe; border-radius: 12px; overflow: hidden; margin-bottom: 24px;">
+          <div style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); padding: 14px 16px;">
+            <p style="margin: 0; color: #ffffff; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;">
+              📋 &nbsp;Biometrics Appointment Details
+            </p>
+          </div>
+          <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background: #ffffff;">
+            ${appointmentTableRows}
+          </table>
+        </div>
+
+        ${instructionsHtml}
+
+        <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 16px; margin-top: 20px;">
+          <p style="margin: 0 0 8px 0; font-size: 13px; font-weight: 700; color: #166534;">✅ &nbsp;What you need to do</p>
+          <ul style="margin: 0; padding-left: 20px; color: #15803d; font-size: 13px; line-height: 1.8;">
+            <li>Attend your appointment at the location above on time</li>
+            <li>Bring your valid passport and any relevant travel documents</li>
+            <li>Bring a printed copy of this confirmation email or have it ready on your phone</li>
+            <li>Arrive at least 15 minutes before your scheduled appointment</li>
+          </ul>
+        </div>
+
+        <p style="font-size: 14px; color: #64748b; margin-top: 24px; line-height: 1.6;">
+          If you have any questions or need to reschedule, please contact your caseworker <strong>${vars.caseworker_name}</strong> immediately.
+        </p>
+      `;
+
+      // Ensure plain text fallback also contains full details
+      if (loc && !body.includes(loc)) {
+        body += `\n\nAppointment Details:\nLocation: ${loc}\nDate: ${dateDisplay}\nTime: ${time || "TBC"}`;
+        if (instructions) body += `\n\nInstructions: ${instructions}`;
+      }
+    } else {
+      bodyHtml = body.replace(/\n/g, "<br>");
+    }
+
     const result = await sendTransactionalEmail({
       organisationId,
       to: candidate.email,
       subject,
       text: body,
-      html:
-        '<div style="font-family:sans-serif;line-height:1.6;white-space:pre-wrap">' +
-        body.replace(/\n/g, "<br>") +
-        "</div>",
+      html: wrapEpicEmail({
+        pageTitle: subject,
+        badge:
+          templateKey === "biometrics_confirmation"
+            ? "Biometrics Appointment Confirmed"
+            : "",
+        title: subject,
+        messageHtml: "",
+        bodyHtml,
+        ctaUrl: vars.portal_link,
+        ctaLabel: "View Your Case in Portal",
+      }),
       attachments: mailAttachments.length ? mailAttachments : null,
       failureContext: `workflow_email:${templateKey}`,
     });

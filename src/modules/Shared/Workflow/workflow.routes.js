@@ -25,6 +25,7 @@ router.patch("/my-tasks/:taskId/complete", requireCandidate, workflowController.
 router.get("/process", requireCandidate, workflowController.getCandidateWorkflowProcess);
 router.post("/draft-review", requireCandidate, workflowController.submitCandidateDraftReview);
 router.post("/biometric-availability", requireCandidate, workflowController.submitCandidateBiometricAvailability);
+router.post("/mark-biometric-attended", requireCandidate, workflowController.candidateMarkBiometricAttended);
 
 // Caseworker / Admin
 const staff = checkRole([ROLES.ADMIN, ROLES.CASEWORKER]);
