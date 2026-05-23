@@ -1,13 +1,12 @@
-import db from "../models/index.js";
-
 const ROLES = [
-  { id: 1, name: "admin" },
+  { id: 1, name: "candidate" },
   { id: 2, name: "caseworker" },
-  { id: 3, name: "candidate" },
+  { id: 3, name: "admin" },
   { id: 4, name: "business" },
+  { id: 5, name: "superadmin" },
 ];
 
-export default async function seedRoles() {
+export async function seedRolesForDb(db) {
   try {
     for (const role of ROLES) {
       await db.Role.findOrCreate({
@@ -16,26 +15,35 @@ export default async function seedRoles() {
       });
     }
     console.log("✔ Roles seeded");
-    
-    // Assign default permissions to roles
-    await assignDefaultPermissions();
+    await assignDefaultPermissions(db);
   } catch (err) {
     console.error("Role seeder failed:", err.message);
+    throw err;
   }
 }
 
-async function assignDefaultPermissions() {
+export default seedRolesForDb;
+
+async function assignDefaultPermissions(db) {
   try {
-    const { Permission, Role, RolePermission } = db;
+    const { Permission, Role } = db;
     
     // Get all permissions
     const allPermissions = await Permission.findAll();
     
-    // Admin (role_id: 1) - All permissions
-    const adminRole = await Role.findByPk(1);
+    // SuperAdmin (role_id: 5) - All permissions
+    const superAdminRole = await Role.findByPk(5);
+    if (superAdminRole) {
+      await superAdminRole.setPermissions(allPermissions);
+      console.log('SuperAdmin role assigned all permissions');
+    }
+
+    // Admin (role_id: 3) - Most permissions (except platform management if applicable)
+    const adminRole = await Role.findByPk(3);
     if (adminRole) {
+      // For now, give admin everything, but we might want to exclude superadmin-only perms later
       await adminRole.setPermissions(allPermissions);
-      console.log('Admin role assigned all permissions');
+      console.log('Admin role assigned permissions');
     }
     
     // Caseworker (role_id: 2) - Case, Document, Task permissions
@@ -54,8 +62,8 @@ async function assignDefaultPermissions() {
       console.log('Caseworker role assigned permissions');
     }
     
-    // Candidate (role_id: 3) - View own cases and documents
-    const candidateRole = await Role.findByPk(3);
+    // Candidate (role_id: 1) - View own cases and documents
+    const candidateRole = await Role.findByPk(1);
     if (candidateRole) {
       const candidatePermNames = allPermissions
         .filter(p => 

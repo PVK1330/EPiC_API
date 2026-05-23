@@ -1,16 +1,12 @@
+import ApiResponse from '../utils/apiResponse.js';
 import { ROLES } from './role.middleware.js';
 
 /**
- * Must run after verifyToken. Only users with candidate role_id may proceed.
+ * Specifically requires the Candidate role.
  */
 export const requireCandidate = (req, res, next) => {
-  const roleId = Number(req.user?.role_id);
-  if (roleId !== ROLES.CANDIDATE) {
-    return res.status(403).json({
-      status: 'error',
-      message: 'Candidate access only.',
-      data: null,
-    });
+  if (req.user && req.user.role_id === ROLES.CANDIDATE) {
+    return next();
   }
-  next();
+  return ApiResponse.forbidden(res, "Candidate access required");
 };

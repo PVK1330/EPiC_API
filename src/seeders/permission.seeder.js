@@ -1,6 +1,3 @@
-import db from '../models/index.js';
-
-const { Permission, Role, RolePermission } = db;
 
 const PERMISSIONS_DATA = [
   // ==================== ADMIN PANEL MODULES ====================
@@ -205,10 +202,11 @@ const PERMISSIONS_DATA = [
 ];
 
 const ROLE_PERMISSIONS = {
-  1: 'admin', // Admin role - all permissions
-  2: 'caseworker', // Caseworker role - case, escalation, reports
-  3: 'candidate', // Candidate role - view own data
-  4: 'sponsor', // Sponsor/Business role - case, payment, reports
+  1: 'candidate',
+  2: 'caseworker',
+  3: 'admin',
+  4: 'sponsor',
+  5: 'superadmin',
 };
 
 const getCaseworkerPermissions = () => {
@@ -258,7 +256,8 @@ const getCandidatePermissions = () => {
     .map(p => p.name);
 };
 
-const seedPermissions = async () => {
+const seedPermissions = async (db) => {
+  const { Permission } = db;
   try {
     console.log('Seeding permissions...');
 
@@ -277,7 +276,8 @@ const seedPermissions = async () => {
   }
 };
 
-const seedRolePermissions = async () => {
+const seedRolePermissions = async (db) => {
+  const { Permission, Role } = db;
   try {
     console.log('Seeding role permissions...');
 
@@ -285,8 +285,15 @@ const seedRolePermissions = async () => {
     const roles = await Role.findAll();
     const allPermissions = await Permission.findAll();
 
-    // Admin (role_id: 1) - All permissions
-    const adminRole = roles.find(r => r.id === 1);
+    // SuperAdmin (role_id: 5) - All permissions
+    const superAdminRole = roles.find(r => r.id === 5);
+    if (superAdminRole) {
+      await superAdminRole.setPermissions(allPermissions);
+      console.log('SuperAdmin role assigned all permissions');
+    }
+
+    // Admin (role_id: 3) - All permissions
+    const adminRole = roles.find(r => r.id === 3);
     if (adminRole) {
       await adminRole.setPermissions(allPermissions);
       console.log('Admin role assigned all permissions');
@@ -301,8 +308,8 @@ const seedRolePermissions = async () => {
       console.log('Caseworker role assigned permissions');
     }
 
-    // Candidate (role_id: 3) - View own cases
-    const candidateRole = roles.find(r => r.id === 3);
+    // Candidate (role_id: 1) - View own cases
+    const candidateRole = roles.find(r => r.id === 1);
     if (candidateRole) {
       const candidatePermNames = getCandidatePermissions();
       const candidatePerms = allPermissions.filter(p => candidatePermNames.includes(p.name));
@@ -326,15 +333,37 @@ const seedRolePermissions = async () => {
   }
 };
 
-const seedAll = async () => {
+export async function seedPermissionsForDb(db) {
   try {
-    await seedPermissions();
-    await seedRolePermissions();
+    await seedPermissions(db);
+    await seedRolePermissions(db);
     console.log('All permissions and role permissions seeded successfully');
   } catch (error) {
     console.error('Error seeding permissions:', error);
     throw error;
   }
-};
+}
 
-export default seedAll;
+/**
+ * Ensure tenant admin role (id 3) is mapped to every permission in this organisation DB.
+ * Safe to call on each request — only writes when mappings are missing.
+ */
+export async function ensureAdminHasAllPermissions(db) {
+  const { Permission, Role } = db;
+  const adminRole = await Role.findByPk(3);
+  if (!adminRole) return;
+
+  let allPermissions = await Permission.findAll();
+  if (allPermissions.length === 0) {
+    await seedPermissions(db);
+    allPermissions = await Permission.findAll();
+  }
+
+  const current = await adminRole.getPermissions();
+  if (current.length >= allPermissions.length) return;
+
+  await adminRole.setPermissions(allPermissions);
+  console.log(`Admin role synced with ${allPermissions.length} permissions`);
+}
+
+export default seedPermissionsForDb;
