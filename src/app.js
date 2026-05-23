@@ -21,6 +21,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());       // must be BEFORE any route that reads req.cookies
 app.use('/uploads', express.static('uploads'));
+// Email/branding images only — NOT the React app (that lives on cms.elitepic.co.uk/dist/assets).
 app.use('/assets', express.static('assets'));
 
 // API Routes
