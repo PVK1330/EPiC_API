@@ -4,7 +4,7 @@ import platformDb from "../models/index.js";
 import { getTenantDb } from "../services/tenantDb.service.js";
 import { userRoom, threadRoom, orgRoom } from "./messagingRealtime.js";
 import { registerIO } from "./ioRegistry.js";
-import { isAllowedFrontendOrigin } from "../config/frontendOrigins.js";
+import { corsOriginDelegate } from "../config/frontendOrigins.js";
 
 function extractSocketToken(socket) {
   const authToken = socket.handshake.auth?.token;
@@ -35,14 +35,8 @@ function extractSocketToken(socket) {
 export function initSocketIO(httpServer, app) {
   const io = new Server(httpServer, {
     cors: {
-      origin: (origin, callback) => {
-        if (isAllowedFrontendOrigin(origin)) {
-          callback(null, true);
-        } else {
-          callback(new Error(`CORS blocked origin: ${origin}`));
-        }
-      },
-      methods: ["GET", "POST"],
+      origin: corsOriginDelegate,
+      methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       credentials: true,
     },
   });

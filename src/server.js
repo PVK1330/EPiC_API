@@ -21,6 +21,7 @@ import http from 'http';
 import { initSocketIO } from './realtime/socketServer.js';
 import { normalizePostgresDatabaseName } from './utils/postgresDbName.js';
 import { verifyMailTransport } from './services/mail.service.js';
+import { logCorsConfiguration } from './config/frontendOrigins.js';
 
 const PORT = process.env.PORT || 5000;
 
@@ -100,6 +101,8 @@ async function bootstrapPlatform() {
         console.error(`Tenant provision failed for org ${org.id}:`, err.message);
       }
     }
+
+    logCorsConfiguration();
 
     const server = http.createServer(app);
     initSocketIO(server, app);

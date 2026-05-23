@@ -4,16 +4,12 @@ import cookieParser from 'cookie-parser';
 import cors from 'cors';
 
 import routes from './routes/index.js';
-import { corsOriginDelegate } from './config/frontendOrigins.js';
+import { getCorsOptions } from './config/frontendOrigins.js';
 import { handleWebhook } from './modules/Candidate/Payments/stripepayment.controller.js';
 
 const app = express();
 
-app.use(cors({
-  origin: corsOriginDelegate,
-  credentials: true,
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Organisation-Slug'],
-}));
+app.use(cors(getCorsOptions()));
 
 // Stripe webhooks must use raw body for signature verification.
 app.post(
