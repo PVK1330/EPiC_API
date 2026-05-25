@@ -3,6 +3,7 @@ import { Op } from "sequelize";
 import platformDb from "../../models/index.js";
 import catchAsync from "../../utils/catchAsync.js";
 import ApiResponse from "../../utils/apiResponse.js";
+import { recordPlatformAuditLog, createPlatformNotification } from "../../services/platformActivity.service.js";
 import {
   PLATFORM_MODULES,
   PLATFORM_MODULE_COUNT,
@@ -160,6 +161,21 @@ export const inviteTeamMember = catchAsync(async (req, res) => {
     include: [{ model: Role, as: "role", include: [{ model: Permission, as: "permissions", through: { attributes: [] } }] }],
   });
 
+  await recordPlatformAuditLog({
+    category: "Authentication",
+    action: "Platform User Invited",
+    user: req.user?.email || "superadmin@epic.com",
+    org: "Global System",
+    description: `Invited new platform team member ${user.first_name} ${user.last_name} (${user.email}) as ${role.name}.`,
+    status: "Success"
+  });
+
+  await createPlatformNotification({
+    title: "Team Member Invited",
+    desc: `New platform team member ${user.first_name} ${user.last_name} invited with role ${role.name}.`,
+    type: "info"
+  });
+
   return ApiResponse.created(res, welcomeEmail.sent ? "Team member invited. Login email sent." : "Team member created.", {
     member: formatMember(withRole),
     welcome_email: welcomeEmail,
@@ -194,6 +210,15 @@ export const updateTeamMember = catchAsync(async (req, res) => {
 
   const refreshed = await User.findByPk(user.id, {
     include: [{ model: Role, as: "role", include: [{ model: Permission, as: "permissions", through: { attributes: [] } }] }],
+  });
+
+  await recordPlatformAuditLog({
+    category: "Authentication",
+    action: "Platform User Updated",
+    user: req.user?.email || "superadmin@epic.com",
+    org: "Global System",
+    description: `Updated properties of platform team member ${refreshed.first_name} ${refreshed.last_name} (${refreshed.email}). Updates: ${Object.keys(updates).join(", ")}`,
+    status: "Success"
   });
 
   return ApiResponse.success(res, "Team member updated", { member: formatMember(refreshed) });
@@ -258,6 +283,15 @@ export const createPlatformRole = catchAsync(async (req, res) => {
     include: [{ model: Permission, as: "permissions", through: { attributes: [] } }],
   });
 
+  await recordPlatformAuditLog({
+    category: "System",
+    action: "Platform Role Created",
+    user: req.user?.email || "superadmin@epic.com",
+    org: "Global System",
+    description: `Created new platform role ${role.name}`,
+    status: "Success"
+  });
+
   return ApiResponse.created(res, "Platform role created", { role: formatRole(withPerms, 0) });
 });
 
@@ -288,6 +322,16 @@ export const updatePlatformRole = catchAsync(async (req, res) => {
   });
 
   const refreshed = await getPlatformRoleOr404(id);
+
+  await recordPlatformAuditLog({
+    category: "System",
+    action: "Platform Role Updated",
+    user: req.user?.email || "superadmin@epic.com",
+    org: "Global System",
+    description: `Updated properties on platform role ${refreshed.name}`,
+    status: "Success"
+  });
+
   return ApiResponse.success(res, "Role updated", { role: formatRole(refreshed, memberCount) });
 });
 
@@ -309,6 +353,17 @@ export const deletePlatformRole = catchAsync(async (req, res) => {
     return ApiResponse.badRequest(res, "Reassign members before deleting this role");
   }
 
+  const roleName = role.name;
   await role.destroy();
+
+  await recordPlatformAuditLog({
+    category: "System",
+    action: "Platform Role Deleted",
+    user: req.user?.email || "superadmin@epic.com",
+    org: "Global System",
+    description: `Deleted platform role ${roleName}`,
+    status: "Success"
+  });
+
   return ApiResponse.success(res, "Role deleted");
 });

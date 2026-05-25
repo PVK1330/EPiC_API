@@ -11,6 +11,7 @@ import { sendOrganisationAdminWelcomeEmail } from "../../services/mail.service.j
 import { mirrorUserToTenant } from "../../services/userSync.service.js";
 import { seedTenantOrganisation } from "../../services/tenantSeed.service.js";
 import { getTenantDb } from "../../services/tenantDb.service.js";
+import { recordPlatformAuditLog, createPlatformNotification } from "../../services/platformActivity.service.js";
 
 const Organisation = platformDb.Organisation;
 const User = platformDb.User;
@@ -219,8 +220,22 @@ export const createOrganisation = async (req, res) => {
         } catch (_) {
         }
       }
-      throw err;
     }
+
+    await recordPlatformAuditLog({
+      category: "Organisation",
+      action: "Organisation Created",
+      user: req.user?.email || "superadmin@epic.com",
+      org: org.name,
+      description: `Successfully created organisation ${org.name} (${org.slug}). Physical DB: ${physicalEnabled ? databaseName : "shared"}`,
+      status: "Success"
+    });
+
+    await createPlatformNotification({
+      title: "New Organisation Registered",
+      desc: `Organisation ${org.name} has signed up on the ${org.plan || 'starter'} plan.`,
+      type: "success"
+    });
 
     return res.status(201).json({
       status: "success",
@@ -427,6 +442,21 @@ export const createOrganisationWithAdmin = async (req, res) => {
         ? "Organisation and admin created. Welcome email failed; SMTP owner was notified."
         : "Organisation and admin created.";
 
+    await recordPlatformAuditLog({
+      category: "Organisation",
+      action: "Organisation Created",
+      user: req.user?.email || "superadmin@epic.com",
+      org: org.name,
+      description: `Successfully created organisation ${org.name} with administrator ${adminEmailVal}. Physical DB: ${physicalEnabled ? databaseName : "shared"}`,
+      status: "Success"
+    });
+
+    await createPlatformNotification({
+      title: "New Tenant Registered",
+      desc: `Organisation ${org.name} has signed up on the ${org.plan || 'starter'} plan with administrator ${adminEmailVal}.`,
+      type: "success"
+    });
+
     return res.status(201).json({
       status: "success",
       message,
@@ -521,6 +551,16 @@ export const updateOrganisation = async (req, res) => {
       }
     }
     await org.update(updates);
+
+    await recordPlatformAuditLog({
+      category: "Organisation",
+      action: "Organisation Updated",
+      user: req.user?.email || "superadmin@epic.com",
+      org: org.name,
+      description: `Updated properties on organisation ${org.name} (${org.slug}). Updates: ${Object.keys(updates).join(", ")}`,
+      status: "Success"
+    });
+
     return res.status(200).json({
       status: "success",
       message: "Organisation updated",
@@ -550,6 +590,21 @@ export const deleteOrganisation = async (req, res) => {
     await removeOrganisationUsers(id);
     await org.destroy();
 
+    await recordPlatformAuditLog({
+      category: "Organisation",
+      action: "Organisation Deleted",
+      user: req.user?.email || "superadmin@epic.com",
+      org: org.name,
+      description: `Soft-deleted organisation ${org.name} (${org.slug}) and removed administrators.`,
+      status: "Success"
+    });
+
+    await createPlatformNotification({
+      title: "Organisation Deleted",
+      desc: `Organisation ${org.name} has been manually deleted by platform staff.`,
+      type: "warning"
+    });
+
     return res.status(200).json({
       status: "success",
       message: "Organisation deleted (soft delete). Admin accounts removed so email/mobile can be reused.",
@@ -578,6 +633,21 @@ export const suspendOrganisation = async (req, res) => {
 
     await org.update({ status: "suspended" });
 
+    await recordPlatformAuditLog({
+      category: "Organisation",
+      action: "Organisation Suspended",
+      user: req.user?.email || "superadmin@epic.com",
+      org: org.name,
+      description: `Manually suspended organisation ${org.name} (${org.slug}).`,
+      status: "Success"
+    });
+
+    await createPlatformNotification({
+      title: "Organisation Suspended",
+      desc: `Organisation ${org.name} has been suspended by platform staff.`,
+      type: "warning"
+    });
+
     return res.status(200).json({
       status: "success",
       message: "Organisation suspended",
@@ -605,6 +675,21 @@ export const activateOrganisation = async (req, res) => {
     }
 
     await org.update({ status: "active" });
+
+    await recordPlatformAuditLog({
+      category: "Organisation",
+      action: "Organisation Activated",
+      user: req.user?.email || "superadmin@epic.com",
+      org: org.name,
+      description: `Manually activated organisation ${org.name} (${org.slug}).`,
+      status: "Success"
+    });
+
+    await createPlatformNotification({
+      title: "Organisation Activated",
+      desc: `Organisation ${org.name} has been activated by platform staff.`,
+      type: "success"
+    });
 
     return res.status(200).json({
       status: "success",

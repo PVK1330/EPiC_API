@@ -1,6 +1,7 @@
 import platformDb from "../../models/index.js";
 import catchAsync from "../../utils/catchAsync.js";
 import ApiResponse from "../../utils/apiResponse.js";
+import { recordPlatformAuditLog } from "../../services/platformActivity.service.js";
 
 /**
  * Get all subscription plans
@@ -80,6 +81,15 @@ export const createPlan = catchAsync(async (req, res) => {
     is_public,
   });
 
+  await recordPlatformAuditLog({
+    category: "Billing",
+    action: "Subscription Plan Created",
+    user: req.user?.email || "superadmin@epic.com",
+    org: "Global System",
+    description: `Created new subscription plan ${plan.name} at $${plan.price} per ${plan.billing_cycle}`,
+    status: "Success"
+  });
+
   return ApiResponse.created(res, "Plan created successfully", { plan });
 });
 
@@ -128,6 +138,15 @@ export const updatePlan = catchAsync(async (req, res) => {
     status,
   });
 
+  await recordPlatformAuditLog({
+    category: "Billing",
+    action: "Subscription Plan Updated",
+    user: req.user?.email || "superadmin@epic.com",
+    org: "Global System",
+    description: `Updated properties of subscription plan ${plan.name}`,
+    status: "Success"
+  });
+
   return ApiResponse.success(res, "Plan updated successfully", { plan });
 });
 
@@ -146,9 +165,30 @@ export const deletePlan = catchAsync(async (req, res) => {
   if (usageCount > 0) {
     // If used, just deactivate it
     await plan.update({ status: 'archived', is_public: false });
+
+    await recordPlatformAuditLog({
+      category: "Billing",
+      action: "Subscription Plan Archived",
+      user: req.user?.email || "superadmin@epic.com",
+      org: "Global System",
+      description: `Archived plan ${plan.name} because it is currently in use by ${usageCount} organisations.`,
+      status: "Success"
+    });
+
     return ApiResponse.success(res, "Plan is in use. It has been archived and hidden instead of deleted.");
   }
 
+  const planName = plan.name;
   await plan.destroy();
+
+  await recordPlatformAuditLog({
+    category: "Billing",
+    action: "Subscription Plan Deleted",
+    user: req.user?.email || "superadmin@epic.com",
+    org: "Global System",
+    description: `Deleted subscription plan ${planName}`,
+    status: "Success"
+  });
+
   return ApiResponse.success(res, "Plan deleted successfully");
 });

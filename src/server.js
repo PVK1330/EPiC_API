@@ -7,6 +7,8 @@ import { seedRolesForDb } from './seeders/role.seeder.js';
 import { seedPermissionsForDb } from './seeders/permission.seeder.js';
 import { seedModules } from './seeders/module.seeder.js';
 import { seedPlatformRbacForDb } from './seeders/platformRbac.seeder.js';
+import seedPlatformAuditLogs from './seeders/platformAuditLog.seeder.js';
+import seedPlatformNotifications from './seeders/platformNotification.seeder.js';
 import {
   createTenantPostgresDatabase,
   ensureTenantPostgresDatabase,
@@ -91,6 +93,8 @@ async function bootstrapPlatform() {
     await seedPlans();
     await seedModules();
     await seedAdmin();
+    await seedPlatformAuditLogs();
+    await seedPlatformNotifications();
 
     const organisations = await platformDb.Organisation.findAll();
     for (const org of organisations) {
