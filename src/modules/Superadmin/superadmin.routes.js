@@ -72,6 +72,7 @@ router.get('/audit-log', platformAuditLogController.listPlatformAuditLogs);
 router.get('/audit-log/export-csv', platformAuditLogController.exportPlatformAuditLogsCsv);
 
 router.get('/notifications', platformNotificationController.listPlatformNotifications);
+router.get('/notifications/unread-count', platformNotificationController.getUnreadCount);
 router.post('/notifications/:id/read', platformNotificationController.markPlatformNotificationRead);
 router.post('/notifications/mark-all-read', platformNotificationController.markAllPlatformNotificationsRead);
 
