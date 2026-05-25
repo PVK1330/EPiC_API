@@ -535,10 +535,10 @@ export const getQuickActions = async (req, res) => {
       }
     });
 
-    // Get overdue tasks
+    // Get overdue tasks (use date string for DATEONLY column)
     const overdueTasks = await req.tenantDb.Task.count({
       where: {
-        dueDate: { [Op.lt]: new Date() },
+        due_date: { [Op.lt]: new Date().toISOString().split("T")[0] },
         status: { [Op.ne]: 'completed' }
       }
     });
@@ -943,7 +943,11 @@ export const getDueOverdueTasks = async (req, res) => {
     for (const c of cases) {
       const raw = c.targetSubmissionDate;
       if (!raw) continue;
-      const d = new Date(raw);
+      // Normalise to "YYYY-MM-DD" regardless of whether the value is a Date or string
+      const dateStr =
+        raw instanceof Date
+          ? raw.toISOString().split("T")[0]
+          : String(raw).split("T")[0];
       const cwRaw = c.assignedcaseworkerId;
       const cwCount = Array.isArray(cwRaw)
         ? cwRaw.length
@@ -953,7 +957,7 @@ export const getDueOverdueTasks = async (req, res) => {
       const row = {
         id: c.id,
         caseId: c.caseId,
-        targetSubmissionDate: raw,
+        targetSubmissionDate: dateStr,
         status: c.status,
         caseStage: c.caseStage,
         priority: c.priority,
@@ -967,9 +971,9 @@ export const getDueOverdueTasks = async (req, res) => {
             ? `/admin/assign?caseId=${encodeURIComponent(c.caseId || "")}`
             : `/admin/cases/${encodeURIComponent(c.caseId || "")}`,
       };
-      if (d < new Date(todayStr)) {
+      if (dateStr < todayStr) {
         overdueCases.push(row);
-      } else if (raw <= in48hStr) {
+      } else if (dateStr <= in48hStr) {
         dueCases.push(row);
       }
     }
@@ -1025,22 +1029,22 @@ export const getDueOverdueTasks = async (req, res) => {
     const dueTasks = [];
     const overdueTasks = [];
     for (const t of tasks) {
-      if (!t.due_date) continue;
-      const d = new Date(t.due_date);
+      const dueDateStr = t.due_date; // DATEONLY string "YYYY-MM-DD"
+      if (!dueDateStr) continue;
       const caseRef = t.case?.caseId || null;
       const row = {
         id: t.id,
         title: t.title,
-        dueDate: t.due_date,
+        dueDate: dueDateStr,
         status: t.status,
         priority: t.priority,
         caseId: caseRef,
         type: "task",
         actionLink: resolveTaskActionLink({ title: t.title, caseId: caseRef }),
       };
-      if (d < now) {
+      if (dueDateStr < todayStr) {
         overdueTasks.push(row);
-      } else if (d <= in48h) {
+      } else if (dueDateStr <= in48hStr) {
         dueTasks.push(row);
       }
     }

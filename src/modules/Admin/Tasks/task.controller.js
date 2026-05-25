@@ -685,36 +685,35 @@ export const getTasksByUserId = async (req, res) => {
       };
     }
 
-    // Date/status based filters
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // Use YYYY-MM-DD strings for DATEONLY column comparisons to avoid
+    // timezone-related mismatches between JS Date objects and PostgreSQL DATE.
+    const now = new Date();
+    const todayStr = now.toISOString().split("T")[0];
 
     if (filter === "overdue") {
-      // Past due date, not completed
-      where.due_date = { [req.tenantDb.Sequelize.Op.lt]: today };
+      where.due_date = { [req.tenantDb.Sequelize.Op.lt]: todayStr };
       where.status = { [req.tenantDb.Sequelize.Op.ne]: "completed" };
 
     } else if (filter === "due_soon") {
-      const in48h = new Date();
-      in48h.setHours(in48h.getHours() + 48);
+      const in48h = new Date(now.getTime() + 48 * 60 * 60 * 1000);
+      const in48hStr = in48h.toISOString().split("T")[0];
       where.due_date = {
-        [req.tenantDb.Sequelize.Op.gte]: today,
-        [req.tenantDb.Sequelize.Op.lte]: in48h,
+        [req.tenantDb.Sequelize.Op.gte]: todayStr,
+        [req.tenantDb.Sequelize.Op.lte]: in48hStr,
       };
       where.status = { [req.tenantDb.Sequelize.Op.ne]: "completed" };
 
     } else if (filter === "today_due") {
-      // Due today, not completed
-      const tomorrow = new Date(today);
+      const tomorrow = new Date(now);
       tomorrow.setDate(tomorrow.getDate() + 1);
+      const tomorrowStr = tomorrow.toISOString().split("T")[0];
       where.due_date = {
-        [req.tenantDb.Sequelize.Op.gte]: today,
-        [req.tenantDb.Sequelize.Op.lt]: tomorrow,
+        [req.tenantDb.Sequelize.Op.gte]: todayStr,
+        [req.tenantDb.Sequelize.Op.lt]: tomorrowStr,
       };
       where.status = { [req.tenantDb.Sequelize.Op.ne]: "completed" };
 
     } else if (filter === "completed") {
-      // Status-based only
       where.status = "completed";
 
     }
