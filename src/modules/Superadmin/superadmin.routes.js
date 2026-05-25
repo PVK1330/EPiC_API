@@ -13,6 +13,8 @@ import { getPlatformSmtpSettings } from '../Admin/Settings/smtp.settings.control
 import * as platformSettingsController from './platformSettings.controller.js';
 import * as profileController from './superadminProfile.controller.js';
 import { handlePlatformLogoUpload, handlePlatformFaviconUpload, handleSuperadminAvatarUpload } from '../../middlewares/upload.middleware.js';
+import * as platformAuditLogController from './platformAuditLog.controller.js';
+import * as platformNotificationController from './platformNotification.controller.js';
 
 const router = express.Router();
 
@@ -66,9 +68,12 @@ router.get('/gateway/status', paymentController.getGatewayStatus);
 router.post('/gateway/configure', paymentController.configureGateway);
 router.get('/dashboard/stats', paymentController.getDashboardStats);
 
-router.get('/audit-log', (req, res) => {
-  res.json({ status: 'success', message: 'Global audit log (scaffold)' });
-});
+router.get('/audit-log', platformAuditLogController.listPlatformAuditLogs);
+router.get('/audit-log/export-csv', platformAuditLogController.exportPlatformAuditLogsCsv);
+
+router.get('/notifications', platformNotificationController.listPlatformNotifications);
+router.post('/notifications/:id/read', platformNotificationController.markPlatformNotificationRead);
+router.post('/notifications/mark-all-read', platformNotificationController.markAllPlatformNotificationsRead);
 
 router.get('/analytics', (req, res) => {
   res.json({ status: 'success', message: 'Platform analytics (scaffold)' });
