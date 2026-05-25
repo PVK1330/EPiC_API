@@ -50,6 +50,10 @@ import DataCaptureTemplateModel from "./tenant/dataCaptureTemplate.model.js";
 import DataCaptureSubmissionModel from "./tenant/dataCaptureSubmission.model.js";
 import CaseCclRecordModel from "./tenant/caseCclRecord.model.js";
 import SponsorChangeRequestModel from "./tenant/sponsorChangeRequest.model.js";
+import RightToWorkRecordModel from "./tenant/rightToWorkRecord.model.js";
+import AbsenceRecordModel from "./tenant/absenceRecord.model.js";
+import SmsActivityLogModel from "./tenant/smsActivityLog.model.js";
+import ComplianceDocumentModel from "./tenant/complianceDocument.model.js";
 
 /**
  * Register all models and associations on a Sequelize instance (main or tenant DB).
@@ -108,6 +112,10 @@ export function buildDb(sequelize) {
   db.SponsorUserPreference = SponsorUserPreferenceModel(sequelize, Sequelize.DataTypes);
   db.WorkerEvent = WorkerEventModel(sequelize, Sequelize.DataTypes);
   db.SponsorChangeRequest = SponsorChangeRequestModel(sequelize, Sequelize.DataTypes);
+  db.RightToWorkRecord = RightToWorkRecordModel(sequelize, Sequelize.DataTypes);
+  db.AbsenceRecord = AbsenceRecordModel(sequelize, Sequelize.DataTypes);
+  db.SmsActivityLog = SmsActivityLogModel(sequelize, Sequelize.DataTypes);
+  db.ComplianceDocument = ComplianceDocumentModel(sequelize, Sequelize.DataTypes);
 
   // Associations (Same as before)
   db.Conversation.belongsTo(db.User, { foreignKey: "participantOneId", as: "participantOne" });
@@ -238,6 +246,23 @@ export function buildDb(sequelize) {
   db.SponsorChangeRequest.belongsTo(db.User, { foreignKey: "requestedBy", as: "requester" });
   db.SponsorChangeRequest.belongsTo(db.User, { foreignKey: "reportedBy", as: "reporter" });
   db.SponsorChangeRequest.belongsTo(db.Organisation, { foreignKey: "organisationId", as: "organisation" });
+
+  db.RightToWorkRecord.belongsTo(db.User, { foreignKey: "workerId", as: "worker" });
+  db.RightToWorkRecord.belongsTo(db.User, { foreignKey: "sponsorId", as: "sponsor" });
+  db.RightToWorkRecord.belongsTo(db.User, { foreignKey: "checkedBy", as: "checker" });
+  db.RightToWorkRecord.belongsTo(db.Organisation, { foreignKey: "organisationId", as: "organisation" });
+
+  db.AbsenceRecord.belongsTo(db.User, { foreignKey: "workerId", as: "worker" });
+  db.AbsenceRecord.belongsTo(db.User, { foreignKey: "sponsorId", as: "sponsor" });
+  db.AbsenceRecord.belongsTo(db.Organisation, { foreignKey: "organisationId", as: "organisation" });
+
+  db.SmsActivityLog.belongsTo(db.User, { foreignKey: "sponsorId", as: "sponsor" });
+  db.SmsActivityLog.belongsTo(db.User, { foreignKey: "submittedBy", as: "submitter" });
+  db.SmsActivityLog.belongsTo(db.Organisation, { foreignKey: "organisationId", as: "organisation" });
+
+  db.ComplianceDocument.belongsTo(db.User, { foreignKey: "sponsorId", as: "sponsor" });
+  db.ComplianceDocument.belongsTo(db.User, { foreignKey: "reviewedBy", as: "reviewer" });
+  db.ComplianceDocument.belongsTo(db.Organisation, { foreignKey: "organisationId", as: "organisation" });
 
   return db;
 }
