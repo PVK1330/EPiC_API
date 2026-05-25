@@ -773,6 +773,51 @@ export const acceptCcl = async (req, res) => {
       visibility: "public",
     });
 
+    // Assign UK Visa Portal task to caseworkers
+    const raw = caseRecord?.assignedcaseworkerId ?? caseRecord?.assignedCaseworkerId;
+    let cwIds = [];
+    if (raw) {
+      if (Array.isArray(raw)) {
+        cwIds = raw.map(Number).filter((n) => Number.isFinite(n) && n > 0);
+      } else if (typeof raw === "object" && raw !== null) {
+        const ids = raw.ids ?? raw.caseworkers ?? Object.values(raw);
+        if (Array.isArray(ids)) cwIds = ids.map(Number).filter((n) => Number.isFinite(n) && n > 0);
+      } else {
+        const n = Number(raw);
+        if (Number.isFinite(n) && n > 0) cwIds = [n];
+      }
+    }
+    cwIds = [...new Set(cwIds)];
+
+    const caseLabel = caseRecord.caseId || `#${caseRecord.id}`;
+    const taskTitle = `You have to submit application on UK visa portal — ${caseLabel}`;
+
+    for (const cwId of cwIds) {
+      try {
+        const existingTask = await req.tenantDb.Task.findOne({
+          where: {
+            case_id: caseRecord.id,
+            assigned_to: cwId,
+            status: "pending",
+            title: taskTitle,
+          }
+        });
+        if (!existingTask) {
+          await req.tenantDb.Task.create({
+            title: taskTitle,
+            assigned_to: cwId,
+            case_id: caseRecord.id,
+            priority: "high",
+            status: "pending",
+            due_date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+            created_by: userId || cwId,
+          });
+        }
+      } catch (taskErr) {
+        console.error("Failed to assign UK visa portal task to caseworker:", cwId, taskErr);
+      }
+    }
+
     const paid =
       ["paid", "Paid"].includes(caseRecord.amountStatus) ||
       (Number(caseRecord.totalAmount) > 0 &&
@@ -834,6 +879,51 @@ export const confirmCclSigned = async (req, res) => {
       performedBy: userId,
       visibility: "public",
     });
+
+    // Assign UK Visa Portal task to caseworkers
+    const raw = caseRecord?.assignedcaseworkerId ?? caseRecord?.assignedCaseworkerId;
+    let cwIds = [];
+    if (raw) {
+      if (Array.isArray(raw)) {
+        cwIds = raw.map(Number).filter((n) => Number.isFinite(n) && n > 0);
+      } else if (typeof raw === "object" && raw !== null) {
+        const ids = raw.ids ?? raw.caseworkers ?? Object.values(raw);
+        if (Array.isArray(ids)) cwIds = ids.map(Number).filter((n) => Number.isFinite(n) && n > 0);
+      } else {
+        const n = Number(raw);
+        if (Number.isFinite(n) && n > 0) cwIds = [n];
+      }
+    }
+    cwIds = [...new Set(cwIds)];
+
+    const caseLabel = caseRecord.caseId || `#${caseRecord.id}`;
+    const taskTitle = `You have to submit application on UK visa portal — ${caseLabel}`;
+
+    for (const cwId of cwIds) {
+      try {
+        const existingTask = await req.tenantDb.Task.findOne({
+          where: {
+            case_id: caseRecord.id,
+            assigned_to: cwId,
+            status: "pending",
+            title: taskTitle,
+          }
+        });
+        if (!existingTask) {
+          await req.tenantDb.Task.create({
+            title: taskTitle,
+            assigned_to: cwId,
+            case_id: caseRecord.id,
+            priority: "high",
+            status: "pending",
+            due_date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+            created_by: userId || cwId,
+          });
+        }
+      } catch (taskErr) {
+        console.error("Failed to assign UK visa portal task to caseworker:", cwId, taskErr);
+      }
+    }
 
     const paid = Number(caseRecord.paidAmount) || 0;
     const total = Number(caseRecord.totalAmount) || 0;
@@ -1115,10 +1205,34 @@ export const completeCandidateTask = async (req, res) => {
 
     await task.update({ status: "completed" });
 
+    let caseStage = null;
+    if (task.case_id && /data capture/i.test(task.title || "")) {
+      try {
+        const caseRecord = await req.tenantDb.Case.findByPk(task.case_id);
+        if (caseRecord) {
+          await applyCaseStageChange({
+            tenantDb: req.tenantDb,
+            caseRecord,
+            nextStageId: "application_preparation",
+            performedBy: userId,
+            organisationId: organisationIdFromReq(req),
+            reason: "Candidate marked Data Capture Sheet task as complete",
+          });
+          await caseRecord.reload();
+          caseStage = resolveCaseStage(caseRecord);
+        }
+      } catch (stageErr) {
+        console.error("completeCandidateTask Data Capture stage advance error:", stageErr);
+      }
+    }
+
     res.status(200).json({
       status: "success",
       message: "Task marked complete",
-      data: { task: task.get({ plain: true }) },
+      data: { 
+        task: task.get({ plain: true }),
+        ...(caseStage ? { caseStage } : {}),
+      },
     });
   } catch (err) {
     console.error("completeCandidateTask:", err);
