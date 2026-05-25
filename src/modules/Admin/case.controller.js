@@ -1238,11 +1238,9 @@ export const assignCase = async (req, res) => {
 
     const parsedFee = parseFloat(feeAmount);
     const adminCclFee =
-      !Number.isNaN(parsedProposed) && parsedProposed > 0
-        ? parsedProposed
-        : !Number.isNaN(parsedFee) && parsedFee > 0
-          ? parsedFee
-          : null;
+      !Number.isNaN(parsedFee) && parsedFee > 0
+        ? parsedFee
+        : null;
 
     if (adminCclFee != null) {
       const performedBy = req.user?.userId;
