@@ -7,6 +7,8 @@ import { seedRolesForDb } from './seeders/role.seeder.js';
 import { seedPermissionsForDb } from './seeders/permission.seeder.js';
 import { seedModules } from './seeders/module.seeder.js';
 import { seedPlatformRbacForDb } from './seeders/platformRbac.seeder.js';
+import seedPlatformAuditLogs from './seeders/platformAuditLog.seeder.js';
+import seedPlatformNotifications from './seeders/platformNotification.seeder.js';
 import {
   createTenantPostgresDatabase,
   ensureTenantPostgresDatabase,
@@ -21,6 +23,7 @@ import http from 'http';
 import { initSocketIO } from './realtime/socketServer.js';
 import { normalizePostgresDatabaseName } from './utils/postgresDbName.js';
 import { verifyMailTransport } from './services/mail.service.js';
+import { logCorsConfiguration } from './config/frontendOrigins.js';
 
 const PORT = process.env.PORT || 5000;
 
@@ -90,6 +93,8 @@ async function bootstrapPlatform() {
     await seedPlans();
     await seedModules();
     await seedAdmin();
+    await seedPlatformAuditLogs();
+    await seedPlatformNotifications();
 
     const organisations = await platformDb.Organisation.findAll();
     for (const org of organisations) {
@@ -100,6 +105,8 @@ async function bootstrapPlatform() {
         console.error(`Tenant provision failed for org ${org.id}:`, err.message);
       }
     }
+
+    logCorsConfiguration();
 
     const server = http.createServer(app);
     initSocketIO(server, app);

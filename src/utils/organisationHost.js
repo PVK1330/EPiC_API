@@ -1,7 +1,35 @@
 import platformDb from "../models/index.js";
 
-const PLATFORM_DOMAIN = () =>
-  String(process.env.PLATFORM_DOMAIN || "localhost").toLowerCase();
+/**
+ * Tenant hosts are {slug}.elitepic.co.uk — not {slug}.cms.elitepic.co.uk.
+ */
+export function normalizePlatformDomain(domain) {
+  const d = String(domain || "").toLowerCase().trim();
+  if (!d) return "localhost";
+  if (d.startsWith("cms.")) return d.slice(4);
+  return d;
+}
+
+export function getPlatformDomain() {
+  const fromEnv = normalizePlatformDomain(process.env.PLATFORM_DOMAIN);
+  if (fromEnv !== "localhost") return fromEnv;
+
+  const base = process.env.FRONTEND_URL?.split(",")[0]?.trim();
+  if (base) {
+    try {
+      const host = new URL(base).hostname.toLowerCase();
+      if (host === "cms.elitepic.co.uk" || host.endsWith(".elitepic.co.uk")) {
+        return "elitepic.co.uk";
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  return fromEnv;
+}
+
+const PLATFORM_DOMAIN = () => getPlatformDomain();
 
 /**
  * Extract tenant slug from host (e.g. acme.localhost:5173 → acme).
@@ -11,13 +39,25 @@ export function parseOrganisationSlugFromHost(host) {
   const hostname = String(host).split(":")[0].toLowerCase();
   const platform = PLATFORM_DOMAIN();
 
-  if (hostname === platform || hostname === "127.0.0.1") {
+  if (
+    hostname === platform ||
+    hostname === "127.0.0.1" ||
+    hostname === "cms.elitepic.co.uk"
+  ) {
     return null;
   }
 
   const suffix = `.${platform}`;
   if (hostname.endsWith(suffix)) {
     const slug = hostname.slice(0, -suffix.length);
+    if (slug && !slug.includes(".")) {
+      return slug;
+    }
+  }
+
+  const cmsSuffix = `.cms.${platform}`;
+  if (hostname.endsWith(cmsSuffix)) {
+    const slug = hostname.slice(0, -cmsSuffix.length);
     if (slug && !slug.includes(".")) {
       return slug;
     }

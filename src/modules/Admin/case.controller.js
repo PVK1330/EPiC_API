@@ -155,19 +155,17 @@ export const createCase = async (req, res) => {
           : null,
     });
 
-    if (!Number.isNaN(parsedProposedOnCreate) && parsedProposedOnCreate > 0) {
+    // proposedAmount is saved on the case as a proposal for the candidate.
+    // The CCL fee is issued later via a separate confirmation step — NOT here.
+    if (!Number.isNaN(parsedProposedOnCreate) && parsedProposedOnCreate > 0 && newCase.candidateId) {
       try {
-        await applyAdminCclFeeOnCase({
-          tenantDb: req.tenantDb,
-          caseRecord: newCase,
-          feeAmount: parsedProposedOnCreate,
-          performedBy: req.user?.userId,
-          organisationId,
-          reviewNotes: "CCL fee set by administrator on case creation",
+        await notifyProposedAmountToCandidate(req.tenantDb, newCase.candidateId, {
+          caseId: newCase.caseId,
+          proposedAmount: parsedProposedOnCreate,
+          caseRecordId: newCase.id,
         });
-        await newCase.reload();
-      } catch (cclErr) {
-        console.error("applyAdminCclFeeOnCase (createCase):", cclErr);
+      } catch (notifErr) {
+        console.error("notifyProposedAmountToCandidate (createCase):", notifErr);
       }
     }
 
@@ -1236,13 +1234,14 @@ export const assignCase = async (req, res) => {
       }
     }
 
+    // Only an explicit feeAmount triggers immediate CCL issuance.
+    // proposedAmount is a proposal saved on the case — it must NOT advance
+    // the stage to client_care_letter; stage should remain at admin_assignment.
     const parsedFee = parseFloat(feeAmount);
     const adminCclFee =
-      !Number.isNaN(parsedProposed) && parsedProposed > 0
-        ? parsedProposed
-        : !Number.isNaN(parsedFee) && parsedFee > 0
-          ? parsedFee
-          : null;
+      !Number.isNaN(parsedFee) && parsedFee > 0
+        ? parsedFee
+        : null;
 
     if (adminCclFee != null) {
       const performedBy = req.user?.userId;

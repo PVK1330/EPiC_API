@@ -152,13 +152,8 @@ const STAGE_TASK_MATRIX = {
     ],
   },
   ccl_payment_received: {
-    caseworkers: [
-      {
-        title: "Submit application on Visa Portal",
-        priority: "high",
-        dueInDays: 3,
-      },
-    ],
+    // Visa portal task is created directly in acceptCcl / confirmCclSigned
+    // to avoid duplicates. No caseworker tasks here.
   },
   application_submitted: {
     caseworkers: [

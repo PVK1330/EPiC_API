@@ -4,16 +4,12 @@ import cookieParser from 'cookie-parser';
 import cors from 'cors';
 
 import routes from './routes/index.js';
-import { corsOriginDelegate } from './config/frontendOrigins.js';
+import { getCorsOptions } from './config/frontendOrigins.js';
 import { handleWebhook } from './modules/Candidate/Payments/stripepayment.controller.js';
 
 const app = express();
 
-app.use(cors({
-  origin: corsOriginDelegate,
-  credentials: true,
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Organisation-Slug'],
-}));
+app.use(cors(getCorsOptions()));
 
 // Stripe webhooks must use raw body for signature verification.
 app.post(
@@ -25,6 +21,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());       // must be BEFORE any route that reads req.cookies
 app.use('/uploads', express.static('uploads'));
+// Email/branding images only — NOT the React app (that lives on cms.elitepic.co.uk/dist/assets).
 app.use('/assets', express.static('assets'));
 
 // API Routes
