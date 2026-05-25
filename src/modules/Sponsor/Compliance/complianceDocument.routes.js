@@ -1,16 +1,17 @@
 import { Router } from 'express';
-import multer from 'multer';
 import {
-    getComplianceDocuments,
-    uploadComplianceDocument,
-    deleteComplianceDocument
+  getDocumentsBySponsor,
+  uploadComplianceDocument,
+  updateDocumentMetadata,
+  deleteComplianceDocument,
 } from './complianceDocument.controller.js';
+import { upload } from '../../../middlewares/upload.middleware.js';
 
 const router = Router();
-const upload = multer({ dest: 'uploads/temp/' });
 
-router.get('/', getComplianceDocuments);
+router.get('/', getDocumentsBySponsor);
 router.post('/upload', upload.single('file'), uploadComplianceDocument);
+router.put('/:id', updateDocumentMetadata);
 router.delete('/:id', deleteComplianceDocument);
 
 export default router;

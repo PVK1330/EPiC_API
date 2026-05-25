@@ -118,9 +118,12 @@ export const listWorkerEvents = async (req, res) => {
       const daysRemaining = Math.ceil((deadline - today) / (1000 * 60 * 60 * 24));
       return {
         ...plain,
-        status,
-        daysRemaining,
+        worker: `${plain.worker?.first_name || ""} ${plain.worker?.last_name || ""}`.trim() || "N/A",
         workerName: `${plain.worker?.first_name || ""} ${plain.worker?.last_name || ""}`.trim() || "N/A",
+        deadline: plain.deadlineDate,
+        status: status.charAt(0).toUpperCase() + status.slice(1),
+        daysRemaining,
+        risk: daysRemaining < 0 ? "high" : daysRemaining <= 3 ? "medium" : "low",
       };
     });
 
@@ -189,7 +192,7 @@ export const updateWorkerEvent = async (req, res) => {
   try {
     const sponsorId = req.user.userId;
     const { id } = req.params;
-    const { workerId, eventType, eventDate, reportedDate, description } = req.body;
+    const { workerId, eventType, eventDate, reportedDate, description, reportedBy, dateReportedToSms } = req.body;
 
     const event = await req.tenantDb.WorkerEvent.findOne({ where: { id, sponsorId } });
     if (!event) {
@@ -215,7 +218,7 @@ export const updateWorkerEvent = async (req, res) => {
 
     const nextEventDate = toISODate(eventDate || event.eventDate);
     const nextDeadlineDate = toISODate(addDays(nextEventDate, 10));
-    const nextReportedDate = toISODate(reportedDate);
+    const nextReportedDate = toISODate(reportedDate || dateReportedToSms);
 
     event.eventType = eventType || event.eventType;
     event.eventDate = nextEventDate;
@@ -223,6 +226,13 @@ export const updateWorkerEvent = async (req, res) => {
     event.reportedDate = nextReportedDate;
     event.status = resolveStatus(nextReportedDate, nextDeadlineDate);
     event.description = description ?? event.description;
+    event.reportedBy = reportedBy ?? event.reportedBy;
+    if (req.file) {
+      event.evidenceFile = req.file.path.replace(/\\/g, '/');
+    }
+    if (dateReportedToSms !== undefined) {
+      event.dateReportedToSms = dateReportedToSms ? new Date(dateReportedToSms) : null;
+    }
 
     await event.save();
     await notifyInvolvedParties({

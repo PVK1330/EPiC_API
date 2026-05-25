@@ -1,0 +1,13 @@
+CREATE TABLE IF NOT EXISTS "sms_activity_logs" (
+  "id" SERIAL PRIMARY KEY,
+  "sponsor_id" INTEGER NOT NULL REFERENCES "users" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+  "organisation_id" INTEGER REFERENCES "organisations" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
+  "event_type" VARCHAR(255) NOT NULL,
+  "date_submitted" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+  "sms_reference_number" VARCHAR(255),
+  "screenshot_path" VARCHAR(500),
+  "submitted_by" INTEGER NOT NULL REFERENCES "users" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+  "notes" TEXT,
+  "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+  "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);

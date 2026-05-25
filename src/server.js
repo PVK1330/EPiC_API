@@ -19,6 +19,7 @@ import { runPlatformMigrations } from './migrations/run.js';
 import { getTenantDb } from './services/tenantDb.service.js';
 import { seedTenantDefaults, seedTenantOrganisation } from './services/tenantSeed.service.js';
 import { checkAndExpireSubscriptions } from './services/subscriptionExpiry.service.js';
+import { runComplianceAlerts } from './services/complianceAlerts.service.js';
 import http from 'http';
 import { initSocketIO } from './realtime/socketServer.js';
 import { normalizePostgresDatabaseName } from './utils/postgresDbName.js';
@@ -118,6 +119,12 @@ async function bootstrapPlatform() {
     }, 6 * 60 * 60 * 1000);
 
     checkAndExpireSubscriptions();
+
+    setInterval(() => {
+      runComplianceAlerts();
+    }, 24 * 60 * 60 * 1000);
+
+    runComplianceAlerts();
 
     server.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
