@@ -1,15 +1,14 @@
 import { Router } from 'express';
 import * as stripeController from './stripepayment.controller.js';
-import { verifyTokenAndTenant } from '../../../middlewares/authStack.middleware.js';
+import { verifyToken } from '../../../middlewares/auth.middleware.js';
+import { attachTenantDb } from '../../../middlewares/tenantDb.middleware.js';
 const router = Router();
 
-// Apply authentication middleware to all routes except webhooks
-router.use((req, res, next) => {
-  if (req.path === '/webhook') {
-    return next(); // Skip auth for webhook
-  }
-  return verifyTokenAndTenant(req, res, next);
-});
+// Webhook Route (no authentication required for webhooks)
+router.post("/webhook", stripeController.handleWebhook);
+
+// Apply authentication middleware to all other routes
+router.use(verifyToken, attachTenantDb);
 
 // Case fee checkout (after admin approves CCL)
 router.post("/create-checkout-session", stripeController.createCaseCheckoutSession);
@@ -33,8 +32,5 @@ router.post("/renew-subscription", stripeController.renewSubscription);
 router.post("/cancel-subscription", stripeController.cancelSubscription);
 router.get("/subscription-status/:subscription_id", stripeController.getSubscriptionStatus);
 router.post("/update-subscription", stripeController.updateSubscription);
-
-// Webhook Route (no authentication required for webhooks)
-router.post("/webhook", stripeController.handleWebhook);
 
 export default router;

@@ -67,6 +67,9 @@ export async function applyCaseStageChange({
   sendEmail = true,
   organisationId = null,
 }) {
+  // Reload caseRecord first to avoid race conditions/duplicate events
+  await caseRecord.reload().catch(() => {});
+
   const previousStage = resolveCaseStage(caseRecord);
   const nextStage = normalizeCaseStage(nextStageId);
   if (!nextStage || previousStage === nextStage) return null;
@@ -234,6 +237,51 @@ export async function evaluateCaseStageAfterEvent({
     }
 
     if (checklist.allApproved && !checklist.hasRejected) {
+      // Assign task to caseworkers to send proposed payment and CCL
+      const raw = caseRecord?.assignedcaseworkerId ?? caseRecord?.assignedCaseworkerId;
+      let cwIds = [];
+      if (raw) {
+        if (Array.isArray(raw)) {
+          cwIds = raw.map(Number).filter((n) => Number.isFinite(n) && n > 0);
+        } else if (typeof raw === "object" && raw !== null) {
+          const ids = raw.ids ?? raw.caseworkers ?? Object.values(raw);
+          if (Array.isArray(ids)) cwIds = ids.map(Number).filter((n) => Number.isFinite(n) && n > 0);
+        } else {
+          const n = Number(raw);
+          if (Number.isFinite(n) && n > 0) cwIds = [n];
+        }
+      }
+      cwIds = [...new Set(cwIds)];
+
+      const caseLabel = caseRecord.caseId || `#${caseRecord.id}`;
+      const taskTitle = `Send proposed payment and CCL to the candidate — ${caseLabel}`;
+
+      for (const cwId of cwIds) {
+        try {
+          const existingTask = await tenantDb.Task.findOne({
+            where: {
+              case_id: caseRecord.id,
+              assigned_to: cwId,
+              status: "pending",
+              title: taskTitle,
+            }
+          });
+          if (!existingTask) {
+            await tenantDb.Task.create({
+              title: taskTitle,
+              assigned_to: cwId,
+              case_id: caseRecord.id,
+              priority: "high",
+              status: "pending",
+              due_date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+              created_by: performedBy || cwId,
+            });
+          }
+        } catch (taskErr) {
+          console.error("Failed to assign Send CCL task to caseworker:", cwId, taskErr);
+        }
+      }
+
       const stageAfterUpload = resolveCaseStage(caseRecord);
       const draftStep = getStepById("draft_application_review");
       const currentStep = getStepById(stageAfterUpload);

@@ -509,6 +509,28 @@ export const updateTask = async (req, res) => {
         });
       }
       updates.status = s;
+
+      if (s === "completed" && row.case_id) {
+        const title = row.title || "";
+        if (/UK visa portal/i.test(title)) {
+          try {
+            const caseRecord = await req.tenantDb.Case.findByPk(row.case_id);
+            if (caseRecord) {
+              const { applyCaseStageChange } = await import("../../../services/caseStageAutomation.service.js");
+              await applyCaseStageChange({
+                tenantDb: req.tenantDb,
+                caseRecord,
+                nextStageId: "application_submitted",
+                performedBy: userId,
+                organisationId: req.user?.organisation_id != null ? Number(req.user.organisation_id) : null,
+                reason: "Caseworker marked UK Visa Portal task as complete",
+              });
+            }
+          } catch (stageErr) {
+            console.error("Failed to automatically transition case stage on UK Visa Portal task completion:", stageErr);
+          }
+        }
+      }
     }
 
     if (isAdmin) {
@@ -643,7 +665,7 @@ export const getTasksByUserId = async (req, res) => {
       });
     }
 
-    const { search, filter = "all", page = 1, limit = 10 } = req.query;
+    const { search, filter = "all", page = 1, limit = 20 } = req.query;
 
     // Validate filter
     if (!FILTER_OPTIONS.includes(filter)) {

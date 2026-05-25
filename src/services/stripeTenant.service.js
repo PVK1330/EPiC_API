@@ -49,16 +49,29 @@ export async function getStripeForTenant(tenantDb) {
   };
 }
 
+export async function getPlatformPaymentSettings() {
+  const keys = ['stripe_secret_key', 'stripe_public_key', 'stripe_webhook_secret'];
+  const settings = await platformDb.PlatformSetting.findAll({
+    where: { key: keys }
+  });
+  
+  const map = {};
+  for (const s of settings) map[s.key] = s.value;
+
+  return {
+    stripe_secret_key: map.stripe_secret_key || process.env.STRIPE_SECRET_KEY || null,
+    stripe_public_key: map.stripe_public_key || process.env.STRIPE_PUBLIC_KEY || null,
+    stripe_webhook_secret: map.stripe_webhook_secret || process.env.STRIPE_WEBHOOK_SECRET || null,
+  };
+}
+
 export async function getStripeForRequest(req) {
   if (!req?.tenantDb) {
-    const fallback = process.env.STRIPE_SECRET_KEY;
-    if (!fallback) throw new Error("Stripe is not configured");
+    const settings = await getPlatformPaymentSettings();
+    if (!settings.stripe_secret_key) throw new Error("Stripe is not configured for platform");
     return {
-      stripe: createStripeClient(fallback),
-      settings: {
-        stripe_secret_key: fallback,
-        stripe_webhook_secret: process.env.STRIPE_WEBHOOK_SECRET,
-      },
+      stripe: createStripeClient(settings.stripe_secret_key),
+      settings,
     };
   }
   return getStripeForTenant(req.tenantDb);
@@ -148,7 +161,15 @@ export async function constructStripeWebhookEvent(rawBody, signature) {
     );
   }
 
-  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "sk_placeholder");
+  // Use platform fallback for webhook verification if tenant lacks it
+  let stripeClientSecret = process.env.STRIPE_SECRET_KEY || "sk_placeholder";
+  if (!metaOrgId) {
+    const pSettings = await getPlatformPaymentSettings();
+    if (pSettings.stripe_secret_key) stripeClientSecret = pSettings.stripe_secret_key;
+    if (!webhookSecret && pSettings.stripe_webhook_secret) webhookSecret = pSettings.stripe_webhook_secret;
+  }
+
+  const stripe = new Stripe(stripeClientSecret);
   const event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
   return event;
 }
