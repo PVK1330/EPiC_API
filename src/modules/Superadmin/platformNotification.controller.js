@@ -6,23 +6,35 @@ import ApiResponse from "../../utils/apiResponse.js";
  * GET /api/superadmin/notifications
  * Query params:
  *   - unreadOnly: boolean (true/false)
+ *   - limit: number (default all)
  */
 export const listPlatformNotifications = catchAsync(async (req, res) => {
-  const { unreadOnly } = req.query || {};
-  
+  const { unreadOnly, limit } = req.query || {};
+
   const where = {};
   if (unreadOnly === "true") {
     where.isRead = false;
   }
 
-  const notifications = await platformDb.PlatformNotification.findAll({
-    where,
-    order: [["created_at", "DESC"]]
-  });
+  const opts = { where, order: [["created_at", "DESC"]] };
+  if (limit) opts.limit = Math.min(parseInt(limit, 10) || 50, 200);
+
+  const notifications = await platformDb.PlatformNotification.findAll(opts);
 
   return ApiResponse.success(res, "Platform notifications retrieved", {
-    notifications
+    notifications,
   });
+});
+
+/**
+ * GET /api/superadmin/notifications/unread-count
+ */
+export const getUnreadCount = catchAsync(async (req, res) => {
+  const count = await platformDb.PlatformNotification.count({
+    where: { isRead: false },
+  });
+
+  return ApiResponse.success(res, "Unread count retrieved", { unreadCount: count });
 });
 
 /**
