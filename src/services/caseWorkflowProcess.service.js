@@ -1,12 +1,19 @@
 import { Op } from "sequelize";
-import { resolveCaseStage, getStageOrder } from "../constants/immigrationCaseProcess.js";
+import {
+  resolveCaseStage,
+  getStageOrder,
+} from "../constants/immigrationCaseProcess.js";
 import { applyCaseStageChange } from "./caseStageAutomation.service.js";
 import { recordTimelineEntry } from "./caseTimeline.service.js";
 import {
   createWorkflowTask,
   syncWorkflowTasksForStage,
 } from "./workflowTaskAutomation.service.js";
-import { notifyUser, NotificationTypes, NotificationPriority } from "./notification.service.js";
+import {
+  notifyUser,
+  NotificationTypes,
+  NotificationPriority,
+} from "./notification.service.js";
 import { sendWorkflowStageEmail } from "./workflowEmail.service.js";
 
 const EMPTY_STATE = {
@@ -70,12 +77,15 @@ async function getActiveAdminIds(tenantDb) {
 }
 
 function parseCaseworkerIds(caseRecord) {
-  const raw = caseRecord?.assignedcaseworkerId ?? caseRecord?.assignedCaseworkerId;
+  const raw =
+    caseRecord?.assignedcaseworkerId ?? caseRecord?.assignedCaseworkerId;
   if (!raw) return [];
-  if (Array.isArray(raw)) return raw.map(Number).filter((n) => Number.isFinite(n) && n > 0);
+  if (Array.isArray(raw))
+    return raw.map(Number).filter((n) => Number.isFinite(n) && n > 0);
   if (typeof raw === "object" && raw !== null) {
     const ids = raw.ids ?? raw.caseworkers ?? Object.values(raw);
-    if (Array.isArray(ids)) return ids.map(Number).filter((n) => Number.isFinite(n) && n > 0);
+    if (Array.isArray(ids))
+      return ids.map(Number).filter((n) => Number.isFinite(n) && n > 0);
   }
   const n = Number(raw);
   return Number.isFinite(n) && n > 0 ? [n] : [];
@@ -89,7 +99,11 @@ export async function lockApplicationForDraftReview(tenantDb, caseRecord) {
   });
   if (!app) return;
   if (app.status !== "submitted") {
-    await app.update({ status: "submitted", isLocked: true, submittedAt: app.submittedAt || new Date() });
+    await app.update({
+      status: "submitted",
+      isLocked: true,
+      submittedAt: app.submittedAt || new Date(),
+    });
   } else if (!app.isLocked) {
     await app.update({ isLocked: true });
   }
@@ -119,12 +133,20 @@ export async function submitDraftReviewDecision({
 }) {
   const stage = resolveCaseStage(caseRecord);
   if (stage !== "draft_application_review") {
-    return { ok: false, status: 400, message: "Draft review is not active for this case" };
+    return {
+      ok: false,
+      status: 400,
+      message: "Draft review is not active for this case",
+    };
   }
 
   const state = getWorkflowState(caseRecord);
   if (state.draftReview.confirmed !== null) {
-    return { ok: false, status: 400, message: "You have already responded to the draft review" };
+    return {
+      ok: false,
+      status: 400,
+      message: "You have already responded to the draft review",
+    };
   }
 
   const now = new Date().toISOString();
@@ -189,30 +211,48 @@ export async function recordVisaPortalSubmission({
   organisationId = null,
 }) {
   const stage = resolveCaseStage(caseRecord);
-  if (!["client_care_letter", "ccl_payment_received", "ccl_issued", "application_submitted"].includes(stage)) {
+  if (
+    ![
+      "client_care_letter",
+      "ccl_payment_received",
+      "ccl_issued",
+      "application_submitted",
+    ].includes(stage)
+  ) {
     return {
       ok: false,
       status: 400,
-      message: "Application can only be marked submitted after CCL and payment are complete",
+      message:
+        "Application can only be marked submitted after CCL and payment are complete",
     };
   }
 
   if (stage === "client_care_letter") {
-    const ccl = await tenantDb.CaseCclRecord?.findOne({ where: { caseId: caseRecord.id } });
+    const ccl = await tenantDb.CaseCclRecord?.findOne({
+      where: { caseId: caseRecord.id },
+    });
     const cclOk = ccl && (ccl.status === "signed" || ccl.status === "accepted");
-    const paid = caseRecord.amountStatus === "paid" || (Number(caseRecord.totalAmount) > 0 && Number(caseRecord.paidAmount) >= Number(caseRecord.totalAmount));
+    const paid =
+      caseRecord.amountStatus === "paid" ||
+      (Number(caseRecord.totalAmount) > 0 &&
+        Number(caseRecord.paidAmount) >= Number(caseRecord.totalAmount));
     if (!cclOk || !paid) {
       return {
         ok: false,
         status: 400,
-        message: "Application can only be marked submitted after CCL and payment are complete",
+        message:
+          "Application can only be marked submitted after CCL and payment are complete",
       };
     }
   }
 
   const now = new Date().toISOString();
   await setWorkflowState(tenantDb, caseRecord, {
-    visaPortal: { submittedAt: now, reference: reference || null, submittedBy: performedBy },
+    visaPortal: {
+      submittedAt: now,
+      reference: reference || null,
+      submittedBy: performedBy,
+    },
   });
 
   if (reference) {
@@ -256,9 +296,17 @@ export async function submitBiometricAvailability({
   performedBy,
   organisationId = null,
 }) {
+  if (!tenantDb || !caseRecord) {
+    return {
+      ok: false,
+      status: 400,
+      message: "Case record not found",
+    };
+  }
+
   const ws = getWorkflowState(caseRecord);
   let stage = resolveCaseStage(caseRecord);
-  const visaPortalSubmitted = Boolean(ws.visaPortal?.submittedAt);
+  const visaPortalSubmitted = Boolean(ws?.visaPortal?.submittedAt);
 
   const pastBiometricsPhase = [
     "biometrics_confirmation_sent",
@@ -266,7 +314,7 @@ export async function submitBiometricAvailability({
     "awaiting_decision",
     "decision_communicated",
     "case_closure",
-  ].includes(stage);
+  ].includes(stage || "");
 
   if (pastBiometricsPhase) {
     return {
@@ -277,23 +325,28 @@ export async function submitBiometricAvailability({
     };
   }
 
-  if (!["application_submitted", "biometrics_booked"].includes(stage)) {
+  if (!["application_submitted", "biometrics_booked"].includes(stage || "")) {
     if (visaPortalSubmitted) {
-      await applyCaseStageChange({
-        tenantDb,
-        caseRecord,
-        nextStageId: "application_submitted",
-        performedBy,
-        reason: "Sync stage with recorded visa portal submission before biometric availability",
-        organisationId,
-        sendEmail: false,
-      });
-      await caseRecord.reload();
-      stage = resolveCaseStage(caseRecord);
+      try {
+        await applyCaseStageChange({
+          tenantDb,
+          caseRecord,
+          nextStageId: "application_submitted",
+          performedBy,
+          reason:
+            "Sync stage with recorded visa portal submission before biometric availability",
+          organisationId,
+          sendEmail: false,
+        });
+        await caseRecord.reload();
+        stage = resolveCaseStage(caseRecord);
+      } catch (stageErr) {
+        console.error("Stage sync error:", stageErr);
+      }
     }
   }
 
-  if (!["application_submitted", "biometrics_booked"].includes(stage)) {
+  if (!["application_submitted", "biometrics_booked"].includes(stage || "")) {
     return {
       ok: false,
       status: 400,
@@ -302,7 +355,11 @@ export async function submitBiometricAvailability({
     };
   }
 
-  if (!preferredLocation?.trim() || !preferredDate || !preferredTime?.trim()) {
+  const location = String(preferredLocation || "").trim();
+  const date = preferredDate ? String(preferredDate).trim() : null;
+  const time = String(preferredTime || "").trim();
+
+  if (!location || !date || !time) {
     return {
       ok: false,
       status: 400,
@@ -311,84 +368,130 @@ export async function submitBiometricAvailability({
   }
 
   const availability = {
-    preferredLocation: preferredLocation.trim(),
-    preferredDate,
-    preferredTime: preferredTime.trim(),
-    preferredTimezone: candidateTimezone || "UTC",
-    notes: notes?.trim() || null,
+    preferredLocation: location,
+    preferredDate: date,
+    preferredTime: time,
+    preferredTimezone: String(candidateTimezone || "UTC").trim(),
+    notes: String(notes || "").trim() || null,
     submittedAt: new Date().toISOString(),
   };
 
-  await setWorkflowState(tenantDb, caseRecord, {
-    biometrics: { availability },
-  });
+  try {
+    await setWorkflowState(tenantDb, caseRecord, {
+      biometrics: { availability },
+    });
+  } catch (dbErr) {
+    console.error("Failed to save biometric availability to database:", dbErr);
+    return {
+      ok: false,
+      status: 500,
+      message: "Failed to save biometric availability",
+    };
+  }
 
-  await recordTimelineEntry({
-    tenantDb,
-    caseId: caseRecord.id,
-    actionType: "biometric_availability",
-    description: `Candidate availability: ${preferredLocation}, ${preferredDate} ${preferredTime} (${availability.preferredTimezone})`,
-    performedBy,
-    visibility: "internal",
-    metadata: availability,
-  });
+  try {
+    await recordTimelineEntry({
+      tenantDb,
+      caseId: caseRecord.id,
+      actionType: "biometric_availability",
+      description: `Candidate availability: ${location}, ${date} ${time} (${availability.preferredTimezone})`,
+      performedBy,
+      visibility: "internal",
+      metadata: availability,
+    });
+  } catch (timelineErr) {
+    console.error(
+      "Failed to record timeline entry for biometric availability:",
+      timelineErr,
+    );
+  }
 
   const caseLabel = caseRecord.caseId || `#${caseRecord.id}`;
-  const adminIds = await getActiveAdminIds(tenantDb);
+  const adminIds = await getActiveAdminIds(tenantDb).catch(() => []);
   const caseworkerIds = parseCaseworkerIds(caseRecord);
 
   for (const adminId of adminIds) {
-    await createWorkflowTask({
-      tenantDb,
-      caseRecord,
-      assigneeId: adminId,
-      title: `Book biometrics slot — ${caseLabel}`,
-      createdBy: performedBy,
-      priority: "high",
-      dueInDays: 2,
-      organisationId,
-    });
+    try {
+      await createWorkflowTask({
+        tenantDb,
+        caseRecord,
+        assigneeId: adminId,
+        title: `Book biometrics slot — ${caseLabel}`,
+        createdBy: performedBy,
+        priority: "high",
+        dueInDays: 2,
+        organisationId,
+      });
+    } catch (taskErr) {
+      console.error(
+        "Failed to create biometrics task for admin:",
+        adminId,
+        taskErr,
+      );
+    }
   }
   for (const cwId of caseworkerIds) {
     if (cwId === performedBy) continue;
-    await createWorkflowTask({
-      tenantDb,
-      caseRecord,
-      assigneeId: cwId,
-      title: `Book biometrics slot — ${caseLabel}`,
-      createdBy: performedBy,
-      priority: "high",
-      dueInDays: 2,
-      organisationId,
-    });
+    try {
+      await createWorkflowTask({
+        tenantDb,
+        caseRecord,
+        assigneeId: cwId,
+        title: `Book biometrics slot — ${caseLabel}`,
+        createdBy: performedBy,
+        priority: "high",
+        dueInDays: 2,
+        organisationId,
+      });
+    } catch (taskErr) {
+      console.error(
+        "Failed to create biometrics task for caseworker:",
+        cwId,
+        taskErr,
+      );
+    }
   }
 
   if (caseRecord.candidateId) {
-    await notifyUser(tenantDb, caseRecord.candidateId, {
-      tenantDb,
-      type: NotificationTypes.SUCCESS,
-      priority: NotificationPriority.HIGH,
-      title: "Biometrics availability received",
-      message: `Thank you — we recorded your preference for ${preferredLocation.trim()} on ${preferredDate} at ${preferredTime.trim()}. Your caseworker will book your appointment and confirm the details.`,
-      actionType: "biometric_availability_submitted",
-      entityId: caseRecord.id,
-      entityType: "case",
-      metadata: { caseId: caseRecord.caseId || caseLabel },
-      sendEmail: true,
-      organisationId,
-    }).catch(() => {});
+    try {
+      await notifyUser(tenantDb, caseRecord.candidateId, {
+        tenantDb,
+        type: NotificationTypes.SUCCESS,
+        priority: NotificationPriority.HIGH,
+        title: "Biometrics availability received",
+        message: `Thank you — we recorded your preference for ${location} on ${date} at ${time}. Your caseworker will book your appointment and confirm the details.`,
+        actionType: "biometric_availability_submitted",
+        entityId: caseRecord.id,
+        entityType: "case",
+        metadata: { caseId: caseRecord.caseId || caseLabel },
+        sendEmail: true,
+        organisationId,
+      }).catch(() => {});
+    } catch (notifErr) {
+      console.error(
+        "Failed to send biometrics availability notification:",
+        notifErr,
+      );
+    }
   }
 
   if (stage === "application_submitted") {
-    await applyCaseStageChange({
-      tenantDb,
-      caseRecord,
-      nextStageId: "biometrics_booked",
-      performedBy,
-      reason: "Candidate submitted biometric availability",
-      organisationId,
-      sendEmail: false,
-    });
+    try {
+      await applyCaseStageChange({
+        tenantDb,
+        caseRecord,
+        nextStageId: "biometrics_booked",
+        performedBy,
+        reason: "Candidate submitted biometric availability",
+        organisationId,
+        sendEmail: false,
+      });
+    } catch (stageErr) {
+      console.error(
+        "Stage change error after biometric availability:",
+        stageErr,
+      );
+    }
   }
 
   return { ok: true };
@@ -412,7 +515,8 @@ export async function bookBiometricDirect({
     return {
       ok: false,
       status: 400,
-      message: "Location, date, and time are required for the biometric appointment",
+      message:
+        "Location, date, and time are required for the biometric appointment",
     };
   }
 
@@ -438,7 +542,8 @@ export async function bookBiometricDirect({
     tenantDb,
     caseId: caseRecord.id,
     actionType: "biometric_slot_sent",
-    description: `Biometrics booked: ${location}, ${appointmentDay || ""} ${appointmentDate} ${appointmentTime}`.trim(),
+    description:
+      `Biometrics booked: ${location}, ${appointmentDay || ""} ${appointmentDate} ${appointmentTime}`.trim(),
     performedBy,
     visibility: "public",
     metadata: bookedSlot,
@@ -531,7 +636,11 @@ function effectiveBiometricBookedSlot(caseRecord, ws) {
   };
 }
 
-async function completePendingBiometricAttendTasks(tenantDb, caseRecord, candidateId) {
+async function completePendingBiometricAttendTasks(
+  tenantDb,
+  caseRecord,
+  candidateId,
+) {
   if (!candidateId || !caseRecord?.id) return;
   await tenantDb.Task.update(
     { status: "completed" },
@@ -549,7 +658,9 @@ async function completePendingBiometricAttendTasks(tenantDb, caseRecord, candida
 async function syncCandidateApplicationAfterBiometrics(tenantDb, caseRecord) {
   const candidateId = caseRecord.candidateId;
   if (!candidateId || !tenantDb.CandidateApplication) return;
-  const app = await tenantDb.CandidateApplication.findOne({ where: { userId: candidateId } });
+  const app = await tenantDb.CandidateApplication.findOne({
+    where: { userId: candidateId },
+  });
   if (!app) return;
   if (app.status === "submitted") {
     await app.update({ status: "under_review" });
@@ -657,7 +768,8 @@ export async function sendBiometricSlotToCandidate({
     return {
       ok: false,
       status: 400,
-      message: "Book a slot only after the candidate has submitted availability",
+      message:
+        "Book a slot only after the candidate has submitted availability",
     };
   }
 
@@ -751,11 +863,18 @@ export async function recordBiometricDocumentsUploaded({
   organisationId = null,
 }) {
   const stage = resolveCaseStage(caseRecord);
-  if (!["biometrics_confirmation_sent", "biometrics_booked", "documents_uploaded"].includes(stage)) {
+  if (
+    ![
+      "biometrics_confirmation_sent",
+      "biometrics_booked",
+      "documents_uploaded",
+    ].includes(stage)
+  ) {
     return {
       ok: false,
       status: 400,
-      message: "Upload confirmation is only available after biometrics confirmation is sent",
+      message:
+        "Upload confirmation is only available after biometrics confirmation is sent",
     };
   }
 
@@ -800,12 +919,17 @@ export async function recordVisaPortalReply({
     return {
       ok: false,
       status: 400,
-      message: "Record visa portal reply after biometric documents are uploaded",
+      message:
+        "Record visa portal reply after biometric documents are uploaded",
     };
   }
 
   if (!replySummary?.trim()) {
-    return { ok: false, status: 400, message: "Please describe the reply from the visa portal" };
+    return {
+      ok: false,
+      status: 400,
+      message: "Please describe the reply from the visa portal",
+    };
   }
 
   const visaPortalReply = {

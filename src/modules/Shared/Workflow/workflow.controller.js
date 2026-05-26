@@ -61,7 +61,9 @@ async function resolveUserTimezone(tenantDb, userId) {
         attributes: ["timezone"],
       })
     : null;
-  const sponsorTz = sponsorPref?.timezone ? String(sponsorPref.timezone).trim() : "";
+  const sponsorTz = sponsorPref?.timezone
+    ? String(sponsorPref.timezone).trim()
+    : "";
   if (sponsorTz) return sponsorTz;
 
   const adminPref = tenantDb.AdminUserPreference
@@ -101,13 +103,20 @@ function validateInstallmentPlan(total, installments) {
   return { ok: true };
 }
 
-const DECISION_DOC_TYPES = ["Decision Letter", "Approval Notice", "Visa Copy", "BRP Information"];
+const DECISION_DOC_TYPES = [
+  "Decision Letter",
+  "Approval Notice",
+  "Visa Copy",
+  "BRP Information",
+];
 
 async function findCaseForUser(tenantDb, userId) {
   return tenantDb.Case.findOne({
     where: { candidateId: userId },
     order: [["created_at", "DESC"]],
-    include: [{ model: tenantDb.VisaType, as: "visaType", attributes: ["id", "name"] }],
+    include: [
+      { model: tenantDb.VisaType, as: "visaType", attributes: ["id", "name"] },
+    ],
   });
 }
 
@@ -140,7 +149,9 @@ export const getDataCaptureForm = async (req, res) => {
     const userId = req.user?.userId;
     const caseRecord = await findCaseForUser(req.tenantDb, userId);
     if (!caseRecord) {
-      return res.status(404).json({ status: "error", message: "No case found", data: null });
+      return res
+        .status(404)
+        .json({ status: "error", message: "No case found", data: null });
     }
 
     const template = await resolveTemplate(req.tenantDb, caseRecord.visaTypeId);
@@ -161,8 +172,14 @@ export const getDataCaptureForm = async (req, res) => {
     res.status(200).json({
       status: "success",
       data: {
-        case: { id: caseRecord.id, caseId: caseRecord.caseId, caseStage: caseRecord.caseStage },
-        template: template ? { id: template.id, name: template.name, fields: template.fields } : null,
+        case: {
+          id: caseRecord.id,
+          caseId: caseRecord.caseId,
+          caseStage: caseRecord.caseStage,
+        },
+        template: template
+          ? { id: template.id, name: template.name, fields: template.fields }
+          : null,
         submission: submission?.toJSON() ?? null,
       },
     });
@@ -185,14 +202,19 @@ export const saveDataCaptureSubmission = async (req, res) => {
     const { responses, submit } = req.body;
     const caseRecord = await findCaseForUser(req.tenantDb, userId);
     if (!caseRecord) {
-      return res.status(404).json({ status: "error", message: "No case found", data: null });
+      return res
+        .status(404)
+        .json({ status: "error", message: "No case found", data: null });
     }
 
     let submission = await req.tenantDb.DataCaptureSubmission.findOne({
       where: { caseId: caseRecord.id },
     });
     if (!submission) {
-      const template = await resolveTemplate(req.tenantDb, caseRecord.visaTypeId);
+      const template = await resolveTemplate(
+        req.tenantDb,
+        caseRecord.visaTypeId,
+      );
       submission = await req.tenantDb.DataCaptureSubmission.create({
         caseId: caseRecord.id,
         userId,
@@ -203,7 +225,11 @@ export const saveDataCaptureSubmission = async (req, res) => {
       });
     } else {
       if (submission.status === "approved") {
-        return res.status(400).json({ status: "error", message: "Submission already approved", data: null });
+        return res.status(400).json({
+          status: "error",
+          message: "Submission already approved",
+          data: null,
+        });
       }
       await submission.update({
         responses: responses ?? submission.responses,
@@ -232,7 +258,8 @@ export const saveDataCaptureSubmission = async (req, res) => {
             nextStageId: "application_preparation",
             performedBy: userId,
             organisationId: organisationIdFromReq(req),
-            reason: "Data Capture Sheet submitted by client — application preparation started",
+            reason:
+              "Data Capture Sheet submitted by client — application preparation started",
             sendEmail: false,
           });
           await caseRecord.reload();
@@ -258,7 +285,9 @@ export const getStaffDataCapture = async (req, res) => {
   try {
     const caseRecord = await findCaseByRef(req.tenantDb, req.params.caseId);
     if (!caseRecord) {
-      return res.status(404).json({ status: "error", message: "Case not found", data: null });
+      return res
+        .status(404)
+        .json({ status: "error", message: "Case not found", data: null });
     }
     const template = await resolveTemplate(req.tenantDb, caseRecord.visaTypeId);
     const submission = await req.tenantDb.DataCaptureSubmission.findOne({
@@ -286,7 +315,9 @@ export const sendDataCaptureRequest = async (req, res) => {
     const { caseId } = req.params;
     const caseRecord = await findCaseByRef(req.tenantDb, caseId);
     if (!caseRecord) {
-      return res.status(404).json({ status: "error", message: "Case not found", data: null });
+      return res
+        .status(404)
+        .json({ status: "error", message: "Case not found", data: null });
     }
 
     const template = await resolveTemplate(req.tenantDb, caseRecord.visaTypeId);
@@ -374,24 +405,48 @@ export const reviewDataCaptureSubmission = async (req, res) => {
     const { caseId } = req.params;
     const { status, reviewNotes } = req.body;
     if (!["approved", "rejected"].includes(status)) {
-      return res.status(400).json({ status: "error", message: "status must be approved or rejected", data: null });
+      return res.status(400).json({
+        status: "error",
+        message: "status must be approved or rejected",
+        data: null,
+      });
     }
 
     const caseRecord = await findCaseByRef(req.tenantDb, caseId);
     if (!caseRecord) {
-      return res.status(404).json({ status: "error", message: "Case not found", data: null });
+      return res
+        .status(404)
+        .json({ status: "error", message: "Case not found", data: null });
     }
 
     const submission = await req.tenantDb.DataCaptureSubmission.findOne({
       where: { caseId: caseRecord.id },
     });
     if (!submission) {
-      return res.status(404).json({ status: "error", message: "No submission found", data: null });
+      return res
+        .status(404)
+        .json({ status: "error", message: "No submission found", data: null });
     }
 
     await submission.update({ status, reviewNotes: reviewNotes || null });
 
     if (status === "approved") {
+      // Mark "Complete Data Capture Sheet" task as completed
+      await req.tenantDb.Task.update(
+        { status: "completed" },
+        {
+          where: {
+            case_id: caseRecord.id,
+            status: "pending",
+            title: {
+              [req.tenantDb.Sequelize.Op.iLike]:
+                "%Complete Data Capture Sheet%",
+            },
+            assigned_to: caseRecord.candidateId,
+          },
+        },
+      ).catch((err) => console.error("Failed to mark DCS task complete:", err));
+
       await applyCaseStageChange({
         tenantDb: req.tenantDb,
         caseRecord,
@@ -408,7 +463,9 @@ export const reviewDataCaptureSubmission = async (req, res) => {
         reviewNotes,
         reviewedBy: req.user?.userId,
         organisationId: organisationIdFromReq(req),
-      }).catch((err) => console.error("createTasksOnDataCaptureRejected:", err));
+      }).catch((err) =>
+        console.error("createTasksOnDataCaptureRejected:", err),
+      );
     }
 
     res.status(200).json({ status: "success", data: { submission } });
@@ -425,7 +482,9 @@ export const proposeCclFees = async (req, res) => {
     const { feeAmount, installments, notes, documentId } = req.body;
     const caseRecord = await findCaseByRef(req.tenantDb, caseId);
     if (!caseRecord) {
-      return res.status(404).json({ status: "error", message: "Case not found", data: null });
+      return res
+        .status(404)
+        .json({ status: "error", message: "Case not found", data: null });
     }
 
     const result = await submitCclFeeProposal({
@@ -462,15 +521,24 @@ export const proposeCclFees = async (req, res) => {
 /** Admin: approve or reject proposed CCL fees */
 export const reviewCclFees = async (req, res) => {
   try {
-    if (Number(req.user?.role_id) !== ROLES.ADMIN && Number(req.user?.role) !== ROLES.ADMIN) {
-      return res.status(403).json({ status: "error", message: "Admin access required", data: null });
+    if (
+      Number(req.user?.role_id) !== ROLES.ADMIN &&
+      Number(req.user?.role) !== ROLES.ADMIN
+    ) {
+      return res.status(403).json({
+        status: "error",
+        message: "Admin access required",
+        data: null,
+      });
     }
 
     const { caseId } = req.params;
     const { action, reviewNotes } = req.body;
     const caseRecord = await findCaseByRef(req.tenantDb, caseId);
     if (!caseRecord) {
-      return res.status(404).json({ status: "error", message: "Case not found", data: null });
+      return res
+        .status(404)
+        .json({ status: "error", message: "Case not found", data: null });
     }
 
     const result = await reviewCclFeeProposal({
@@ -512,14 +580,29 @@ export const issueCcl = async (req, res) => {
 /** Admin: list cases awaiting CCL fee approval */
 export const listCclFeePendingApprovals = async (req, res) => {
   try {
-    if (Number(req.user?.role_id) !== ROLES.ADMIN && Number(req.user?.role) !== ROLES.ADMIN) {
-      return res.status(403).json({ status: "error", message: "Admin access required", data: null });
+    if (
+      Number(req.user?.role_id) !== ROLES.ADMIN &&
+      Number(req.user?.role) !== ROLES.ADMIN
+    ) {
+      return res.status(403).json({
+        status: "error",
+        message: "Admin access required",
+        data: null,
+      });
     }
 
     const cases = await req.tenantDb.Case.findAll({
       include: [
-        { model: req.tenantDb.User, as: "candidate", attributes: ["id", "first_name", "last_name", "email"] },
-        { model: req.tenantDb.VisaType, as: "visaType", attributes: ["id", "name"] },
+        {
+          model: req.tenantDb.User,
+          as: "candidate",
+          attributes: ["id", "first_name", "last_name", "email"],
+        },
+        {
+          model: req.tenantDb.VisaType,
+          as: "visaType",
+          attributes: ["id", "name"],
+        },
         {
           model: req.tenantDb.CaseCclRecord,
           as: "cclRecord",
@@ -543,10 +626,16 @@ export const getCclStatus = async (req, res) => {
     const caseRef = req.params.caseId || req.query.caseId;
     const caseRecord = await findCaseByRef(req.tenantDb, caseRef);
     if (!caseRecord) {
-      return res.status(404).json({ status: "error", message: "Case not found", data: null });
+      return res
+        .status(404)
+        .json({ status: "error", message: "Case not found", data: null });
     }
-    const ccl = await req.tenantDb.CaseCclRecord.findOne({ where: { caseId: caseRecord.id } });
-    res.status(200).json({ status: "success", data: { ccl, caseId: caseRecord.caseId } });
+    const ccl = await req.tenantDb.CaseCclRecord.findOne({
+      where: { caseId: caseRecord.id },
+    });
+    res
+      .status(200)
+      .json({ status: "success", data: { ccl, caseId: caseRecord.caseId } });
   } catch (err) {
     res.status(500).json({ status: "error", message: err.message, data: null });
   }
@@ -558,15 +647,18 @@ export const getCandidateCcl = async (req, res) => {
     const userId = req.user?.userId;
     let caseRecord = await findCaseForUser(req.tenantDb, userId);
     if (!caseRecord) {
-      return res.status(404).json({ status: "error", message: "No case found", data: null });
+      return res
+        .status(404)
+        .json({ status: "error", message: "No case found", data: null });
     }
 
-    const { ccl: syncedCcl, caseRecord: syncedCase } = await syncCclReleaseForApprovedFees({
-      tenantDb: req.tenantDb,
-      caseRecord,
-      performedBy: null,
-      organisationId: organisationIdFromReq(req),
-    });
+    const { ccl: syncedCcl, caseRecord: syncedCase } =
+      await syncCclReleaseForApprovedFees({
+        tenantDb: req.tenantDb,
+        caseRecord,
+        performedBy: null,
+        organisationId: organisationIdFromReq(req),
+      });
     caseRecord = syncedCase || caseRecord;
     const ccl =
       syncedCcl ||
@@ -574,7 +666,11 @@ export const getCandidateCcl = async (req, res) => {
         where: { caseId: caseRecord.id },
       }));
 
-    if (isCclReleasedToClient(caseRecord, ccl) && ccl && !ccl.issuedDocumentId) {
+    if (
+      isCclReleasedToClient(caseRecord, ccl) &&
+      ccl &&
+      !ccl.issuedDocumentId
+    ) {
       await attachCclTemplateToCase({
         tenantDb: req.tenantDb,
         caseRecord,
@@ -588,7 +684,14 @@ export const getCandidateCcl = async (req, res) => {
     let issuedDocument = null;
     if (ccl?.issuedDocumentId && req.tenantDb.Document) {
       const doc = await req.tenantDb.Document.findByPk(ccl.issuedDocumentId, {
-        attributes: ["id", "documentName", "documentType", "documentPath", "status", "userFileName"],
+        attributes: [
+          "id",
+          "documentName",
+          "documentType",
+          "documentPath",
+          "status",
+          "userFileName",
+        ],
       });
       issuedDocument = doc ? doc.get({ plain: true }) : null;
     }
@@ -637,19 +740,24 @@ export const downloadCandidateCcl = async (req, res) => {
     const userId = req.user?.userId;
     let caseRecord = await findCaseForUser(req.tenantDb, userId);
     if (!caseRecord) {
-      return res.status(404).json({ status: "error", message: "No case found", data: null });
+      return res
+        .status(404)
+        .json({ status: "error", message: "No case found", data: null });
     }
 
-    const { ccl: syncedCcl, caseRecord: syncedCase } = await syncCclReleaseForApprovedFees({
-      tenantDb: req.tenantDb,
-      caseRecord,
-      performedBy: null,
-      organisationId: organisationIdFromReq(req),
-    });
+    const { ccl: syncedCcl, caseRecord: syncedCase } =
+      await syncCclReleaseForApprovedFees({
+        tenantDb: req.tenantDb,
+        caseRecord,
+        performedBy: null,
+        organisationId: organisationIdFromReq(req),
+      });
     caseRecord = syncedCase || caseRecord;
     let ccl =
       syncedCcl ||
-      (await req.tenantDb.CaseCclRecord.findOne({ where: { caseId: caseRecord.id } }));
+      (await req.tenantDb.CaseCclRecord.findOne({
+        where: { caseId: caseRecord.id },
+      }));
 
     if (!isCclReleasedToClient(caseRecord, ccl)) {
       return res.status(403).json({
@@ -702,7 +810,9 @@ export const downloadCandidateCcl = async (req, res) => {
 
     return res.download(
       absolutePath,
-      document.userFileName || document.documentName || "client-care-letter.docx",
+      document.userFileName ||
+        document.documentName ||
+        "client-care-letter.docx",
     );
   } catch (err) {
     console.error("downloadCandidateCcl:", err);
@@ -716,19 +826,24 @@ export const acceptCcl = async (req, res) => {
     const userId = req.user?.userId;
     let caseRecord = await findCaseForUser(req.tenantDb, userId);
     if (!caseRecord) {
-      return res.status(404).json({ status: "error", message: "No case found", data: null });
+      return res
+        .status(404)
+        .json({ status: "error", message: "No case found", data: null });
     }
 
-    const { ccl: syncedCcl, caseRecord: syncedCase } = await syncCclReleaseForApprovedFees({
-      tenantDb: req.tenantDb,
-      caseRecord,
-      performedBy: userId,
-      organisationId: organisationIdFromReq(req),
-    });
+    const { ccl: syncedCcl, caseRecord: syncedCase } =
+      await syncCclReleaseForApprovedFees({
+        tenantDb: req.tenantDb,
+        caseRecord,
+        performedBy: userId,
+        organisationId: organisationIdFromReq(req),
+      });
     caseRecord = syncedCase || caseRecord;
     let ccl =
       syncedCcl ||
-      (await req.tenantDb.CaseCclRecord.findOne({ where: { caseId: caseRecord.id } }));
+      (await req.tenantDb.CaseCclRecord.findOne({
+        where: { caseId: caseRecord.id },
+      }));
 
     if (!isCclReleasedToClient(caseRecord, ccl)) {
       return res.status(400).json({
@@ -739,7 +854,10 @@ export const acceptCcl = async (req, res) => {
     }
 
     if (ccl && ccl.status !== "issued" && ccl.status !== "signed") {
-      await ccl.update({ status: "issued", issuedAt: ccl.issuedAt || new Date() });
+      await ccl.update({
+        status: "issued",
+        issuedAt: ccl.issuedAt || new Date(),
+      });
       await ccl.reload();
     }
 
@@ -773,15 +891,17 @@ export const acceptCcl = async (req, res) => {
       visibility: "public",
     });
 
-    // Assign UK Visa Portal task to caseworkers
-    const raw = caseRecord?.assignedcaseworkerId ?? caseRecord?.assignedCaseworkerId;
+    // Assign UK Visa Portal task (only ONE task per case, not per caseworker!)
+    const raw =
+      caseRecord?.assignedcaseworkerId ?? caseRecord?.assignedCaseworkerId;
     let cwIds = [];
     if (raw) {
       if (Array.isArray(raw)) {
         cwIds = raw.map(Number).filter((n) => Number.isFinite(n) && n > 0);
       } else if (typeof raw === "object" && raw !== null) {
         const ids = raw.ids ?? raw.caseworkers ?? Object.values(raw);
-        if (Array.isArray(ids)) cwIds = ids.map(Number).filter((n) => Number.isFinite(n) && n > 0);
+        if (Array.isArray(ids))
+          cwIds = ids.map(Number).filter((n) => Number.isFinite(n) && n > 0);
       } else {
         const n = Number(raw);
         if (Number.isFinite(n) && n > 0) cwIds = [n];
@@ -790,31 +910,31 @@ export const acceptCcl = async (req, res) => {
     cwIds = [...new Set(cwIds)];
 
     const caseLabel = caseRecord.caseId || `#${caseRecord.id}`;
-    const taskTitle = `You have to submit application on UK visa portal — ${caseLabel}`;
+    const taskTitle = `Submit Application on UK Visa Portal — ${caseLabel}`;
 
-    for (const cwId of cwIds) {
+    // First, check if ANY such task exists for this case (any status, any assignee)
+    const anyExistingTask = await req.tenantDb.Task.findOne({
+      where: {
+        case_id: caseRecord.id,
+        title: { [req.tenantDb.Sequelize.Op.iLike]: `%${taskTitle}%` },
+      },
+    });
+    if (!anyExistingTask && cwIds.length > 0) {
+      const assigneeId = cwIds[0]; // assign to first caseworker
       try {
-        const existingTask = await req.tenantDb.Task.findOne({
-          where: {
-            case_id: caseRecord.id,
-            assigned_to: cwId,
-            status: "pending",
-            title: taskTitle,
-          }
+        await req.tenantDb.Task.create({
+          title: taskTitle,
+          assigned_to: assigneeId,
+          case_id: caseRecord.id,
+          priority: "high",
+          status: "pending",
+          due_date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000)
+            .toISOString()
+            .split("T")[0],
+          created_by: userId || assigneeId,
         });
-        if (!existingTask) {
-          await req.tenantDb.Task.create({
-            title: taskTitle,
-            assigned_to: cwId,
-            case_id: caseRecord.id,
-            priority: "high",
-            status: "pending",
-            due_date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-            created_by: userId || cwId,
-          });
-        }
       } catch (taskErr) {
-        console.error("Failed to assign UK visa portal task to caseworker:", cwId, taskErr);
+        console.error("Failed to assign UK visa portal task:", taskErr);
       }
     }
 
@@ -853,10 +973,14 @@ export const confirmCclSigned = async (req, res) => {
     const { documentId } = req.body;
     const caseRecord = await findCaseForUser(req.tenantDb, userId);
     if (!caseRecord) {
-      return res.status(404).json({ status: "error", message: "No case found", data: null });
+      return res
+        .status(404)
+        .json({ status: "error", message: "No case found", data: null });
     }
 
-    const ccl = await req.tenantDb.CaseCclRecord.findOne({ where: { caseId: caseRecord.id } });
+    const ccl = await req.tenantDb.CaseCclRecord.findOne({
+      where: { caseId: caseRecord.id },
+    });
     if (!ccl || ccl.status !== "issued") {
       return res.status(400).json({
         status: "error",
@@ -880,15 +1004,17 @@ export const confirmCclSigned = async (req, res) => {
       visibility: "public",
     });
 
-    // Assign UK Visa Portal task to caseworkers
-    const raw = caseRecord?.assignedcaseworkerId ?? caseRecord?.assignedCaseworkerId;
+    // Assign UK Visa Portal task (only ONE task per case, not per caseworker!)
+    const raw =
+      caseRecord?.assignedcaseworkerId ?? caseRecord?.assignedCaseworkerId;
     let cwIds = [];
     if (raw) {
       if (Array.isArray(raw)) {
         cwIds = raw.map(Number).filter((n) => Number.isFinite(n) && n > 0);
       } else if (typeof raw === "object" && raw !== null) {
         const ids = raw.ids ?? raw.caseworkers ?? Object.values(raw);
-        if (Array.isArray(ids)) cwIds = ids.map(Number).filter((n) => Number.isFinite(n) && n > 0);
+        if (Array.isArray(ids))
+          cwIds = ids.map(Number).filter((n) => Number.isFinite(n) && n > 0);
       } else {
         const n = Number(raw);
         if (Number.isFinite(n) && n > 0) cwIds = [n];
@@ -897,31 +1023,31 @@ export const confirmCclSigned = async (req, res) => {
     cwIds = [...new Set(cwIds)];
 
     const caseLabel = caseRecord.caseId || `#${caseRecord.id}`;
-    const taskTitle = `You have to submit application on UK visa portal — ${caseLabel}`;
+    const taskTitle = `Submit Application on UK Visa Portal — ${caseLabel}`;
 
-    for (const cwId of cwIds) {
+    // First, check if ANY such task exists for this case (any status, any assignee)
+    const anyExistingTask = await req.tenantDb.Task.findOne({
+      where: {
+        case_id: caseRecord.id,
+        title: { [req.tenantDb.Sequelize.Op.iLike]: `%${taskTitle}%` },
+      },
+    });
+    if (!anyExistingTask && cwIds.length > 0) {
+      const assigneeId = cwIds[0]; // assign to first caseworker
       try {
-        const existingTask = await req.tenantDb.Task.findOne({
-          where: {
-            case_id: caseRecord.id,
-            assigned_to: cwId,
-            status: "pending",
-            title: taskTitle,
-          }
+        await req.tenantDb.Task.create({
+          title: taskTitle,
+          assigned_to: assigneeId,
+          case_id: caseRecord.id,
+          priority: "high",
+          status: "pending",
+          due_date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000)
+            .toISOString()
+            .split("T")[0],
+          created_by: userId || assigneeId,
         });
-        if (!existingTask) {
-          await req.tenantDb.Task.create({
-            title: taskTitle,
-            assigned_to: cwId,
-            case_id: caseRecord.id,
-            priority: "high",
-            status: "pending",
-            due_date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-            created_by: userId || cwId,
-          });
-        }
       } catch (taskErr) {
-        console.error("Failed to assign UK visa portal task to caseworker:", cwId, taskErr);
+        console.error("Failed to assign UK visa portal task:", taskErr);
       }
     }
 
@@ -952,7 +1078,9 @@ export const getDecisionDocuments = async (req, res) => {
     const userId = req.user?.userId;
     const caseRecord = await findCaseForUser(req.tenantDb, userId);
     if (!caseRecord) {
-      return res.status(404).json({ status: "error", message: "No case found", data: null });
+      return res
+        .status(404)
+        .json({ status: "error", message: "No case found", data: null });
     }
 
     const stage = resolveCaseStage(caseRecord);
@@ -965,7 +1093,14 @@ export const getDecisionDocuments = async (req, res) => {
         status: "approved",
       },
       order: [["created_at", "DESC"]],
-      attributes: ["id", "documentType", "documentName", "userFileName", "status", "created_at"],
+      attributes: [
+        "id",
+        "documentType",
+        "documentName",
+        "userFileName",
+        "status",
+        "created_at",
+      ],
     });
 
     res.status(200).json({
@@ -975,10 +1110,29 @@ export const getDecisionDocuments = async (req, res) => {
         caseStage: stage,
         documents: docs,
         placeholders: [
-          { type: "Decision Letter", available: unlocked && docs.some((d) => d.documentType === "Decision Letter") },
-          { type: "Approval Notice", available: unlocked && docs.some((d) => d.documentType === "Approval Notice") },
-          { type: "Visa Copy", available: unlocked && docs.some((d) => d.documentType === "Visa Copy") },
-          { type: "BRP Information", available: unlocked && docs.some((d) => d.documentType === "BRP Information") },
+          {
+            type: "Decision Letter",
+            available:
+              unlocked &&
+              docs.some((d) => d.documentType === "Decision Letter"),
+          },
+          {
+            type: "Approval Notice",
+            available:
+              unlocked &&
+              docs.some((d) => d.documentType === "Approval Notice"),
+          },
+          {
+            type: "Visa Copy",
+            available:
+              unlocked && docs.some((d) => d.documentType === "Visa Copy"),
+          },
+          {
+            type: "BRP Information",
+            available:
+              unlocked &&
+              docs.some((d) => d.documentType === "BRP Information"),
+          },
         ],
       },
     });
@@ -994,19 +1148,24 @@ export const getCandidatePaymentSchedule = async (req, res) => {
     const userId = req.user?.userId;
     let caseRecord = await findCaseForUser(req.tenantDb, userId);
     if (!caseRecord) {
-      return res.status(404).json({ status: "error", message: "No case found", data: null });
+      return res
+        .status(404)
+        .json({ status: "error", message: "No case found", data: null });
     }
 
-    const { ccl: syncedCcl, caseRecord: syncedCase } = await syncCclReleaseForApprovedFees({
-      tenantDb: req.tenantDb,
-      caseRecord,
-      performedBy: null,
-      organisationId: organisationIdFromReq(req),
-    });
+    const { ccl: syncedCcl, caseRecord: syncedCase } =
+      await syncCclReleaseForApprovedFees({
+        tenantDb: req.tenantDb,
+        caseRecord,
+        performedBy: null,
+        organisationId: organisationIdFromReq(req),
+      });
     caseRecord = syncedCase || caseRecord;
     const ccl =
       syncedCcl ||
-      (await req.tenantDb.CaseCclRecord.findOne({ where: { caseId: caseRecord.id } }));
+      (await req.tenantDb.CaseCclRecord.findOne({
+        where: { caseId: caseRecord.id },
+      }));
 
     const approved = isCclReleasedToClient(caseRecord, ccl);
     const totalFee = resolveCaseFeeTotal(caseRecord, ccl);
@@ -1029,7 +1188,9 @@ export const getCandidatePaymentSchedule = async (req, res) => {
     }
 
     const installments =
-      ccl && Array.isArray(ccl.installmentPlan) && ccl.installmentPlan.length > 0
+      ccl &&
+      Array.isArray(ccl.installmentPlan) &&
+      ccl.installmentPlan.length > 0
         ? ccl.installmentPlan
         : [{ label: "Full fee", amount: totalFee, dueDate: null }];
 
@@ -1064,7 +1225,9 @@ export const getCandidateTasks = async (req, res) => {
   try {
     const userId = req.user?.userId;
     if (!userId) {
-      return res.status(401).json({ status: "error", message: "Unauthorized", data: null });
+      return res
+        .status(401)
+        .json({ status: "error", message: "Unauthorized", data: null });
     }
 
     const rows = await req.tenantDb.Task.findAll({
@@ -1104,11 +1267,14 @@ export const getCandidateTasks = async (req, res) => {
             ],
           })
         : [];
-    const caseById = Object.fromEntries(caseRows.map((c) => [c.id, c.get({ plain: true })]));
+    const caseById = Object.fromEntries(
+      caseRows.map((c) => [c.id, c.get({ plain: true })]),
+    );
 
     const tasks = rows.map((row) => {
       const plain = row.get({ plain: true });
-      const caseRef = plain.case?.caseId || (plain.case_id ? `#${plain.case_id}` : null);
+      const caseRef =
+        plain.case?.caseId || (plain.case_id ? `#${plain.case_id}` : null);
       const caseRow = plain.case_id ? caseById[plain.case_id] : null;
       const title = plain.title || "";
       const isBiometricAttend = /attend biometrics/i.test(title);
@@ -1131,15 +1297,16 @@ export const getCandidateTasks = async (req, res) => {
           /data capture sheet/i.test(plain.title || "") ||
           plain.title?.toLowerCase().includes("data capture"),
         isBiometricAttend,
-        biometricDetails: isBiometricAttend && caseRow
-          ? {
-              location: caseRow.biometricLocation,
-              date: caseRow.biometricsDate,
-              time: caseRow.biometricTime,
-              day: caseRow.biometricDay,
-              caseStage: resolveCaseStage(caseRow),
-            }
-          : null,
+        biometricDetails:
+          isBiometricAttend && caseRow
+            ? {
+                location: caseRow.biometricLocation,
+                date: caseRow.biometricsDate,
+                time: caseRow.biometricTime,
+                day: caseRow.biometricDay,
+                caseStage: resolveCaseStage(caseRow),
+              }
+            : null,
       };
     });
 
@@ -1159,12 +1326,16 @@ export const completeCandidateTask = async (req, res) => {
     const userId = req.user?.userId;
     const taskId = parseInt(req.params.taskId, 10);
     if (!userId || Number.isNaN(taskId)) {
-      return res.status(400).json({ status: "error", message: "Invalid request", data: null });
+      return res
+        .status(400)
+        .json({ status: "error", message: "Invalid request", data: null });
     }
 
     const task = await req.tenantDb.Task.findByPk(taskId);
     if (!task || task.assigned_to !== userId) {
-      return res.status(404).json({ status: "error", message: "Task not found", data: null });
+      return res
+        .status(404)
+        .json({ status: "error", message: "Task not found", data: null });
     }
 
     const isBiometricAttend = /attend biometrics/i.test(task.title || "");
@@ -1172,7 +1343,9 @@ export const completeCandidateTask = async (req, res) => {
     if (isBiometricAttend && task.case_id) {
       const caseRecord = await req.tenantDb.Case.findByPk(task.case_id);
       if (!caseRecord) {
-        return res.status(404).json({ status: "error", message: "Case not found", data: null });
+        return res
+          .status(404)
+          .json({ status: "error", message: "Case not found", data: null });
       }
 
       const result = await markBiometricAttendedByCandidate({
@@ -1222,14 +1395,17 @@ export const completeCandidateTask = async (req, res) => {
           caseStage = resolveCaseStage(caseRecord);
         }
       } catch (stageErr) {
-        console.error("completeCandidateTask Data Capture stage advance error:", stageErr);
+        console.error(
+          "completeCandidateTask Data Capture stage advance error:",
+          stageErr,
+        );
       }
     }
 
     res.status(200).json({
       status: "success",
       message: "Task marked complete",
-      data: { 
+      data: {
         task: task.get({ plain: true }),
         ...(caseStage ? { caseStage } : {}),
       },
@@ -1245,11 +1421,15 @@ export const getCaseWorkflowBundle = async (req, res) => {
   try {
     const caseRecord = await findCaseByRef(req.tenantDb, req.params.caseId);
     if (!caseRecord) {
-      return res.status(404).json({ status: "error", message: "Case not found", data: null });
+      return res
+        .status(404)
+        .json({ status: "error", message: "Case not found", data: null });
     }
 
     const [submission, ccl, template] = await Promise.all([
-      req.tenantDb.DataCaptureSubmission.findOne({ where: { caseId: caseRecord.id } }),
+      req.tenantDb.DataCaptureSubmission.findOne({
+        where: { caseId: caseRecord.id },
+      }),
       req.tenantDb.CaseCclRecord.findOne({ where: { caseId: caseRecord.id } }),
       resolveTemplate(req.tenantDb, caseRecord.visaTypeId),
     ]);
@@ -1279,14 +1459,21 @@ export const getCandidateWorkflowProcess = async (req, res) => {
     const userId = req.user?.userId;
     const caseRecord = await findCaseForUser(req.tenantDb, userId);
     if (!caseRecord) {
-      return res.status(404).json({ status: "error", message: "No case found", data: null });
+      return res
+        .status(404)
+        .json({ status: "error", message: "No case found", data: null });
     }
 
-    const app = await req.tenantDb.CandidateApplication.findOne({ where: { userId } });
+    const app = await req.tenantDb.CandidateApplication.findOne({
+      where: { userId },
+    });
     const timezone = await resolveUserTimezone(req.tenantDb, userId);
     const workflowState = getWorkflowState(caseRecord);
     const caseStage = resolveCaseStage(caseRecord);
-    const hasBiometricAppointment = hasBiometricAppointmentBooked(caseRecord, workflowState);
+    const hasBiometricAppointment = hasBiometricAppointmentBooked(
+      caseRecord,
+      workflowState,
+    );
     const biometricAttended = Boolean(workflowState.biometrics?.attendedAt);
     const canMarkBiometricAttended =
       hasBiometricAppointment &&
@@ -1337,7 +1524,9 @@ export const submitCandidateDraftReview = async (req, res) => {
 
     const caseRecord = await findCaseForUser(req.tenantDb, userId);
     if (!caseRecord) {
-      return res.status(404).json({ status: "error", message: "No case found", data: null });
+      return res
+        .status(404)
+        .json({ status: "error", message: "No case found", data: null });
     }
 
     const result = await submitDraftReviewDecision({
@@ -1382,7 +1571,9 @@ export const submitCandidateBiometricAvailability = async (req, res) => {
 
     const caseRecord = await findCaseForUser(req.tenantDb, userId);
     if (!caseRecord) {
-      return res.status(404).json({ status: "error", message: "No case found", data: null });
+      return res
+        .status(404)
+        .json({ status: "error", message: "No case found", data: null });
     }
 
     const result = await submitBiometricAvailability({
@@ -1426,7 +1617,9 @@ export const candidateMarkBiometricAttended = async (req, res) => {
     const userId = req.user?.userId;
     const caseRecord = await findCaseForUser(req.tenantDb, userId);
     if (!caseRecord) {
-      return res.status(404).json({ status: "error", message: "No case found", data: null });
+      return res
+        .status(404)
+        .json({ status: "error", message: "No case found", data: null });
     }
 
     const result = await markBiometricAttendedByCandidate({
@@ -1487,7 +1680,9 @@ export const staffRecordVisaPortalSubmission = async (req, res) => {
   try {
     const caseRecord = await findCaseByRef(req.tenantDb, req.params.caseId);
     if (!caseRecord) {
-      return res.status(404).json({ status: "error", message: "Case not found", data: null });
+      return res
+        .status(404)
+        .json({ status: "error", message: "Case not found", data: null });
     }
 
     const result = await recordVisaPortalSubmission({
@@ -1526,7 +1721,9 @@ export const staffSendBiometricSlot = async (req, res) => {
   try {
     const caseRecord = await findCaseByRef(req.tenantDb, req.params.caseId);
     if (!caseRecord) {
-      return res.status(404).json({ status: "error", message: "Case not found", data: null });
+      return res
+        .status(404)
+        .json({ status: "error", message: "Case not found", data: null });
     }
 
     const {
@@ -1588,7 +1785,9 @@ export const staffRecordBiometricDocsUploaded = async (req, res) => {
   try {
     const caseRecord = await findCaseByRef(req.tenantDb, req.params.caseId);
     if (!caseRecord) {
-      return res.status(404).json({ status: "error", message: "Case not found", data: null });
+      return res
+        .status(404)
+        .json({ status: "error", message: "Case not found", data: null });
     }
 
     const result = await recordBiometricDocumentsUploaded({
@@ -1626,7 +1825,9 @@ export const staffRecordVisaPortalReply = async (req, res) => {
   try {
     const caseRecord = await findCaseByRef(req.tenantDb, req.params.caseId);
     if (!caseRecord) {
-      return res.status(404).json({ status: "error", message: "Case not found", data: null });
+      return res
+        .status(404)
+        .json({ status: "error", message: "Case not found", data: null });
     }
 
     const result = await recordVisaPortalReply({
