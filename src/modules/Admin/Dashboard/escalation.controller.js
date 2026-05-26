@@ -1,6 +1,7 @@
 import { Op } from 'sequelize';
 import { notifyEscalationCreated, notifyEscalationResolved } from '../../../services/notification.service.js';
 import { rowsToXlsxBuffer, sendXlsxDownload } from '../../../utils/excelExport.util.js';
+import { localDateStr } from '../../../utils/dateHelpers.js';
 
 
 /** Shared filters for listing and export (DRY). */
@@ -458,7 +459,7 @@ export const exportEscalationsExcel = async (req, res) => {
     });
 
     const buffer = rowsToXlsxBuffer(rows, columns);
-    const day = new Date().toISOString().split("T")[0];
+    const day = localDateStr();
     sendXlsxDownload(res, buffer, `escalations_${day}`);
   } catch (error) {
     console.error("Error exporting escalations:", error);

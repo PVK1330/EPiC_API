@@ -2,6 +2,7 @@ import { Op } from "sequelize";
 import { getStepById } from "../constants/immigrationCaseProcess.js";
 import { isFeesApprovedForClient } from "./cclCandidateRelease.service.js";
 import { notifyTaskAssigned, notifyUser, NotificationTypes, NotificationPriority } from "./notification.service.js";
+import { localDateAfterDays } from "../utils/dateHelpers.js";
 
 function parseCaseworkerIds(caseRecord) {
   const raw = caseRecord?.assignedcaseworkerId ?? caseRecord?.assignedCaseworkerId;
@@ -16,9 +17,7 @@ function parseCaseworkerIds(caseRecord) {
 }
 
 function dueDateInDays(days = 3) {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  return d.toISOString().split("T")[0];
+  return localDateAfterDays(days);
 }
 
 export async function getActiveAdminIds(tenantDb) {

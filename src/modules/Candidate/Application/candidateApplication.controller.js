@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { Op } from 'sequelize';
 import { notifyCaseCreated } from '../../../services/notification.service.js';
 import { addTimelineEntry } from '../../../services/timeline.service.js';
+import { localDateStr } from '../../../utils/dateHelpers.js';
 import { streamBrandedPdf } from '../../../services/pdfGenerator.service.js';
 import { rowsToXlsxBuffer, xlsxBufferToRows } from '../../../utils/excelExport.util.js';
 import { generateStrongPassword } from '../../../utils/passwordGenerator.js';
@@ -871,7 +872,7 @@ function exportCellValue(fieldKey, raw) {
   if (raw === null || raw === undefined || raw === '') return '';
   if (DATE_FIELDS.has(fieldKey)) {
     const d = raw instanceof Date ? raw : new Date(raw);
-    if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+    if (!isNaN(d.getTime())) return localDateStr(d);
     return '';
   }
   if (typeof raw === 'object' && !(raw instanceof Date)) {
@@ -1220,7 +1221,7 @@ function formatApplicationScalar(fieldKey, raw) {
   if (raw === null || raw === undefined || raw === '') return '—';
   if (DATE_FIELDS.has(fieldKey)) {
     const d = raw instanceof Date ? raw : new Date(raw);
-    if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+    if (!isNaN(d.getTime())) return localDateStr(d);
     return '—';
   }
   if (typeof raw === 'object' && !(raw instanceof Date)) {
@@ -1237,7 +1238,7 @@ function formatCaseDate(raw) {
   if (raw === null || raw === undefined || raw === '') return '—';
   const d = raw instanceof Date ? raw : new Date(raw);
   if (isNaN(d.getTime())) return '—';
-  return d.toISOString().split('T')[0];
+  return localDateStr(d);
 }
 
 async function buildFieldLabelMap() {

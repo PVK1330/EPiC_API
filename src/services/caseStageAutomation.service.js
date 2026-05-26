@@ -8,6 +8,7 @@ import {
   buildDocumentLookupMap,
   findDocumentForChecklistItem,
 } from "../utils/documentMatch.utils.js";
+import { localDateAfterDays } from "../utils/dateHelpers.js";
 import { recordStatusChange, recordTimelineEntry } from "./caseTimeline.service.js";
 import { sendWorkflowStageEmail } from "./workflowEmail.service.js";
 import { notifyWorkflowStageChange } from "./workflowNotifications.service.js";
@@ -272,7 +273,7 @@ export async function evaluateCaseStageAfterEvent({
             case_id: caseRecord.id,
             priority: "high",
             status: "pending",
-            due_date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+            due_date: localDateAfterDays(3),
             created_by: performedBy || assigneeId,
           });
         } catch (taskErr) {

@@ -12,6 +12,7 @@ import { sendCandidateWelcomeEmail } from '../../../services/candidateMail.servi
 import { ensureCandidateEnquiryCase } from '../../../services/candidateOnboarding.service.js';
 import { DEFAULT_CASE_STAGE } from '../../../constants/immigrationCaseProcess.js';
 import { sanitizeApplicationPayload } from '../../../utils/applicationPayload.util.js';
+import { createWorkflowTask, getActiveAdminIds } from '../../../services/workflowTaskAutomation.service.js';
 
 const APPLICATION_PAYLOAD_USER_KEYS = new Set([
   'first_name',
@@ -134,6 +135,11 @@ export class CandidateService {
       return newUser;
     });
 
+    const caseRecord = await this.repository.tenantDb.Case.findOne({
+      where: { candidateId: candidate.id },
+      order: [['created_at', 'DESC']]
+    });
+
     if (!application) {
       await ensureCandidateEnquiryCase(this.repository.tenantDb, candidate.id, {
         visaTypeName: application?.visaType || null,
@@ -155,6 +161,35 @@ export class CandidateService {
       first_name: candidate.first_name,
       last_name: candidate.last_name,
     }).catch(err => console.error("Notification Error:", err));
+
+    // Assign Task to Admins
+    if (caseRecord && (!caseRecord.assignedcaseworkerId || caseRecord.assignedcaseworkerId.length === 0)) {
+      const adminIds = await getActiveAdminIds(this.repository.tenantDb).catch(() => []);
+      for (const adminId of adminIds) {
+        createWorkflowTask({
+          tenantDb: this.repository.tenantDb,
+          caseRecord,
+          assigneeId: adminId,
+          title: `Assign a caseworker to this case — ${caseRecord.caseId}`,
+          priority: 'high',
+          dueInDays: 1,
+          organisationId: organisation_id,
+        }).catch((err) => console.error("Create Admin Task Error:", err));
+      }
+    }
+
+    // Assign Task to Candidate
+    if (caseRecord) {
+      createWorkflowTask({
+        tenantDb: this.repository.tenantDb,
+        caseRecord,
+        assigneeId: candidate.id,
+        title: `Review the form and fill the form and submit`,
+        priority: 'high',
+        dueInDays: 3,
+        organisationId: organisation_id,
+      }).catch((err) => console.error("Create Candidate Task Error:", err));
+    }
 
     return {
       candidate,

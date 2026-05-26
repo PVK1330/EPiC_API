@@ -1,4 +1,5 @@
 import { Op } from "sequelize";
+import { localDateStr } from "../../utils/dateHelpers.js";
 import platformDb from "../../models/index.js";
 import catchAsync from "../../utils/catchAsync.js";
 import ApiResponse from "../../utils/apiResponse.js";
@@ -61,7 +62,7 @@ export const exportPlatformAuditLogsCsv = catchAsync(async (req, res) => {
   });
 
   res.setHeader("Content-Type", "text/csv");
-  res.setHeader("Content-Disposition", `attachment; filename=EPiC_Platform_Audit_Logs_${new Date().toISOString().split("T")[0]}.csv`);
+  res.setHeader("Content-Disposition", `attachment; filename=EPiC_Platform_Audit_Logs_${localDateStr()}.csv`);
 
   let csvContent = "ID,Category,Action,Initiated By,Organisation,Timestamp,Status,Description\n";
 

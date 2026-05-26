@@ -1,5 +1,6 @@
 import Stripe from 'stripe';
 import { Op } from 'sequelize';
+import { localDateStr } from '../../../utils/dateHelpers.js';
 import { notifyPaymentReceived, NotificationTypes } from '../../../services/notification.service.js';
 import { createWorkflowTask } from '../../../services/workflowTaskAutomation.service.js';
 import { evaluateCaseStageAfterEvent } from '../../../services/caseStageAutomation.service.js';
@@ -109,7 +110,7 @@ async function recordStripeCasePayment({ tenantDb, caseRecord, paymentIntent, us
     paymentType: 'fee',
     amount,
     paymentMethod: 'online',
-    paymentDate: new Date().toISOString().split('T')[0],
+    paymentDate: localDateStr(),
     paymentStatus,
     transactionId: txnId,
     invoiceNumber: txnId,

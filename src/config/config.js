@@ -29,6 +29,7 @@ function buildBaseConfig(databaseName) {
     host: process.env.DB_HOST || "localhost",
     port: Number(process.env.DB_PORT || 5432),
     dialect: "postgres",
+    timezone: "+05:30",
     logging: process.env.DB_LOGGING === "true",
     pool: {
       max: Number(process.env.DB_POOL_MAX || 10),

@@ -1,3 +1,6 @@
+// Must be set before any other import so every new Date() uses IST.
+process.env.TZ = process.env.TZ || 'Asia/Kolkata';
+
 import 'dotenv/config';
 import app from './app.js';
 import platformDb from './models/index.js';
@@ -108,6 +111,7 @@ async function bootstrapPlatform() {
     }
 
     logCorsConfiguration();
+    console.log(`Timezone: ${process.env.TZ} (${new Date().toString().match(/\((.+)\)/)?.[1] || '—'})`);
 
     const server = http.createServer(app);
     initSocketIO(server, app);

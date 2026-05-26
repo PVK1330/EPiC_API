@@ -1,5 +1,6 @@
 import { Op } from 'sequelize';
 import { mergeCaseWhere } from '../../../utils/tenantScope.js';
+import { localDateStr } from '../../../utils/dateHelpers.js';
 
 const INACTIVE = ['Cancelled', 'Closed', 'Rejected'];
 
@@ -250,7 +251,7 @@ export const createReportingObligation = async (req, res) => {
       workerId,
       eventType,
       eventDate,
-      deadlineDate: deadlineD.toISOString().split('T')[0],
+      deadlineDate: localDateStr(deadlineD),
       description,
       status: 'pending'
     });
@@ -277,7 +278,7 @@ export const updateReportingObligation = async (req, res) => {
 
     await event.update({
       status: status || event.status,
-      reportedDate: reportedDate || event.reportedDate || new Date().toISOString().split('T')[0]
+      reportedDate: reportedDate || event.reportedDate || localDateStr()
     });
 
     res.status(200).json({

@@ -4,6 +4,7 @@
  * Platform-level (SaaS) billing is handled by the Superadmin module.
  */
 import { Op, fn, col, literal } from 'sequelize';
+import { localDateStr } from '../../../utils/dateHelpers.js';
 import catchAsync from '../../../utils/catchAsync.js';
 import ApiResponse from '../../../utils/apiResponse.js';
 
@@ -113,7 +114,7 @@ export const getTransactions = catchAsync(async (req, res) => {
       : r.paymentStatus === 'failed'    ? 'Failed'
       : 'Processed',
     rawStatus:     r.paymentStatus,
-    date:          new Date(r.created_at).toISOString().split('T')[0],
+    date:          localDateStr(new Date(r.created_at)),
     invoiceNumber: r.invoiceNumber || null,
     description:   r.description   || null,
     transactionId: r.transactionId || null,
@@ -186,7 +187,7 @@ export const createInvoice = catchAsync(async (req, res) => {
     amount:        parseFloat(amount),
     paymentType,
     paymentMethod,
-    paymentDate:   new Date().toISOString().split('T')[0],
+    paymentDate:   localDateStr(),
     paymentStatus: 'pending',
     invoiceNumber: autoInvoiceNumber,
     description,
