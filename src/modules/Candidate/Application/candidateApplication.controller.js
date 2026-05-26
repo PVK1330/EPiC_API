@@ -1241,10 +1241,10 @@ function formatCaseDate(raw) {
   return localDateStr(d);
 }
 
-async function buildFieldLabelMap() {
-  const settings = await req.tenantDb.ApplicationFieldSetting.findAll({
+async function buildFieldLabelMap(tenantDb) {
+  const settings = await tenantDb.ApplicationFieldSetting.findAll({
     where: {
-      field_type: { [req.tenantDb.Sequelize.Op.ne]: 'file' },
+      field_type: { [tenantDb.Sequelize.Op.ne]: 'file' },
     },
     attributes: ['field_key', 'field_label'],
   });
@@ -1272,7 +1272,7 @@ export const downloadFilledApplicationPdf = async (req, res) => {
     }
 
     const appJson = application.toJSON();
-    const labelMap = await buildFieldLabelMap();
+    const labelMap = await buildFieldLabelMap(req.tenantDb);
     const sections = PDF_APPLICATION_SECTIONS.map((sec) => ({
       sectionTitle: sec.title,
       rows: sec.fields.map((fieldKey) => ({

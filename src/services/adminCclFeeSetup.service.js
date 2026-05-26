@@ -184,11 +184,7 @@ export async function applyAdminCclFeeOnCase({
     organisationId,
   }).catch((err) => console.error("notifyCclFeeApproved:", err));
 
-  await createVisaPortalSubmissionTasks({
-    tenantDb,
-    caseRecord,
-    createdBy: performedBy,
-  }).catch((err) => console.error("createVisaPortalSubmissionTasks:", err));
+
 
   await caseRecord.reload();
 

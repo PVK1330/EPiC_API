@@ -137,7 +137,7 @@ export const createNotification = async (data) => {
         try {
           const sent = await sendNotificationEmailToUser(tenantDb, userId, notification, organisationId);
           if (sent) {
-            await tenantDb.Notification.update({ emailSent: true });
+            await notification.update({ emailSent: true });
           }
         } catch (emailError) {
           console.error(`Email send failed for notification ${notification.id}:`, emailError);
