@@ -179,6 +179,16 @@ export async function syncTenantDatabaseSchema(databaseName) {
   await tenantDb.sequelize.query(
     "ALTER TABLE visa_types ADD COLUMN IF NOT EXISTS ccl_template_name VARCHAR(255) DEFAULT NULL",
   );
+  // Ensure audit_logs has the columns the Sequelize model expects
+  await tenantDb.sequelize.query(
+    "ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS resource VARCHAR(255)",
+  );
+  await tenantDb.sequelize.query(
+    "ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'Success'",
+  );
+  await tenantDb.sequelize.query(
+    "ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS details TEXT",
+  );
   await seedTenantDefaults(tenantDb).catch((err) =>
     console.warn("seedTenantDefaults:", err.message),
   );

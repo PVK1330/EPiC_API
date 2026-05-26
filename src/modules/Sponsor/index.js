@@ -8,6 +8,8 @@ import sponsorCosRoutes from './Licence/sponsorCos.routes.js';
 import sponsorDashboardRoutes from './Dashboard/sponsorDashboard.routes.js';
 import workerEventRoutes from './Workers/workerEvent.routes.js';
 import complianceDocumentRoutes from './Compliance/complianceDocument.routes.js';
+import sponsorChangeRequestRoutes from './ChangeRequests/sponsorChangeRequest.routes.js';
+import rightToWorkRoutes from './RightToWork/rightToWork.routes.js';
 import {
   getBusinessCases,
   getBusinessPayments,
@@ -40,5 +42,7 @@ router.patch('/reporting-obligations/:id', updateReportingObligation);
 
 router.use('/worker-events', workerEventRoutes);
 router.use('/compliance-documents', complianceDocumentRoutes);
+router.use('/change-requests', sponsorChangeRequestRoutes);
+router.use('/right-to-work', rightToWorkRoutes);
 
 export default router;

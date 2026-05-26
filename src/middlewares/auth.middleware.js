@@ -59,6 +59,8 @@ export const verifyToken = async (req, res, next) => {
     }
 
     user.userId = user.id;
+    // Attach role_name from JWT payload so controllers can use it
+    user.role_name = decoded.role_name || null;
     req.user = user;
     next();
   } catch (err) {

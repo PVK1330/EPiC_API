@@ -13,6 +13,7 @@ import dashboardRoutes from '../modules/Admin/Dashboard/admin.dashboard.routes.j
 import workloadRoutes from '../modules/Admin/Dashboard/admin.workload.routes.js';
 import reportingRoutes from '../modules/Admin/Reporting/reporting.routes.js';
 import auditLogRoutes from '../modules/Admin/AuditLogs/auditLog.routes.js';
+import adminFinanceRoutes from '../modules/Admin/Finance/adminFinance.routes.js';
 import permissionsRoutes from '../modules/Admin/Permissions/permissions.routes.js';
 import rbacRoutes from '../modules/Admin/Permissions/rbac.routes.js';
 import roleRoutes from '../modules/Admin/Roles/role.routes.js';
@@ -58,6 +59,9 @@ router.use('/admin/permissions', permissionsRoutes);
 router.use('/admin/rbac', rbacRoutes);
 router.use('/admin/roles', roleRoutes);
 router.use('/admin/audit-logs', auditLogRoutes);
+// Alias: frontend calls /api/audit-logs (without /admin prefix)
+router.use('/audit-logs', auditLogRoutes);
+router.use('/admin/finance', adminFinanceRoutes);
 router.use('/admin/candidates', adminCandidateRoutes);
 router.use('/admin/document-checklists', adminDocumentChecklistRoutes);
 router.use('/admin/licence', adminLicenceRoutes);

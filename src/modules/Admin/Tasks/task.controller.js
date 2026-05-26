@@ -512,7 +512,8 @@ export const updateTask = async (req, res) => {
 
       if (s === "completed" && row.case_id) {
         const title = row.title || "";
-        if (/UK visa portal/i.test(title)) {
+        // Handle "Submit Application on UK Visa Portal" task
+        if (/Submit Application on UK Visa Portal/i.test(title)) {
           try {
             const caseRecord = await req.tenantDb.Case.findByPk(row.case_id);
             if (caseRecord) {
@@ -525,10 +526,33 @@ export const updateTask = async (req, res) => {
                 organisationId: req.user?.organisation_id != null ? Number(req.user.organisation_id) : null,
                 reason: "Caseworker marked UK Visa Portal task as complete",
               });
+              // Notify candidate that visa application has been submitted
+              if (caseRecord.candidateId) {
+                const { notifyUser, NotificationTypes, NotificationPriority } = await import("../../../services/notification.service.js");
+                await notifyUser(req.tenantDb, caseRecord.candidateId, {
+                  tenantDb: req.tenantDb,
+                  type: NotificationTypes.SUCCESS,
+                  priority: NotificationPriority.HIGH,
+                  title: "Visa application submitted",
+                  message: "Your visa application has been submitted on the UK Visa Portal.",
+                  actionType: "visa_application_submitted",
+                  entityId: caseRecord.id,
+                  entityType: "case",
+                  metadata: { caseId: caseRecord.caseId || `#${caseRecord.id}` },
+                  sendEmail: true,
+                  organisationId: req.user?.organisation_id != null ? Number(req.user.organisation_id) : null,
+                }).catch(() => {});
+              }
             }
           } catch (stageErr) {
             console.error("Failed to automatically transition case stage on UK Visa Portal task completion:", stageErr);
           }
+        }
+        // Handle "Send Proposed Payment and CCL to Candidate" task
+        if (/Send Proposed Payment and CCL to Candidate/i.test(title)) {
+          // When this task is marked complete, it should trigger CCL fee proposal flow
+          // (currently that flow is handled via separate API, so just log)
+          console.log("Send Proposed Payment and CCL to Candidate task marked complete");
         }
       }
     }

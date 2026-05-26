@@ -50,31 +50,35 @@ function buildCaseDateWhere(startDate, endDate) {
 }
 
 // Role-based access filter
-// Admins see all. Caseworkers see their assigned cases. 
-// Sponsors see cases they sponsored. Candidates see their own cases.
+// Admins (role_id 3) and Superadmins (role_id 5) see all.
+// Caseworkers (role_id 2) see their assigned cases.
+// Sponsors/Business (role_id 4) see cases they sponsored.
+// Candidates (role_id 1) see their own cases.
 function buildRoleWhere(user) {
-  if (!user || !user.role_name) return { id: null }; // Fallback for safety
-  
-  const role = user.role_name.toLowerCase();
-  
-  if (role.includes('admin')) return {}; // Admin sees all
-  
-  if (role.includes('caseworker')) {
-    // Caseworkers linked via assignedcaseworkerId array (JSONB)
-    return { assignedcaseworkerId: { [Op.contains]: [user.userId] } };
+  if (!user) return { id: null };
+
+  const roleId   = Number(user.role_id);
+  const roleName = (user.role_name || '').toLowerCase();
+
+  // Admin (3) and Superadmin (5) — full access
+  if (roleId === 3 || roleId === 5 || roleName.includes('admin')) return {};
+
+  // Caseworker (2)
+  if (roleId === 2 || roleName.includes('caseworker')) {
+    return { assignedcaseworkerId: { [Op.contains]: [user.userId || user.id] } };
   }
-  
-  if (role.includes('sponsor')) {
-    // Sponsors linked via sponsorId
-    return { sponsorId: user.userId };
+
+  // Sponsor / Business (4)
+  if (roleId === 4 || roleName.includes('sponsor') || roleName.includes('business')) {
+    return { sponsorId: user.userId || user.id };
   }
-  
-  if (role.includes('candidate')) {
-    // Candidates linked via candidateId
-    return { candidateId: user.userId };
+
+  // Candidate (1)
+  if (roleId === 1 || roleName.includes('candidate')) {
+    return { candidateId: user.userId || user.id };
   }
-  
-  // Default to nothing if role unknown
+
+  // Unknown role — deny
   return { id: null };
 }
 
@@ -124,22 +128,16 @@ export async function computeCaseAnalyticsData(req) {
     // Total
     req.tenantDb.Case.count({ where: { ...dateWhere, ...roleWhere } }).catch(() => 0),
 
-    // By Visa Type (Dynamic Mapping)
-    req.tenantDb.Case.findAll({
-      where: { ...dateWhere, ...roleWhere },
-      attributes: [
-        [col('visaType.name'), 'name'],
-        [fn('COUNT', col('Case.id')), 'count'],
-      ],
-      include: [{
-        model: req.tenantDb.VisaType,
-        as: 'visaType',
-        attributes: [],
-      }],
-      group: ['visaType.id', 'visaType.name'],
-      order: [[literal('"count"'), 'DESC']],
-      raw: true,
-    }).catch((err) => {
+    // By Visa Type — raw SQL with correct quoted column names
+    req.tenantDb.sequelize.query(
+      `SELECT vt.id, vt.name, COUNT(c.id)::int AS count
+       FROM cases c
+       LEFT JOIN visa_types vt ON c."visaTypeId" = vt.id
+       WHERE c.deleted_at IS NULL
+       GROUP BY vt.id, vt.name
+       ORDER BY count DESC`,
+      { type: req.tenantDb.Sequelize.QueryTypes.SELECT }
+    ).catch((err) => {
       console.error('VisaType Query Error:', err);
       return [];
     }),
@@ -186,8 +184,8 @@ export async function computeCaseAnalyticsData(req) {
       count: parseInt(s.count),
     })),
     byVisaType: byVisaTypeData.map(v => ({
-      name: v.name || 'Unknown',
-      count: parseInt(v.count),
+      name:  v.name || 'Unknown',
+      count: parseInt(v.count) || 0,
     })),
     monthlyTrend: monthlyTrend.map(m => ({
       month: m.month,
@@ -215,24 +213,24 @@ export async function computeWorkloadReportData(req) {
   const { startDate, endDate } = req.query;
   const dateWhere = buildCaseDateWhere(startDate, endDate);
   const slaRules = await req.tenantDb.SlaRule.findAll().catch(() => []);
-  
-  // Determine which caseworkers to fetch based on role
-  const role = req.user?.role_name?.toLowerCase() || '';
-  let userFilter = { name: { [Op.iLike]: '%caseworker%' } };
-  
-  if (!role.includes('admin')) {
-    userFilter = { name: { [Op.iLike]: '%caseworker%' } };
-  }
 
-  // Fetch caseworker-role users
+  const roleId   = Number(req.user?.role_id);
+  const isAdmin  = roleId === 3 || roleId === 5;
+
+  // Always filter to caseworker-role users
+  const caseworkerRoleFilter = { name: { [Op.iLike]: '%caseworker%' } };
+
+  // Admins see all caseworkers; non-admins see only themselves
+  const userWhere = isAdmin ? {} : { id: req.user?.userId || req.user?.id };
+
   const caseworkerUsers = await req.tenantDb.User.findAll({
-    where: !role.includes('admin') ? { id: req.user.userId } : {},
+    where: userWhere,
     attributes: ['id', 'first_name', 'last_name', 'email'],
     include: [{
-      model: req.tenantDb.Role,
-      as: 'role',
+      model:    req.tenantDb.Role,
+      as:       'role',
       attributes: ['name'],
-      where: userFilter,
+      where:    caseworkerRoleFilter,
       required: true,
     }],
   }).catch(() => []);
@@ -375,43 +373,32 @@ export async function computeFinancialReportData(req) {
       raw: true,
     }).catch(() => []),
 
-    // Revenue by Visa Type
-    req.tenantDb.CasePayment.findAll({
-      where: { paymentStatus: 'completed', ...dateWhere },
-      attributes: [
-        [col('Case.visaType.name'), 'name'],
-        [fn('SUM', col('amount')), 'total'],
-      ],
-      include: [{
-        model: req.tenantDb.Case,
-        attributes: [],
-        where: roleWhere,
-        required: true,
-        include: [{ model: req.tenantDb.VisaType, as: 'visaType', attributes: [] }]
-      }],
-      group: [col('Case.visaType.id'), col('Case.visaType.name')],
-      order: [[literal('"total"'), 'DESC']],
-      raw: true,
-    }).catch(() => []),
+    // Revenue by Visa Type — raw SQL with correct quoted column names
+    req.tenantDb.sequelize.query(
+      `SELECT vt.name, COALESCE(SUM(cp.amount), 0)::float AS total
+       FROM case_payments cp
+       JOIN cases c ON cp."caseId" = c.id
+       LEFT JOIN visa_types vt ON c."visaTypeId" = vt.id
+       WHERE cp."paymentStatus" = 'completed'
+         AND c.deleted_at IS NULL
+       GROUP BY vt.id, vt.name
+       ORDER BY total DESC`,
+      { type: req.tenantDb.Sequelize.QueryTypes.SELECT }
+    ).catch(() => []),
 
-    // Revenue by Sponsor
-    req.tenantDb.CasePayment.findAll({
-      where: { paymentStatus: 'completed', ...dateWhere },
-      attributes: [
-        [fn('CONCAT', col('Case.sponsor.first_name'), ' ', col('Case.sponsor.last_name')), 'name'],
-        [fn('SUM', col('amount')), 'total'],
-      ],
-      include: [{
-        model: req.tenantDb.Case,
-        attributes: [],
-        where: roleWhere,
-        required: true,
-        include: [{ model: req.tenantDb.User, as: 'sponsor', attributes: [] }]
-      }],
-      group: [col('Case.sponsor.id'), col('Case.sponsor.first_name'), col('Case.sponsor.last_name')],
-      order: [[literal('"total"'), 'DESC']],
-      raw: true,
-    }).catch(() => []),
+    // Revenue by Sponsor — raw SQL with correct quoted column names
+    req.tenantDb.sequelize.query(
+      `SELECT CONCAT(u.first_name, ' ', u.last_name) AS name,
+              COALESCE(SUM(cp.amount), 0)::float AS total
+       FROM case_payments cp
+       JOIN cases c ON cp."caseId" = c.id
+       JOIN users u ON c."sponsorId" = u.id
+       WHERE cp."paymentStatus" = 'completed'
+         AND c.deleted_at IS NULL
+       GROUP BY u.id, u.first_name, u.last_name
+       ORDER BY total DESC`,
+      { type: req.tenantDb.Sequelize.QueryTypes.SELECT }
+    ).catch(() => []),
   ]);
 
   return {
@@ -431,11 +418,11 @@ export async function computeFinancialReportData(req) {
       total: parseFloat(s.total || 0),
     })),
     byVisaType: byVisaType.map(v => ({
-      name: v.name || 'Unknown',
+      name:  v.name || 'Unknown',
       total: parseFloat(v.total || 0),
     })),
     bySponsor: bySponsor.map(s => ({
-      name: s.name || 'Unknown',
+      name:  s.name || 'Unknown',
       total: parseFloat(s.total || 0),
     })),
   };
@@ -459,7 +446,7 @@ export const getFinancialReport = async (req, res) => {
 export const getFinancialTransactions = async (req, res) => {
   try {
     const { page = 1, limit = 20, status } = req.query;
-    const offset = (page - 1) * limit;
+    const offset    = (parseInt(page) - 1) * parseInt(limit);
     const roleWhere = buildRoleWhere(req.user);
 
     const where = {};
@@ -468,38 +455,45 @@ export const getFinancialTransactions = async (req, res) => {
     const { count, rows } = await req.tenantDb.CasePayment.findAndCountAll({
       where,
       include: [{
-        model: req.tenantDb.Case,
-        where: roleWhere,
+        model:      req.tenantDb.Case,
         attributes: ['caseId', 'status'],
-        include: [{ 
-          model: req.tenantDb.User, 
-          as: 'candidate', 
-          attributes: ['first_name', 'last_name'] 
-        }]
+        where:      roleWhere,
+        required:   true,
+        include: [{
+          model:      req.tenantDb.User,
+          as:         'candidate',
+          attributes: ['first_name', 'last_name'],
+          required:   false,
+        }],
       }],
-      order: [['created_at', 'DESC']],
-      limit: parseInt(limit),
-      offset: parseInt(offset)
+      order:  [['created_at', 'DESC']],
+      limit:  parseInt(limit),
+      offset: parseInt(offset),
     });
 
     res.status(200).json({
       status: 'success',
       data: {
         transactions: rows.map(r => ({
-          id: r.payment_id || `#PAY-${r.id}`,
-          client: r.Case?.candidate ? `${r.Case.candidate.first_name} ${r.Case.candidate.last_name}` : 'Unknown',
+          id:     `#PAY-${r.id}`,
+          client: r.Case?.candidate
+            ? `${r.Case.candidate.first_name} ${r.Case.candidate.last_name}`
+            : 'Unknown',
           caseId: r.Case?.caseId || 'N/A',
-          amount: `£${parseFloat(r.amount).toLocaleString()}`,
-          type: r.paymentMethod || 'Invoice',
-          status: r.paymentStatus === 'completed' ? 'Paid' : (r.paymentStatus === 'pending' ? 'Pending' : 'Processed'),
-          date: new Date(r.created_at).toISOString().split('T')[0]
+          amount: `£${parseFloat(r.amount).toLocaleString('en-GB', { minimumFractionDigits: 2 })}`,
+          type:   r.paymentMethod || 'Invoice',
+          status: r.paymentStatus === 'completed' ? 'Paid'
+            : r.paymentStatus === 'pending'  ? 'Pending'
+            : r.paymentStatus === 'refunded' ? 'Refunded'
+            : 'Processed',
+          date: new Date(r.created_at).toISOString().split('T')[0],
         })),
         pagination: {
           total: count,
-          page: parseInt(page),
-          pages: Math.ceil(count / limit)
-        }
-      }
+          page:  parseInt(page),
+          pages: Math.ceil(count / parseInt(limit)),
+        },
+      },
     });
   } catch (error) {
     console.error('getFinancialTransactions Error:', error);
@@ -511,24 +505,23 @@ export const getFinancialTransactions = async (req, res) => {
 export async function computePerformanceReportData(req) {
   const { startDate, endDate } = req.query;
   const dateWhere = buildCaseDateWhere(startDate, endDate);
-  const slaRules = await req.tenantDb.SlaRule.findAll().catch(() => []);
-  
-  const role = req.user?.role_name?.toLowerCase() || '';
-  let userFilter = { name: { [Op.iLike]: '%caseworker%' } };
-  
-  if (!role.includes('admin')) {
-    userFilter = { name: { [Op.iLike]: '%caseworker%' } };
-  }
+  const slaRules  = await req.tenantDb.SlaRule.findAll().catch(() => []);
+
+  const roleId  = Number(req.user?.role_id);
+  const isAdmin = roleId === 3 || roleId === 5;
+
+  const caseworkerRoleFilter = { name: { [Op.iLike]: '%caseworker%' } };
+  const userWhere = isAdmin ? {} : { id: req.user?.userId || req.user?.id };
 
   const caseworkerUsers = await req.tenantDb.User.findAll({
-    where: !role.includes('admin') ? { id: req.user.userId } : {},
+    where:      userWhere,
     attributes: ['id', 'first_name', 'last_name', 'email', 'createdAt'],
     include: [{
-      model: req.tenantDb.Role,
-      as: 'role',
+      model:      req.tenantDb.Role,
+      as:         'role',
       attributes: ['name'],
-      where: userFilter,
-      required: true,
+      where:      caseworkerRoleFilter,
+      required:   true,
     }],
   }).catch(() => []);
 
@@ -550,16 +543,19 @@ export async function computePerformanceReportData(req) {
         req.tenantDb.Case.count({ where: { ...cwWhere, ...dateWhere, status: { [Op.notIn]: ['Completed', 'Closed', 'Cancelled', 'Rejected', 'Approved'] } } }).catch(() => 0),
         req.tenantDb.Case.count({ where: { ...cwWhere, ...dateWhere, status: { [Op.in]: ['Completed', 'Closed', 'Approved'] } } }).catch(() => 0),
         
-        req.tenantDb.Case.findAll({
-          where: { ...cwWhere, ...dateWhere },
-          attributes: [
-            [col('visaType.name'), 'type'],
-            [fn('COUNT', col('Case.id')), 'count']
-          ],
-          include: [{ model: req.tenantDb.VisaType, as: 'visaType', attributes: [] }],
-          group: ['visaType.id', 'visaType.name'],
-          raw: true
-        }).catch(() => []),
+        req.tenantDb.sequelize.query(
+          `SELECT vt.name AS type, COUNT(c.id)::int AS count
+           FROM cases c
+           LEFT JOIN visa_types vt ON c."visaTypeId" = vt.id
+           WHERE c.deleted_at IS NULL
+             AND c."assignedcaseworkerId" @> $1::jsonb
+           GROUP BY vt.id, vt.name
+           ORDER BY count DESC`,
+          {
+            bind: [JSON.stringify([cw.id])],
+            type: req.tenantDb.Sequelize.QueryTypes.SELECT,
+          }
+        ).catch(() => []),
 
         req.tenantDb.Case.findAll({
           where: { ...cwWhere, ...dateWhere },
@@ -630,7 +626,10 @@ export async function computePerformanceReportData(req) {
         avgCompletionDays, 
         clientSatisfaction, 
         escalations,
-        visaBreakdown: visaBreakdownRaw.map(v => ({ type: v.type || 'Unknown', count: parseInt(v.count) })),
+        visaBreakdown: visaBreakdownRaw.map(v => ({
+          type:  v.type || 'Unknown',
+          count: parseInt(v.count) || 0,
+        })),
         recentCases: recentCases.map(c => {
           let slaStatus = 'Met';
           const met = isSlaMet(c, slaRules);
@@ -928,12 +927,12 @@ export const exportReportingExcel = async (req, res) => {
 export const getReportingSummary = async (req, res) => {
   try {
     const roleWhere = buildRoleWhere(req.user);
-    const role = req.user?.role_name?.toLowerCase() || '';
-    const userId = req.user?.userId;
-    const isAdmin = role.includes('admin');
-    
+    const roleId    = Number(req.user?.role_id);
+    const isAdmin   = roleId === 3 || roleId === 5;
+    const userId    = req.user?.userId || req.user?.id;
+
     const taskWhere = isAdmin ? {} : { assigned_to: userId };
-    const escWhere = isAdmin ? {} : { assignedAdminId: userId };
+    const escWhere  = isAdmin ? {} : { assignedAdminId: userId };
 
     const now = new Date();
     const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);

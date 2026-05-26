@@ -1,0 +1,357 @@
+import { Op } from "sequelize";
+import platformDb from "../models/index.js";
+import { getTenantDb } from "./tenantDb.service.js";
+import {
+  notifyAdmins,
+  notifyUser,
+  NotificationTypes,
+  NotificationPriority,
+} from "./notification.service.js";
+
+const VISA_ALERT_DAYS = [120, 90, 60, 30];
+
+const extractCaseworkerIds = (assignedcaseworkerId) => {
+  if (!Array.isArray(assignedcaseworkerId)) return [];
+  return assignedcaseworkerId
+    .map((entry) => {
+      if (typeof entry === "number") return entry;
+      if (entry && typeof entry === "object") {
+        return entry.id || entry.userId || entry.caseworkerId || null;
+      }
+      return null;
+    })
+    .filter((id) => Number.isInteger(id));
+};
+
+const toDateOnly = (date) => {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d.toISOString().slice(0, 10);
+};
+
+const addDays = (base, days) => {
+  const d = new Date(base);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + days);
+  return d;
+};
+
+const notifyCaseworkersAndAdmins = async ({
+  tenantDb,
+  organisationId,
+  caseworkerIds,
+  title,
+  message,
+  actionType,
+  entityId,
+  entityType,
+  metadata,
+}) => {
+  try {
+    await notifyAdmins(tenantDb, {
+      type: NotificationTypes.WARNING,
+      priority: NotificationPriority.HIGH,
+      title,
+      message,
+      actionType,
+      entityId,
+      entityType,
+      metadata,
+      organisationId,
+      sendEmail: true,
+    });
+  } catch (err) {
+    console.error("Failed to notify admins for compliance alert:", err);
+  }
+
+  for (const caseworkerId of caseworkerIds) {
+    try {
+      await notifyUser(tenantDb, caseworkerId, {
+        type: NotificationTypes.WARNING,
+        priority: NotificationPriority.HIGH,
+        title,
+        message,
+        actionType,
+        entityId,
+        entityType,
+        metadata,
+        sendEmail: true,
+        organisationId,
+      });
+    } catch (err) {
+      console.error(`Failed to notify caseworker ${caseworkerId} for compliance alert:`, err);
+    }
+  }
+};
+
+const checkVisaExpiryAlerts = async (tenantDb, organisationId, today) => {
+  let count = 0;
+
+  for (const days of VISA_ALERT_DAYS) {
+    const targetDate = toDateOnly(addDays(today, days));
+
+    const cases = await tenantDb.Case.findAll({
+      where: { sponsorId: { [Op.not]: null } },
+      attributes: ["id", "caseId", "assignedcaseworkerId", "candidateId"],
+      include: [
+        {
+          model: tenantDb.User,
+          as: "candidate",
+          attributes: ["id", "first_name", "last_name"],
+          required: true,
+          include: [
+            {
+              model: tenantDb.CandidateApplication,
+              as: "application",
+              where: { visaEndDate: targetDate },
+              required: true,
+              attributes: ["visaEndDate", "visaType"],
+            },
+          ],
+        },
+      ],
+    });
+
+    for (const workerCase of cases) {
+      const candidate = workerCase.candidate;
+      const workerName = [candidate?.first_name, candidate?.last_name].filter(Boolean).join(" ") || "Sponsored worker";
+
+      await notifyCaseworkersAndAdmins({
+        tenantDb,
+        organisationId,
+        caseworkerIds: extractCaseworkerIds(workerCase.assignedcaseworkerId),
+        title: `Visa Expiry Alert: ${days} Days`,
+        message: `Sponsored worker ${workerName} (case ${workerCase.caseId}) visa expires in ${days} days on ${targetDate}.`,
+        actionType: "visa_expiry_alert",
+        entityId: workerCase.id,
+        entityType: "case",
+        metadata: {
+          caseId: workerCase.caseId,
+          daysRemaining: days,
+          visaEndDate: targetDate,
+          candidateId: workerCase.candidateId,
+        },
+      });
+      count += 1;
+    }
+  }
+
+  return count;
+};
+
+const checkWorkerEventDeadlines = async (tenantDb, organisationId, today) => {
+  const todayStr = toDateOnly(today);
+  const twoDaysLaterStr = toDateOnly(addDays(today, 2));
+
+  const events = await tenantDb.WorkerEvent.findAll({
+    where: {
+      status: "pending",
+      deadlineDate: { [Op.between]: [todayStr, twoDaysLaterStr] },
+    },
+    include: [
+      {
+        model: tenantDb.User,
+        as: "worker",
+        attributes: ["id", "first_name", "last_name"],
+      },
+    ],
+  });
+
+  for (const event of events) {
+    const workerCase = await tenantDb.Case.findOne({
+      where: { sponsorId: event.sponsorId, candidateId: event.workerId },
+      attributes: ["id", "caseId", "assignedcaseworkerId"],
+    });
+
+    const worker = event.worker;
+    const workerName = [worker?.first_name, worker?.last_name].filter(Boolean).join(" ") || "Worker";
+
+    await notifyCaseworkersAndAdmins({
+      tenantDb,
+      organisationId,
+      caseworkerIds: extractCaseworkerIds(workerCase?.assignedcaseworkerId),
+      title: "Worker Event Reporting Deadline Approaching",
+      message: `Worker event "${event.eventType}" for ${workerName} is due by ${event.deadlineDate}. Please ensure SMS reporting is completed.`,
+      actionType: "worker_event_deadline_approaching",
+      entityId: event.id,
+      entityType: "worker_event",
+      metadata: {
+        caseId: workerCase?.caseId || null,
+        eventType: event.eventType,
+        deadlineDate: event.deadlineDate,
+        workerId: event.workerId,
+      },
+    });
+  }
+
+  return events.length;
+};
+
+const checkRightToWorkFollowUps = async (tenantDb, organisationId, today) => {
+  const todayStr = toDateOnly(today);
+  const fourteenDaysLaterStr = toDateOnly(addDays(today, 14));
+
+  const records = await tenantDb.RightToWorkRecord.findAll({
+    where: {
+      followUpCheckDate: {
+        [Op.not]: null,
+        [Op.between]: [todayStr, fourteenDaysLaterStr],
+      },
+    },
+    include: [
+      {
+        model: tenantDb.User,
+        as: "worker",
+        attributes: ["id", "first_name", "last_name"],
+      },
+    ],
+  });
+
+  for (const record of records) {
+    const workerCase = await tenantDb.Case.findOne({
+      where: { sponsorId: record.sponsorId, candidateId: record.workerId },
+      attributes: ["id", "caseId", "assignedcaseworkerId"],
+    });
+
+    const worker = record.worker;
+    const workerName = [worker?.first_name, worker?.last_name].filter(Boolean).join(" ") || "Worker";
+
+    await notifyCaseworkersAndAdmins({
+      tenantDb,
+      organisationId,
+      caseworkerIds: extractCaseworkerIds(workerCase?.assignedcaseworkerId),
+      title: "Right to Work Follow-up Check Due",
+      message: `A right to work follow-up check for ${workerName} is due by ${record.followUpCheckDate}.`,
+      actionType: "rtw_followup_alert",
+      entityId: record.id,
+      entityType: "right_to_work_record",
+      metadata: {
+        caseId: workerCase?.caseId || null,
+        followUpCheckDate: record.followUpCheckDate,
+        workerId: record.workerId,
+      },
+    });
+  }
+
+  return records.length;
+};
+
+const checkSponsorChangeRequestDeadlines = async (tenantDb, organisationId, today) => {
+  const startOfToday = new Date(today);
+  startOfToday.setHours(0, 0, 0, 0);
+  const endOfTwoDays = addDays(today, 2);
+  endOfTwoDays.setHours(23, 59, 59, 999);
+
+  const requests = await tenantDb.SponsorChangeRequest.findAll({
+    where: {
+      status: "pending",
+      reportingDeadline: { [Op.between]: [startOfToday, endOfTwoDays] },
+    },
+  });
+
+  for (const request of requests) {
+    const deadlineLabel = request.reportingDeadline
+      ? new Date(request.reportingDeadline).toISOString().slice(0, 10)
+      : "soon";
+
+    try {
+      await notifyAdmins(tenantDb, {
+        type: NotificationTypes.WARNING,
+        priority: NotificationPriority.HIGH,
+        title: "Sponsor Change Request Deadline Approaching",
+        message: `A sponsor change request (${request.changeType}) must be reported by ${deadlineLabel}.`,
+        actionType: "sponsor_change_deadline_approaching",
+        entityId: request.id,
+        entityType: "sponsor_change_request",
+        metadata: {
+          changeType: request.changeType,
+          reportingDeadline: request.reportingDeadline,
+          sponsorId: request.sponsorId,
+        },
+        organisationId,
+        sendEmail: true,
+      });
+    } catch (err) {
+      console.error("Failed to notify admins for sponsor change request alert:", err);
+    }
+
+    if (request.sponsorId) {
+      try {
+        await notifyUser(tenantDb, request.sponsorId, {
+          type: NotificationTypes.WARNING,
+          priority: NotificationPriority.HIGH,
+          title: "Sponsor Change Request Deadline Approaching",
+          message: `Your sponsor change request (${request.changeType}) must be reported by ${deadlineLabel}.`,
+          actionType: "sponsor_change_deadline_approaching",
+          entityId: request.id,
+          entityType: "sponsor_change_request",
+          metadata: {
+            changeType: request.changeType,
+            reportingDeadline: request.reportingDeadline,
+          },
+          sendEmail: true,
+          organisationId,
+        });
+      } catch (err) {
+        console.error(`Failed to notify sponsor ${request.sponsorId} for change request alert:`, err);
+      }
+    }
+  }
+
+  return requests.length;
+};
+
+const runTenantComplianceChecks = async (tenantDb, organisationId, today) => {
+  const visaAlerts = await checkVisaExpiryAlerts(tenantDb, organisationId, today);
+  const workerEventAlerts = await checkWorkerEventDeadlines(tenantDb, organisationId, today);
+  const rtwAlerts = await checkRightToWorkFollowUps(tenantDb, organisationId, today);
+  const changeRequestAlerts = await checkSponsorChangeRequestDeadlines(tenantDb, organisationId, today);
+
+  return {
+    visaAlerts,
+    workerEventAlerts,
+    rtwAlerts,
+    changeRequestAlerts,
+  };
+};
+
+export async function runComplianceAlerts() {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const organisations = await platformDb.Organisation.findAll({
+      where: {
+        status: { [Op.in]: ["active", "trial"] },
+        database_name: { [Op.not]: null },
+      },
+      attributes: ["id", "name", "database_name"],
+    });
+
+    let visaAlerts = 0;
+    let workerEventAlerts = 0;
+    let rtwAlerts = 0;
+    let changeRequestAlerts = 0;
+    let organisationsProcessed = 0;
+
+    for (const org of organisations) {
+      try {
+        const tenantDb = getTenantDb(org.database_name);
+        const result = await runTenantComplianceChecks(tenantDb, org.id, today);
+        visaAlerts += result.visaAlerts;
+        workerEventAlerts += result.workerEventAlerts;
+        rtwAlerts += result.rtwAlerts;
+        changeRequestAlerts += result.changeRequestAlerts;
+        organisationsProcessed += 1;
+      } catch (err) {
+        console.error(`Compliance alerts failed for org ${org.id}:`, err);
+      }
+    }
+
+    console.log(
+      `✔ Compliance alerts completed: ${organisationsProcessed} organisations, ${visaAlerts} visa alerts, ${workerEventAlerts} worker event alerts, ${rtwAlerts} RTW alerts, ${changeRequestAlerts} change request alerts`,
+    );
+  } catch (error) {
+    console.error("Compliance alerts check failed:", error);
+  }
+}

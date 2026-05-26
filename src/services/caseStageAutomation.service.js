@@ -237,7 +237,7 @@ export async function evaluateCaseStageAfterEvent({
     }
 
     if (checklist.allApproved && !checklist.hasRejected) {
-      // Assign task to caseworkers to send proposed payment and CCL
+      // Assign task to caseworkers to send proposed payment and CCL (only ONE task per case)
       const raw = caseRecord?.assignedcaseworkerId ?? caseRecord?.assignedCaseworkerId;
       let cwIds = [];
       if (raw) {
@@ -254,31 +254,29 @@ export async function evaluateCaseStageAfterEvent({
       cwIds = [...new Set(cwIds)];
 
       const caseLabel = caseRecord.caseId || `#${caseRecord.id}`;
-      const taskTitle = `Send proposed payment and CCL to the candidate — ${caseLabel}`;
+      const taskTitle = `Send Proposed Payment and CCL to Candidate — ${caseLabel}`;
 
-      for (const cwId of cwIds) {
+      // Check if ANY such task exists for this case (any status, any assignee)
+      const anyExistingTask = await tenantDb.Task.findOne({
+        where: {
+          case_id: caseRecord.id,
+          title: { [tenantDb.Sequelize.Op.iLike]: `%${taskTitle}%` },
+        }
+      });
+      if (!anyExistingTask && cwIds.length > 0) {
+        const assigneeId = cwIds[0]; // assign to first caseworker
         try {
-          const existingTask = await tenantDb.Task.findOne({
-            where: {
-              case_id: caseRecord.id,
-              assigned_to: cwId,
-              status: "pending",
-              title: taskTitle,
-            }
+          await tenantDb.Task.create({
+            title: taskTitle,
+            assigned_to: assigneeId,
+            case_id: caseRecord.id,
+            priority: "high",
+            status: "pending",
+            due_date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+            created_by: performedBy || assigneeId,
           });
-          if (!existingTask) {
-            await tenantDb.Task.create({
-              title: taskTitle,
-              assigned_to: cwId,
-              case_id: caseRecord.id,
-              priority: "high",
-              status: "pending",
-              due_date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-              created_by: performedBy || cwId,
-            });
-          }
         } catch (taskErr) {
-          console.error("Failed to assign Send CCL task to caseworker:", cwId, taskErr);
+          console.error("Failed to assign Send CCL task:", taskErr);
         }
       }
 

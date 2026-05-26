@@ -699,3 +699,161 @@ export const updateWorkerStatus = async (req, res) => {
     res.status(500).json({ status: 'error', message: 'Internal server error' });
   }
 };
+
+const toISODate = (value) => {
+  if (!value) return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString().slice(0, 10);
+};
+
+export const createAbsenceRecord = async (req, res) => {
+  try {
+    const sponsorId = req.user.userId;
+    const {
+      workerId, absenceType, startDate, endDate,
+      totalWorkingDays, reportedToSms, notes
+    } = req.body;
+
+    if (!workerId || !absenceType || !startDate || !endDate) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'workerId, absenceType, startDate and endDate are required'
+      });
+    }
+
+    const organisationId = req.user?.organisation_id != null ? Number(req.user.organisation_id) : null;
+    const attendanceRecordPath = req.file ? req.file.path.replace(/\\/g, '/') : null;
+    const days = totalWorkingDays !== undefined ? parseInt(totalWorkingDays, 10) : 0;
+
+    const record = await req.tenantDb.AbsenceRecord.create({
+      workerId: parseInt(workerId, 10),
+      sponsorId,
+      organisationId,
+      absenceType,
+      startDate: toISODate(startDate),
+      endDate: toISODate(endDate),
+      totalWorkingDays: days,
+      attendanceRecordPath,
+      reportedToSms: reportedToSms === true || reportedToSms === 'true',
+      notes: notes || null,
+    });
+
+    return res.status(201).json({ status: 'success', data: record });
+  } catch (err) {
+    console.error('createAbsenceRecord error:', err);
+    return res.status(500).json({ status: 'error', message: 'Internal server error' });
+  }
+};
+
+export const getAbsenceByWorker = async (req, res) => {
+  try {
+    const sponsorId = req.user.userId;
+    const { workerId } = req.params;
+
+    if (!workerId) {
+      return res.status(400).json({ status: 'error', message: 'workerId is required' });
+    }
+
+    const records = await req.tenantDb.AbsenceRecord.findAll({
+      where: { workerId: parseInt(workerId, 10), sponsorId },
+      include: [
+        {
+          model: req.tenantDb.User,
+          as: 'worker',
+          attributes: ['id', 'first_name', 'last_name', 'email']
+        }
+      ],
+      order: [['start_date', 'DESC']]
+    });
+
+    return res.status(200).json({ status: 'success', data: records });
+  } catch (err) {
+    console.error('getAbsenceByWorker error:', err);
+    return res.status(500).json({ status: 'error', message: 'Internal server error' });
+  }
+};
+
+export const updateAbsenceRecord = async (req, res) => {
+  try {
+    const sponsorId = req.user.userId;
+    const { id } = req.params;
+    const {
+      absenceType, startDate, endDate,
+      totalWorkingDays, reportedToSms, notes
+    } = req.body;
+
+    const record = await req.tenantDb.AbsenceRecord.findOne({ where: { id, sponsorId } });
+    if (!record) {
+      return res.status(404).json({ status: 'error', message: 'Absence record not found' });
+    }
+
+    if (absenceType !== undefined) record.absenceType = absenceType;
+    if (startDate !== undefined) record.startDate = toISODate(startDate);
+    if (endDate !== undefined) record.endDate = toISODate(endDate);
+    if (totalWorkingDays !== undefined) record.totalWorkingDays = parseInt(totalWorkingDays, 10);
+    if (reportedToSms !== undefined) record.reportedToSms = reportedToSms === true || reportedToSms === 'true';
+    if (notes !== undefined) record.notes = notes;
+    if (req.file) record.attendanceRecordPath = req.file.path.replace(/\\/g, '/');
+
+    await record.save();
+
+    return res.status(200).json({ status: 'success', data: record });
+  } catch (err) {
+    console.error('updateAbsenceRecord error:', err);
+    return res.status(500).json({ status: 'error', message: 'Internal server error' });
+  }
+};
+
+export const createSmsLog = async (req, res) => {
+  try {
+    const sponsorId = req.user.userId;
+    const { eventType, dateSubmitted, smsReferenceNumber, notes } = req.body;
+
+    if (!eventType) {
+      return res.status(400).json({ status: 'error', message: 'eventType is required' });
+    }
+
+    const organisationId = req.user?.organisation_id != null ? Number(req.user.organisation_id) : null;
+    const screenshotPath = req.file ? req.file.path.replace(/\\/g, '/') : null;
+
+    const record = await req.tenantDb.SmsActivityLog.create({
+      sponsorId,
+      organisationId,
+      eventType,
+      dateSubmitted: dateSubmitted ? new Date(dateSubmitted) : new Date(),
+      smsReferenceNumber: smsReferenceNumber || null,
+      screenshotPath,
+      submittedBy: sponsorId,
+      notes: notes || null,
+    });
+
+    return res.status(201).json({ status: 'success', data: record });
+  } catch (err) {
+    console.error('createSmsLog error:', err);
+    return res.status(500).json({ status: 'error', message: 'Internal server error' });
+  }
+};
+
+export const getSmsLogsBySponsor = async (req, res) => {
+  try {
+    const sponsorId = req.user.userId;
+
+    const records = await req.tenantDb.SmsActivityLog.findAll({
+      where: { sponsorId },
+      include: [
+        {
+          model: req.tenantDb.User,
+          as: 'submitter',
+          attributes: ['id', 'first_name', 'last_name', 'email']
+        }
+      ],
+      order: [['date_submitted', 'DESC']]
+    });
+
+    return res.status(200).json({ status: 'success', data: records });
+  } catch (err) {
+    console.error('getSmsLogsBySponsor error:', err);
+    return res.status(500).json({ status: 'error', message: 'Internal server error' });
+  }
+};
