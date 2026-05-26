@@ -296,12 +296,7 @@ export async function reviewCclFeeProposal({
     organisationId,
   }).catch((err) => console.error("notifyCclFeeApproved:", err));
 
-  const { createVisaPortalSubmissionTasks } = await import("./caseWorkflowExtended.service.js");
-  await createVisaPortalSubmissionTasks({
-    tenantDb,
-    caseRecord,
-    createdBy: reviewedBy,
-  }).catch((err) => console.error("createVisaPortalSubmissionTasks:", err));
+
 
   return { ok: true, ccl, caseRecord };
 }

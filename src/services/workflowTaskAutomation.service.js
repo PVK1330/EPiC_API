@@ -90,7 +90,7 @@ export async function createWorkflowTask({
       ...plain,
       organisationId,
       metadata: { caseId: caseLabel, taskId: task.id },
-    }).catch(() => {});
+    }).catch(() => { });
   }
 
   return task;
@@ -162,16 +162,6 @@ const STAGE_TASK_MATRIX = {
         dueInDays: 2,
       },
     ],
-    candidates: [
-      {
-        title: "Provide biometrics appointment availability",
-        priority: "high",
-        dueInDays: 5,
-        notify: true,
-        message:
-          "Please submit your preferred location, date, and time for your biometrics appointment in the portal.",
-      },
-    ],
   },
   biometrics_booked: {
     caseworkers: [
@@ -188,15 +178,6 @@ const STAGE_TASK_MATRIX = {
         title: "Upload biometric documents to Visa Portal",
         priority: "high",
         dueInDays: 2,
-      },
-    ],
-    candidates: [
-      {
-        title: "Attend biometrics appointment",
-        priority: "high",
-        dueInDays: 7,
-        notify: true,
-        message: "Biometrics appointment details are in your portal.",
       },
     ],
   },
@@ -335,7 +316,7 @@ export async function syncWorkflowTasksForStage({
         metadata: { caseId: caseLabel, stageId },
         sendEmail: true,
         organisationId,
-      }).catch(() => {});
+      }).catch(() => { });
     }
   }
 
@@ -425,7 +406,7 @@ export async function createTasksOnCaseworkerAssignment({
       },
       sendEmail: false,
       organisationId,
-    }).catch(() => {});
+    }).catch(() => { });
   }
 
   return created;
@@ -464,7 +445,7 @@ export async function createTasksOnDataCaptureSent({
     metadata: { caseId: caseLabel },
     sendEmail: false,
     organisationId,
-  }).catch(() => {});
+  }).catch(() => { });
 
   return task ? [task] : [];
 }
@@ -506,7 +487,7 @@ export async function createTasksOnDataCaptureRejected({
     metadata: { caseId: caseLabel, reviewNotes },
     sendEmail: true,
     organisationId,
-  }).catch(() => {});
+  }).catch(() => { });
 
   return task ? [task] : [];
 }
