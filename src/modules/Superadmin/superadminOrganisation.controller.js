@@ -552,6 +552,20 @@ export const updateOrganisation = async (req, res) => {
     }
     await org.update(updates);
 
+    if (updates.name !== undefined && org.slug) {
+      try {
+        const tenantDb = await getTenantDb(org.slug);
+        if (tenantDb && tenantDb.Organisation) {
+          await tenantDb.Organisation.update(
+            { name: updates.name },
+            { where: { id: org.id } }
+          );
+        }
+      } catch (syncErr) {
+        console.error("Failed to sync organisation name to tenant DB:", syncErr);
+      }
+    }
+
     await recordPlatformAuditLog({
       category: "Organisation",
       action: "Organisation Updated",

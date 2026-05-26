@@ -39,109 +39,91 @@ export const getDashboardStats = async (req, res) => {
       dateWhere = { created_at: { [Op.gte]: firstDay } };
     }
 
-    // Get user counts by role (Users aren't usually filtered by date, but keeping structure)
-    const totalAdmins = await req.tenantDb.User.count({ where: { role_id: 3 } });
-    const totalCaseworkers = await req.tenantDb.User.count({ where: { role_id: 2 } });
-    const totalCandidates = await req.tenantDb.User.count({ where: { role_id: 1 } });
-    const totalSponsors = await req.tenantDb.User.count({ where: { role_id: 4 } });
-
-    // Get case statistics
-    const totalCases = await req.tenantDb.Case.count({ where: { ...dateWhere } });
-    const activeCases = await req.tenantDb.Case.count({ where: { status: { [Op.ne]: 'Completed' }, ...dateWhere } });
-    const completedCases = await req.tenantDb.Case.count({ where: { status: 'Completed', ...dateWhere } });
-    const pendingCases = await req.tenantDb.Case.count({ where: { status: 'Pending', ...dateWhere } });
-
-    // Get task statistics
-    const totalTasks = await req.tenantDb.Task.count({ where: { ...dateWhere } });
-    const completedTasks = await req.tenantDb.Task.count({ where: { status: 'completed', ...dateWhere } });
-    const pendingTasks = await req.tenantDb.Task.count({ where: { status: 'pending', ...dateWhere } });
-    const inProgressTasks = await req.tenantDb.Task.count({ where: { status: 'in-progress', ...dateWhere } });
-
-    // Get document statistics
-    const totalDocuments = await req.tenantDb.Document.count({ where: { ...dateWhere } });
-
-    // Get recent activity (last 7 days)
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-    const recentCases = await req.tenantDb.Case.count({
-      where: { created_at: { [Op.gte]: sevenDaysAgo } }
-    });
+    const [
+      totalAdmins, totalCaseworkers, totalCandidates, totalSponsors,
+      totalCases, activeCases, completedCases, pendingCases,
+      totalTasks, completedTasks, pendingTasks, inProgressTasks,
+      totalDocuments,
+      recentCases, recentNotes, recentTasks,
+      escalations,
+      caseworkers,
+      caseStatusBreakdown, taskPriorityBreakdown,
+    ] = await Promise.all([
+      req.tenantDb.User.count({ where: { role_id: 3 } }),
+      req.tenantDb.User.count({ where: { role_id: 2 } }),
+      req.tenantDb.User.count({ where: { role_id: 1 } }),
+      req.tenantDb.User.count({ where: { role_id: 4 } }),
 
-    const recentNotes = await safeDashboardQuery(
-      req.tenantDb.CaseNote.count({
-        where: { created_at: { [Op.gte]: sevenDaysAgo } }
+      req.tenantDb.Case.count({ where: { ...dateWhere } }),
+      req.tenantDb.Case.count({ where: { status: { [Op.ne]: 'Completed' }, ...dateWhere } }),
+      req.tenantDb.Case.count({ where: { status: 'Completed', ...dateWhere } }),
+      req.tenantDb.Case.count({ where: { status: 'Pending', ...dateWhere } }),
+
+      req.tenantDb.Task.count({ where: { ...dateWhere } }),
+      req.tenantDb.Task.count({ where: { status: 'completed', ...dateWhere } }),
+      req.tenantDb.Task.count({ where: { status: 'pending', ...dateWhere } }),
+      req.tenantDb.Task.count({ where: { status: 'in-progress', ...dateWhere } }),
+
+      req.tenantDb.Document.count({ where: { ...dateWhere } }),
+
+      req.tenantDb.Case.count({ where: { created_at: { [Op.gte]: sevenDaysAgo } } }),
+      safeDashboardQuery(
+        req.tenantDb.CaseNote.count({ where: { created_at: { [Op.gte]: sevenDaysAgo } } }),
+        0, 'recentNotes count',
+      ),
+      safeDashboardQuery(
+        req.tenantDb.Task.count({ where: { created_at: { [Op.gte]: sevenDaysAgo } } }),
+        0, 'recentTasks count',
+      ),
+
+      safeDashboardQuery(
+        req.tenantDb.Escalation.findAll({
+          where: { status: { [Op.in]: ['Open', 'In Progress', 'Monitoring', 'Chasing'] } },
+          limit: 5,
+          order: [
+            [req.tenantDb.sequelize.literal("CASE WHEN severity = 'Critical' THEN 1 WHEN severity = 'High' THEN 2 WHEN severity = 'Medium' THEN 3 ELSE 4 END"), 'ASC'],
+            ['created_at', 'DESC'],
+          ],
+        }),
+        [], 'escalations',
+      ),
+
+      req.tenantDb.User.findAll({
+        where: { role_id: 2 },
+        attributes: ['id', 'first_name', 'last_name'],
       }),
-      0,
-      'recentNotes count'
-    );
 
-    const recentTasks = await safeDashboardQuery(
-      req.tenantDb.Task.count({
-        where: { created_at: { [Op.gte]: sevenDaysAgo } }
+      req.tenantDb.Case.findAll({
+        where: { ...dateWhere },
+        attributes: ['status', [req.tenantDb.sequelize.fn('COUNT', '*'), 'count']],
+        group: ['status'],
+        raw: true,
       }),
-      0,
-      'recentTasks count'
-    );
-
-    // Get top active escalations
-    const escalations = await safeDashboardQuery(
-      req.tenantDb.Escalation.findAll({
-        where: { status: { [Op.in]: ['Open', 'In Progress', 'Monitoring', 'Chasing'] } },
-        limit: 5,
-        order: [
-          [req.tenantDb.sequelize.literal("CASE WHEN severity = 'Critical' THEN 1 WHEN severity = 'High' THEN 2 WHEN severity = 'Medium' THEN 3 ELSE 4 END"), 'ASC'],
-          ['created_at', 'DESC']
-        ]
+      req.tenantDb.Task.findAll({
+        where: { ...dateWhere },
+        attributes: ['priority', [req.tenantDb.sequelize.fn('COUNT', '*'), 'count']],
+        group: ['priority'],
+        raw: true,
       }),
-      [],
-      'escalations'
-    );
+    ]);
 
-    // Get team workload (caseworkers)
-    const caseworkers = await req.tenantDb.User.findAll({
-      where: { role_id: 2 }, // Assuming role_id 2 is Caseworker
-      attributes: ['id', 'first_name', 'last_name']
-    });
-
-    // For each caseworker, count active cases they are assigned to
     const teamWorkload = await Promise.all(caseworkers.map(async (cw) => {
       const activeCasesCount = await req.tenantDb.Case.count({
         where: {
           status: { [Op.notIn]: ['Completed', 'Approved', 'Rejected', 'Closed', 'Cancelled'] },
-          assignedcaseworkerId: { [Op.contains]: [cw.id] }
-        }
+          assignedcaseworkerId: { [Op.contains]: [cw.id] },
+        },
       });
-      
       return {
         name: `${cw.first_name} ${cw.last_name}`,
         cases: activeCasesCount,
-        pct: Math.min(Math.round((activeCasesCount / 20) * 100), 100), // Assuming 20 is max capacity for 100%
-        bar: activeCasesCount > 15 ? "bg-red-500" : activeCasesCount > 10 ? "bg-yellow-500" : "bg-green-500"
+        pct: Math.min(Math.round((activeCasesCount / 20) * 100), 100),
+        bar: activeCasesCount > 15 ? "bg-red-500" : activeCasesCount > 10 ? "bg-yellow-500" : "bg-green-500",
       };
     }));
-
-    // Get case status breakdown
-    const caseStatusBreakdown = await req.tenantDb.Case.findAll({
-      where: { ...dateWhere },
-      attributes: [
-        'status',
-        [req.tenantDb.sequelize.fn('COUNT', '*'), 'count']
-      ],
-      group: ['status'],
-      raw: true
-    });
-
-    // Get task priority breakdown
-    const taskPriorityBreakdown = await req.tenantDb.Task.findAll({
-      where: { ...dateWhere },
-      attributes: [
-        'priority',
-        [req.tenantDb.sequelize.fn('COUNT', '*'), 'count']
-      ],
-      group: ['priority'],
-      raw: true
-    });
 
     // Calculate Expiry Alerts (within 30 days)
     const thirtyDaysFromNow = new Date();
@@ -518,38 +500,34 @@ export const getQuickActions = async (req, res) => {
       });
     }
 
-    // Get pending tasks for current user
-    const myPendingTasks = await req.tenantDb.Task.count({
-      where: { 
-        assigned_to: userId,
-        status: { [Op.in]: ['pending', 'in-progress'] }
-      }
-    });
-
-    // Get cases assigned to current user
-    const myCases = await req.tenantDb.Case.count({
-      where: {
-        [Op.or]: [
-          { assignedToId: userId },
-          { assignedcaseworkerId: { [Op.contains]: [userId] } }
-        ]
-      }
-    });
-
-    // Get overdue tasks (use local date string for DATEONLY column)
-    const overdueTasks = await req.tenantDb.Task.count({
-      where: {
-        due_date: { [Op.lt]: localDateStr() },
-        status: { [Op.ne]: 'completed' }
-      }
-    });
-
-    // Get cases needing attention (pending or overdue)
-    const casesNeedingAttention = await req.tenantDb.Case.count({
-      where: {
-        status: { [Op.in]: ['Pending', 'On Hold'] }
-      }
-    });
+    const [myPendingTasks, myCases, overdueTasks, casesNeedingAttention] =
+      await Promise.all([
+        req.tenantDb.Task.count({
+          where: {
+            assigned_to: userId,
+            status: { [Op.in]: ['pending', 'in-progress'] },
+          },
+        }),
+        req.tenantDb.Case.count({
+          where: {
+            [Op.or]: [
+              { assignedToId: userId },
+              { assignedcaseworkerId: { [Op.contains]: [userId] } },
+            ],
+          },
+        }),
+        req.tenantDb.Task.count({
+          where: {
+            due_date: { [Op.lt]: localDateStr() },
+            status: { [Op.ne]: 'completed' },
+          },
+        }),
+        req.tenantDb.Case.count({
+          where: {
+            status: { [Op.in]: ['Pending', 'On Hold'] },
+          },
+        }),
+      ]);
 
     res.status(200).json({
       status: "success",

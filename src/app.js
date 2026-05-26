@@ -2,12 +2,15 @@ import 'dotenv/config';
 import express from 'express';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
+import compression from 'compression';
 
 import routes from './routes/index.js';
 import { getCorsOptions } from './config/frontendOrigins.js';
 import { handleWebhook } from './modules/Candidate/Payments/stripepayment.controller.js';
 
 const app = express();
+
+app.use(compression({ level: 6, threshold: 1024 }));
 
 app.use(cors(getCorsOptions()));
 
@@ -17,12 +20,13 @@ app.post(
   express.raw({ type: 'application/json' }),
   handleWebhook,
 );
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '2mb' }));
+app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 app.use(cookieParser());       // must be BEFORE any route that reads req.cookies
-app.use('/uploads', express.static('uploads'));
-// Email/branding images only — NOT the React app (that lives on cms.elitepic.co.uk/dist/assets).
-app.use('/assets', express.static('assets'));
+
+const STATIC_CACHE = { maxAge: '7d', etag: true, lastModified: true };
+app.use('/uploads', express.static('uploads', STATIC_CACHE));
+app.use('/assets', express.static('assets', STATIC_CACHE));
 
 // API Routes
 app.use('/api', routes);
