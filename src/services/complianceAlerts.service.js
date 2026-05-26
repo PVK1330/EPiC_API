@@ -7,6 +7,7 @@ import {
   NotificationTypes,
   NotificationPriority,
 } from "./notification.service.js";
+import { localDateStr } from "../utils/dateHelpers.js";
 
 const VISA_ALERT_DAYS = [120, 90, 60, 30];
 
@@ -24,9 +25,7 @@ const extractCaseworkerIds = (assignedcaseworkerId) => {
 };
 
 const toDateOnly = (date) => {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString().slice(0, 10);
+  return localDateStr(new Date(date));
 };
 
 const addDays = (base, days) => {
@@ -251,7 +250,7 @@ const checkSponsorChangeRequestDeadlines = async (tenantDb, organisationId, toda
 
   for (const request of requests) {
     const deadlineLabel = request.reportingDeadline
-      ? new Date(request.reportingDeadline).toISOString().slice(0, 10)
+      ? localDateStr(new Date(request.reportingDeadline))
       : "soon";
 
     try {

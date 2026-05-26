@@ -7,6 +7,7 @@ import {
   NotificationTypes,
   NotificationPriority,
 } from "./notification.service.js";
+import { localDateAfterDays } from "../utils/dateHelpers.js";
 
 function parseCaseworkerIds(caseRecord) {
   const raw = caseRecord?.assignedcaseworkerId ?? caseRecord?.assignedCaseworkerId;
@@ -34,9 +35,7 @@ async function getActiveAdminIds(tenantDb) {
 }
 
 function dueDateInDays(days = 2) {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  return d.toISOString().split("T")[0];
+  return localDateAfterDays(days);
 }
 
 /**

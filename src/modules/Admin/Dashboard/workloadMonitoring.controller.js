@@ -1,4 +1,5 @@
 import { Op } from "sequelize";
+import { localDateStr } from "../../../utils/dateHelpers.js";
 
 // Export workload data as CSV
 export const exportWorkloadCSV = async (req, res) => {
@@ -195,7 +196,7 @@ export const exportWorkloadCSV = async (req, res) => {
     res.setHeader("Content-Type", "text/csv");
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename=workload_report_${new Date().toISOString().split("T")[0]}.csv`,
+      `attachment; filename=workload_report_${localDateStr()}.csv`,
     );
     res.send(csvContent);
   } catch (error) {

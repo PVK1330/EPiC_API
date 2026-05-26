@@ -1,4 +1,5 @@
 import { Op, fn, col, literal } from 'sequelize';
+import { localDateStr } from '../../../utils/dateHelpers.js';
 import { multiSheetXlsxBuffer, sendXlsxDownload } from '../../../utils/excelExport.util.js';
 
 
@@ -486,7 +487,7 @@ export const getFinancialTransactions = async (req, res) => {
             : r.paymentStatus === 'pending'  ? 'Pending'
             : r.paymentStatus === 'refunded' ? 'Refunded'
             : 'Processed',
-          date: new Date(r.created_at).toISOString().split('T')[0],
+          date: localDateStr(new Date(r.created_at)),
         })),
         pagination: {
           total: count,
@@ -911,7 +912,7 @@ export const exportReportingExcel = async (req, res) => {
     }
 
     const buffer = multiSheetXlsxBuffer(sheets);
-    const day = new Date().toISOString().split('T')[0];
+    const day = localDateStr();
     sendXlsxDownload(res, buffer, `reports_${day}`);
   } catch (error) {
     console.error('exportReportingExcel Error:', error);

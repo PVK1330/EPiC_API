@@ -1,6 +1,7 @@
 import { Op } from 'sequelize';
 import { ROLES } from '../../../middlewares/role.middleware.js';
 import { assertUsersInOrganisation } from '../../../utils/tenantScope.js';
+import { localDateStr } from '../../../utils/dateHelpers.js';
 import {
   IMMIGRATION_CASE_STEPS,
   assignCasesToPipeline,
@@ -245,9 +246,11 @@ export const getMyDashboardStats = async (req, res) => {
     }
 
     const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
-    const startOfDay = new Date(today.setHours(0, 0, 0, 0));
-    const endOfDay = new Date(today.setHours(23, 59, 59, 999));
+    const todayStr = localDateStr(today);
+    const startOfDay = new Date(today);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(startOfDay);
+    endOfDay.setHours(23, 59, 59, 999);
 
     // Get all assigned licence applications
     const licenceWhere = {

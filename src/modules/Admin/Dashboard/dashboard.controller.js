@@ -1,5 +1,6 @@
 import { Op } from 'sequelize';
 import { createRequire } from 'module';
+import { localDateStr, localDateAfterDays } from '../../../utils/dateHelpers.js';
 const require = createRequire(import.meta.url);
 const PdfPrinter = require('pdfmake');
 
@@ -535,10 +536,10 @@ export const getQuickActions = async (req, res) => {
       }
     });
 
-    // Get overdue tasks (use date string for DATEONLY column)
+    // Get overdue tasks (use local date string for DATEONLY column)
     const overdueTasks = await req.tenantDb.Task.count({
       where: {
-        due_date: { [Op.lt]: new Date().toISOString().split("T")[0] },
+        due_date: { [Op.lt]: localDateStr() },
         status: { [Op.ne]: 'completed' }
       }
     });
@@ -893,10 +894,8 @@ export const getDueOverdueTasks = async (req, res) => {
   try {
     const userId = req.user?.userId ?? req.user?.id;
     const roleId = Number(req.user?.role_id);
-    const now = new Date();
-    const in48h = new Date(now.getTime() + 48 * 60 * 60 * 1000);
-    const todayStr = now.toISOString().split("T")[0];
-    const in48hStr = in48h.toISOString().split("T")[0];
+    const todayStr = localDateStr();
+    const in48hStr = localDateAfterDays(2);
 
     const caseWhere = {
       deleted_at: null,
@@ -946,7 +945,7 @@ export const getDueOverdueTasks = async (req, res) => {
       // Normalise to "YYYY-MM-DD" regardless of whether the value is a Date or string
       const dateStr =
         raw instanceof Date
-          ? raw.toISOString().split("T")[0]
+          ? localDateStr(raw)
           : String(raw).split("T")[0];
       const cwRaw = c.assignedcaseworkerId;
       const cwCount = Array.isArray(cwRaw)

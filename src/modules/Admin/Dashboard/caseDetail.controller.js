@@ -1,4 +1,5 @@
 import { Op } from 'sequelize';
+import { localDateStr } from '../../../utils/dateHelpers.js';
 import { ROLES } from '../../../middlewares/role.middleware.js';
 import {
   submitCclFeeProposal,
@@ -726,7 +727,7 @@ export const updateCaseFinance = async (req, res) => {
           paymentType: 'fee',
           amount: balanceDue,
           paymentMethod: 'bank_transfer',
-          paymentDate: new Date().toISOString().split('T')[0],
+          paymentDate: localDateStr(),
           paymentStatus: 'completed',
           transactionId: invoiceNumber,
           invoiceNumber,
@@ -917,7 +918,7 @@ export const recordManualCasePayment = async (req, res) => {
     }
 
     const methodEnum = resolvePaymentMethodEnum(paymentMethod);
-    const paymentDate = new Date().toISOString().split('T')[0];
+    const paymentDate = localDateStr();
     const invoiceNumber = `MAN-${Date.now()}`;
 
     const payment = await req.tenantDb.CasePayment.create({

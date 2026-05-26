@@ -1,5 +1,6 @@
 import { ROLES } from '../../../middlewares/role.middleware.js';
 import { notifyTaskAssigned } from '../../../services/notification.service.js';
+import { localDateStr, localDateAfterDays } from '../../../utils/dateHelpers.js';
 
 // Constants
 const PRIORITIES = ["low", "medium", "high"];
@@ -709,18 +710,15 @@ export const getTasksByUserId = async (req, res) => {
       };
     }
 
-    // Use YYYY-MM-DD strings for DATEONLY column comparisons to avoid
-    // timezone-related mismatches between JS Date objects and PostgreSQL DATE.
-    const now = new Date();
-    const todayStr = now.toISOString().split("T")[0];
+    // Use IST-aware YYYY-MM-DD strings for DATEONLY column comparisons.
+    const todayStr = localDateStr();
 
     if (filter === "overdue") {
       where.due_date = { [req.tenantDb.Sequelize.Op.lt]: todayStr };
       where.status = { [req.tenantDb.Sequelize.Op.ne]: "completed" };
 
     } else if (filter === "due_soon") {
-      const in48h = new Date(now.getTime() + 48 * 60 * 60 * 1000);
-      const in48hStr = in48h.toISOString().split("T")[0];
+      const in48hStr = localDateAfterDays(2);
       where.due_date = {
         [req.tenantDb.Sequelize.Op.gte]: todayStr,
         [req.tenantDb.Sequelize.Op.lte]: in48hStr,
@@ -728,9 +726,7 @@ export const getTasksByUserId = async (req, res) => {
       where.status = { [req.tenantDb.Sequelize.Op.ne]: "completed" };
 
     } else if (filter === "today_due") {
-      const tomorrow = new Date(now);
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      const tomorrowStr = tomorrow.toISOString().split("T")[0];
+      const tomorrowStr = localDateAfterDays(1);
       where.due_date = {
         [req.tenantDb.Sequelize.Op.gte]: todayStr,
         [req.tenantDb.Sequelize.Op.lt]: tomorrowStr,
