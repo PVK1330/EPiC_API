@@ -1,12 +1,18 @@
 import platformDb from "../models/index.js";
 import { getTenantDb } from "../services/tenantDb.service.js";
 import { isPlatformStaffUser } from "../utils/tenantScope.js";
-import { ROLES, hasFullAccessRole } from "./role.middleware.js";
-import { ensureAdminHasAllPermissions } from "../seeders/permission.seeder.js";
+import { hasFullAccessRole } from "./role.middleware.js";
+import {
+  getCachedOrg,
+  setCachedOrg,
+  getCachedPermissions,
+  setCachedPermissions,
+} from "../services/orgCache.service.js";
 
 /**
  * Attach req.tenantDb for authenticated non-superadmin requests.
- * Superadmin routes use platformDb only (organisations registry).
+ * Uses cached org lookups (from auth middleware or local cache) to avoid
+ * repeated platform DB queries. Caches permissions per user for 2 min.
  */
 export async function attachTenantDb(req, res, next) {
   try {
@@ -16,51 +22,56 @@ export async function attachTenantDb(req, res, next) {
     }
 
     let orgId = req.user?.organisation_id;
-    
-    // If admin/caseworker/candidate/business has no organisation, use default
+
     if (!orgId) {
       const envDefaultOrgId = process.env.DEFAULT_ORGANISATION_ID;
       if (envDefaultOrgId) {
         orgId = parseInt(envDefaultOrgId, 10);
       } else {
-        // Fall back to first active organisation
         const defaultOrg = await platformDb.Organisation.findOne({
-          where: { status: { [platformDb.Sequelize.Op.in]: ["active", "trial"] } },
+          where: {
+            status: {
+              [platformDb.Sequelize.Op.in]: ["active", "trial"],
+            },
+          },
           order: [["id", "ASC"]],
+          attributes: ["id"],
         });
         orgId = defaultOrg?.id;
       }
-      
+
       if (!orgId) {
         return res.status(403).json({
           status: "error",
-          message: "No organisation on token and no default organisation available.",
+          message:
+            "No organisation on token and no default organisation available.",
           data: null,
         });
       }
     }
 
-    const org = await platformDb.Organisation.findByPk(orgId, {
-      attributes: ["database_name", "status"],
-    });
+    let orgData = req._orgData || getCachedOrg(orgId);
 
-    if (!org) {
+    if (!orgData) {
+      const org = await platformDb.Organisation.findByPk(orgId, {
+        attributes: ["database_name", "status"],
+      });
+      orgData = {
+        status: org?.status ?? null,
+        database_name: org?.database_name ?? null,
+      };
+      setCachedOrg(orgId, orgData);
+    }
+
+    if (!orgData || orgData.status === "suspended") {
       return res.status(403).json({
         status: "error",
-        message: "Organisation not found.",
+        message: orgData ? "Organisation suspended." : "Organisation not found.",
         data: null,
       });
     }
 
-    if (org.status === "suspended") {
-      return res.status(403).json({
-        status: "error",
-        message: "Organisation suspended.",
-        data: null,
-      });
-    }
-
-    if (!org.database_name) {
+    if (!orgData.database_name) {
       return res.status(500).json({
         status: "error",
         message: "Tenant DB not provisioned. Contact support.",
@@ -68,36 +79,52 @@ export async function attachTenantDb(req, res, next) {
       });
     }
 
-    req.tenantDb = getTenantDb(org.database_name);
+    req.tenantDb = getTenantDb(orgData.database_name);
 
-    // Organisation admins always have full access within their tenant
     try {
       if (hasFullAccessRole(req.user.role_id)) {
-        await ensureAdminHasAllPermissions(req.tenantDb);
-        const allPerms = await req.tenantDb.Permission.findAll({ attributes: ["name"] });
-        req.user.permissions = allPerms.map((p) => p.name);
+        const permCacheKey = `admin:${orgId}`;
+        let perms = getCachedPermissions(permCacheKey);
+        if (!perms) {
+          const allPerms = await req.tenantDb.Permission.findAll({
+            attributes: ["name"],
+          });
+          perms = allPerms.map((p) => p.name);
+          setCachedPermissions(permCacheKey, perms);
+        }
+        req.user.permissions = perms;
       } else {
-        const userWithPermissions = await req.tenantDb.User.findByPk(req.user.id, {
-          include: [
+        const permCacheKey = `user:${orgId}:${req.user.id}`;
+        let perms = getCachedPermissions(permCacheKey);
+        if (!perms) {
+          const userWithPermissions = await req.tenantDb.User.findByPk(
+            req.user.id,
             {
-              model: req.tenantDb.Role,
-              as: "role",
+              attributes: ["id"],
               include: [
                 {
-                  model: req.tenantDb.Permission,
-                  as: "permissions",
-                  through: { attributes: [] },
+                  model: req.tenantDb.Role,
+                  as: "role",
+                  attributes: ["id"],
+                  include: [
+                    {
+                      model: req.tenantDb.Permission,
+                      as: "permissions",
+                      attributes: ["name"],
+                      through: { attributes: [] },
+                    },
+                  ],
                 },
               ],
             },
-          ],
-        });
+          );
 
-        if (userWithPermissions?.role?.permissions) {
-          req.user.permissions = userWithPermissions.role.permissions.map((p) => p.name);
-        } else {
-          req.user.permissions = [];
+          perms = userWithPermissions?.role?.permissions
+            ? userWithPermissions.role.permissions.map((p) => p.name)
+            : [];
+          setCachedPermissions(permCacheKey, perms);
         }
+        req.user.permissions = perms;
       }
     } catch (permErr) {
       console.error("Error loading tenant permissions:", permErr);

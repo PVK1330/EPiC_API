@@ -252,161 +252,88 @@ export const getMyDashboardStats = async (req, res) => {
     const endOfDay = new Date(startOfDay);
     endOfDay.setHours(23, 59, 59, 999);
 
-    // Get all assigned licence applications
     const licenceWhere = {
-        assignedcaseworkerId: {
-            [Op.contains]: [userId]
-        }
+      assignedcaseworkerId: { [Op.contains]: [userId] },
     };
-    const myLicences = await req.tenantDb.LicenceApplication.count({ where: licenceWhere });
-    const myPendingLicences = await req.tenantDb.LicenceApplication.count({ 
-        where: { ...licenceWhere, status: { [Op.in]: ['Pending', 'Under Review', 'Information Requested'] } } 
-    });
-
-    // Get all assigned cases
-    const myTotal = await req.tenantDb.Case.count({
-      where: buildCaseworkerWhereClause(req, userId)
-    });
-
-    // Get active cases
-    const myActive = await req.tenantDb.Case.count({
-      where: { 
-        ...buildCaseworkerWhereClause(req, userId),
-        status: { [Op.in]: ['Pending', 'In Progress', 'Under Review'] }
-      }
-    });
-
-    // Get overdue cases
-    const myOverdue = await req.tenantDb.Case.count({
-      where: { 
-        ...buildCaseworkerWhereClause(req, userId),
-        status: 'Overdue'
-      }
-    });
-
-    // Get due today cases
-    const myDueToday = await req.tenantDb.Case.count({
-      where: { 
-        ...buildCaseworkerWhereClause(req, userId),
-        targetSubmissionDate: todayStr
-      }
-    });
-
-    // Get completed this month
+    const cwWhere = buildCaseworkerWhereClause(req, userId);
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-    const myCompletedMonth = await req.tenantDb.Case.count({
-      where: { 
-        ...buildCaseworkerWhereClause(req, userId),
-        status: { [Op.in]: ['Approved', 'Rejected', 'Closed'] },
-        updated_at: { [Op.gte]: startOfMonth }
-      }
-    });
+    const closedStatuses = ['Approved', 'Rejected', 'Closed'];
 
-    // Get tasks due today for this caseworker
-    const tasksToday = await req.tenantDb.Task.count({
-      where: {
-        assigned_to: userId,
-        due_date: {
-          [Op.gte]: startOfDay,
-          [Op.lte]: endOfDay
+    const [
+      myLicences, myPendingLicences,
+      myTotal, myActive, myOverdue, myDueToday, myCompletedMonth,
+      tasksToday, totalTasks, completedTasks,
+      completedOnTime, totalCompleted,
+      recentCases, tasksTodayDetails,
+    ] = await Promise.all([
+      req.tenantDb.LicenceApplication.count({ where: licenceWhere }),
+      req.tenantDb.LicenceApplication.count({
+        where: { ...licenceWhere, status: { [Op.in]: ['Pending', 'Under Review', 'Information Requested'] } },
+      }),
+      req.tenantDb.Case.count({ where: cwWhere }),
+      req.tenantDb.Case.count({
+        where: { ...cwWhere, status: { [Op.in]: ['Pending', 'In Progress', 'Under Review'] } },
+      }),
+      req.tenantDb.Case.count({ where: { ...cwWhere, status: 'Overdue' } }),
+      req.tenantDb.Case.count({ where: { ...cwWhere, targetSubmissionDate: todayStr } }),
+      req.tenantDb.Case.count({
+        where: { ...cwWhere, status: { [Op.in]: closedStatuses }, updated_at: { [Op.gte]: startOfMonth } },
+      }),
+      req.tenantDb.Task.count({
+        where: {
+          assigned_to: userId,
+          due_date: { [Op.gte]: startOfDay, [Op.lte]: endOfDay },
+          status: { [Op.ne]: 'completed' },
         },
-        status: { [Op.ne]: 'completed' }
-      }
-    });
+      }),
+      req.tenantDb.Task.count({ where: { assigned_to: userId } }),
+      req.tenantDb.Task.count({ where: { assigned_to: userId, status: 'completed' } }),
+      req.tenantDb.Case.count({
+        where: {
+          ...cwWhere,
+          status: { [Op.in]: closedStatuses },
+          [Op.or]: [
+            { targetSubmissionDate: null },
+            { decisionDate: { [Op.lte]: req.tenantDb.sequelize.col('targetSubmissionDate') } },
+          ],
+        },
+      }),
+      req.tenantDb.Case.count({ where: { ...cwWhere, status: { [Op.in]: closedStatuses } } }),
+      req.tenantDb.Case.findAll({
+        where: cwWhere,
+        order: [['created_at', 'DESC']],
+        limit: 5,
+        include: [
+          { model: req.tenantDb.User, as: 'candidate', attributes: ['id', 'first_name', 'last_name'] },
+          {
+            model: req.tenantDb.User, as: 'sponsor', attributes: ['id', 'first_name', 'last_name'],
+            include: [
+              { model: req.tenantDb.SponsorProfile, as: 'sponsorProfile', attributes: ['companyName', 'tradingName'], required: false },
+            ],
+          },
+          { model: req.tenantDb.VisaType, as: 'visaType', attributes: ['id', 'name'] },
+        ],
+      }),
+      req.tenantDb.Task.findAll({
+        where: {
+          assigned_to: userId,
+          due_date: { [Op.gte]: startOfDay, [Op.lte]: endOfDay },
+          status: { [Op.ne]: 'completed' },
+        },
+        include: [
+          {
+            model: req.tenantDb.Case, as: 'case', attributes: ['id', 'caseId'],
+            include: [{ model: req.tenantDb.User, as: 'candidate', attributes: ['first_name', 'last_name'] }],
+          },
+        ],
+        order: [['due_date', 'ASC']],
+        limit: 5,
+      }),
+    ]);
 
-    // Calculate performance score based on completion rate and SLA compliance
-    const totalTasks = await req.tenantDb.Task.count({
-      where: { assigned_to: userId }
-    });
-    const completedTasks = await req.tenantDb.Task.count({
-      where: { 
-        assigned_to: userId,
-        status: 'completed'
-      }
-    });
     const taskCompletionRate = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0;
-
-    // Calculate SLA compliance (cases completed on time)
-    const completedOnTime = await req.tenantDb.Case.count({
-      where: {
-        ...buildCaseworkerWhereClause(req, userId),
-        status: { [Op.in]: ['Approved', 'Rejected', 'Closed'] },
-        [Op.or]: [
-          { targetSubmissionDate: null },
-          { decisionDate: { [Op.lte]: req.tenantDb.sequelize.col('targetSubmissionDate') } }
-        ]
-      }
-    });
-    const totalCompleted = await req.tenantDb.Case.count({
-      where: {
-        ...buildCaseworkerWhereClause(req, userId),
-        status: { [Op.in]: ['Approved', 'Rejected', 'Closed'] }
-      }
-    });
     const slaCompliance = totalCompleted > 0 ? (completedOnTime / totalCompleted) * 100 : 0;
-
-    // Performance score: weighted average of task completion (40%) and SLA compliance (60%)
     const performanceScore = Math.round((taskCompletionRate * 0.4) + (slaCompliance * 0.6));
-
-    // Get recent cases (last 5)
-    const recentCases = await req.tenantDb.Case.findAll({
-      where: buildCaseworkerWhereClause(req, userId),
-      order: [['created_at', 'DESC']],
-      limit: 5,
-      include: [
-        {
-          model: req.tenantDb.User,
-          as: 'candidate',
-          attributes: ['id', 'first_name', 'last_name']
-        },
-        {
-          model: req.tenantDb.User,
-          as: 'sponsor',
-          attributes: ['id', 'first_name', 'last_name'],
-          include: [
-            {
-              model: req.tenantDb.SponsorProfile,
-              as: 'sponsorProfile',
-              attributes: ['companyName', 'tradingName'],
-              required: false
-            }
-          ]
-        },
-        {
-          model: req.tenantDb.VisaType,
-          as: 'visaType',
-          attributes: ['id', 'name']
-        }
-      ]
-    });
-
-    // Get tasks due today with details
-    const tasksTodayDetails = await req.tenantDb.Task.findAll({
-      where: {
-        assigned_to: userId,
-        due_date: {
-          [Op.gte]: startOfDay,
-          [Op.lte]: endOfDay
-        },
-        status: { [Op.ne]: 'completed' }
-      },
-      include: [
-        {
-          model: req.tenantDb.Case,
-          as: 'case',
-          attributes: ['id', 'caseId'],
-          include: [
-            {
-              model: req.tenantDb.User,
-              as: 'candidate',
-              attributes: ['first_name', 'last_name']
-            }
-          ]
-        }
-      ],
-      order: [['due_date', 'ASC']],
-      limit: 5
-    });
 
     res.status(200).json({
       status: "success",

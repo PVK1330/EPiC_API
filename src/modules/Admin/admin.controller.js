@@ -244,6 +244,16 @@ export const updateAdmin = catchAsync(async (req, res) => {
     }
   }
 
+  if (status === 'inactive') {
+    const orgId = req.user?.organisation_id;
+    if (orgId) {
+      const platformOrg = await platformDb.Organisation.findByPk(orgId);
+      if (platformOrg && platformOrg.primaryEmail === admin.email) {
+        return ApiResponse.badRequest(res, "Cannot deactivate the primary organisation admin.");
+      }
+    }
+  }
+
   const updateData = {
     first_name: first_name || admin.first_name,
     last_name: last_name || admin.last_name,
@@ -280,6 +290,14 @@ export const deleteAdmin = catchAsync(async (req, res) => {
   const admin = await req.tenantDb.User.findOne({ where: { id, role_id: ADMIN_ROLE_ID } });
   if (!admin) {
     return ApiResponse.notFound(res, "Admin not found");
+  }
+
+  const orgId = req.user?.organisation_id;
+  if (orgId) {
+    const platformOrg = await platformDb.Organisation.findByPk(orgId);
+    if (platformOrg && platformOrg.primaryEmail === admin.email) {
+      return ApiResponse.badRequest(res, "Cannot delete the primary organisation admin.");
+    }
   }
 
   await admin.update({ status: 'inactive' });
@@ -335,6 +353,17 @@ export const toggleAdminStatus = catchAsync(async (req, res) => {
   }
 
   const newStatus = admin.status === 'active' ? 'inactive' : 'active';
+
+  if (newStatus === 'inactive') {
+    const orgId = req.user?.organisation_id;
+    if (orgId) {
+      const platformOrg = await platformDb.Organisation.findByPk(orgId);
+      if (platformOrg && platformOrg.primaryEmail === admin.email) {
+        return ApiResponse.badRequest(res, "Cannot deactivate the primary organisation admin.");
+      }
+    }
+  }
+
   await admin.update({ status: newStatus });
 
   return ApiResponse.success(res, `Admin ${newStatus === 'active' ? 'activated' : 'deactivated'} successfully`, {

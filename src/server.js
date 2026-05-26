@@ -28,6 +28,7 @@ import { initSocketIO } from './realtime/socketServer.js';
 import { normalizePostgresDatabaseName } from './utils/postgresDbName.js';
 import { verifyMailTransport } from './services/mail.service.js';
 import { logCorsConfiguration } from './config/frontendOrigins.js';
+import { ensureAdminHasAllPermissions } from './seeders/permission.seeder.js';
 
 const PORT = process.env.PORT || 5000;
 
@@ -103,7 +104,8 @@ async function bootstrapPlatform() {
     const organisations = await platformDb.Organisation.findAll();
     for (const org of organisations) {
       try {
-        await ensureOrganisationTenantDatabase(org);
+        const tenantDb = await ensureOrganisationTenantDatabase(org);
+        await ensureAdminHasAllPermissions(tenantDb);
         console.log(`✔ Tenant DB ready: ${org.slug} (${org.database_name})`);
       } catch (err) {
         console.error(`Tenant provision failed for org ${org.id}:`, err.message);
