@@ -1,6 +1,10 @@
 import Stripe from 'stripe';
 import { Op } from 'sequelize';
+import path from 'path';
 import { localDateStr } from '../../../utils/dateHelpers.js';
+import catchAsync from '../../../utils/catchAsync.js';
+import ApiResponse from '../../../utils/apiResponse.js';
+import { generateBrandedPdfBuffer } from '../../../services/pdfGenerator.service.js';
 import { notifyPaymentReceived, NotificationTypes } from '../../../services/notification.service.js';
 import { createWorkflowTask } from '../../../services/workflowTaskAutomation.service.js';
 import { evaluateCaseStageAfterEvent } from '../../../services/caseStageAutomation.service.js';
@@ -1167,3 +1171,58 @@ export const updateSubscription = async (req, res) => {
     });
   }
 };
+
+export const exportInvoiceReceiptPdf = catchAsync(async (req, res) => {
+  const {
+    caseId,
+    amount,
+    date,
+    description = "Visa Application Fees",
+    candidateName = "Client",
+    isReceipt = true,
+    platformName = "EPiC Immigration Services",
+  } = req.body || {};
+
+  if (!caseId || amount === undefined || amount === null || !date) {
+    return ApiResponse.badRequest(res, "caseId, amount, and date are required");
+  }
+
+  const amountNum = Number(amount);
+  const totalAmountStr = `£${Number.isFinite(amountNum) ? amountNum.toFixed(2) : "0.00"}`;
+  const safeCaseId = String(caseId).replace(/[^A-Za-z0-9_-]/g, "_");
+  const invoiceNo = `INV-${safeCaseId}-${Date.now()}`;
+
+  const logoPath = path.join(process.cwd(), "assets", "elitepic_logo.png");
+
+  const sections = [
+    {
+      sectionTitle: isReceipt ? "Payment Receipt" : "Invoice",
+      rows: [
+        { label: "Description", value: description || "—" },
+        { label: "Qty", value: "1" },
+        { label: "Unit Price", value: totalAmountStr },
+        { label: "Total", value: totalAmountStr },
+        { label: "Billed To", value: candidateName || "Client" },
+        { label: "Case Reference", value: String(caseId) },
+        { label: "Receipt/Invoice No", value: invoiceNo },
+        { label: "Date", value: String(date) },
+      ],
+    },
+  ];
+
+  const buffer = await generateBrandedPdfBuffer({
+    logoPath,
+    title: isReceipt ? "PAYMENT RECEIPT" : "INVOICE",
+    sections,
+    metadata: {
+      subtitle: platformName || "EPiC Immigration Services",
+      reference: `Receipt/Invoice No: ${invoiceNo}`,
+      candidateName: candidateName || "Client",
+    },
+  });
+
+  const filename = `${isReceipt ? "Receipt" : "Invoice"}_${safeCaseId}.pdf`;
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  res.status(200).send(buffer);
+});

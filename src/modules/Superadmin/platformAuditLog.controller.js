@@ -3,6 +3,7 @@ import { localDateStr } from "../../utils/dateHelpers.js";
 import platformDb from "../../models/index.js";
 import catchAsync from "../../utils/catchAsync.js";
 import ApiResponse from "../../utils/apiResponse.js";
+import { rowsToXlsxBuffer, sendXlsxDownload } from "../../utils/excelExport.util.js";
 
 /**
  * GET /api/superadmin/audit-log
@@ -57,36 +58,40 @@ export const listPlatformAuditLogs = catchAsync(async (req, res) => {
  * GET /api/superadmin/audit-log/export-csv
  */
 export const exportPlatformAuditLogsCsv = catchAsync(async (req, res) => {
-  const logs = await platformDb.PlatformAuditLog.findAll({
-    order: [["created_at", "DESC"]]
-  });
+  try {
+    const logs = await platformDb.PlatformAuditLog.findAll({
+      order: [["created_at", "DESC"]],
+    });
 
-  res.setHeader("Content-Type", "text/csv");
-  res.setHeader("Content-Disposition", `attachment; filename=EPiC_Platform_Audit_Logs_${localDateStr()}.csv`);
+    const columns = [
+      { key: "id", header: "ID" },
+      { key: "category", header: "Category" },
+      { key: "action", header: "Action" },
+      { key: "user", header: "Initiated By" },
+      { key: "org", header: "Organisation" },
+      { key: "timestamp", header: "Timestamp" },
+      { key: "status", header: "Status" },
+      { key: "description", header: "Description" },
+    ];
 
-  let csvContent = "ID,Category,Action,Initiated By,Organisation,Timestamp,Status,Description\n";
+    const rows = logs.map((log) => ({
+      id: log.id,
+      category: log.category || "",
+      action: log.action || "",
+      user: log.user || "",
+      org: log.org || "",
+      timestamp: log.created_at ? new Date(log.created_at).toLocaleString() : "",
+      status: log.status || "",
+      description: log.description || "",
+    }));
 
-  for (const log of logs) {
-    const timeStr = log.created_at ? new Date(log.created_at).toLocaleString() : "";
-    
-    // Escape double quotes in CSV fields
-    const escapeCsv = (str) => {
-      if (str == null) return "";
-      const s = String(str).replace(/"/g, '""');
-      return s.includes(",") || s.includes('"') || s.includes("\n") ? `"${s}"` : s;
-    };
-
-    csvContent += [
-      log.id,
-      escapeCsv(log.category),
-      escapeCsv(log.action),
-      escapeCsv(log.user),
-      escapeCsv(log.org),
-      escapeCsv(timeStr),
-      escapeCsv(log.status),
-      escapeCsv(log.description)
-    ].join(",") + "\n";
+    const buffer = rowsToXlsxBuffer(rows, columns);
+    sendXlsxDownload(
+      res,
+      buffer,
+      `EPiC_Platform_Audit_Logs_${localDateStr()}.xlsx`,
+    );
+  } catch (err) {
+    return ApiResponse.error(res, "Failed to export platform audit logs", 500, err);
   }
-
-  return res.status(200).send(csvContent);
 });

@@ -1,6 +1,7 @@
 import PdfPrinter from "pdfmake";
 import fs from "fs";
 
+// Use pdfmake's built-in fonts (Roboto) or standard PDF fonts
 const fonts = {
   Roboto: {
     normal: "Helvetica",
@@ -8,7 +9,57 @@ const fonts = {
     italics: "Helvetica-Oblique",
     bolditalics: "Helvetica-BoldOblique",
   },
+  Helvetica: {
+    normal: "Helvetica",
+    bold: "Helvetica-Bold",
+    italics: "Helvetica-Oblique",
+    bolditalics: "Helvetica-BoldOblique",
+  }
 };
+
+export function generatePdfBufferFromDefinition(docDefinition) {
+  try {
+    console.log('[PDF Generator] Creating PDF printer...');
+    const printer = new PdfPrinter(fonts);
+    
+    console.log('[PDF Generator] Creating PDF document...');
+    const pdfDoc = printer.createPdfKitDocument(docDefinition);
+
+    return new Promise((resolve, reject) => {
+      const chunks = [];
+
+      pdfDoc.on("data", (chunk) => {
+        chunks.push(chunk);
+      });
+
+      pdfDoc.on("end", () => {
+        try {
+          console.log('[PDF Generator] PDF generation completed, chunks:', chunks.length);
+          resolve(Buffer.concat(chunks));
+        } catch (err) {
+          console.error('[PDF Generator] Error concatenating chunks:', err);
+          reject(err);
+        }
+      });
+
+      pdfDoc.on("error", (err) => {
+        console.error('[PDF Generator] PDF document error:', err);
+        reject(err);
+      });
+
+      console.log('[PDF Generator] Ending PDF document...');
+      pdfDoc.end();
+    });
+  } catch (error) {
+    console.error('[PDF Generator] Error in generatePdfBufferFromDefinition:', error);
+    throw error;
+  }
+}
+
+export function generateBrandedPdfBuffer(options) {
+  const docDefinition = buildBrandedPdfDocDefinition(options);
+  return generatePdfBufferFromDefinition(docDefinition);
+}
 
 function escapePdfText(text) {
   if (text === null || text === undefined) return "";

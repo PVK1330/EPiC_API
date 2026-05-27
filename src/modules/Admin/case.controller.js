@@ -1,4 +1,7 @@
 import { Op } from 'sequelize';
+import catchAsync from '../../utils/catchAsync.js';
+import ApiResponse from '../../utils/apiResponse.js';
+import { rowsToXlsxBuffer, sendXlsxDownload } from '../../utils/excelExport.util.js';
 import {
   notifyCaseAssigned,
   notifyCaseStatusChanged,
@@ -928,8 +931,7 @@ export const updatePipelineStage = async (req, res) => {
   }
 };
 
-// Export Cases to CSV
-export const exportCases = async (req, res) => {
+export const exportCases = catchAsync(async (req, res) => {
   try {
     const { search, status, priority, visaType } = req.query;
 
@@ -1003,53 +1005,58 @@ export const exportCases = async (req, res) => {
       caseworkerMap[cw.id] = `${cw.first_name} ${cw.last_name}`;
     });
 
-    // Generate CSV
-    const csvHeader = ['Case ID', 'Candidate', 'Candidate Email', 'Sponsor', 'Sponsor Email', 'Visa Type', 'Petition Type', 'Priority', 'Status', 'Assigned Caseworkers', 'Submission Date', 'Target Date', 'LCA Number', 'Receipt Number', 'Salary Offered', 'Total Amount', 'Paid Amount', 'Created At'];
-    const csvRows = cases.map(c => {
+    const columns = [
+      { key: 'caseId', header: 'Case ID' },
+      { key: 'candidate', header: 'Candidate' },
+      { key: 'candidateEmail', header: 'Candidate Email' },
+      { key: 'sponsor', header: 'Sponsor' },
+      { key: 'sponsorEmail', header: 'Sponsor Email' },
+      { key: 'visaType', header: 'Visa Type' },
+      { key: 'petitionType', header: 'Petition Type' },
+      { key: 'priority', header: 'Priority' },
+      { key: 'status', header: 'Status' },
+      { key: 'assignedCaseworkers', header: 'Assigned Caseworkers' },
+      { key: 'submissionDate', header: 'Submission Date' },
+      { key: 'targetDate', header: 'Target Date' },
+      { key: 'lcaNumber', header: 'LCA Number' },
+      { key: 'receiptNumber', header: 'Receipt Number' },
+      { key: 'salaryOffered', header: 'Salary Offered' },
+      { key: 'totalAmount', header: 'Total Amount' },
+      { key: 'paidAmount', header: 'Paid Amount' },
+      { key: 'createdAt', header: 'Created At' },
+    ];
+
+    const rows = cases.map((c) => {
       const cwIds = Array.isArray(c.assignedcaseworkerId) ? c.assignedcaseworkerId : (c.assignedcaseworkerId ? [c.assignedcaseworkerId] : []);
       const cwNames = cwIds.map(id => caseworkerMap[id] || `ID:${id}`).join(', ');
       
-      return [
-        c.caseId || 'N/A',
-        c.candidate ? `${c.candidate.first_name} ${c.candidate.last_name}` : 'N/A',
-        c.candidate?.email || 'N/A',
-        c.sponsor ? `${c.sponsor.first_name} ${c.sponsor.last_name}` : 'N/A',
-        c.sponsor?.email || 'N/A',
-        c.visaType?.name || 'N/A',
-        c.petitionType?.name || 'N/A',
-        c.priority,
-        c.status,
-        cwNames || 'N/A',
-        c.submissionDate || 'N/A',
-        c.targetSubmissionDate || 'N/A',
-        c.lcaNumber || 'N/A',
-        c.receiptNumber || 'N/A',
-        c.salaryOffered || 0,
-        c.totalAmount || 0,
-        c.paidAmount || 0,
-        c.created_at || 'N/A'
-      ];
+      return {
+        caseId: c.caseId || 'N/A',
+        candidate: c.candidate ? `${c.candidate.first_name} ${c.candidate.last_name}` : 'N/A',
+        candidateEmail: c.candidate?.email || 'N/A',
+        sponsor: c.sponsor ? `${c.sponsor.first_name} ${c.sponsor.last_name}` : 'N/A',
+        sponsorEmail: c.sponsor?.email || 'N/A',
+        visaType: c.visaType?.name || 'N/A',
+        petitionType: c.petitionType?.name || 'N/A',
+        priority: c.priority,
+        status: c.status,
+        assignedCaseworkers: cwNames || 'N/A',
+        submissionDate: c.submissionDate || 'N/A',
+        targetDate: c.targetSubmissionDate || 'N/A',
+        lcaNumber: c.lcaNumber || 'N/A',
+        receiptNumber: c.receiptNumber || 'N/A',
+        salaryOffered: c.salaryOffered || 0,
+        totalAmount: c.totalAmount || 0,
+        paidAmount: c.paidAmount || 0,
+        createdAt: c.created_at || 'N/A',
+      };
     });
-
-    const csvContent = [
-      csvHeader.join(','),
-      ...csvRows.map(row => row.map(cell => `"${cell}"`).join(','))
-    ].join('\n');
-
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', 'attachment; filename="cases_export.csv"');
-    res.send(csvContent);
-
-  } catch (error) {
-    console.error("Export Cases Error:", error);
-    res.status(500).json({
-      status: "error",
-      message: "Internal server error",
-      data: null,
-      error: error.message
-    });
+    const buffer = rowsToXlsxBuffer(rows, columns);
+    sendXlsxDownload(res, buffer, 'cases_export.xlsx');
+  } catch (err) {
+    return ApiResponse.error(res, 'Failed to export cases', 500, err);
   }
-};
+});
 export const getTeamCapacity = async (req, res) => {
   try {
     const cases = await req.tenantDb.Case.findAll({

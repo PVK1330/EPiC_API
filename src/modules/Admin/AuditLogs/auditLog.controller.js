@@ -1,4 +1,5 @@
 import { Op } from 'sequelize';
+import { rowsToXlsxBuffer, sendXlsxDownload } from '../../../utils/excelExport.util.js';
 
 /**
  * Build the date-range where clause from a dateRange query param.
@@ -233,7 +234,7 @@ export const getAuditActionTypes = async (req, res) => {
   }
 };
 
-// ─── GET /audit-logs/export  (CSV download) ───────────────────────────────────
+// ─── GET /audit-logs/export  (Excel download) ─────────────────────────────────
 export const exportAuditLogs = async (req, res) => {
   try {
     const { dateRange = 'all', status = 'all' } = req.query;
@@ -255,30 +256,34 @@ export const exportAuditLogs = async (req, res) => {
       order: [['created_at', 'DESC']],
     });
 
-    const esc = (v) => `"${String(v || '').replace(/"/g, '""')}"`;
-    let csv = '\uFEFFTimestamp,User,Action,Resource,IP Address,Status,Details\n';
+    const columns = [
+      { key: 'timestamp', header: 'Timestamp' },
+      { key: 'userName', header: 'User' },
+      { key: 'action', header: 'Action' },
+      { key: 'resource', header: 'Resource' },
+      { key: 'ip', header: 'IP Address' },
+      { key: 'status', header: 'Status' },
+      { key: 'details', header: 'Details' },
+    ];
 
-    logs.forEach(log => {
+    const rows = logs.map(log => {
       const userName = log.user
         ? `${log.user.first_name || ''} ${log.user.last_name || ''}`.trim()
         : 'System';
-      csv += [
-        esc(new Date(log.created_at).toLocaleString()),
-        esc(userName),
-        esc(log.action),
-        esc(log.resource || log.entity_type),
-        esc(log.ip_address),
-        esc(log.status),
-        esc(log.details),
-      ].join(',') + '\n';
+      return {
+        timestamp: new Date(log.created_at).toLocaleString(),
+        userName,
+        action: log.action || '',
+        resource: log.resource || log.entity_type || '',
+        ip: log.ip_address || '',
+        status: log.status || '',
+        details: log.details || '',
+      };
     });
 
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename=Audit_Export_${new Date().toISOString().slice(0, 10)}.csv`,
-    );
-    return res.status(200).send(csv);
+    const buffer = rowsToXlsxBuffer(rows, columns);
+    const filename = `Audit_Export_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    sendXlsxDownload(res, buffer, filename);
   } catch (error) {
     res.status(500).json({ status: 'error', message: error.message });
   }

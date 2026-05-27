@@ -2,6 +2,7 @@ import { Op } from 'sequelize';
 import bcrypt from 'bcryptjs';
 import multer from 'multer';
 import { ROLES } from '../../../middlewares/role.middleware.js';
+import { rowsToXlsxBuffer, sendXlsxDownload } from '../../../utils/excelExport.util.js';
 import { generateStrongPassword } from '../../../utils/passwordGenerator.js';
 import { createUserOnPlatformAndTenant } from '../../../services/userSync.service.js';
 import { sendTenantCaseworkerWelcomeEmail } from '../../../services/tenantUserMail.service.js';
@@ -1128,7 +1129,7 @@ export const toggleCaseworkerStatus = async (req, res) => {
   }
 };
 
-// Export Caseworkers to CSV
+// Export Caseworkers to Excel
 export const exportCaseworkers = async (req, res) => {
   try {
     const { search, status, department } = req.query;
@@ -1174,29 +1175,34 @@ export const exportCaseworkers = async (req, res) => {
       order: [["createdAt", "DESC"]],
     });
 
-    // Generate CSV
-    const csvHeader = ['ID', 'First Name', 'Last Name', 'Email', 'Country Code', 'Mobile', 'Role', 'Department', 'Status', 'Created At'];
-    const csvRows = caseworkers.map(caseworker => [
-      caseworker.id,
-      caseworker.first_name,
-      caseworker.last_name,
-      caseworker.email,
-      caseworker.country_code,
-      caseworker.mobile,
-      caseworker.role?.name || 'N/A',
-      caseworker.caseworkerProfile?.department || 'N/A',
-      caseworker.status,
-      caseworker.createdAt.toISOString()
-    ]);
+    const columns = [
+      { key: 'id', header: 'ID' },
+      { key: 'firstName', header: 'First Name' },
+      { key: 'lastName', header: 'Last Name' },
+      { key: 'email', header: 'Email' },
+      { key: 'countryCode', header: 'Country Code' },
+      { key: 'mobile', header: 'Mobile' },
+      { key: 'role', header: 'Role' },
+      { key: 'department', header: 'Department' },
+      { key: 'status', header: 'Status' },
+      { key: 'createdAt', header: 'Created At' },
+    ];
 
-    const csvContent = [
-      csvHeader.join(','),
-      ...csvRows.map(row => row.map(cell => `"${cell}"`).join(','))
-    ].join('\n');
+    const rows = caseworkers.map((caseworker) => ({
+      id: caseworker.id,
+      firstName: caseworker.first_name,
+      lastName: caseworker.last_name,
+      email: caseworker.email,
+      countryCode: caseworker.country_code,
+      mobile: caseworker.mobile,
+      role: caseworker.role?.name || 'N/A',
+      department: caseworker.caseworkerProfile?.department || 'N/A',
+      status: caseworker.status,
+      createdAt: caseworker.createdAt?.toISOString() || '',
+    }));
 
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', 'attachment; filename="caseworkers_export.csv"');
-    res.send(csvContent);
+    const buffer = rowsToXlsxBuffer(rows, columns);
+    sendXlsxDownload(res, buffer, 'caseworkers_export.xlsx');
 
   } catch (error) {
     console.error("Export Caseworkers Error:", error);

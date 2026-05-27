@@ -1,8 +1,10 @@
 import { Op } from "sequelize";
 import { localDateStr } from "../../../utils/dateHelpers.js";
+import catchAsync from "../../../utils/catchAsync.js";
+import ApiResponse from "../../../utils/apiResponse.js";
+import { rowsToXlsxBuffer, sendXlsxDownload } from "../../../utils/excelExport.util.js";
 
-// Export workload data as CSV
-export const exportWorkloadCSV = async (req, res) => {
+export const exportWorkloadCSV = catchAsync(async (req, res) => {
   try {
     const userId = req.user?.userId ?? req.user?.id;
     if (!userId) {
@@ -143,72 +145,33 @@ export const exportWorkloadCSV = async (req, res) => {
       };
     });
 
-    // Generate CSV
-    const headers = [
-      "Caseworker Name",
-      "Email",
-      "Role",
-      "Total Cases",
-      "Active Cases",
-      "Completed Cases",
-      "Case Completion Rate (%)",
-      "Total Tasks",
-      "Pending Tasks",
-      "In Progress Tasks",
-      "Completed Tasks",
-      "Overdue Tasks",
-      "Task Completion Rate (%)",
-      "High Priority Tasks",
-      "Medium Priority Tasks",
-      "Low Priority Tasks",
-      "Workload Score",
-      "Workload Level",
+    const columns = [
+      { key: "caseworkerName", header: "Caseworker Name" },
+      { key: "email", header: "Email" },
+      { key: "role", header: "Role" },
+      { key: "totalCases", header: "Total Cases" },
+      { key: "activeCases", header: "Active Cases" },
+      { key: "completedCases", header: "Completed Cases" },
+      { key: "caseCompletionRate", header: "Case Completion Rate (%)" },
+      { key: "totalTasks", header: "Total Tasks" },
+      { key: "pendingTasks", header: "Pending Tasks" },
+      { key: "inProgressTasks", header: "In Progress Tasks" },
+      { key: "completedTasks", header: "Completed Tasks" },
+      { key: "overdueTasks", header: "Overdue Tasks" },
+      { key: "taskCompletionRate", header: "Task Completion Rate (%)" },
+      { key: "highPriorityTasks", header: "High Priority Tasks" },
+      { key: "mediumPriorityTasks", header: "Medium Priority Tasks" },
+      { key: "lowPriorityTasks", header: "Low Priority Tasks" },
+      { key: "workloadScore", header: "Workload Score" },
+      { key: "workloadLevel", header: "Workload Level" },
     ];
 
-    const csvRows = [headers.join(",")];
-
-    workloadData.forEach((row) => {
-      const values = [
-        `"${row.caseworkerName}"`,
-        `"${row.email}"`,
-        `"${row.role}"`,
-        row.totalCases,
-        row.activeCases,
-        row.completedCases,
-        row.caseCompletionRate,
-        row.totalTasks,
-        row.pendingTasks,
-        row.inProgressTasks,
-        row.completedTasks,
-        row.overdueTasks,
-        row.taskCompletionRate,
-        row.highPriorityTasks,
-        row.mediumPriorityTasks,
-        row.lowPriorityTasks,
-        row.workloadScore,
-        `"${row.workloadLevel}"`,
-      ];
-      csvRows.push(values.join(","));
-    });
-
-    const csvContent = csvRows.join("\n");
-
-    res.setHeader("Content-Type", "text/csv");
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename=workload_report_${localDateStr()}.csv`,
-    );
-    res.send(csvContent);
+    const buffer = rowsToXlsxBuffer(workloadData, columns);
+    sendXlsxDownload(res, buffer, `workload_report_${localDateStr()}.xlsx`);
   } catch (error) {
-    console.error("Export Workload CSV Error:", error);
-    res.status(500).json({
-      status: "error",
-      message: "Internal server error",
-      data: null,
-      error: error.message,
-    });
+    return ApiResponse.error(res, "Failed to export workload", 500, error);
   }
-};
+});
 
 // Get Workload Overview
 export const getWorkloadOverview = async (req, res) => {
