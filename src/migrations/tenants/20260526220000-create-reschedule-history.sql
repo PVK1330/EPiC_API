@@ -1,0 +1,10 @@
+CREATE TABLE IF NOT EXISTS "reschedule_history" (
+  "id" SERIAL PRIMARY KEY,
+  "caseId" INTEGER NOT NULL REFERENCES "cases" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+  "fieldName" VARCHAR(50) NOT NULL,
+  "oldValue" DATE,
+  "newValue" DATE,
+  "reason" TEXT,
+  "createdById" INTEGER NOT NULL REFERENCES "users" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+  "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);

@@ -1,34 +1,37 @@
 // Must be set before any other import so every new Date() uses IST.
-process.env.TZ = process.env.TZ || 'Asia/Kolkata';
+process.env.TZ = process.env.TZ || "Asia/Kolkata";
 
-import 'dotenv/config';
-import app from './app.js';
-import platformDb from './models/index.js';
-import { seedPlans } from './seeders/plan.seeder.js';
-import seedAdmin from './seeders/admin.seeder.js';
-import { seedRolesForDb } from './seeders/role.seeder.js';
-import { seedPermissionsForDb } from './seeders/permission.seeder.js';
-import { seedModules } from './seeders/module.seeder.js';
-import { seedPlatformRbacForDb } from './seeders/platformRbac.seeder.js';
-import seedPlatformAuditLogs from './seeders/platformAuditLog.seeder.js';
-import seedPlatformNotifications from './seeders/platformNotification.seeder.js';
+import "dotenv/config";
+import app from "./app.js";
+import platformDb from "./models/index.js";
+import { seedPlans } from "./seeders/plan.seeder.js";
+import seedAdmin from "./seeders/admin.seeder.js";
+import { seedRolesForDb } from "./seeders/role.seeder.js";
+import { seedPermissionsForDb } from "./seeders/permission.seeder.js";
+import { seedModules } from "./seeders/module.seeder.js";
+import { seedPlatformRbacForDb } from "./seeders/platformRbac.seeder.js";
+import seedPlatformAuditLogs from "./seeders/platformAuditLog.seeder.js";
+import seedPlatformNotifications from "./seeders/platformNotification.seeder.js";
 import {
   createTenantPostgresDatabase,
   ensureTenantPostgresDatabase,
   resolveOrganisationDatabaseName,
   syncTenantDatabaseSchema,
-} from './services/tenantDatabaseProvision.service.js';
-import { runPlatformMigrations } from './migrations/run.js';
-import { getTenantDb } from './services/tenantDb.service.js';
-import { seedTenantDefaults, seedTenantOrganisation } from './services/tenantSeed.service.js';
-import { checkAndExpireSubscriptions } from './services/subscriptionExpiry.service.js';
-import { runComplianceAlerts } from './services/complianceAlerts.service.js';
-import http from 'http';
-import { initSocketIO } from './realtime/socketServer.js';
-import { normalizePostgresDatabaseName } from './utils/postgresDbName.js';
-import { verifyMailTransport } from './services/mail.service.js';
-import { logCorsConfiguration } from './config/frontendOrigins.js';
-import { ensureAdminHasAllPermissions } from './seeders/permission.seeder.js';
+} from "./services/tenantDatabaseProvision.service.js";
+import { runPlatformMigrations } from "./migrations/run.js";
+import { getTenantDb } from "./services/tenantDb.service.js";
+import {
+  seedTenantDefaults,
+  seedTenantOrganisation,
+} from "./services/tenantSeed.service.js";
+import { checkAndExpireSubscriptions } from "./services/subscriptionExpiry.service.js";
+import { runComplianceAlerts } from "./services/complianceAlerts.service.js";
+import http from "http";
+import { initSocketIO } from "./realtime/socketServer.js";
+import { normalizePostgresDatabaseName } from "./utils/postgresDbName.js";
+import { verifyMailTransport } from "./services/mail.service.js";
+import { logCorsConfiguration } from "./config/frontendOrigins.js";
+import { ensureAdminHasAllPermissions } from "./seeders/permission.seeder.js";
 
 const PORT = process.env.PORT || 5000;
 
@@ -56,7 +59,7 @@ async function bootstrapPlatform() {
   try {
     const centralDbName = normalizePostgresDatabaseName(
       process.env.DB_NAME,
-      'epic_central',
+      "epic_central",
     );
     console.log(`Ensuring Platform Database exists: ${centralDbName}...`);
     const dbResult = await createTenantPostgresDatabase(centralDbName);
@@ -65,16 +68,16 @@ async function bootstrapPlatform() {
     } else {
       console.log(`✔ Platform database verified: ${centralDbName}`);
     }
-    
+
     await platformDb.sequelize.authenticate();
-    console.log('Platform database connected');
-    
+    console.log("Platform database connected");
+
     await platformDb.sequelize.sync();
-    console.log('✔ Platform schema synchronized');
+    console.log("✔ Platform schema synchronized");
 
     await runPlatformMigrations();
-    console.log('✔ Platform SQL migrations applied');
-    
+    console.log("✔ Platform SQL migrations applied");
+
     await seedRolesForDb(platformDb);
     await seedPermissionsForDb(platformDb);
     await seedPlatformRbacForDb(platformDb);
@@ -92,7 +95,7 @@ async function bootstrapPlatform() {
       'ALTER TABLE "organisations" ADD COLUMN IF NOT EXISTS "deleted_at" TIMESTAMPTZ;',
     );
     await platformDb.sequelize.query(
-      'CREATE INDEX IF NOT EXISTS idx_organisations_deleted_at ON organisations (deleted_at);',
+      "CREATE INDEX IF NOT EXISTS idx_organisations_deleted_at ON organisations (deleted_at);",
     );
 
     await seedPlans();
@@ -108,27 +111,38 @@ async function bootstrapPlatform() {
         await ensureAdminHasAllPermissions(tenantDb);
         console.log(`✔ Tenant DB ready: ${org.slug} (${org.database_name})`);
       } catch (err) {
-        console.error(`Tenant provision failed for org ${org.id}:`, err.message);
+        console.error(
+          `Tenant provision failed for org ${org.id}:`,
+          err.message,
+        );
       }
     }
 
     logCorsConfiguration();
-    console.log(`Timezone: ${process.env.TZ} (${new Date().toString().match(/\((.+)\)/)?.[1] || '—'})`);
+    console.log(
+      `Timezone: ${process.env.TZ} (${new Date().toString().match(/\((.+)\)/)?.[1] || "—"})`,
+    );
 
     const server = http.createServer(app);
     initSocketIO(server, app);
 
     await verifyMailTransport();
 
-    setInterval(() => {
-      checkAndExpireSubscriptions();
-    }, 6 * 60 * 60 * 1000);
+    setInterval(
+      () => {
+        checkAndExpireSubscriptions();
+      },
+      6 * 60 * 60 * 1000,
+    );
 
     checkAndExpireSubscriptions();
 
-    setInterval(() => {
-      runComplianceAlerts();
-    }, 24 * 60 * 60 * 1000);
+    setInterval(
+      () => {
+        runComplianceAlerts();
+      },
+      24 * 60 * 60 * 1000,
+    );
 
     runComplianceAlerts();
 
@@ -136,9 +150,11 @@ async function bootstrapPlatform() {
       console.log(`Server running on port ${PORT}`);
     });
   } catch (err) {
-    console.error('Failed to bootstrap EPiC project:', err);
+    console.error("Failed to bootstrap EPiC project:", err);
     process.exit(1);
   }
 }
 
 bootstrapPlatform();
+
+//test

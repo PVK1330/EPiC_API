@@ -1,6 +1,6 @@
-import { sendRescheduleEmail } from '../../../services/email.service.js';
-import { generateNotificationEmailTemplate } from '../../../utils/emailTemplates.js';
-import { ROLES } from '../../../middlewares/role.middleware.js';
+import { sendRescheduleEmail } from "../../../services/email.service.js";
+import { generateNotificationEmailTemplate } from "../../../utils/emailTemplates.js";
+import { ROLES } from "../../../middlewares/role.middleware.js";
 
 // Reschedule case
 export const rescheduleCase = async (req, res) => {
@@ -18,12 +18,12 @@ export const rescheduleCase = async (req, res) => {
       });
     }
 
-    const { 
-      targetSubmissionDate, 
-      biometricsDate, 
-      submissionDate, 
+    const {
+      targetSubmissionDate,
+      biometricsDate,
+      submissionDate,
       decisionDate,
-      reason
+      reason,
     } = req.body;
 
     const caseData = await req.tenantDb.Case.findByPk(id);
@@ -42,57 +42,143 @@ export const rescheduleCase = async (req, res) => {
     if (!isAssigned) {
       return res.status(403).json({
         status: "error",
-        message: "Access denied. You can only reschedule cases assigned to you.",
+        message:
+          "Access denied. You can only reschedule cases assigned to you.",
         data: null,
       });
     }
 
+    // Helper to convert date to YYYY-MM-DD string
+    const formatDate = (date) => {
+      console.log("formatDate called with:", date, "type:", typeof date);
+      if (!date) return null;
+      if (typeof date === "string") {
+        // If input is string, ensure it's in YYYY-MM-DD format
+        // If it's already in YYYY-MM-DD, just return it to avoid timezone issues!
+        if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+          console.log("formatDate: already YYYY-MM-DD, returning as is:", date);
+          return date;
+        }
+        const d = new Date(date);
+        const result = d.toISOString().split("T")[0];
+        console.log("formatDate: parsed string to:", result);
+        return result;
+      }
+      if (date instanceof Date) {
+        const result = date.toISOString().split("T")[0];
+        console.log("formatDate: Date object converted to:", result);
+        return result;
+      }
+      console.log("formatDate: unknown type, returning null");
+      return null;
+    };
+
+    // Debug logs
+    console.log("=== Reschedule Debug ===");
+    console.log("Request body dates:", {
+      targetSubmissionDate,
+      biometricsDate,
+      submissionDate,
+      decisionDate,
+    });
+    console.log("Case data dates:", {
+      targetSubmissionDate: caseData.targetSubmissionDate,
+      biometricsDate: caseData.biometricsDate,
+      submissionDate: caseData.submissionDate,
+      decisionDate: caseData.decisionDate,
+    });
+    console.log("Types:", {
+      targetSubmissionDate: typeof targetSubmissionDate,
+      caseTargetSubmissionDate: typeof caseData.targetSubmissionDate,
+      biometricsDate: typeof biometricsDate,
+      caseBiometricsDate: typeof caseData.biometricsDate,
+    });
+
     // Track what fields are being changed
     const changes = [];
-    if (targetSubmissionDate && targetSubmissionDate !== caseData.targetSubmissionDate) {
+    const formattedTargetSubmissionDate = formatDate(targetSubmissionDate);
+    const formattedBiometricsDate = formatDate(biometricsDate);
+    const formattedSubmissionDate = formatDate(submissionDate);
+    const formattedDecisionDate = formatDate(decisionDate);
+
+    const formattedCaseTargetSubmissionDate = formatDate(
+      caseData.targetSubmissionDate,
+    );
+    const formattedCaseBiometricsDate = formatDate(caseData.biometricsDate);
+    const formattedCaseSubmissionDate = formatDate(caseData.submissionDate);
+    const formattedCaseDecisionDate = formatDate(caseData.decisionDate);
+
+    console.log("Formatted request dates:", {
+      targetSubmissionDate: formattedTargetSubmissionDate,
+      biometricsDate: formattedBiometricsDate,
+      submissionDate: formattedSubmissionDate,
+      decisionDate: formattedDecisionDate,
+    });
+    console.log("Formatted case dates:", {
+      targetSubmissionDate: formattedCaseTargetSubmissionDate,
+      biometricsDate: formattedCaseBiometricsDate,
+      submissionDate: formattedCaseSubmissionDate,
+      decisionDate: formattedCaseDecisionDate,
+    });
+
+    if (
+      formattedTargetSubmissionDate &&
+      formattedTargetSubmissionDate !== formattedCaseTargetSubmissionDate
+    ) {
       changes.push({
         field: "Target Submission Date",
         oldValue: caseData.targetSubmissionDate,
         newValue: targetSubmissionDate,
-        reason
+        reason,
       });
     }
-    if (biometricsDate && biometricsDate !== caseData.biometricsDate) {
+    if (
+      formattedBiometricsDate &&
+      formattedBiometricsDate !== formattedCaseBiometricsDate
+    ) {
       changes.push({
         field: "Biometrics Date",
         oldValue: caseData.biometricsDate,
         newValue: biometricsDate,
-        reason
+        reason,
       });
     }
-    if (submissionDate && submissionDate !== caseData.submissionDate) {
+    if (
+      formattedSubmissionDate &&
+      formattedSubmissionDate !== formattedCaseSubmissionDate
+    ) {
       changes.push({
         field: "Submission Date",
         oldValue: caseData.submissionDate,
         newValue: submissionDate,
-        reason
+        reason,
       });
     }
-    if (decisionDate && decisionDate !== caseData.decisionDate) {
+    if (
+      formattedDecisionDate &&
+      formattedDecisionDate !== formattedCaseDecisionDate
+    ) {
       changes.push({
         field: "Decision Date",
         oldValue: caseData.decisionDate,
         newValue: decisionDate,
-        reason
+        reason,
       });
     }
 
     if (changes.length === 0) {
       return res.status(400).json({
         status: "error",
-        message: "No changes detected. At least one date must be different from the current value.",
+        message:
+          "No changes detected. At least one date must be different from the current value.",
         data: null,
       });
     }
 
     // Update the case with new dates
     await caseData.update({
-      targetSubmissionDate: targetSubmissionDate || caseData.targetSubmissionDate,
+      targetSubmissionDate:
+        targetSubmissionDate || caseData.targetSubmissionDate,
       biometricsDate: biometricsDate || caseData.biometricsDate,
       submissionDate: submissionDate || caseData.submissionDate,
       decisionDate: decisionDate || caseData.decisionDate,
@@ -120,11 +206,14 @@ export const rescheduleCase = async (req, res) => {
       const emailHtml = generateNotificationEmailTemplate({
         recipientName: candidate.first_name,
         title: "Case Schedule Updated",
-        message: "Your case timeline has been updated by the caseworker. Please review the changes below.",
+        message:
+          "Your case timeline has been updated by the caseworker. Please review the changes below.",
         notificationType: "schedule_update",
         metadata: {
-          "Changes": changes.map(c => `${c.field}: ${c.oldValue || 'None'} -> ${c.newValue}`).join(" | ")
-        }
+          Changes: changes
+            .map((c) => `${c.field}: ${c.oldValue || "None"} -> ${c.newValue}`)
+            .join(" | "),
+        },
       });
       await sendRescheduleEmail({
         to: candidate.email,
@@ -138,11 +227,14 @@ export const rescheduleCase = async (req, res) => {
       const emailHtml = generateNotificationEmailTemplate({
         recipientName: sponsor.first_name,
         title: "Case Schedule Updated",
-        message: "Your case timeline has been updated by the caseworker. Please review the changes below.",
+        message:
+          "Your case timeline has been updated by the caseworker. Please review the changes below.",
         notificationType: "schedule_update",
         metadata: {
-          "Changes": changes.map(c => `${c.field}: ${c.oldValue || 'None'} -> ${c.newValue}`).join(" | ")
-        }
+          Changes: changes
+            .map((c) => `${c.field}: ${c.oldValue || "None"} -> ${c.newValue}`)
+            .join(" | "),
+        },
       });
       await sendRescheduleEmail({
         to: sponsor.email,
@@ -159,7 +251,9 @@ export const rescheduleCase = async (req, res) => {
         changes,
         emailsSent: [
           ...(candidate?.email ? [candidate.email] : []),
-          ...(sponsor?.email && sponsor.email !== candidate?.email ? [sponsor.email] : []),
+          ...(sponsor?.email && sponsor.email !== candidate?.email
+            ? [sponsor.email]
+            : []),
         ],
       },
     });
@@ -206,7 +300,8 @@ export const getRescheduleHistory = async (req, res) => {
     if (!isAssigned) {
       return res.status(403).json({
         status: "error",
-        message: "Access denied. You can only view reschedule history for cases assigned to you.",
+        message:
+          "Access denied. You can only view reschedule history for cases assigned to you.",
         data: null,
       });
     }
@@ -216,11 +311,11 @@ export const getRescheduleHistory = async (req, res) => {
       include: [
         {
           model: req.tenantDb.User,
-          as: 'createdBy',
-          attributes: ['id', 'first_name', 'last_name', 'email'],
+          as: "createdBy",
+          attributes: ["id", "first_name", "last_name", "email"],
         },
       ],
-      order: [['created_at', 'DESC']],
+      order: [["created_at", "DESC"]],
     });
 
     res.status(200).json({
@@ -260,13 +355,13 @@ export const getAllRescheduleHistory = async (req, res) => {
     const assignedCases = await req.tenantDb.Case.findAll({
       where: {
         assignedcaseworkerId: {
-          [req.tenantDb.Sequelize.Op.contains]: [userId]
-        }
+          [req.tenantDb.Sequelize.Op.contains]: [userId],
+        },
       },
-      attributes: ['id']
+      attributes: ["id"],
     });
 
-    const caseIds = assignedCases.map(c => c.id);
+    const caseIds = assignedCases.map((c) => c.id);
 
     if (caseIds.length === 0) {
       return res.status(200).json({
@@ -284,40 +379,41 @@ export const getAllRescheduleHistory = async (req, res) => {
       });
     }
 
-    const { count, rows: history } = await req.tenantDb.RescheduleHistory.findAndCountAll({
-      where: {
-        caseId: {
-          [req.tenantDb.Sequelize.Op.in]: caseIds
-        }
-      },
-      include: [
-        {
-          model: req.tenantDb.Case,
-          as: 'case',
-          attributes: ['id', 'caseId', 'candidateId', 'sponsorId'],
-          include: [
-            {
-              model: req.tenantDb.User,
-              as: 'candidate',
-              attributes: ['id', 'first_name', 'last_name', 'email'],
-            },
-            {
-              model: req.tenantDb.User,
-              as: 'sponsor',
-              attributes: ['id', 'first_name', 'last_name', 'email'],
-            },
-          ],
+    const { count, rows: history } =
+      await req.tenantDb.RescheduleHistory.findAndCountAll({
+        where: {
+          caseId: {
+            [req.tenantDb.Sequelize.Op.in]: caseIds,
+          },
         },
-        {
-          model: req.tenantDb.User,
-          as: 'createdBy',
-          attributes: ['id', 'first_name', 'last_name', 'email'],
-        },
-      ],
-      order: [['created_at', 'DESC']],
-      limit: parseInt(limit),
-      offset: parseInt(offset),
-    });
+        include: [
+          {
+            model: req.tenantDb.Case,
+            as: "case",
+            attributes: ["id", "caseId", "candidateId", "sponsorId"],
+            include: [
+              {
+                model: req.tenantDb.User,
+                as: "candidate",
+                attributes: ["id", "first_name", "last_name", "email"],
+              },
+              {
+                model: req.tenantDb.User,
+                as: "sponsor",
+                attributes: ["id", "first_name", "last_name", "email"],
+              },
+            ],
+          },
+          {
+            model: req.tenantDb.User,
+            as: "createdBy",
+            attributes: ["id", "first_name", "last_name", "email"],
+          },
+        ],
+        order: [["created_at", "DESC"]],
+        limit: parseInt(limit),
+        offset: parseInt(offset),
+      });
 
     res.status(200).json({
       status: "success",
