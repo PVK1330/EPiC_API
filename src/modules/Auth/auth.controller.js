@@ -480,7 +480,20 @@ export const register = catchAsync(async (req, res) => {
  * Verify OTP and activate user
  */
 export const verifyOTP = catchAsync(async (req, res) => {
-  const { email, otp } = req.body;
+  const { email, otp, organisation_id: bodyOrgId } = req.body;
+  const emailNorm = normalizePlatformEmail(email);
+
+  // ── Resolve organisation context from body (same as register) ──────────
+  if (bodyOrgId && !req.organisationContext?.organisation) {
+    const org = await platformDb.Organisation.findByPk(bodyOrgId, {
+      attributes: ["id", "slug", "name", "database_name", "status"],
+    });
+    if (org && org.status !== "suspended" && org.database_name) {
+      req.organisationContext = req.organisationContext || {};
+      req.organisationContext.organisation = org;
+    }
+  }
+
   const { orgId, tenantDb } = await resolveTenantDbForAuth(req);
   if (!tenantDb) {
     return ApiResponse.error(
@@ -491,7 +504,7 @@ export const verifyOTP = catchAsync(async (req, res) => {
   }
   
   const { UnverifiedUser } = tenantDb;
-  const unverifiedUser = await UnverifiedUser.findOne({ where: { email } });
+  const unverifiedUser = await UnverifiedUser.findOne({ where: { email: emailNorm } });
 
   if (!unverifiedUser) {
     return ApiResponse.notFound(res, "User not found or already verified");
@@ -583,8 +596,20 @@ export const verifyOTP = catchAsync(async (req, res) => {
  * Resend OTP for registration
  */
 export const resendOTP = catchAsync(async (req, res) => {
-  const { email } = req.body;
+  const { email, organisation_id: bodyOrgId } = req.body;
   const emailNorm = normalizePlatformEmail(email);
+
+  // ── Resolve organisation context from body (same as register/verifyOTP) ──
+  if (bodyOrgId && !req.organisationContext?.organisation) {
+    const org = await platformDb.Organisation.findByPk(bodyOrgId, {
+      attributes: ["id", "slug", "name", "database_name", "status"],
+    });
+    if (org && org.status !== "suspended" && org.database_name) {
+      req.organisationContext = req.organisationContext || {};
+      req.organisationContext.organisation = org;
+    }
+  }
+
   const { orgId, tenantDb } = await resolveTenantDbForAuth(req);
 
   if (orgId && (await isPlatformEmailTaken(platformDb, emailNorm, orgId))) {
@@ -603,7 +628,7 @@ export const resendOTP = catchAsync(async (req, res) => {
     );
   }
   const { UnverifiedUser } = tenantDb;
-  const unverifiedUser = await UnverifiedUser.findOne({ where: { email } });
+  const unverifiedUser = await UnverifiedUser.findOne({ where: { email: emailNorm } });
   if (!unverifiedUser) {
     return ApiResponse.notFound(res, "User not found. Please register first.");
   }
@@ -1204,10 +1229,7 @@ export const handoff = catchAsync(async (req, res) => {
   if (!user) {
     return ApiResponse.notFound(res, 'User not found');
   }
-
-  // Set the impersonation token as httpOnly cookie
-  res.cookie('token', token, getCookieConfig({ maxAge: 7 * 24 * 60 * 60 * 1000 }));
-
+  
   const roleMeta = await resolveAuthRole(user);
   const allowedModules = await resolveAllowedModules(user);
 
@@ -1215,4 +1237,4 @@ export const handoff = catchAsync(async (req, res) => {
     user: buildLoginUserResponse(user, roleMeta),
     allowedModules,
   });
-});
+}); 

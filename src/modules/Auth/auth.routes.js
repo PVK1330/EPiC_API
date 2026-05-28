@@ -15,11 +15,7 @@ import {
 const router = Router();
 
 const withOrgContext = [attachOrganisationContext];
-
-// ── Rate-limited public auth routes ──────────────────────────────────────────
-// Limiter is placed AFTER attachOrganisationContext so that the tenant slug is
-// available for building the rate-limit key.
-
+ 
 router.post("/register",       ...withOrgContext, registerLimiter,       auth.register);
 router.post("/verify-otp",     ...withOrgContext, verifyOtpLimiter,      auth.verifyOTP);
 router.post("/resend-otp",     ...withOrgContext, resendOtpLimiter,      auth.resendOTP);

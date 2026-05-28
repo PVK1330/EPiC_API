@@ -117,7 +117,7 @@ export const addSponsoredWorker = async (req, res) => {
     // 6. Update Sponsor Profile count
     const sponsorProfile = await req.tenantDb.SponsorProfile.findOne({ where: { userId: sponsorId } });
     if (sponsorProfile) {
-      await req.tenantDb.SponsorProfile.increment('sponsored_workers', { by: 1, transaction });
+      await sponsorProfile.increment('sponsored_workers', { by: 1, transaction });
     }
 
     // 7. Commit Transaction
