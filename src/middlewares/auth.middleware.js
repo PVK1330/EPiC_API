@@ -1,6 +1,6 @@
-import jwt from "jsonwebtoken";
 import platformDb from "../models/index.js";
 import ApiResponse from "../utils/apiResponse.js";
+import { verifyToken as verifyJwt } from "../config/jwt.config.js";
 import {
   getCachedOrg,
   setCachedOrg,
@@ -9,16 +9,29 @@ import {
 /**
  * Global token verification against Platform DB users registry.
  * Caches organisation status to avoid hitting the DB on every request.
+ * JWT secret is validated at startup — no fallback exists.
  */
 export const verifyToken = async (req, res, next) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return ApiResponse.unauthorized(res, "Missing or invalid authorization header");
+    // Read token from httpOnly cookie first (XSS-resistant),
+    // fall back to Authorization header for backward compatibility
+    // (impersonation flows, mobile apps, direct API consumers).
+    let token = null;
+
+    const authHeader = req.headers.authorization || req.headers.Authorization;
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      token = authHeader.split(" ")[1];
     }
 
-    const token = authHeader.split(" ")[1];
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || "epic-secret-key");
+    if (!token) {
+      token = req.cookies?.token;
+    }
+
+    if (!token) {
+      return ApiResponse.unauthorized(res, "Missing or invalid authorization token");
+    }
+
+    const decoded = verifyJwt(token);
 
     const user = await platformDb.User.findByPk(decoded.id, {
       attributes: [

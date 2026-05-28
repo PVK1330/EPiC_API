@@ -13,6 +13,7 @@ import {
   NotificationTypes,
   NotificationPriority,
 } from "./notification.service.js";
+import logger from "../utils/logger.js";
 
 function parseCaseworkerIds(caseRecord) {
   const raw = caseRecord?.assignedcaseworkerId ?? caseRecord?.assignedCaseworkerId;
@@ -47,7 +48,7 @@ export async function createAdminCclFeeWorkflowTasks({
     stageId: "client_care_letter",
     performedBy,
     organisationId,
-  }).catch((err) => console.error("syncWorkflowTasksForStage (admin CCL):", err));
+  }).catch((err) => logger.error({ err }, "syncWorkflowTasksForStage (admin CCL)"));
 
   if (caseRecord.candidateId) {
     const payTitle = `Pay CCL fee ${feeLabel} — ${caseLabel}`;
@@ -175,14 +176,14 @@ export async function applyAdminCclFeeOnCase({
     caseRecord,
     ccl,
     performedBy,
-  }).catch((err) => console.error("attachCclTemplateToCase:", err));
+  }).catch((err) => logger.error({ err }, "attachCclTemplateToCase"));
 
   await notifyCclFeeApproved({
     tenantDb,
     caseRecord,
     ccl,
     organisationId,
-  }).catch((err) => console.error("notifyCclFeeApproved:", err));
+  }).catch((err) => logger.error({ err }, "notifyCclFeeApproved"));
 
 
 
@@ -194,7 +195,7 @@ export async function applyAdminCclFeeOnCase({
     feeAmount: parsedFee,
     performedBy,
     organisationId,
-  }).catch((err) => console.error("createAdminCclFeeWorkflowTasks:", err));
+  }).catch((err) => logger.error({ err }, "createAdminCclFeeWorkflowTasks"));
 
   return { ok: true, ccl, caseRecord, feeAmount: parsedFee };
 }

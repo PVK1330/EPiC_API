@@ -10,6 +10,7 @@ import { createUserOnPlatformAndTenant } from '../../services/userSync.service.j
 import { sendTenantAdminWelcomeEmail } from '../../services/tenantUserMail.service.js';
 import { ensureAdminHasAllPermissions } from '../../seeders/permission.seeder.js';
 import { rowsToXlsxBuffer, sendXlsxDownload } from '../../utils/excelExport.util.js';
+import logger from '../../utils/logger.js';
 
 /** Tenant users with role "admin" (matches org provisioning + tenantSeed). */
 const ADMIN_ROLE_ID = ROLES.ADMIN;
@@ -103,7 +104,7 @@ export const createAdmin = catchAsync(async (req, res) => {
       organisationId,
     });
   } catch (emailError) {
-    console.error("Failed to send admin welcome email:", emailError);
+    logger.error({ err: emailError }, "Failed to send admin welcome email");
     welcomeEmail = { sent: false, reason: emailError?.message || "send_failed" };
   }
 

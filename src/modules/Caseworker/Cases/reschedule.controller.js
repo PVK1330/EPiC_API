@@ -1,3 +1,4 @@
+import logger from "../../../utils/logger.js";
 import { sendRescheduleEmail } from "../../../services/email.service.js";
 import { generateNotificationEmailTemplate } from "../../../utils/emailTemplates.js";
 import { ROLES } from "../../../middlewares/role.middleware.js";
@@ -50,49 +51,34 @@ export const rescheduleCase = async (req, res) => {
 
     // Helper to convert date to YYYY-MM-DD string
     const formatDate = (date) => {
-      console.log("formatDate called with:", date, "type:", typeof date);
+      logger.debug({ date, type: typeof date }, "formatDate called");
       if (!date) return null;
       if (typeof date === "string") {
         // If input is string, ensure it's in YYYY-MM-DD format
         // If it's already in YYYY-MM-DD, just return it to avoid timezone issues!
         if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-          console.log("formatDate: already YYYY-MM-DD, returning as is:", date);
+          logger.debug({ date }, "formatDate: already YYYY-MM-DD, returning as is");
           return date;
         }
         const d = new Date(date);
         const result = d.toISOString().split("T")[0];
-        console.log("formatDate: parsed string to:", result);
+        logger.debug({ result }, "formatDate: parsed string to result");
         return result;
       }
       if (date instanceof Date) {
         const result = date.toISOString().split("T")[0];
-        console.log("formatDate: Date object converted to:", result);
+        logger.debug({ result }, "formatDate: Date object converted to result");
         return result;
       }
-      console.log("formatDate: unknown type, returning null");
+      logger.debug("formatDate: unknown type, returning null");
       return null;
     };
 
     // Debug logs
-    console.log("=== Reschedule Debug ===");
-    console.log("Request body dates:", {
-      targetSubmissionDate,
-      biometricsDate,
-      submissionDate,
-      decisionDate,
-    });
-    console.log("Case data dates:", {
-      targetSubmissionDate: caseData.targetSubmissionDate,
-      biometricsDate: caseData.biometricsDate,
-      submissionDate: caseData.submissionDate,
-      decisionDate: caseData.decisionDate,
-    });
-    console.log("Types:", {
-      targetSubmissionDate: typeof targetSubmissionDate,
-      caseTargetSubmissionDate: typeof caseData.targetSubmissionDate,
-      biometricsDate: typeof biometricsDate,
-      caseBiometricsDate: typeof caseData.biometricsDate,
-    });
+    logger.debug("=== Reschedule Debug ===");
+    logger.debug({ targetSubmissionDate, biometricsDate, submissionDate, decisionDate }, "Request body dates");
+    logger.debug({ targetSubmissionDate: caseData.targetSubmissionDate, biometricsDate: caseData.biometricsDate, submissionDate: caseData.submissionDate, decisionDate: caseData.decisionDate }, "Case data dates");
+    logger.debug({ targetSubmissionDate: typeof targetSubmissionDate, caseTargetSubmissionDate: typeof caseData.targetSubmissionDate, biometricsDate: typeof biometricsDate, caseBiometricsDate: typeof caseData.biometricsDate }, "Types");
 
     // Track what fields are being changed
     const changes = [];
@@ -108,18 +94,8 @@ export const rescheduleCase = async (req, res) => {
     const formattedCaseSubmissionDate = formatDate(caseData.submissionDate);
     const formattedCaseDecisionDate = formatDate(caseData.decisionDate);
 
-    console.log("Formatted request dates:", {
-      targetSubmissionDate: formattedTargetSubmissionDate,
-      biometricsDate: formattedBiometricsDate,
-      submissionDate: formattedSubmissionDate,
-      decisionDate: formattedDecisionDate,
-    });
-    console.log("Formatted case dates:", {
-      targetSubmissionDate: formattedCaseTargetSubmissionDate,
-      biometricsDate: formattedCaseBiometricsDate,
-      submissionDate: formattedCaseSubmissionDate,
-      decisionDate: formattedCaseDecisionDate,
-    });
+    logger.debug({ targetSubmissionDate: formattedTargetSubmissionDate, biometricsDate: formattedBiometricsDate, submissionDate: formattedSubmissionDate, decisionDate: formattedDecisionDate }, "Formatted request dates");
+    logger.debug({ targetSubmissionDate: formattedCaseTargetSubmissionDate, biometricsDate: formattedCaseBiometricsDate, submissionDate: formattedCaseSubmissionDate, decisionDate: formattedCaseDecisionDate }, "Formatted case dates");
 
     if (
       formattedTargetSubmissionDate &&
@@ -258,7 +234,7 @@ export const rescheduleCase = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Reschedule Case Error:", error);
+    logger.error({ err: error }, "Reschedule Case Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -324,7 +300,7 @@ export const getRescheduleHistory = async (req, res) => {
       data: history,
     });
   } catch (error) {
-    console.error("Get Reschedule History Error:", error);
+    logger.error({ err: error }, "Get Reschedule History Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -429,7 +405,7 @@ export const getAllRescheduleHistory = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Get All Reschedule History Error:", error);
+    logger.error({ err: error }, "Get All Reschedule History Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",

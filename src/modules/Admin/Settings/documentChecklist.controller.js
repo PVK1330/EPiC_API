@@ -1,4 +1,5 @@
 import { Op } from "sequelize";
+import logger from "../../../utils/logger.js";
 import {
   buildDocumentLookupMap,
   findDocumentForChecklistItem,
@@ -62,7 +63,7 @@ export const getChecklistByVisaType = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error("Get Checklist Error:", error);
+    logger.error({ err: error }, "Get Checklist Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -124,7 +125,7 @@ export const getCandidateDocumentChecklist = async (req, res) => {
     req.params.caseId = String(caseRecord.id);
     return getCaseChecklist(req, res);
   } catch (error) {
-    console.error("Get Candidate Document Checklist Error:", error);
+    logger.error({ err: error }, "Get Candidate Document Checklist Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -276,7 +277,7 @@ export const getCaseChecklist = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error("Get Case Checklist Error:", error);
+    logger.error({ err: error }, "Get Case Checklist Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -326,7 +327,7 @@ export const createChecklistItem = async (req, res) => {
       data: checklistItem
     });
   } catch (error) {
-    console.error("Create Checklist Item Error:", error);
+    logger.error({ err: error }, "Create Checklist Item Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -377,7 +378,7 @@ export const updateChecklistItem = async (req, res) => {
       data: checklistItem
     });
   } catch (error) {
-    console.error("Update Checklist Item Error:", error);
+    logger.error({ err: error }, "Update Checklist Item Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -412,7 +413,7 @@ export const deleteChecklistItem = async (req, res) => {
       data: null
     });
   } catch (error) {
-    console.error("Delete Checklist Item Error:", error);
+    logger.error({ err: error }, "Delete Checklist Item Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -446,7 +447,7 @@ export const getAllChecklists = async (req, res) => {
       data: checklists
     });
   } catch (error) {
-    console.error("Get All Checklists Error:", error);
+    logger.error({ err: error }, "Get All Checklists Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -519,7 +520,7 @@ export const initializeCaseChecklist = async (req, res) => {
       data: { count: created.length, items: created },
     });
   } catch (error) {
-    console.error("Initialize Case Checklist Error:", error);
+    logger.error({ err: error }, "Initialize Case Checklist Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -582,7 +583,7 @@ export const createCaseChecklistItem = async (req, res) => {
       data: item,
     });
   } catch (error) {
-    console.error("Create Case Checklist Item Error:", error);
+    logger.error({ err: error }, "Create Case Checklist Item Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",

@@ -1,3 +1,4 @@
+import logger from '../../../utils/logger.js';
 import { sendTransactionalEmail } from '../../../services/mail.service.js';
 import { generateNotificationEmailTemplate } from '../../../utils/emailTemplates.js';
 import { notifyAdmins, notifyUser, NotificationTypes, NotificationPriority } from '../../../services/notification.service.js';
@@ -60,10 +61,10 @@ export const submitLicenceApplication = async (req, res) => {
                 }
             });
         } catch (err) {
-            console.error('Failed to notify admins of new application:', err);
+            logger.error({ err }, 'Failed to notify admins of new application');
         }
     } catch (error) {
-        console.error('Error submitting licence application:', error);
+        logger.error({ err: error }, 'Error submitting licence application');
         res.status(500).json({
             status: 'error',
             message: 'Failed to submit licence application',
@@ -85,7 +86,7 @@ export const getMyLicenceApplications = async (req, res) => {
             data: applications
         });
     } catch (error) {
-        console.error('Error fetching my licence applications:', error);
+        logger.error({ err: error }, 'Error fetching my licence applications');
         res.status(500).json({
             status: 'error',
             message: 'Failed to fetch licence applications',
@@ -115,7 +116,7 @@ export const getLicenceApplicationDetails = async (req, res) => {
             data: application
         });
     } catch (error) {
-        console.error('Error fetching licence application details:', error);
+        logger.error({ err: error }, 'Error fetching licence application details');
         res.status(500).json({
             status: 'error',
             message: 'Failed to fetch licence application details',
@@ -190,10 +191,10 @@ export const updateLicenceApplication = async (req, res) => {
                 }
             });
         } catch (err) {
-            console.error('Failed to notify admins of update:', err);
+            logger.error({ err }, 'Failed to notify admins of update');
         }
     } catch (error) {
-        console.error('Error updating licence application:', error);
+        logger.error({ err: error }, 'Error updating licence application');
         res.status(500).json({
             status: 'error',
             message: 'Failed to update licence application',
@@ -233,7 +234,7 @@ export const deleteMyLicenceApplication = async (req, res) => {
             message: 'Licence application deleted successfully'
         });
     } catch (error) {
-        console.error('Error deleting my licence application:', error);
+        logger.error({ err: error }, 'Error deleting my licence application');
         res.status(500).json({
             status: 'error',
             message: 'Failed to delete licence application',
@@ -302,10 +303,10 @@ export const renewLicenceApplication = async (req, res) => {
                 }
             });
         } catch (err) {
-            console.error('Failed to notify admins of renewal:', err);
+            logger.error({ err }, 'Failed to notify admins of renewal');
         }
     } catch (error) {
-        console.error('Error in quick renewal:', error);
+        logger.error({ err: error }, 'Error in quick renewal');
         res.status(500).json({
             status: 'error',
             message: 'Failed to process renewal',
@@ -358,7 +359,7 @@ export const getLicenceDocuments = async (req, res) => {
             data: allDocuments
         });
     } catch (error) {
-        console.error('Error fetching licence documents:', error);
+        logger.error({ err: error }, 'Error fetching licence documents');
         res.status(500).json({
             status: 'error',
             message: 'Failed to fetch licence documents',
@@ -419,7 +420,7 @@ export const getLicenceSummary = async (req, res) => {
             }
         });
     } catch (error) {
-        console.error('Error fetching licence summary:', error);
+        logger.error({ err: error }, 'Error fetching licence summary');
         res.status(500).json({
             status: 'error',
             message: 'Failed to fetch licence summary',
@@ -484,7 +485,7 @@ export const requestMoreCos = async (req, res) => {
                 metadata: { requestedAmount, visaType, reason, companyName }
             });
         } catch (err) {
-            console.error('Failed to notify admins for CoS request:', err);
+            logger.error({ err }, 'Failed to notify admins for CoS request');
         }
 
         try {
@@ -504,10 +505,10 @@ export const requestMoreCos = async (req, res) => {
                 });
             }
         } catch (e) {
-            console.error('Email failed:', e);
+            logger.error({ err: e }, 'Email failed');
         }
     } catch (error) {
-        console.error('Error requesting more CoS:', error);
+        logger.error({ err: error }, 'Error requesting more CoS');
         res.status(500).json({
             status: 'error',
             message: 'Failed to submit CoS allocation request',
@@ -619,7 +620,7 @@ export const getCosSummary = async (req, res) => {
             }
         });
     } catch (error) {
-        console.error('Error fetching CoS summary:', error);
+        logger.error({ err: error }, 'Error fetching CoS summary');
         res.status(500).json({
             status: 'error',
             message: 'Failed to fetch CoS summary',
@@ -681,7 +682,7 @@ export const requestCosAllocation = async (req, res) => {
                 metadata: { visaType, requestedAmount, reason, companyName }
             });
         } catch (err) {
-            console.error('Failed to notify admins for CoS allocation:', err);
+            logger.error({ err }, 'Failed to notify admins for CoS allocation');
         }
 
         try {
@@ -715,10 +716,10 @@ export const requestCosAllocation = async (req, res) => {
                 });
             }
         } catch (e) {
-            console.error('Email failed:', e);
+            logger.error({ err: e }, 'Email failed');
         }
     } catch (error) {
-        console.error('Error requesting CoS allocation:', error);
+        logger.error({ err: error }, 'Error requesting CoS allocation');
         res.status(500).json({
             status: 'error',
             message: 'Failed to submit CoS request',
@@ -763,7 +764,7 @@ export const getCosRequests = async (req, res) => {
             data: requests
         });
     } catch (error) {
-        console.error('Error fetching CoS requests:', error);
+        logger.error({ err: error }, 'Error fetching CoS requests');
         res.status(500).json({
             status: 'error',
             message: 'Failed to fetch CoS requests',
@@ -826,10 +827,10 @@ export const updateCosRequest = async (req, res) => {
                 entityType: 'licence_application'
             });
         } catch (notifyErr) {
-            console.error('Failed to notify admins about CoS request update:', notifyErr);
+            logger.error({ err: notifyErr }, 'Failed to notify admins about CoS request update');
         }
     } catch (error) {
-        console.error('Error updating CoS request:', error);
+        logger.error({ err: error }, 'Error updating CoS request');
         res.status(500).json({
             status: 'error',
             message: 'Failed to update CoS request',
@@ -875,7 +876,7 @@ export const deleteCosRequest = async (req, res) => {
             data: null
         });
     } catch (error) {
-        console.error('Error deleting CoS request:', error);
+        logger.error({ err: error }, 'Error deleting CoS request');
         res.status(500).json({
             status: 'error',
             message: 'Failed to delete CoS request',
@@ -937,10 +938,10 @@ export const uploadLicenceDocument = async (req, res) => {
                 });
             }
         } catch (e) {
-            console.error('Post-upload actions failed:', e);
+            logger.error({ err: e }, 'Post-upload actions failed');
         }
     } catch (error) {
-        console.error('Error uploading licence document:', error);
+        logger.error({ err: error }, 'Error uploading licence document');
         res.status(500).json({ status: 'error', message: 'Internal server error' });
     }
 };
@@ -995,10 +996,10 @@ export const deleteLicenceDocument = async (req, res) => {
                 });
             }
         } catch (notifyErr) {
-            console.error('Failed to send document delete notifications:', notifyErr);
+            logger.error({ err: notifyErr }, 'Failed to send document delete notifications');
         }
     } catch (error) {
-        console.error('Error deleting licence document:', error);
+        logger.error({ err: error }, 'Error deleting licence document');
         res.status(500).json({ status: 'error', message: 'Internal server error' });
     }
 };

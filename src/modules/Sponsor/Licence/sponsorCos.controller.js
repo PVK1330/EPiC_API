@@ -1,4 +1,6 @@
 import { Op } from 'sequelize';
+
+import logger from '../../../utils/logger.js';
 import { sendTransactionalEmail } from '../../../services/mail.service.js';
 import { generateNotificationEmailTemplate } from '../../../utils/emailTemplates.js';
 import { notifyAdmins, createNotification, NotificationTypes, NotificationPriority } from '../../../services/notification.service.js';
@@ -49,7 +51,7 @@ export const getCosSummary = async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('getCosSummary error:', err);
+    logger.error({ err }, 'getCosSummary error');
     res.status(500).json({ status: 'error', message: 'Internal server error', error: err.message });
   }
 };
@@ -85,8 +87,8 @@ export const requestCosAllocation = async (req, res) => {
     res.status(201).json({ status: 'success', message: 'CoS allocation request submitted', data: app });
 
     const company = profile?.companyName || user.email;
-    try { await notifyAdmins(req.tenantDb, { type: NotificationTypes.INFO, priority: NotificationPriority.HIGH, title: `CoS Request: ${company}`, message: `${company} requested ${requestedAmount} CoS slots for ${visaType}. Reason: ${reason}`, actionType: 'cos_request', entityId: app.id, entityType: 'licence_application' }); } catch (e) { console.error(e); }
-    try { await createNotification({ tenantDb: req.tenantDb, userId, type: NotificationTypes.INFO, priority: NotificationPriority.MEDIUM, title: 'CoS Request Submitted', message: `Your request for ${requestedAmount} CoS slots (${visaType}) is under review.` }); } catch (e) { console.error(e); }
+    try { await notifyAdmins(req.tenantDb, { type: NotificationTypes.INFO, priority: NotificationPriority.HIGH, title: `CoS Request: ${company}`, message: `${company} requested ${requestedAmount} CoS slots for ${visaType}. Reason: ${reason}`, actionType: 'cos_request', entityId: app.id, entityType: 'licence_application' }); } catch (e) { logger.error({ err: e }, 'Failed to notify admins for CoS request'); }
+    try { await createNotification({ tenantDb: req.tenantDb, userId, type: NotificationTypes.INFO, priority: NotificationPriority.MEDIUM, title: 'CoS Request Submitted', message: `Your request for ${requestedAmount} CoS slots (${visaType}) is under review.` }); } catch (e) { logger.error({ err: e }, 'Failed to create CoS notification'); }
     if (process.env.ADMIN_EMAIL) {
       try {
         await sendTransactionalEmail({
@@ -104,11 +106,11 @@ export const requestCosAllocation = async (req, res) => {
           }),
         });
       } catch (e) {
-        console.error(e);
+        logger.error({ err: e }, 'Failed to send CoS admin email');
       }
     }
   } catch (err) {
-    console.error('requestCosAllocation error:', err);
+    logger.error({ err }, 'requestCosAllocation error');
     res.status(500).json({ status: 'error', message: 'Internal server error', error: err.message });
   }
 };
@@ -125,7 +127,7 @@ export const getCosRequests = async (req, res) => {
 
     res.status(200).json({ status: 'success', data: requests });
   } catch (err) {
-    console.error('getCosRequests error:', err);
+    logger.error({ err }, 'getCosRequests error');
     res.status(500).json({ status: 'error', message: 'Internal server error', error: err.message });
   }
 };
@@ -149,7 +151,7 @@ export const updateCosRequest = async (req, res) => {
 
     res.status(200).json({ status: 'success', message: 'Request updated', data: app });
   } catch (err) {
-    console.error('updateCosRequest error:', err);
+    logger.error({ err }, 'updateCosRequest error');
     res.status(500).json({ status: 'error', message: 'Internal server error', error: err.message });
   }
 };
@@ -168,7 +170,7 @@ export const deleteCosRequest = async (req, res) => {
     await app.destroy();
     res.status(200).json({ status: 'success', message: 'Request deleted' });
   } catch (err) {
-    console.error('deleteCosRequest error:', err);
+    logger.error({ err }, 'deleteCosRequest error');
     res.status(500).json({ status: 'error', message: 'Internal server error', error: err.message });
   }
 };

@@ -1,5 +1,6 @@
 import { Op } from 'sequelize';
 
+import logger from '../../../utils/logger.js';
 import { sendAppointmentEmail } from '../../../services/email.service.js';
 import { generateAppointmentTemplate } from '../../../utils/emailTemplates.js';
 import { ROLES, hasFullAccessRole } from '../../../middlewares/role.middleware.js';
@@ -52,7 +53,7 @@ export const getMyAppointments = async (req, res) => {
       data: { appointments }
     });
   } catch (error) {
-    console.error("Get Appointments Error:", error);
+    logger.error({ err: error }, "Get Appointments Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -134,7 +135,7 @@ export const createAppointment = async (req, res) => {
             })
           });
         } catch (err) {
-          console.error(`Failed to send appointment email to staff ${staffId}:`, err);
+          logger.error({ err }, `Failed to send appointment email to staff ${staffId}`);
         }
       }
 
@@ -157,7 +158,7 @@ export const createAppointment = async (req, res) => {
           })
         });
       } catch (err) {
-        console.error("Failed to send appointment confirmation to candidate:", err);
+        logger.error({ err }, "Failed to send appointment confirmation to candidate");
       }
     }
 
@@ -167,7 +168,7 @@ export const createAppointment = async (req, res) => {
       data: { appointment }
     });
   } catch (error) {
-    console.error("Create Appointment Error:", error);
+    logger.error({ err: error }, "Create Appointment Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -197,7 +198,7 @@ export const getAvailableStaff = async (req, res) => {
       data: { staff }
     });
   } catch (error) {
-    console.error("Get Staff Error:", error);
+    logger.error({ err: error }, "Get Staff Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -240,7 +241,7 @@ export const updateAppointmentStatus = async (req, res) => {
       data: { appointment }
     });
   } catch (error) {
-    console.error("Update Appointment Error:", error);
+    logger.error({ err: error }, "Update Appointment Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -281,7 +282,7 @@ export const deleteAppointment = async (req, res) => {
       data: null
     });
   } catch (error) {
-    console.error("Delete Appointment Error:", error);
+    logger.error({ err: error }, "Delete Appointment Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",

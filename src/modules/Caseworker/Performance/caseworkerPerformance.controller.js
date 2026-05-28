@@ -1,4 +1,5 @@
 import { Op } from 'sequelize';
+import logger from '../../../utils/logger.js';
 import { Parser } from 'json2csv';
 
 
@@ -205,7 +206,7 @@ export const getCaseworkerPerformance = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('Error fetching caseworker performance:', error);
+    logger.error({ err: error }, 'Error fetching caseworker performance');
     res.status(500).json({ 
       success: false, 
       message: 'Failed to fetch performance metrics' 
@@ -245,7 +246,7 @@ export const getCaseworkerActivityLog = async (req, res) => {
 
     res.json({ success: true, data: timeline });
   } catch (error) {
-    console.error('Error fetching activity log:', error);
+    logger.error({ err: error }, 'Error fetching activity log');
     res.status(500).json({
       success: false,
       message: 'Failed to fetch activity log'
@@ -478,7 +479,7 @@ export const exportCaseworkerPerformance = async (req, res) => {
     res.setHeader('Content-Disposition', 'attachment; filename=caseworker_performance_report.csv');
     res.send(csv);
   } catch (error) {
-    console.error('Error exporting caseworker performance:', error);
+    logger.error({ err: error }, 'Error exporting caseworker performance');
     res.status(500).json({
       success: false,
       message: 'Failed to export performance data'

@@ -1,4 +1,5 @@
 import { Op } from 'sequelize';
+import logger from '../../../utils/logger.js';
 import { ROLES } from '../../../middlewares/role.middleware.js';
 import { assertUsersInOrganisation } from '../../../utils/tenantScope.js';
 import { localDateStr } from '../../../utils/dateHelpers.js';
@@ -223,7 +224,7 @@ export const getMyCases = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Get My Cases Error:", error);
+    logger.error({ err: error }, "Get My Cases Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -357,7 +358,7 @@ export const getMyDashboardStats = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Get My Dashboard Stats Error:", error);
+    logger.error({ err: error }, "Get My Dashboard Stats Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -413,7 +414,7 @@ export const getMyPipelineCases = async (req, res) => {
       meta: { steps: IMMIGRATION_CASE_STEPS },
     });
   } catch (error) {
-    console.error("Get My Pipeline Cases Error:", error);
+    logger.error({ err: error }, "Get My Pipeline Cases Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -475,7 +476,7 @@ export const updateMyCaseStatus = async (req, res) => {
       data: { case: caseData },
     });
   } catch (error) {
-    console.error("Update My Case Status Error:", error);
+    logger.error({ err: error }, "Update My Case Status Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -601,7 +602,7 @@ export const createMyCase = async (req, res) => {
       data: { case: newCase },
     });
   } catch (error) {
-    console.error("Create My Case Error:", error);
+    logger.error({ err: error }, "Create My Case Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -715,7 +716,7 @@ export const updateMyCase = async (req, res) => {
       data: { case: caseData },
     });
   } catch (error) {
-    console.error("Update My Case Error:", error);
+    logger.error({ err: error }, "Update My Case Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -769,7 +770,7 @@ export const deleteMyCase = async (req, res) => {
       data: null,
     });
   } catch (error) {
-    console.error("Delete My Case Error:", error);
+    logger.error({ err: error }, "Delete My Case Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -1047,7 +1048,7 @@ export const getCaseDetails = async (req, res) => {
 
     res.status(200).json(response);
   } catch (error) {
-    console.error("Get Case Details Error:", error);
+    logger.error({ err: error }, "Get Case Details Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",

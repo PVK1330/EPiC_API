@@ -13,6 +13,7 @@ import { sendTenantSponsorWelcomeEmail } from '../../../services/tenantUserMail.
 import catchAsync from '../../../utils/catchAsync.js';
 import ApiResponse from '../../../utils/apiResponse.js';
 import { rowsToXlsxBuffer, sendXlsxDownload } from '../../../utils/excelExport.util.js';
+import logger from '../../../utils/logger.js';
 
 // Multer configuration for file upload
 const upload = multer({ storage: multer.memoryStorage() });
@@ -187,7 +188,7 @@ export const createSponsor = async (req, res) => {
         firstName: first_name,
       });
     } catch (emailError) {
-      console.error("Failed to send sponsor welcome email:", emailError);
+      logger.error({ err: emailError }, "Failed to send sponsor welcome email");
     }
 
     try {
@@ -199,7 +200,7 @@ export const createSponsor = async (req, res) => {
         last_name: sponsor.last_name,
       });
     } catch (notifError) {
-      console.error("Failed to send user creation notification:", notifError);
+      logger.error({ err: notifError }, "Failed to send user creation notification");
     }
 
     const { password: _, ...sponsorData } = sponsor.toJSON();
@@ -218,7 +219,7 @@ export const createSponsor = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Create Sponsor Error:", error);
+    logger.error({ err: error }, "Create Sponsor Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -289,7 +290,7 @@ export const getAllSponsors = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Get All Sponsors Error:", error);
+    logger.error({ err: error }, "Get All Sponsors Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -331,7 +332,7 @@ export const getSponsorById = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Get Sponsor by ID Error:", error);
+    logger.error({ err: error }, "Get Sponsor by ID Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -570,7 +571,7 @@ export const updateSponsor = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Update Sponsor Error:", error);
+    logger.error({ err: error }, "Update Sponsor Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -603,7 +604,7 @@ export const deleteSponsor = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Delete Sponsor Error:", error);
+    logger.error({ err: error }, "Delete Sponsor Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -670,7 +671,7 @@ export const resetSponsorPassword = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Reset Sponsor Password Error:", error);
+    logger.error({ err: error }, "Reset Sponsor Password Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -707,7 +708,7 @@ export const toggleSponsorStatus = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Toggle Sponsor Status Error:", error);
+    logger.error({ err: error }, "Toggle Sponsor Status Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -800,7 +801,7 @@ export const bulkImportSponsors = async (req, res) => {
             firstName: sponsor.first_name,
           });
         } catch (emailError) {
-          console.error(`Failed to send sponsor email to ${sponsor.email}:`, emailError);
+          logger.error({ err: emailError, email: sponsor.email }, 'Failed to send sponsor email');
         }
 
         try {
@@ -812,7 +813,7 @@ export const bulkImportSponsors = async (req, res) => {
             last_name: sponsor.last_name,
           });
         } catch (notifError) {
-          console.error(`Failed to send notification for ${sponsor.email}:`, notifError);
+          logger.error({ err: notifError, email: sponsor.email }, 'Failed to send notification');
         }
 
         results.success.push({
@@ -842,7 +843,7 @@ export const bulkImportSponsors = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Bulk Import Sponsors Error:", error);
+    logger.error({ err: error }, "Bulk Import Sponsors Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",

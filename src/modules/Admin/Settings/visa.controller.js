@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { Op } from 'sequelize';
 import { ROLES } from '../../../middlewares/role.middleware.js';
+import logger from '../../../utils/logger.js';
 
 function mapVisaType(row) {
   const plain = row?.get ? row.get({ plain: true }) : row;
@@ -25,7 +26,7 @@ function deleteTemplateFileIfExists(filePath) {
   try {
     if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
   } catch (err) {
-    console.warn('deleteTemplateFileIfExists:', err.message);
+    logger.warn({ err }, 'deleteTemplateFileIfExists');
   }
 }
 
@@ -61,7 +62,7 @@ export const listVisaTypes = async (req, res) => {
       data: { visa_types: rows.map(mapVisaType) },
     });
   } catch (error) {
-    console.error("listVisaTypes error:", error);
+    logger.error({ err: error }, "listVisaTypes error");
     res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
   }
 };
@@ -91,7 +92,7 @@ export const createVisaType = async (req, res) => {
       data: { visa_type: mapVisaType(row) },
     });
   } catch (error) {
-    console.error("createVisaType error:", error);
+    logger.error({ err: error }, "createVisaType error");
     if (error.name === "SequelizeUniqueConstraintError") {
       return res.status(400).json({ status: "error", message: "A visa type with this name already exists", data: null });
     }
@@ -135,7 +136,7 @@ export const updateVisaType = async (req, res) => {
       data: { visa_type: mapVisaType(row) },
     });
   } catch (error) {
-    console.error("updateVisaType error:", error);
+    logger.error({ err: error }, "updateVisaType error");
     res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
   }
 };
@@ -155,7 +156,7 @@ export const deleteVisaType = async (req, res) => {
     await row.destroy();
     res.status(200).json({ status: "success", message: "Visa type deleted.", data: null });
   } catch (error) {
-    console.error("deleteVisaType error:", error);
+    logger.error({ err: error }, "deleteVisaType error");
     res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
   }
 };
@@ -176,7 +177,7 @@ export const dropdownVisaType = async (req, res) => {
       data: { visa_types: rows.map(mapVisaType) },
     });
   } catch (error) {
-    console.error("dropdownVisaType error:", error);
+    logger.error({ err: error }, "dropdownVisaType error");
     res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
   }
 };
@@ -215,7 +216,7 @@ export const uploadCclTemplate = async (req, res) => {
       data: { visa_type: mapVisaType(row) },
     });
   } catch (error) {
-    console.error("uploadCclTemplate error:", error);
+    logger.error({ err: error }, "uploadCclTemplate error");
     if (req.file?.path && fs.existsSync(req.file.path)) {
       try {
         fs.unlinkSync(req.file.path);
@@ -250,7 +251,7 @@ export const deleteCclTemplate = async (req, res) => {
       data: { visa_type: mapVisaType(row) },
     });
   } catch (error) {
-    console.error("deleteCclTemplate error:", error);
+    logger.error({ err: error }, "deleteCclTemplate error");
     res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
   }
 };

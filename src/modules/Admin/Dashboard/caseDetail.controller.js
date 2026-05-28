@@ -20,6 +20,7 @@ import {
   normalizeCaseStage,
   isValidCaseStage,
 } from '../../../constants/immigrationCaseProcess.js';
+import logger from '../../../utils/logger.js';
 
 const MANUAL_PAYMENT_METHOD_MAP = {
   bank_transfer: 'bank_transfer',
@@ -406,7 +407,7 @@ export const getCaseDetails = async (req, res) => {
 
     res.status(200).json(response);
   } catch (error) {
-    console.error("Get Case Details Error:", error);
+    logger.error({ err: error }, "Get Case Details Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -558,7 +559,7 @@ export const updateCaseStatus = async (req, res) => {
       data: { case: caseData }
     });
   } catch (error) {
-    console.error("Update Case Status Error:", error);
+    logger.error({ err: error }, "Update Case Status Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -752,7 +753,7 @@ export const updateCaseFinance = async (req, res) => {
         trigger: 'payment_received',
         performedBy: userId || null,
         organisationId,
-      }).catch((err) => console.error('evaluateCaseStageAfterEvent:', err));
+      }).catch((err) => logger.error({ err }, 'evaluateCaseStageAfterEvent'));
 
       await recordTimelineEntry({
         tenantDb: req.tenantDb,
@@ -856,7 +857,7 @@ export const updateCaseFinance = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Update Case Finance Error:", error);
+    logger.error({ err: error }, "Update Case Finance Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -954,7 +955,7 @@ export const recordManualCasePayment = async (req, res) => {
       trigger: 'payment_received',
       performedBy: userId || null,
       organisationId,
-    }).catch((err) => console.error('evaluateCaseStageAfterEvent:', err));
+    }).catch((err) => logger.error({ err }, 'evaluateCaseStageAfterEvent'));
 
     await recordTimelineEntry({
       tenantDb: req.tenantDb,
@@ -985,7 +986,7 @@ export const recordManualCasePayment = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('Record Manual Case Payment Error:', error);
+    logger.error({ err: error }, 'Record Manual Case Payment Error');
     res.status(500).json({
       status: 'error',
       message: 'Internal server error',

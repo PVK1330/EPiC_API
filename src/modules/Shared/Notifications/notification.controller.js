@@ -116,7 +116,7 @@ export const getAllNotifications = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('Get all notifications error:', error);
+    logger.error({ err: error }, 'Get all notifications error');
     return internalServerError(res);
   }
 };
@@ -173,7 +173,7 @@ export const getNotifications = async (req, res) => {
       data: result,
     });
   } catch (error) {
-    console.error('Get notifications error:', error);
+    logger.error({ err: error }, 'Get notifications error');
     return internalServerError(res);
   }
 };
@@ -199,7 +199,7 @@ export const getUnreadNotificationCount = async (req, res) => {
       data: { count },
     });
   } catch (error) {
-    console.error('Get unread count error:', error);
+    logger.error({ err: error }, 'Get unread count error');
     return internalServerError(res);
   }
 };
@@ -239,7 +239,7 @@ export const markNotificationAsRead = async (req, res) => {
       data: { notification: updated },
     });
   } catch (error) {
-    console.error('Mark as read error:', error);
+    logger.error({ err: error }, 'Mark as read error');
     return internalServerError(res);
   }
 };
@@ -265,7 +265,7 @@ export const markAllNotificationsAsRead = async (req, res) => {
       data: { count },
     });
   } catch (error) {
-    console.error('Mark all as read error:', error);
+    logger.error({ err: error }, 'Mark all as read error');
     return internalServerError(res);
   }
 };
@@ -305,7 +305,7 @@ export const deleteNotificationById = async (req, res) => {
       data: null,
     });
   } catch (error) {
-    console.error('Delete notification error:', error);
+    logger.error({ err: error }, 'Delete notification error');
     return internalServerError(res);
   }
 };
@@ -464,7 +464,7 @@ export const createManualNotification = async (req, res) => {
       data: { notification },
     });
   } catch (error) {
-    console.error('Create notification error:', error);
+    logger.error({ err: error }, 'Create notification error');
     return internalServerError(res);
   }
 };
@@ -519,7 +519,7 @@ export const getNotificationStats = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('Get notification stats error:', error);
+    logger.error({ err: error }, 'Get notification stats error');
     return internalServerError(res);
   }
 };
@@ -535,7 +535,7 @@ export const processScheduled = async (req, res) => {
       data: { processed: count },
     });
   } catch (error) {
-    console.error('Process scheduled notifications error:', error);
+    logger.error({ err: error }, 'Process scheduled notifications error');
     return internalServerError(res);
   }
 };
@@ -551,7 +551,7 @@ export const deleteExpired = async (req, res) => {
       data: { deleted: count },
     });
   } catch (error) {
-    console.error('Delete expired notifications error:', error);
+    logger.error({ err: error }, 'Delete expired notifications error');
     return internalServerError(res);
   }
 };

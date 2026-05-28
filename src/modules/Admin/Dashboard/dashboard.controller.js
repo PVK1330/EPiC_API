@@ -3,13 +3,14 @@ import { localDateStr, localDateAfterDays } from '../../../utils/dateHelpers.js'
 import { generatePdfBufferFromDefinition } from '../../../services/pdfGenerator.service.js';
 import catchAsync from '../../../utils/catchAsync.js';
 import ApiResponse from '../../../utils/apiResponse.js';
+import logger from '../../../utils/logger.js';
 
 /** Run a dashboard query without failing the whole endpoint when a table/model is missing. */
 async function safeDashboardQuery(promise, fallback, label = 'query') {
   try {
     return await promise;
   } catch (err) {
-    console.warn(`Dashboard ${label} skipped:`, err.message);
+    logger.warn({ errMessage: err.message }, `Dashboard ${label} skipped`);
     return fallback;
   }
 }
@@ -238,7 +239,7 @@ export const getDashboardStats = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Get Dashboard Stats Error:", error);
+    logger.error({ err: error }, "Get Dashboard Stats Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -293,7 +294,7 @@ export const getRecentCases = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Get Recent Cases Error:", error);
+    logger.error({ err: error }, "Get Recent Cases Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -357,7 +358,7 @@ export const getRecentTasks = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Get Recent Tasks Error:", error);
+    logger.error({ err: error }, "Get Recent Tasks Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -478,7 +479,7 @@ export const getRecentActivities = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Get Recent Activities Error:", error);
+    logger.error({ err: error }, "Get Recent Activities Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -567,7 +568,7 @@ export const getQuickActions = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Get Quick Actions Error:", error);
+    logger.error({ err: error }, "Get Quick Actions Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -584,7 +585,7 @@ export const exportDashboardSnapshot = catchAsync(async (req, res) => {
 // Simple test endpoint to verify PDF generation works
 export const testPdfGeneration = catchAsync(async (req, res) => {
   try {
-    console.log('[Test PDF] Starting simple PDF test...');
+    logger.info('[Test PDF] Starting simple PDF test...');
     
     const simpleDoc = {
       content: [
@@ -598,16 +599,16 @@ export const testPdfGeneration = catchAsync(async (req, res) => {
       defaultStyle: { font: 'Helvetica' }
     };
 
-    console.log('[Test PDF] Generating buffer...');
+    logger.info('[Test PDF] Generating buffer...');
     const buffer = await generatePdfBufferFromDefinition(simpleDoc);
-    console.log('[Test PDF] Buffer generated, size:', buffer.length);
+    logger.info({ bufferSize: buffer.length }, '[Test PDF] Buffer generated');
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', 'attachment; filename="test.pdf"');
     res.status(200).send(buffer);
-    console.log('[Test PDF] PDF sent successfully');
+    logger.info('[Test PDF] PDF sent successfully');
   } catch (error) {
-    console.error('[Test PDF] Error:', error);
+    logger.error({ err: error }, '[Test PDF] Error');
     return res.status(500).json({
       status: "error",
       message: "Test PDF generation failed",
@@ -619,58 +620,58 @@ export const testPdfGeneration = catchAsync(async (req, res) => {
 
 export const exportDashboardPDF = catchAsync(async (req, res) => {
   try {
-    console.log('[PDF Export] Starting dashboard PDF generation...');
+    logger.info('[PDF Export] Starting dashboard PDF generation...');
     
     const userId = req.user?.userId ?? req.user?.id;
     if (!userId) {
-      console.error('[PDF Export] No user ID found');
+      logger.error('[PDF Export] No user ID found');
       return ApiResponse.unauthorized(res, "Authentication required");
     }
 
-    console.log('[PDF Export] User authenticated:', userId);
+    logger.info({ userId }, '[PDF Export] User authenticated');
 
     // Check if tenantDb exists
     if (!req.tenantDb) {
-      console.error('[PDF Export] No tenant database found');
+      logger.error('[PDF Export] No tenant database found');
       return ApiResponse.error(res, "Tenant database not initialized", 500);
     }
 
-    console.log('[PDF Export] Fetching dashboard data...');
+    logger.info('[PDF Export] Fetching dashboard data...');
 
     // 1. Fetch all necessary data (reuse stats logic) with error handling
     const totalCases = await req.tenantDb.Case.count().catch((err) => {
-      console.error('[PDF Export] Error counting total cases:', err.message);
+      logger.error({ errMessage: err.message }, '[PDF Export] Error counting total cases');
       return 0;
     });
     const activeCases = await req.tenantDb.Case.count({ where: { status: { [Op.ne]: 'Completed' } } }).catch((err) => {
-      console.error('[PDF Export] Error counting active cases:', err.message);
+      logger.error({ errMessage: err.message }, '[PDF Export] Error counting active cases');
       return 0;
     });
     const completedCases = await req.tenantDb.Case.count({ where: { status: 'Completed' } }).catch((err) => {
-      console.error('[PDF Export] Error counting completed cases:', err.message);
+      logger.error({ errMessage: err.message }, '[PDF Export] Error counting completed cases');
       return 0;
     });
     const totalTasks = await req.tenantDb.Task.count().catch((err) => {
-      console.error('[PDF Export] Error counting total tasks:', err.message);
+      logger.error({ errMessage: err.message }, '[PDF Export] Error counting total tasks');
       return 0;
     });
     const pendingTasks = await req.tenantDb.Task.count({ where: { status: { [Op.ne]: 'completed' } } }).catch((err) => {
-      console.error('[PDF Export] Error counting pending tasks:', err.message);
+      logger.error({ errMessage: err.message }, '[PDF Export] Error counting pending tasks');
       return 0;
     });
     
-    console.log('[PDF Export] Case stats:', { totalCases, activeCases, completedCases });
+    logger.info({ totalCases, activeCases, completedCases }, '[PDF Export] Case stats');
     
     const caseStatusBreakdown = await req.tenantDb.Case.findAll({
       attributes: ['status', [req.tenantDb.sequelize.fn('COUNT', '*'), 'count']],
       group: ['status'],
       raw: true
     }).catch((err) => {
-      console.error('[PDF Export] Error fetching case status breakdown:', err.message);
+      logger.error({ errMessage: err.message }, '[PDF Export] Error fetching case status breakdown');
       return [];
     });
 
-    console.log('[PDF Export] Case status breakdown:', caseStatusBreakdown);
+    logger.info({ caseStatusBreakdown }, '[PDF Export] Case status breakdown');
 
     const escalations = await safeDashboardQuery(
       req.tenantDb.Escalation.findAll({
@@ -682,17 +683,17 @@ export const exportDashboardPDF = catchAsync(async (req, res) => {
       'escalations for PDF'
     );
 
-    console.log('[PDF Export] Escalations count:', escalations.length);
+    logger.info({ escalationsCount: escalations.length }, '[PDF Export] Escalations count');
 
     const caseworkers = await req.tenantDb.User.findAll({
       where: { role_id: 2 },
       attributes: ['id', 'first_name', 'last_name']
     }).catch((err) => {
-      console.error('[PDF Export] Error fetching caseworkers:', err.message);
+      logger.error({ errMessage: err.message }, '[PDF Export] Error fetching caseworkers');
       return [];
     });
 
-    console.log('[PDF Export] Caseworkers count:', caseworkers.length);
+    logger.info({ caseworkersCount: caseworkers.length }, '[PDF Export] Caseworkers count');
 
     const teamWorkload = await Promise.all(caseworkers.map(async (cw) => {
       const count = await req.tenantDb.Case.count({
@@ -701,15 +702,15 @@ export const exportDashboardPDF = catchAsync(async (req, res) => {
           assignedcaseworkerId: { [Op.contains]: [cw.id] }
         }
       }).catch((err) => {
-        console.error(`[PDF Export] Error counting cases for caseworker ${cw.id}:`, err.message);
+        logger.error({ errMessage: err.message, caseworkerId: cw.id }, '[PDF Export] Error counting cases for caseworker');
         return 0;
       });
       return { name: `${cw.first_name} ${cw.last_name}`, count };
     }));
 
-    console.log('[PDF Export] Team workload calculated');
+    logger.info('[PDF Export] Team workload calculated');
 
-    console.log('[PDF Export] Building PDF document definition...');
+    logger.info('[PDF Export] Building PDF document definition...');
 
     // 2. Define PDF structure (Standard Fonts - no files needed)
     const docDefinition = {
@@ -887,23 +888,21 @@ export const exportDashboardPDF = catchAsync(async (req, res) => {
       defaultStyle: { font: 'Helvetica' }
     };
 
-    console.log('[PDF Export] Generating PDF buffer...');
+    logger.info('[PDF Export] Generating PDF buffer...');
     const buffer = await generatePdfBufferFromDefinition(docDefinition);
-    console.log('[PDF Export] PDF buffer generated successfully, size:', buffer.length, 'bytes');
+    logger.info({ bufferSize: buffer.length }, '[PDF Export] PDF buffer generated successfully');
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader(
       'Content-Disposition',
       'attachment; filename="dashboard_report.pdf"',
     );
-    console.log('[PDF Export] Sending PDF response...');
+    logger.info('[PDF Export] Sending PDF response...');
     res.status(200).send(buffer);
-    console.log('[PDF Export] PDF sent successfully');
+    logger.info('[PDF Export] PDF sent successfully');
 
   } catch (error) {
-    console.error("Export Dashboard PDF Error:", error);
-    console.error("Error message:", error.message);
-    console.error("Error stack:", error.stack);
+    logger.error({ err: error }, "Export Dashboard PDF Error");
     
     // Return detailed error in development
     if (process.env.NODE_ENV === 'development') {
@@ -1096,7 +1095,7 @@ export const getDueOverdueTasks = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("getDueOverdueTasks:", error);
+    logger.error({ err: error }, "getDueOverdueTasks");
     res.status(500).json({
       status: "error",
       message: "Failed to load due and overdue items",

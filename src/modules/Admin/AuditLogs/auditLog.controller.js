@@ -170,7 +170,7 @@ export const getAuditLogs = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('Get Audit Logs Error:', error);
+    logger.error({ err: error }, 'Get Audit Logs Error');
     res.status(500).json({
       status:  'error',
       message: 'Internal server error',
@@ -210,7 +210,7 @@ export const getAuditStats = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('Get Audit Stats Error:', error);
+    logger.error({ err: error }, 'Get Audit Stats Error');
     res.status(500).json({ status: 'error', message: error.message });
   }
 };

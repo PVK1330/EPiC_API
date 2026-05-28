@@ -2,6 +2,7 @@ import express from 'express';
 import { verifyTokenAndTenant } from '../../../middlewares/authStack.middleware.js';
 import { checkAnyPermission } from '../../../middlewares/role.middleware.js';
 import { handleDocumentUpload } from '../../../middlewares/upload.middleware.js';
+import { uploadLimiter } from '../../../middlewares/uploadRateLimiter.js';
 import {
   uploadDocuments,
   getUserDocumentsByCategory,
@@ -34,6 +35,7 @@ const DOWNLOAD_PERMS = ['caseworker.documents.view', 'candidate.documents.view',
 router.post('/upload',
   verifyTokenAndTenant,
   checkAnyPermission(UPLOAD_PERMS),
+  uploadLimiter,
   handleDocumentUpload,
   uploadDocuments
 );
@@ -55,6 +57,27 @@ router.get('/download/:documentId',
   verifyTokenAndTenant,
   checkAnyPermission(DOWNLOAD_PERMS),
   downloadDocument
+);
+
+router.get('/temp/:filename',
+  verifyTokenAndTenant,
+  (req, res) => {
+    import('path').then(path => {
+      import('fs').then(fs => {
+        const { filename } = req.params;
+        const targetPath = path.default.join(process.cwd(), 'storage/private/temp', filename);
+        if (!targetPath.startsWith(path.default.join(process.cwd(), 'storage/private/temp'))) {
+          return res.status(403).json({ status: false, message: "Forbidden" });
+        }
+        if (!fs.default.existsSync(targetPath)) {
+          return res.status(404).json({ status: false, message: "File not found" });
+        }
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.sendFile(targetPath);
+      });
+    });
+  }
 );
 
 router.get('/bundle/me',

@@ -1,3 +1,4 @@
+import logger from '../../../utils/logger.js';
 import { Op } from 'sequelize';
 import { ROLES } from '../../../middlewares/role.middleware.js';
 
@@ -86,7 +87,7 @@ export const getAllSponsors = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Get All Sponsors Error:", error);
+    logger.error({ err: error }, "Get All Sponsors Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -177,7 +178,7 @@ export const getSponsorById = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Get Sponsor by ID Error:", error);
+    logger.error({ err: error }, "Get Sponsor by ID Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",

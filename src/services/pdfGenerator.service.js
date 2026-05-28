@@ -1,5 +1,6 @@
 import PdfPrinter from "pdfmake";
 import fs from "fs";
+import logger from "../utils/logger.js";
 
 // Use pdfmake's built-in fonts (Roboto) or standard PDF fonts
 const fonts = {
@@ -19,10 +20,10 @@ const fonts = {
 
 export function generatePdfBufferFromDefinition(docDefinition) {
   try {
-    console.log('[PDF Generator] Creating PDF printer...');
+    logger.debug('[PDF Generator] Creating PDF printer...');
     const printer = new PdfPrinter(fonts);
     
-    console.log('[PDF Generator] Creating PDF document...');
+    logger.debug('[PDF Generator] Creating PDF document...');
     const pdfDoc = printer.createPdfKitDocument(docDefinition);
 
     return new Promise((resolve, reject) => {
@@ -34,24 +35,24 @@ export function generatePdfBufferFromDefinition(docDefinition) {
 
       pdfDoc.on("end", () => {
         try {
-          console.log('[PDF Generator] PDF generation completed, chunks:', chunks.length);
+          logger.debug({ chunks: chunks.length }, '[PDF Generator] PDF generation completed');
           resolve(Buffer.concat(chunks));
         } catch (err) {
-          console.error('[PDF Generator] Error concatenating chunks:', err);
+          logger.error({ err }, '[PDF Generator] Error concatenating chunks');
           reject(err);
         }
       });
 
       pdfDoc.on("error", (err) => {
-        console.error('[PDF Generator] PDF document error:', err);
+        logger.error({ err }, '[PDF Generator] PDF document error');
         reject(err);
       });
 
-      console.log('[PDF Generator] Ending PDF document...');
+      logger.debug('[PDF Generator] Ending PDF document...');
       pdfDoc.end();
     });
   } catch (error) {
-    console.error('[PDF Generator] Error in generatePdfBufferFromDefinition:', error);
+    logger.error({ err: error }, '[PDF Generator] Error in generatePdfBufferFromDefinition');
     throw error;
   }
 }
@@ -267,7 +268,7 @@ export function streamBrandedPdf(res, attachmentFilename, options) {
     `attachment; filename="${attachmentFilename.replace(/"/g, "")}"`,
   );
   pdfDoc.on("error", (err) => {
-    console.error("PDF stream error:", err);
+    logger.error({ err }, "PDF stream error");
     if (!res.headersSent) {
       res.status(500).json({
         status: "error",

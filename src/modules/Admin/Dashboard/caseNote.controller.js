@@ -1,4 +1,5 @@
 import { ROLES } from '../../../middlewares/role.middleware.js';
+import logger from '../../../utils/logger.js';
 
 // Create a new case note
 export const createCaseNote = async (req, res) => {
@@ -70,7 +71,7 @@ export const createCaseNote = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Create Case Note Error:", error);
+    logger.error({ err: error }, "Create Case Note Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -165,7 +166,7 @@ export const getCaseNotes = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Get Case Notes Error:", error);
+    logger.error({ err: error }, "Get Case Notes Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -222,7 +223,7 @@ export const updateCaseNote = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Update Case Note Error:", error);
+    logger.error({ err: error }, "Update Case Note Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -267,7 +268,7 @@ export const deleteCaseNote = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Delete Case Note Error:", error);
+    logger.error({ err: error }, "Delete Case Note Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -324,7 +325,7 @@ export const getCaseNoteByNoteId = async (req, res) => {
     });
     
   } catch (error) {
-    console.error("Get Case by Note ID Error:", error);
+    logger.error({ err: error }, "Get Case by Note ID Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",

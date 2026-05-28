@@ -1,3 +1,4 @@
+import logger from '../../../utils/logger.js';
 import { Op } from 'sequelize';
 import { mergeCaseWhere } from '../../../utils/tenantScope.js';
 import { localDateStr } from '../../../utils/dateHelpers.js';
@@ -55,7 +56,7 @@ export const getDashboard = async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('getDashboard error:', err);
+    logger.error({ err }, 'getDashboard error');
     res.status(500).json({ status: 'error', message: 'Internal server error', error: err.message });
   }
 };
@@ -227,7 +228,7 @@ export const getReportingObligations = async (req, res) => {
       data: transformed
     });
   } catch (err) {
-    console.error('getReportingObligations error:', err);
+    logger.error({ err }, 'getReportingObligations error');
     res.status(500).json({ status: 'error', message: 'Internal server error' });
   }
 };
@@ -262,7 +263,7 @@ export const createReportingObligation = async (req, res) => {
       data: newEvent
     });
   } catch (err) {
-    console.error('createReportingObligation error:', err);
+    logger.error({ err }, 'createReportingObligation error');
     res.status(500).json({ status: 'error', message: 'Internal server error' });
   }
 };
@@ -287,7 +288,7 @@ export const updateReportingObligation = async (req, res) => {
       data: event
     });
   } catch (err) {
-    console.error('updateReportingObligation error:', err);
+    logger.error({ err }, 'updateReportingObligation error');
     res.status(500).json({ status: 'error', message: 'Internal server error' });
   }
 };
@@ -342,7 +343,7 @@ export const getBusinessPayments = async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('getBusinessPayments error:', err);
+    logger.error({ err }, 'getBusinessPayments error');
     res.status(500).json({ status: 'error', message: 'Internal server error', error: err.message });
   }
 };

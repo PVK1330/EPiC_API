@@ -1,3 +1,4 @@
+import logger from '../../../utils/logger.js';
 import path from 'path';
 import bcrypt from 'bcryptjs';
 import { Op } from 'sequelize';
@@ -300,7 +301,7 @@ export const getCandidateApplicationFieldSettings = async (req, res) => {
       data: settings.map((s) => s.toJSON()),
     });
   } catch (err) {
-    console.error('getCandidateApplicationFieldSettings error:', err);
+    logger.error({ err }, 'getCandidateApplicationFieldSettings error');
     res.status(500).json({
       status: 'error',
       message: 'Internal server error',
@@ -328,7 +329,7 @@ export const getCandidateApplicationCustomFields = async (req, res) => {
       data: customFields.map((f) => f.toJSON()),
     });
   } catch (err) {
-    console.error('getCandidateApplicationCustomFields error:', err);
+    logger.error({ err }, 'getCandidateApplicationCustomFields error');
     res.status(500).json({
       status: 'error',
       message: 'Internal server error',
@@ -439,7 +440,7 @@ export const getMyApplication = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('getMyApplication error:', err);
+    logger.error({ err }, 'getMyApplication error');
     res.status(500).json({
       status: 'error',
       message: 'Internal server error',
@@ -626,10 +627,10 @@ export const submitApplication = async (req, res) => {
         });
       }
     } catch (taskErr) {
-      console.error('Error syncing workflow tasks after application submit:', taskErr);
+      logger.error({ err: taskErr }, 'Error syncing workflow tasks after application submit');
     }
   } catch (err) {
-    console.error('submitApplication error:', err);
+    logger.error({ err }, 'submitApplication error');
     res.status(500).json({
       status: 'error',
       message: 'Internal server error',
@@ -688,7 +689,7 @@ export const saveDraft = async (req, res) => {
       data: { application },
     });
   } catch (err) {
-    console.error('saveDraft error:', err);
+    logger.error({ err }, 'saveDraft error');
     res.status(500).json({
       status: 'error',
       message: 'Internal server error',
@@ -715,7 +716,7 @@ export const unlockApplication = async (req, res) => {
 
     res.status(200).json({ success: true, message: 'Application unlocked successfully.' });
   } catch (err) {
-    console.error('unlockApplication error:', err);
+    logger.error({ err }, 'unlockApplication error');
     res.status(500).json({
       status: 'error',
       message: 'Internal server error',
@@ -860,7 +861,7 @@ export const adminUpdateCandidateApplication = async (req, res) => {
       data: { candidate: updatedCandidate },
     });
   } catch (err) {
-    console.error('adminUpdateCandidateApplication error:', err);
+    logger.error({ err }, 'adminUpdateCandidateApplication error');
     res.status(500).json({
       status: 'error',
       message: 'Internal server error',
@@ -972,7 +973,7 @@ export const exportCandidateApplicationsExcel = async (req, res) => {
     );
     res.status(200).send(buf);
   } catch (err) {
-    console.error('exportCandidateApplicationsExcel error:', err);
+    logger.error({ err }, 'exportCandidateApplicationsExcel error');
     res.status(500).json({
       status: 'error',
       message: 'Internal server error',
@@ -1202,7 +1203,7 @@ export const importCandidateApplicationsExcel = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('importCandidateApplicationsExcel error:', err);
+    logger.error({ err }, 'importCandidateApplicationsExcel error');
     res.status(500).json({
       status: 'error',
       message: 'Internal server error',

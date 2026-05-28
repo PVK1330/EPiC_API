@@ -1,6 +1,7 @@
 import { ROLES } from '../../../middlewares/role.middleware.js';
 import { notifyTaskAssigned } from '../../../services/notification.service.js';
 import { localDateStr, localDateAfterDays } from '../../../utils/dateHelpers.js';
+import logger from '../../../utils/logger.js';
 
 // Constants
 const PRIORITIES = ["low", "medium", "high"];
@@ -208,7 +209,7 @@ export const createTask = async (req, res) => {
           metadata: { caseId: caseLabel },
         });
       } catch (notifErr) {
-        console.error("Failed to notify user about assigned task:", notifErr);
+        logger.error({ err: notifErr }, "Failed to notify user about assigned task");
       }
     }
 
@@ -218,7 +219,7 @@ export const createTask = async (req, res) => {
       data: { task: mapTask(withUsers) },
     });
   } catch (error) {
-    console.error("Create Task Error:", error);
+    logger.error({ err: error }, "Create Task Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -287,7 +288,7 @@ export const getTasks = async (req, res) => {
       data: { tasks: rows.map(mapTask) },
     });
   } catch (error) {
-    console.error("Get Tasks Error:", error);
+    logger.error({ err: error }, "Get Tasks Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -353,7 +354,7 @@ export const getTaskById = async (req, res) => {
       data: null,
     });
   } catch (error) {
-    console.error("Get Task By ID Error:", error);
+    logger.error({ err: error }, "Get Task By ID Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -418,7 +419,7 @@ export const getTaskByCaseId = async (req, res) => {
       data: null,
     });
   } catch (error) {
-    console.error("Get Tasks by Case ID Error:", error);
+    logger.error({ err: error }, "Get Tasks by Case ID Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -546,14 +547,14 @@ export const updateTask = async (req, res) => {
               }
             }
           } catch (stageErr) {
-            console.error("Failed to automatically transition case stage on UK Visa Portal task completion:", stageErr);
+            logger.error({ err: stageErr }, "Failed to automatically transition case stage on UK Visa Portal task completion");
           }
         }
         // Handle "Send Proposed Payment and CCL to Candidate" task
         if (/Send Proposed Payment and CCL to Candidate/i.test(title)) {
           // When this task is marked complete, it should trigger CCL fee proposal flow
           // (currently that flow is handled via separate API, so just log)
-          console.log("Send Proposed Payment and CCL to Candidate task marked complete");
+          logger.info("Send Proposed Payment and CCL to Candidate task marked complete");
         }
       }
     }
@@ -615,7 +616,7 @@ export const updateTask = async (req, res) => {
       data: { task: mapTask(refreshed) },
     });
   } catch (error) {
-    console.error("Update Task Error:", error);
+    logger.error({ err: error }, "Update Task Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -668,7 +669,7 @@ export const deleteTask = async (req, res) => {
       data: null,
     });
   } catch (error) {
-    console.error("Delete Task Error:", error);
+    logger.error({ err: error }, "Delete Task Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -786,7 +787,7 @@ export const getTasksByUserId = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Get Tasks by User ID Error:", error);
+    logger.error({ err: error }, "Get Tasks by User ID Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",

@@ -3,6 +3,7 @@ import { localDateStr } from "../../../utils/dateHelpers.js";
 import catchAsync from "../../../utils/catchAsync.js";
 import ApiResponse from "../../../utils/apiResponse.js";
 import { rowsToXlsxBuffer, sendXlsxDownload } from "../../../utils/excelExport.util.js";
+import logger from "../../../utils/logger.js";
 
 export const exportWorkloadCSV = catchAsync(async (req, res) => {
   try {
@@ -354,7 +355,7 @@ export const getWorkloadOverview = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Get Workload Overview Error:", error);
+    logger.error({ err: error }, "Get Workload Overview Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -517,7 +518,7 @@ export const getCaseworkerWorkload = async (req, res) => {
       data: detailedData,
     });
   } catch (error) {
-    console.error("Get Caseworker Workload Error:", error);
+    logger.error({ err: error }, "Get Caseworker Workload Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -615,7 +616,7 @@ export const getWorkloadTrends = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Get Workload Trends Error:", error);
+    logger.error({ err: error }, "Get Workload Trends Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -750,7 +751,7 @@ export const getWorkloadAlerts = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Get Workload Alerts Error:", error);
+    logger.error({ err: error }, "Get Workload Alerts Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -799,7 +800,7 @@ export const getPendingTasks = async (req, res) => {
       .status(200)
       .json({ status: "success", data: { tasks: formattedTasks } });
   } catch (error) {
-    console.error("Get Pending Tasks Error:", error);
+    logger.error({ err: error }, "Get Pending Tasks Error");
     res.status(500).json({ status: "error", message: "Internal server error" });
   }
 };
@@ -853,7 +854,7 @@ export const getDeadlineMonitor = async (req, res) => {
       .status(200)
       .json({ status: "success", data: { cases: formattedCases } });
   } catch (error) {
-    console.error("Get Deadline Monitor Error:", error);
+    logger.error({ err: error }, "Get Deadline Monitor Error");
     res.status(500).json({ status: "error", message: "Internal server error" });
   }
 };

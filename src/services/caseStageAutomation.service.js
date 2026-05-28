@@ -13,6 +13,7 @@ import { recordStatusChange, recordTimelineEntry } from "./caseTimeline.service.
 import { sendWorkflowStageEmail } from "./workflowEmail.service.js";
 import { notifyWorkflowStageChange } from "./workflowNotifications.service.js";
 import { syncWorkflowTasksForStage } from "./workflowTaskAutomation.service.js";
+import logger from "../utils/logger.js";
 
 const UPLOADED_STATUSES = new Set(["uploaded", "under_review", "approved"]);
 
@@ -115,10 +116,10 @@ export async function applyCaseStageChange({
             emailSent: true,
           },
           visibility: "internal",
-        }).catch((err) => console.error("recordTimelineEntry (email):", err));
+        }).catch((err) => logger.error({ err }, "recordTimelineEntry (email)"));
       }
     } catch (emailErr) {
-      console.error("sendWorkflowStageEmail failed (stage change continues):", emailErr);
+      logger.error({ err: emailErr }, "sendWorkflowStageEmail failed (stage change continues)");
     }
   }
 
@@ -129,7 +130,7 @@ export async function applyCaseStageChange({
     nextStage,
     performedBy,
     organisationId,
-  }).catch((err) => console.error("notifyWorkflowStageChange:", err));
+  }).catch((err) => logger.error({ err }, "notifyWorkflowStageChange"));
 
   await syncWorkflowTasksForStage({
     tenantDb,
@@ -137,7 +138,7 @@ export async function applyCaseStageChange({
     stageId: nextStage,
     performedBy,
     organisationId,
-  }).catch((err) => console.error("syncWorkflowTasksForStage:", err));
+  }).catch((err) => logger.error({ err }, "syncWorkflowTasksForStage"));
 
   const { runStageEntryHooks } = await import("./caseWorkflowExtended.service.js");
   await runStageEntryHooks({
@@ -146,7 +147,7 @@ export async function applyCaseStageChange({
     nextStage,
     performedBy,
     organisationId,
-  }).catch((err) => console.error("runStageEntryHooks:", err));
+  }).catch((err) => logger.error({ err }, "runStageEntryHooks"));
 
   return { previousStage, nextStage };
 }
@@ -203,7 +204,7 @@ export async function evaluateCaseStageAfterEvent({
           stageId: "ccl_payment_received",
           performedBy,
           organisationId,
-        }).catch((err) => console.error("syncWorkflowTasksForStage:", err));
+        }).catch((err) => logger.error({ err }, "syncWorkflowTasksForStage"));
         return { previousStage: currentStage, nextStage: "client_care_letter", legacyStage: "ccl_payment_received" };
       }
       return result;
@@ -277,7 +278,7 @@ export async function evaluateCaseStageAfterEvent({
             created_by: performedBy || assigneeId,
           });
         } catch (taskErr) {
-          console.error("Failed to assign Send CCL task:", taskErr);
+          logger.error({ err: taskErr }, "Failed to assign Send CCL task");
         }
       }
 

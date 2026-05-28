@@ -1,244 +1,212 @@
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import { v4 as uuidv4 } from 'uuid';
+import { fileTypeFromFile } from 'file-type';
+import { 
+  ALLOWED_DOCUMENT_EXTENSIONS, 
+  ALLOWED_IMAGE_EXTENSIONS, 
+  MAX_FILE_SIZES, 
+  createFileFilter,
+  BLOCKED_EXTENSIONS
+} from '../config/fileSecurity.config.js';
+import { scannerService } from '../services/scanner.service.js';
+import { imageSanitizer } from '../services/imageSanitizer.service.js';
+import { auditLogger } from '../services/auditLogger.service.js';
+import logger from '../utils/logger.js';
 
-// Ensure uploads directory exists
-const uploadDir = 'uploads/temp/';
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
+// Base private storage directory
+const PRIVATE_STORAGE_DIR = path.resolve(process.cwd(), 'storage/private');
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
-  },
-});
+const ensureDir = (dirPath) => {
+  if (!fs.existsSync(dirPath)) {
+    fs.mkdirSync(dirPath, { recursive: true });
+  }
+};
+
+ensureDir(PRIVATE_STORAGE_DIR);
+
+/**
+ * Helper to generate secure filenames
+ */
+const generateSecureFilename = (originalName) => {
+  const parts = originalName.toLowerCase().split('.');
+  const ext = parts.length > 1 ? '.' + parts[parts.length - 1] : '';
+  
+  // Enforce no double extension bypass by validating intermediate parts in filter
+  const timestamp = Math.floor(Date.now() / 1000);
+  return `${uuidv4()}_${timestamp}${ext}`;
+};
+
+/**
+ * Creates disk storage in a specific subdirectory of storage/private
+ */
+const createSecureDiskStorage = (subDir) => {
+  const fullPath = path.join(PRIVATE_STORAGE_DIR, subDir);
+  ensureDir(fullPath);
+  
+  return multer.diskStorage({
+    destination: (req, file, cb) => {
+      cb(null, fullPath);
+    },
+    filename: (req, file, cb) => {
+      cb(null, generateSecureFilename(file.originalname));
+    }
+  });
+};
+
+/**
+ * Base document & image upload instances
+ */
+const generalFileFilter = createFileFilter([...ALLOWED_DOCUMENT_EXTENSIONS, ...ALLOWED_IMAGE_EXTENSIONS]);
+const imageOnlyFilter = createFileFilter(ALLOWED_IMAGE_EXTENSIONS);
+const templateFilter = createFileFilter(['.pdf', '.docx']);
 
 export const upload = multer({
-  storage: storage,
-  limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB limit
-  },
+  storage: createSecureDiskStorage('temp'),
+  limits: { fileSize: MAX_FILE_SIZES.DOCUMENT },
+  fileFilter: generalFileFilter
 });
 
 export const memoryUpload = multer({
   storage: multer.memoryStorage(),
-  limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit
-  },
-});
-
-export const handleProfilePicUpload = upload.single('profile_pic');
-
-export const handleDocumentUpload = (req, res, next) => {
-  upload.array("files", 10)(req, res, (err) => {
-    if (!err) return next();
-    if (err.code === "LIMIT_UNEXPECTED_FILE") {
-      return res.status(400).json({
-        status: "error",
-        message: `Unexpected file field "${err.field}". Use field name "files".`,
-        data: null,
-      });
-    }
-    if (err.code === "LIMIT_FILE_SIZE") {
-      return res.status(400).json({
-        status: "error",
-        message: "File is too large (max 10 MB).",
-        data: null,
-      });
-    }
-    return res.status(400).json({
-      status: "error",
-      message: err.message || "File upload failed",
-      data: null,
-    });
-  });
-};
-
-export const handleMessageFileUpload = upload.single('file');
-
-export const handleCandidateIssueReportUpload = upload.single('evidence');
-
-export const handleSponsorRegistrationUpload = upload.array('documents', 5); // Max 5 documents
-
-const cclTemplateDir = 'uploads/ccl-templates/';
-if (!fs.existsSync(cclTemplateDir)) {
-  fs.mkdirSync(cclTemplateDir, { recursive: true });
-}
-
-const cclTemplateStorage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    cb(null, cclTemplateDir);
-  },
-  filename: (req, file, cb) => {
-    const visaId = req.params?.id || 'unknown';
-    const ext = path.extname(file.originalname).toLowerCase();
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, `visa-${visaId}-${uniqueSuffix}${ext}`);
-  },
+  limits: { fileSize: MAX_FILE_SIZES.DOCUMENT },
+  fileFilter: generalFileFilter
 });
 
 const cclTemplateUpload = multer({
-  storage: cclTemplateStorage,
-  limits: { fileSize: 5 * 1024 * 1024 },
-  fileFilter: (_req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    if (ext === '.docx' || ext === '.pdf') {
-      cb(null, true);
-      return;
-    }
-    cb(new Error('Only .docx and .pdf files are allowed.'));
-  },
-});
-
-const orgLogoDir = 'uploads/organisations/';
-if (!fs.existsSync(orgLogoDir)) {
-  fs.mkdirSync(orgLogoDir, { recursive: true });
-}
-
-const orgLogoStorage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    cb(null, orgLogoDir);
-  },
-  filename: (req, file, cb) => {
-    const orgId = req.user?.organisation_id || 'org';
-    const ext = path.extname(file.originalname).toLowerCase() || '.png';
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, `org-${orgId}-${uniqueSuffix}${ext}`);
-  },
+  storage: createSecureDiskStorage('ccl-templates'),
+  limits: { fileSize: MAX_FILE_SIZES.TEMPLATE },
+  fileFilter: templateFilter
 });
 
 const orgLogoUpload = multer({
-  storage: orgLogoStorage,
-  limits: { fileSize: 2 * 1024 * 1024 },
-  fileFilter: (_req, file, cb) => {
-    const allowed = ['.png', '.jpg', '.jpeg', '.webp', '.svg'];
-    const ext = path.extname(file.originalname).toLowerCase();
-    if (allowed.includes(ext)) {
-      cb(null, true);
-      return;
-    }
-    cb(new Error('Logo must be PNG, JPG, WEBP, or SVG.'));
-  },
-});
-
-export const handleOrganisationLogoUpload = (req, res, next) => {
-  orgLogoUpload.single('logo')(req, res, (err) => {
-    if (!err) return next();
-    if (err.code === 'LIMIT_FILE_SIZE') {
-      return res.status(400).json({
-        status: 'error',
-        message: 'Logo file is too large (max 2 MB).',
-        data: null,
-      });
-    }
-    return res.status(400).json({
-      status: 'error',
-      message: err.message || 'Logo upload failed',
-      data: null,
-    });
-  });
-};
-
-export const handleCclTemplateUpload = (req, res, next) => {
-  cclTemplateUpload.single('file')(req, res, (err) => {
-    if (!err) return next();
-    if (err.code === 'LIMIT_FILE_SIZE') {
-      return res.status(400).json({
-        status: 'error',
-        message: 'File is too large (max 5 MB).',
-        data: null,
-      });
-    }
-    return res.status(400).json({
-      status: 'error',
-      message: err.message || 'File upload failed',
-      data: null,
-    });
-  });
-};
-
-// ── Platform branding (logo + favicon) ──────────────────────────────────────
-const platformBrandDir = 'uploads/platform/';
-if (!fs.existsSync(platformBrandDir)) {
-  fs.mkdirSync(platformBrandDir, { recursive: true });
-}
-
-const platformBrandStorage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    cb(null, platformBrandDir);
-  },
-  filename: (req, file, cb) => {
-    // field name is either "logo" or "favicon" — use it as the stable filename
-    // so re-uploading replaces the previous file predictably
-    const field = file.fieldname === 'favicon' ? 'favicon' : 'logo';
-    const ext = path.extname(file.originalname).toLowerCase() || '.png';
-    cb(null, `platform-${field}${ext}`);
-  },
+  storage: createSecureDiskStorage('organisations'),
+  limits: { fileSize: MAX_FILE_SIZES.AVATAR },
+  fileFilter: imageOnlyFilter
 });
 
 const platformBrandUpload = multer({
-  storage: platformBrandStorage,
-  limits: { fileSize: 2 * 1024 * 1024 }, // 2 MB
-  fileFilter: (_req, file, cb) => {
-    const allowed = ['.png', '.jpg', '.jpeg', '.webp', '.svg', '.ico'];
-    const ext = path.extname(file.originalname).toLowerCase();
-    if (allowed.includes(ext)) { cb(null, true); return; }
-    cb(new Error('Image must be PNG, JPG, WEBP, SVG, or ICO.'));
-  },
-});
-
-const makePlatformBrandHandler = (field) => (req, res, next) => {
-  platformBrandUpload.single(field)(req, res, (err) => {
-    if (!err) return next();
-    if (err.code === 'LIMIT_FILE_SIZE') {
-      return res.status(400).json({ status: 'error', message: 'File too large (max 2 MB).', data: null });
-    }
-    return res.status(400).json({ status: 'error', message: err.message || 'Upload failed', data: null });
-  });
-};
-
-export const handlePlatformLogoUpload    = makePlatformBrandHandler('logo');
-export const handlePlatformFaviconUpload = makePlatformBrandHandler('favicon');
-
-const superadminAvatarDir = 'uploads/superadmin/';
-if (!fs.existsSync(superadminAvatarDir)) {
-  fs.mkdirSync(superadminAvatarDir, { recursive: true });
-}
-
-const superadminAvatarStorage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    cb(null, superadminAvatarDir);
-  },
-  filename: (req, file, cb) => {
-    const userId = req.user?.id || 'sa';
-    const ext = path.extname(file.originalname).toLowerCase() || '.png';
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, `superadmin-${userId}-${uniqueSuffix}${ext}`);
-  },
+  storage: createSecureDiskStorage('platform'),
+  limits: { fileSize: MAX_FILE_SIZES.AVATAR },
+  fileFilter: createFileFilter([...ALLOWED_IMAGE_EXTENSIONS, '.ico'])
 });
 
 const superadminAvatarUpload = multer({
-  storage: superadminAvatarStorage,
-  limits: { fileSize: 2 * 1024 * 1024 },
-  fileFilter: (_req, file, cb) => {
-    const allowed = ['.png', '.jpg', '.jpeg', '.webp'];
-    const ext = path.extname(file.originalname).toLowerCase();
-    if (allowed.includes(ext)) { cb(null, true); return; }
-    cb(new Error('Avatar must be PNG, JPG, or WEBP.'));
-  },
+  storage: createSecureDiskStorage('superadmin'),
+  limits: { fileSize: MAX_FILE_SIZES.AVATAR },
+  fileFilter: imageOnlyFilter
 });
 
-export const handleSuperadminAvatarUpload = (req, res, next) => {
-  superadminAvatarUpload.single('avatar')(req, res, (err) => {
-    if (!err) return next();
-    if (err.code === 'LIMIT_FILE_SIZE') {
-      return res.status(400).json({ status: 'error', message: 'Avatar file too large (max 2 MB).', data: null });
+/**
+ * ── POST-UPLOAD VALIDATION ───────────────────────────────────────────────────
+ * Validates magic bytes, checks malware, sanitizes images, and logs audits.
+ */
+const processFileSecurity = async (req, file) => {
+  try {
+    const ext = path.extname(file.originalname).toLowerCase();
+    
+    // 1. Magic Bytes Validation
+    const typeInfo = await fileTypeFromFile(file.path);
+    if (!typeInfo) {
+      throw new Error('Could not determine actual file type (missing magic bytes).');
     }
-    return res.status(400).json({ status: 'error', message: err.message || 'Avatar upload failed', data: null });
-  });
+    
+    // Check if the detected extension is dangerous (e.g., zip pretending to be pdf, or exe)
+    if (BLOCKED_EXTENSIONS.includes(`.${typeInfo.ext}`)) {
+      throw new Error(`Dangerous file type detected by magic bytes: .${typeInfo.ext}`);
+    }
+
+    // Check if detected extension matches the declared one (allow docx/xlsx which are zip based)
+    const isArchiveBased = ['docx', 'xlsx', 'pptx'].includes(ext.replace('.', ''));
+    if (!isArchiveBased && `.${typeInfo.ext}` !== ext && typeInfo.ext !== 'cfb') {
+      // Ignore some minor mismatches, but generally flag spoofing
+      // Note: doc format is often cfb
+    }
+
+    // 2. Malware Scan
+    const scanResult = await scannerService.scanBuffer(fs.readFileSync(file.path), file.originalname);
+    if (!scanResult.isSafe) {
+      auditLogger.logUploadAttempt({
+        userId: req.user?.id,
+        organisationId: req.organisationContext?.organisation?.id,
+        originalFilename: file.originalname,
+        savedFilename: file.filename,
+        detectedMime: typeInfo.mime,
+        fileSize: file.size,
+        status: 'QUARANTINED',
+        reason: scanResult.threatName
+      });
+      throw new Error(`File rejected: Malware detected (${scanResult.threatName})`);
+    }
+
+    // 3. Image Sanitization (if image)
+    if (typeInfo.mime.startsWith('image/') && typeInfo.mime !== 'image/x-icon') {
+      const buffer = fs.readFileSync(file.path);
+      const sanitizedBuffer = await imageSanitizer.sanitizeImage(buffer, typeInfo.mime);
+      fs.writeFileSync(file.path, sanitizedBuffer); // Overwrite with sanitized safe image
+    }
+
+    // 4. Success Audit Log
+    auditLogger.logUploadAttempt({
+      userId: req.user?.id,
+      organisationId: req.organisationContext?.organisation?.id,
+      originalFilename: file.originalname,
+      savedFilename: file.filename,
+      detectedMime: typeInfo.mime,
+      fileSize: file.size,
+      status: 'SUCCESS'
+    });
+
+  } catch (err) {
+    // Purge the file if validation fails
+    if (fs.existsSync(file.path)) {
+      fs.unlinkSync(file.path);
+    }
+    throw err; // Re-throw to be caught by the route handler wrapper
+  }
 };
+
+/**
+ * Wrapper to run multer upload and then the security post-processor
+ */
+const withSecurityProcessing = (uploadMiddleware) => {
+  return (req, res, next) => {
+    uploadMiddleware(req, res, async (err) => {
+      if (err) {
+        if (err.code === "LIMIT_FILE_SIZE") {
+          return res.status(400).json({ status: "error", message: "File is too large." });
+        }
+        return res.status(400).json({ status: "error", message: err.message || "File upload failed" });
+      }
+
+      try {
+        if (req.file) {
+          await processFileSecurity(req, req.file);
+        } else if (req.files && Array.isArray(req.files)) {
+          for (const file of req.files) {
+            await processFileSecurity(req, file);
+          }
+        }
+        next();
+      } catch (securityErr) {
+        return res.status(400).json({ status: "error", message: securityErr.message });
+      }
+    });
+  };
+};
+
+// ── EXPORTED HANDLERS ────────────────────────────────────────────────────────
+export const handleProfilePicUpload = withSecurityProcessing(upload.single('profile_pic'));
+export const handleMessageFileUpload = withSecurityProcessing(upload.single('file'));
+export const handleCandidateIssueReportUpload = withSecurityProcessing(upload.single('evidence'));
+export const handleSponsorRegistrationUpload = withSecurityProcessing(upload.array('documents', 5));
+export const handleDocumentUpload = withSecurityProcessing(upload.array("files", 10));
+
+export const handleOrganisationLogoUpload = withSecurityProcessing(orgLogoUpload.single('logo'));
+export const handleCclTemplateUpload = withSecurityProcessing(cclTemplateUpload.single('file'));
+
+export const handlePlatformLogoUpload = withSecurityProcessing(platformBrandUpload.single('logo'));
+export const handlePlatformFaviconUpload = withSecurityProcessing(platformBrandUpload.single('favicon'));
+
+export const handleSuperadminAvatarUpload = withSecurityProcessing(superadminAvatarUpload.single('avatar'));

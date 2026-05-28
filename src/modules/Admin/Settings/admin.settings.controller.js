@@ -8,6 +8,7 @@ import { ROLES } from '../../../middlewares/role.middleware.js';
 import platformDb from '../../../models/index.js';
 import { toPublicAssetUrl } from '../../../services/stripeTenant.service.js';
 import { seedTenantOrganisation } from '../../../services/tenantSeed.service.js';
+import logger from '../../../utils/logger.js';
 
 
 
@@ -163,7 +164,7 @@ export const getMe = async (req, res) => {
 
   } catch (error) {
 
-    console.error("getMe settings error:", error);
+    logger.error({ err: error }, "getMe settings error");
 
     res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
 
@@ -406,7 +407,7 @@ export const patchMe = async (req, res) => {
 
   } catch (error) {
 
-    console.error("patchMe settings error:", error);
+    logger.error({ err: error }, "patchMe settings error");
 
     res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
 
@@ -552,7 +553,7 @@ export const patchMePreferences = async (req, res) => {
 
   } catch (error) {
 
-    console.error("patchMePreferences error:", error);
+    logger.error({ err: error }, "patchMePreferences error");
 
     res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
 
@@ -628,7 +629,7 @@ export const changePassword = async (req, res) => {
 
   } catch (error) {
 
-    console.error("changePassword error:", error);
+    logger.error({ err: error }, "changePassword error");
 
     res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
 
@@ -660,7 +661,7 @@ export const listVisaTypes = async (req, res) => {
 
   } catch (error) {
 
-    console.error("listVisaTypes error:", error);
+    logger.error({ err: error }, "listVisaTypes error");
 
     res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
 
@@ -720,7 +721,7 @@ export const createVisaType = async (req, res) => {
 
   } catch (error) {
 
-    console.error("createVisaType error:", error);
+    logger.error({ err: error }, "createVisaType error");
 
     if (error.name === "SequelizeUniqueConstraintError") {
 
@@ -808,7 +809,7 @@ export const updateVisaType = async (req, res) => {
 
   } catch (error) {
 
-    console.error("updateVisaType error:", error);
+    logger.error({ err: error }, "updateVisaType error");
 
     res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
 
@@ -846,7 +847,7 @@ export const deleteVisaType = async (req, res) => {
 
   } catch (error) {
 
-    console.error("deleteVisaType error:", error);
+    logger.error({ err: error }, "deleteVisaType error");
 
     res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
 
@@ -878,7 +879,7 @@ export const listCaseCategories = async (req, res) => {
 
   } catch (error) {
 
-    console.error("listCaseCategories error:", error);
+    logger.error({ err: error }, "listCaseCategories error");
 
     res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
 
@@ -934,7 +935,7 @@ export const createCaseCategory = async (req, res) => {
 
   } catch (error) {
 
-    console.error("createCaseCategory error:", error);
+    logger.error({ err: error }, "createCaseCategory error");
 
     if (error.name === "SequelizeUniqueConstraintError") {
 
@@ -978,7 +979,7 @@ export const deleteCaseCategory = async (req, res) => {
 
   } catch (error) {
 
-    console.error("deleteCaseCategory error:", error);
+    logger.error({ err: error }, "deleteCaseCategory error");
 
     res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
 
@@ -1022,7 +1023,7 @@ export const listEmailTemplates = async (req, res) => {
 
   } catch (error) {
 
-    console.error("listEmailTemplates error:", error);
+    logger.error({ err: error }, "listEmailTemplates error");
 
     res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
 
@@ -1062,7 +1063,7 @@ export const getEmailTemplateByKey = async (req, res) => {
 
   } catch (error) {
 
-    console.error("getEmailTemplateByKey error:", error);
+    logger.error({ err: error }, "getEmailTemplateByKey error");
 
     res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
 
@@ -1117,7 +1118,7 @@ export const updateEmailTemplate = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("updateEmailTemplate error:", error);
+    logger.error({ err: error }, "updateEmailTemplate error");
     res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
   }
 };
@@ -1144,7 +1145,7 @@ export const createEmailTemplate = async (req, res) => {
 
     res.status(201).json({ status: "success", message: "Email template created.", data: { template: row } });
   } catch (error) {
-    console.error("createEmailTemplate error:", error);
+    logger.error({ err: error }, "createEmailTemplate error");
     res.status(500).json({ status: "error", message: "Internal server error" });
   }
 };
@@ -1162,7 +1163,7 @@ export const deleteEmailTemplate = async (req, res) => {
     await row.destroy();
     res.status(200).json({ status: "success", message: "Email template deleted." });
   } catch (error) {
-    console.error("deleteEmailTemplate error:", error);
+    logger.error({ err: error }, "deleteEmailTemplate error");
     res.status(500).json({ status: "error", message: "Internal server error" });
   }
 };
@@ -1176,7 +1177,7 @@ export const getPaymentSetting = async (req, res) => {
     }
     res.status(200).json({ status: "success", data: { setting } });
   } catch (error) {
-    console.error("getPaymentSetting error:", error);
+    logger.error({ err: error }, "getPaymentSetting error");
     res.status(500).json({ status: "error", message: "Internal server error" });
   }
 };
@@ -1212,7 +1213,7 @@ export const getOrganisationBranding = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("getOrganisationBranding error:", error);
+    logger.error({ err: error }, "getOrganisationBranding error");
     res.status(500).json({ status: "error", message: "Internal server error" });
   }
 };
@@ -1227,7 +1228,7 @@ export const getOrganisation = async (req, res) => {
     }
     res.status(200).json({ status: "success", data: { organisation } });
   } catch (error) {
-    console.error("getOrganisation error:", error);
+    logger.error({ err: error }, "getOrganisation error");
     res.status(500).json({ status: "error", message: "Internal server error" });
   }
 };
@@ -1251,7 +1252,7 @@ export const uploadOrganisationLogo = async (req, res) => {
     try {
       await platformDb.Organisation.update({ logoUrl: relativePath }, { where: { id: orgId } });
     } catch (syncErr) {
-      console.warn("Platform organisation logo sync skipped:", syncErr.message);
+      logger.warn({ errMessage: syncErr.message }, "Platform organisation logo sync skipped");
     }
 
     res.status(200).json({
@@ -1265,7 +1266,7 @@ export const uploadOrganisationLogo = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("uploadOrganisationLogo error:", error);
+    logger.error({ err: error }, "uploadOrganisationLogo error");
     res.status(500).json({ status: "error", message: error.message || "Internal server error" });
   }
 };
@@ -1313,7 +1314,7 @@ export const updatePaymentSetting = async (req, res) => {
 
     res.status(200).json({ status: "success", message: "Payment settings updated", data: { setting } });
   } catch (error) {
-    console.error("updatePaymentSetting error:", error);
+    logger.error({ err: error }, "updatePaymentSetting error");
     res.status(500).json({ status: "error", message: "Internal server error" });
   }
 };
@@ -1331,7 +1332,7 @@ export const listSlaRules = async (req, res) => {
       data: { rules },
     });
   } catch (error) {
-    console.error("listSlaRules error:", error);
+    logger.error({ err: error }, "listSlaRules error");
     res.status(500).json({ status: "error", message: "Internal server error", data: null });
   }
 };
@@ -1352,7 +1353,7 @@ export const createSlaRule = async (req, res) => {
 
     res.status(201).json({ status: "success", message: "SLA rule created.", data: { rule } });
   } catch (error) {
-    console.error("createSlaRule error:", error);
+    logger.error({ err: error }, "createSlaRule error");
     if (error.name === "SequelizeUniqueConstraintError") {
       return res.status(400).json({ status: "error", message: "A rule with this name already exists" });
     }
@@ -1377,7 +1378,7 @@ export const updateSlaRule = async (req, res) => {
     await rule.update(updates);
     res.status(200).json({ status: "success", message: "SLA rule updated.", data: { rule } });
   } catch (error) {
-    console.error("updateSlaRule error:", error);
+    logger.error({ err: error }, "updateSlaRule error");
     if (error.name === "SequelizeUniqueConstraintError") {
       return res.status(400).json({ status: "error", message: "A rule with this name already exists" });
     }
@@ -1395,7 +1396,7 @@ export const deleteSlaRule = async (req, res) => {
     await rule.destroy();
     res.status(200).json({ status: "success", message: "SLA rule deleted." });
   } catch (error) {
-    console.error("deleteSlaRule error:", error);
+    logger.error({ err: error }, "deleteSlaRule error");
     res.status(500).json({ status: "error", message: "Internal server error" });
   }
 };

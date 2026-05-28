@@ -15,6 +15,7 @@ import {
   organisationIdFromRequest,
   userBelongsToOrganisation,
 } from '../../../utils/tenantScope.js';
+import logger from '../../../utils/logger.js';
 
 const CASEWORKER_ROLE = ROLES.CASEWORKER;
 
@@ -44,7 +45,7 @@ export const getDepartments = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error("Error fetching departments:", error);
+    logger.error({ err: error }, "Error fetching departments");
     res.status(500).json({
       status: "error",
       message: "Failed to fetch departments",
@@ -93,7 +94,7 @@ export const createDepartment = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error("Error creating department:", error);
+    logger.error({ err: error }, "Error creating department");
     res.status(500).json({
       status: "error",
       message: "Failed to create department",
@@ -122,7 +123,7 @@ export const departmentDropdown = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error("Error fetching departments:", error);
+    logger.error({ err: error }, "Error fetching departments");
     res.status(500).json({
       status: "error",
       message: "Failed to fetch departments",
@@ -180,7 +181,7 @@ export const updateDepartment = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error("Error updating department:", error);
+    logger.error({ err: error }, "Error updating department");
     res.status(500).json({
       status: "error",
       message: "Failed to update department",
@@ -233,7 +234,7 @@ export const deleteDepartment = async (req, res) => {
       message: "Department deleted successfully"
     });
   } catch (error) {
-    console.error("Error deleting department:", error);
+    logger.error({ err: error }, "Error deleting department");
     res.status(500).json({
       status: "error",
       message: "Failed to delete department",
@@ -601,7 +602,7 @@ export const createCaseworker = async (req, res) => {
         firstName: first_name,
       });
     } catch (emailError) {
-      console.error("Failed to send caseworker email:", emailError);
+      logger.error({ err: emailError }, "Failed to send caseworker email");
     }
 
     const full = await req.tenantDb.User.findOne({
@@ -639,7 +640,7 @@ export const createCaseworker = async (req, res) => {
         /* already rolled back */
       }
     }
-    console.error("Create Caseworker Error:", error);
+    logger.error({ err: error }, "Create Caseworker Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -764,7 +765,7 @@ export const getAllCaseworkers = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Get All Caseworkers Error:", error);
+    logger.error({ err: error }, "Get All Caseworkers Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -840,7 +841,7 @@ export const getCaseworkerById = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Get Caseworker by ID Error:", error);
+    logger.error({ err: error }, "Get Caseworker by ID Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -987,7 +988,7 @@ export const updateCaseworker = async (req, res) => {
       data: { caseworker: updatedCaseworker },
     });
   } catch (error) {
-    console.error("Update Caseworker Error:", error);
+    logger.error({ err: error }, "Update Caseworker Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -1019,7 +1020,7 @@ export const deleteCaseworker = async (req, res) => {
       data: null,
     });
   } catch (error) {
-    console.error("Delete Caseworker Error:", error);
+    logger.error({ err: error }, "Delete Caseworker Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -1083,7 +1084,7 @@ export const resetCaseworkerPassword = async (req, res) => {
       data: null,
     });
   } catch (error) {
-    console.error("Reset Caseworker Password Error:", error);
+    logger.error({ err: error }, "Reset Caseworker Password Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -1119,7 +1120,7 @@ export const toggleCaseworkerStatus = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Toggle Caseworker Status Error:", error);
+    logger.error({ err: error }, "Toggle Caseworker Status Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -1205,7 +1206,7 @@ export const exportCaseworkers = async (req, res) => {
     sendXlsxDownload(res, buffer, 'caseworkers_export.xlsx');
 
   } catch (error) {
-    console.error("Export Caseworkers Error:", error);
+    logger.error({ err: error }, "Export Caseworkers Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -1293,7 +1294,7 @@ export const bulkImportCaseworkers = async (req, res) => {
             html: generateCaseworkerCredentialsTemplate(caseworker.email, generatedPassword, loginUrl),
           });
         } catch (emailError) {
-          console.error("Failed to send caseworker email:", emailError);
+          logger.error({ err: emailError }, "Failed to send caseworker email");
         }
 
         results.success.push({
@@ -1323,7 +1324,7 @@ export const bulkImportCaseworkers = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Bulk Import Caseworkers Error:", error);
+    logger.error({ err: error }, "Bulk Import Caseworkers Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -1418,7 +1419,7 @@ export const getPerformanceReport = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Get Performance Report Error:", error);
+    logger.error({ err: error }, "Get Performance Report Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -1492,7 +1493,7 @@ export const reassignCase = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Reassign Case Error:", error);
+    logger.error({ err: error }, "Reassign Case Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",

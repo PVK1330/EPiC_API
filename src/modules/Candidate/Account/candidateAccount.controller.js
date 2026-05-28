@@ -1,3 +1,4 @@
+import logger from '../../../utils/logger.js';
 import bcrypt from 'bcryptjs';
 import path from 'path';
 import fs from 'fs';
@@ -231,7 +232,7 @@ export const getAccount = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('getAccount error:', err);
+    logger.error({ err }, 'getAccount error');
     res.status(500).json({
       status: 'error',
       message: 'Internal server error',
@@ -291,7 +292,7 @@ export const patchPreferences = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('patchPreferences error:', err);
+    logger.error({ err }, 'patchPreferences error');
     res.status(500).json({
       status: 'error',
       message: 'Internal server error',
@@ -372,7 +373,7 @@ export const postFeedback = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('postFeedback error:', err);
+    logger.error({ err }, 'postFeedback error');
     if (err.name === 'SequelizeUniqueConstraintError') {
       return res.status(409).json({
         status: 'error',
@@ -430,7 +431,7 @@ export const postConsent = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('postConsent error:', err);
+    logger.error({ err }, 'postConsent error');
     res.status(500).json({
       status: 'error',
       message: 'Internal server error',
@@ -480,7 +481,7 @@ export const postDataDeletionRequest = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('postDataDeletionRequest error:', err);
+    logger.error({ err }, 'postDataDeletionRequest error');
     res.status(500).json({
       status: 'error',
       message: 'Internal server error',
@@ -585,7 +586,7 @@ export const postIssueReport = async (req, res) => {
         const baseUrl = (process.env.BASE_URL || '').replace(/\/$/, '');
         attachmentUrls.push(`${baseUrl}/${rel}`);
       } catch (e) {
-        console.error('postIssueReport file move error:', e);
+        logger.error({ err: e }, 'postIssueReport file move error');
       }
     }
 
@@ -637,7 +638,7 @@ export const postIssueReport = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('postIssueReport error:', err);
+    logger.error({ err }, 'postIssueReport error');
     res.status(500).json({
       status: 'error',
       message: 'Internal server error',
@@ -651,7 +652,7 @@ export const postIssueReport = async (req, res) => {
  * Update candidate profile information
  */
 export const updateProfile = async (req, res) => {
-  console.log('updateProfile request received', {
+  logger.debug('updateProfile request received', {
     body: req.body,
     file: req.file ? req.file.originalname : 'no file',
     user: req.user
@@ -708,19 +709,19 @@ export const updateProfile = async (req, res) => {
 
     // Handle profile pic if uploaded
     if (req.file) {
-      console.log('File detected in request:', req.file.originalname);
+      logger.debug({ originalname: req.file.originalname }, 'File detected in request');
       const userDir = path.join('uploads', 'profile_pics', String(idNum));
       if (!fs.existsSync(userDir)) {
-        console.log('Creating user directory:', userDir);
+        logger.debug({ userDir }, 'Creating user directory');
         fs.mkdirSync(userDir, { recursive: true });
       }
       const targetPath = path.join(userDir, req.file.filename);
-      console.log('Moving file from', req.file.path, 'to', targetPath);
+      logger.debug({ from: req.file.path, to: targetPath }, 'Moving file');
       fs.renameSync(req.file.path, targetPath);
       updateData.profile_pic = targetPath.replace(/\\/g, '/');
-      console.log('Profile pic updated in data:', updateData.profile_pic);
+      logger.debug({ profile_pic: updateData.profile_pic }, 'Profile pic updated in data');
     } else {
-      console.log('No file detected in req.file');
+      logger.debug('No file detected in req.file');
     }
 
     await user.update(updateData);
@@ -743,7 +744,7 @@ export const updateProfile = async (req, res) => {
       data: { user: updatedUser }
     });
   } catch (err) {
-    console.error('updateProfile error:', err);
+    logger.error({ err }, 'updateProfile error');
     res.status(500).json({
       status: 'error',
       message: 'Internal server error',
@@ -790,7 +791,7 @@ export const changePassword = async (req, res) => {
       message: 'Password updated successfully'
     });
   } catch (err) {
-    console.error('changePassword error:', err);
+    logger.error({ err }, 'changePassword error');
     res.status(500).json({
       status: 'error',
       message: 'Internal server error',

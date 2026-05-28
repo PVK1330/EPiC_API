@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { getStepById, resolveCaseStage } from "../constants/immigrationCaseProcess.js";
+import logger from "../utils/logger.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const CCL_TEMPLATES_DIR = path.join(__dirname, "../../assets/ccl-templates");
@@ -178,7 +179,7 @@ export async function attachCclTemplateToCase({
   } else {
     template = resolveCclTemplate(visaName, petitionName);
     if (!template.exists) {
-      console.warn("CCL template missing:", template.absolutePath);
+      logger.warn({ templatePath: template.absolutePath }, "CCL template missing");
       return { document: null, template };
     }
   }
