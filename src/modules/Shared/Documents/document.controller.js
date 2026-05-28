@@ -1,6 +1,7 @@
 import path from 'path';
 import fs from 'fs';
 import archiver from 'archiver';
+import logger from '../../../utils/logger.js';
 import { Op } from 'sequelize';
 
 import {
@@ -12,6 +13,7 @@ import {
   evaluateCaseStageAfterEvent,
   recordDocumentReviewTimeline,
 } from '../../../services/caseStageAutomation.service.js';
+import { auditLogger } from '../../../services/auditLogger.service.js';
 import {
   buildDocumentLookupMap,
   findDocumentForChecklistItem,
@@ -277,10 +279,10 @@ export const uploadDocuments = async (req, res) => {
       let urlPath;
 
       if (numericCaseId) {
-        targetDir = path.join("uploads", "caseimages", String(numericCaseId));
+        targetDir = path.join("storage", "private", "caseimages", String(numericCaseId));
         urlPath = `caseimages/${numericCaseId}`;
       } else {
-        targetDir = path.join("uploads", "documents", userId.toString());
+        targetDir = path.join("storage", "private", "documents", userId.toString());
         urlPath = `documents/${userId}`;
       }
 
@@ -393,7 +395,7 @@ export const uploadDocuments = async (req, res) => {
         mimeType: document.mimeType,
         status: document.status,
         uploadedAt: document.uploadedAt,
-        documentUrl: `${process.env.BASE_URL || 'http://localhost:5000'}/uploads/${urlPath}/${systemDocumentName}`
+        documentUrl: `${process.env.BASE_URL || 'http://localhost:5000'}/api/documents/download/${document.id}`
       });
 
       // Send document upload notifications
@@ -451,7 +453,7 @@ export const uploadDocuments = async (req, res) => {
           await notifyDocumentUploaded(req.tenantDb, userId, docNotificationData);
         }
       } catch (notifErr) {
-        console.error("Failed to send document upload notification:", notifErr);
+        logger.error({ err: notifErr }, "Failed to send document upload notification");
       }
     }
 
@@ -469,7 +471,7 @@ export const uploadDocuments = async (req, res) => {
           });
         }
       } catch (stageErr) {
-        console.error("evaluateCaseStageAfterEvent:", stageErr);
+        logger.error({ err: stageErr }, "evaluateCaseStageAfterEvent");
       }
     }
 
@@ -482,7 +484,7 @@ export const uploadDocuments = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Document upload error:', error);
+    logger.error({ err: error }, 'Document upload error');
     res.status(500).json({
       status: "error",
       message: "Failed to upload documents",
@@ -535,7 +537,7 @@ export const getUserDocumentsByCategory = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('Get user documents error:', error);
+    logger.error({ err: error }, 'Get user documents error');
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -622,11 +624,7 @@ export const getCaseDocuments = async (req, res) => {
     // Add documentUrl to each document
     const documentsWithUrls = documents.rows.map(doc => {
       const docData = doc.toJSON();
-      // Use the stored documentPath directly - it contains the relative path from uploads/
-      const relativePath = docData.documentPath
-        .replace(/^uploads[\/\\]/, '')
-        .replace(/\\/g, '/');
-      docData.documentUrl = `${process.env.BASE_URL || 'http://localhost:5000'}/uploads/${relativePath}`;
+      docData.documentUrl = `${process.env.BASE_URL || 'http://localhost:5000'}/api/documents/download/${docData.id}`;
       return docData;
     });
 
@@ -645,7 +643,7 @@ export const getCaseDocuments = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Get case documents error:', error);
+    logger.error({ err: error }, 'Get case documents error');
     res.status(500).json({
       status: "error",
       message: "Failed to retrieve case documents",
@@ -691,11 +689,7 @@ export const getDocumentById = async (req, res) => {
     }
 
     const docData = document.toJSON();
-    // Use the stored documentPath directly - it contains the relative path from uploads/
-    const relativePath = docData.documentPath
-      .replace(/^uploads[\/\\]/, '')
-      .replace(/\\/g, '/');
-    docData.documentUrl = `${process.env.BASE_URL || 'http://localhost:5000'}/uploads/${relativePath}`;
+    docData.documentUrl = `${process.env.BASE_URL || 'http://localhost:5000'}/api/documents/download/${docData.id}`;
 
     res.status(200).json({
       status: "success",
@@ -706,7 +700,7 @@ export const getDocumentById = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Get document error:', error);
+    logger.error({ err: error }, 'Get document error');
     res.status(500).json({
       status: "error",
       message: "Failed to retrieve document",
@@ -747,7 +741,7 @@ export const updateDocument = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Update document error:', error);
+    logger.error({ err: error }, 'Update document error');
     res.status(500).json({
       status: "error",
       message: "Failed to update document",
@@ -786,7 +780,7 @@ export const deleteDocument = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Delete document error:', error);
+    logger.error({ err: error }, 'Delete document error');
     res.status(500).json({
       status: "error",
       message: "Failed to delete document",
@@ -907,7 +901,7 @@ export const updateDocumentStatus = async (req, res) => {
         }
       }
     } catch (notifErr) {
-      console.error("Failed post-review workflow:", notifErr);
+      logger.error({ err: notifErr }, "Failed post-review workflow");
     }
 
     res.status(200).json({
@@ -921,7 +915,7 @@ export const updateDocumentStatus = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Update document status error:', error);
+    logger.error({ err: error }, 'Update document status error');
     res.status(500).json({
       status: "error",
       message: "Failed to update document status",
@@ -938,6 +932,13 @@ export const downloadDocument = async (req, res) => {
 
     const document = await req.tenantDb.Document.findByPk(documentId);
     if (!document) {
+      auditLogger.logDownloadAttempt({
+        userId: req.user?.id,
+        organisationId: req.organisationContext?.organisation?.id,
+        documentId,
+        status: 'FAILED',
+        reason: 'Document not found in DB'
+      });
       return res.status(404).json({
         status: "error",
         message: "Document not found",
@@ -947,6 +948,13 @@ export const downloadDocument = async (req, res) => {
 
     const access = await assertCandidateMayDownloadDocument(req, document);
     if (!access.ok) {
+      auditLogger.logDownloadAttempt({
+        userId: req.user?.id,
+        organisationId: req.organisationContext?.organisation?.id,
+        documentId,
+        status: 'FAILED',
+        reason: 'Access Denied (RBAC)'
+      });
       return res.status(403).json({
         status: "error",
         message: access.message,
@@ -957,7 +965,26 @@ export const downloadDocument = async (req, res) => {
     // Resolve the absolute path from the relative path stored in database
     const absolutePath = path.resolve(document.documentPath);
 
+    // Basic path traversal prevention
+    if (!absolutePath.startsWith(path.resolve('storage/private')) && !absolutePath.startsWith(path.resolve('uploads'))) {
+      auditLogger.logDownloadAttempt({
+        userId: req.user?.id,
+        organisationId: req.organisationContext?.organisation?.id,
+        documentId,
+        status: 'FAILED',
+        reason: 'Path traversal attempt blocked'
+      });
+      return res.status(403).json({ status: "error", message: "Forbidden" });
+    }
+
     if (!document.documentPath || !fs.existsSync(absolutePath)) {
+      auditLogger.logDownloadAttempt({
+        userId: req.user?.id,
+        organisationId: req.organisationContext?.organisation?.id,
+        documentId,
+        status: 'FAILED',
+        reason: 'File missing on disk'
+      });
       return res.status(404).json({
         status: "error",
         message: "File not found on server",
@@ -965,15 +992,33 @@ export const downloadDocument = async (req, res) => {
       });
     }
 
+    auditLogger.logDownloadAttempt({
+      userId: req.user?.id,
+      organisationId: req.organisationContext?.organisation?.id,
+      documentId,
+      status: 'SUCCESS'
+    });
+
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+
     const filename = path.basename(absolutePath);
-    res.setHeader('Content-Disposition', `attachment; filename="${document.userFileName || document.documentName}"`);
+    const ext = path.extname(filename).toLowerCase();
+    const imageExts = ['.png', '.jpg', '.jpeg', '.webp'];
+    
+    if (!imageExts.includes(ext)) {
+      res.setHeader('Content-Disposition', `attachment; filename="${document.userFileName || document.documentName}"`);
+    } else {
+      res.setHeader('Content-Disposition', `inline; filename="${document.userFileName || document.documentName}"`);
+    }
+    
     res.setHeader('Content-Type', document.mimeType || 'application/octet-stream');
 
     const fileStream = fs.createReadStream(absolutePath);
     fileStream.pipe(res);
 
   } catch (error) {
-    console.error('Download document error:', error);
+    logger.error({ err: error }, 'Download document error');
     res.status(500).json({
       status: "error",
       message: "Failed to download document",
@@ -1051,7 +1096,7 @@ export const downloadMyDocumentsBundle = async (req, res) => {
 
     const archive = archiver('zip', { zlib: { level: 9 } });
     archive.on('error', (err) => {
-      console.error('ZIP archive error:', err);
+      logger.error({ err }, 'ZIP archive error');
       if (!res.headersSent) {
         res.status(500).json({
           status: 'error',
@@ -1070,7 +1115,7 @@ export const downloadMyDocumentsBundle = async (req, res) => {
 
     await archive.finalize();
   } catch (error) {
-    console.error('downloadMyDocumentsBundle error:', error);
+    logger.error({ err: error }, 'downloadMyDocumentsBundle error');
     if (!res.headersSent) {
       res.status(500).json({
         status: 'error',

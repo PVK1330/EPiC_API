@@ -2,6 +2,7 @@ import { Op } from "sequelize";
 import platformDb from "../models/index.js";
 import { sendTransactionalEmail } from "./mail.service.js";
 import { generateSubscriptionExpiryTemplate } from "../utils/emailTemplates.js";
+import logger from "../utils/logger.js";
 
 export async function checkAndExpireSubscriptions() {
   try {
@@ -118,8 +119,8 @@ export async function checkAndExpireSubscriptions() {
       }
     }
 
-    console.log(`✔ Subscription expiry check completed: ${expiredSubscriptions.length} expired, ${expiringSoon.length} expiring soon`);
+    logger.info({ expired: expiredSubscriptions.length, expiringSoon: expiringSoon.length }, "Subscription expiry check completed");
   } catch (error) {
-    console.error("Subscription expiry check failed:", error);
+    logger.error({ err: error }, "Subscription expiry check failed");
   }
 }

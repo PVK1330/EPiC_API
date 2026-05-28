@@ -33,7 +33,7 @@ export const addTimelineEntry = async (data) => {
       isSystemAction,
     });
   } catch (error) {
-    console.error("Error adding timeline entry:", error);
+    logger.error({ err: error }, "Error adding timeline entry");
     throw error;
   }
 };

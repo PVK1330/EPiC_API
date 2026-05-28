@@ -1,4 +1,5 @@
 import { getWorkflowCalendarEvents } from "../../../services/calendarEvents.service.js";
+import logger from "../../../utils/logger.js";
 
 export const getWorkflowEvents = async (req, res) => {
   try {
@@ -25,7 +26,7 @@ export const getWorkflowEvents = async (req, res) => {
       data: { events },
     });
   } catch (err) {
-    console.error("getWorkflowEvents:", err);
+    logger.error({ err }, "getWorkflowEvents");
     res.status(500).json({
       status: "error",
       message: err.message || "Failed to load calendar events",

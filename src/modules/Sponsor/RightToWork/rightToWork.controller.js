@@ -1,3 +1,5 @@
+import logger from '../../../utils/logger.js';
+
 const toISODate = (value) => {
   if (!value) return null;
   const d = new Date(value);
@@ -31,7 +33,7 @@ export const createRtwRecord = async (req, res) => {
 
     return res.status(201).json({ status: "success", data: newRecord });
   } catch (error) {
-    console.error("Error creating right to work record:", error);
+    logger.error({ err: error }, "Error creating right to work record");
     return res.status(500).json({ status: "error", message: "Internal server error" });
   }
 };
@@ -56,7 +58,7 @@ export const getRtwRecordsByWorker = async (req, res) => {
 
     return res.status(200).json({ status: "success", data: records });
   } catch (error) {
-    console.error("Error fetching right to work records:", error);
+    logger.error({ err: error }, "Error fetching right to work records");
     return res.status(500).json({ status: "error", message: "Internal server error" });
   }
 };
@@ -85,7 +87,7 @@ export const updateRtwRecord = async (req, res) => {
 
     return res.status(200).json({ status: "success", data: record });
   } catch (error) {
-    console.error("Error updating right to work record:", error);
+    logger.error({ err: error }, "Error updating right to work record");
     return res.status(500).json({ status: "error", message: "Internal server error" });
   }
 };

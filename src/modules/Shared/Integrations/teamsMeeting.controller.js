@@ -84,7 +84,7 @@ export const createTeamsMeeting = async (req, res) => {
       data: normalizeMeeting(row),
     });
   } catch (error) {
-    console.error('createTeamsMeeting error:', error);
+    logger.error({ err: error }, 'createTeamsMeeting error');
     res.status(500).json({
       status: 'error',
       message: 'Failed to create meeting',
@@ -101,7 +101,7 @@ export const syncTeamsMeetings = async (req, res) => {
       data: { synced: 0 },
     });
   } catch (error) {
-    console.error('syncTeamsMeetings error:', error);
+    logger.error({ err: error }, 'syncTeamsMeetings error');
     res.status(500).json({
       status: 'error',
       message: 'Sync failed',
@@ -141,7 +141,7 @@ export const getTeamsMeetings = async (req, res) => {
       data: { meetings: rows.map(normalizeMeeting) },
     });
   } catch (error) {
-    console.error('getTeamsMeetings error:', error);
+    logger.error({ err: error }, 'getTeamsMeetings error');
     res.status(500).json({
       status: 'error',
       message: 'Failed to list meetings',
@@ -175,7 +175,7 @@ export const getUpcomingTeamsMeetings = async (req, res) => {
       data: { meetings: rows.map(normalizeMeeting) },
     });
   } catch (error) {
-    console.error('getUpcomingTeamsMeetings error:', error);
+    logger.error({ err: error }, 'getUpcomingTeamsMeetings error');
     res.status(500).json({
       status: 'error',
       message: 'Failed to load upcoming meetings',
@@ -204,7 +204,7 @@ export const getTeamsMeetingById = async (req, res) => {
       data: normalizeMeeting(row),
     });
   } catch (error) {
-    console.error('getTeamsMeetingById error:', error);
+    logger.error({ err: error }, 'getTeamsMeetingById error');
     res.status(500).json({
       status: 'error',
       message: 'Failed to load meeting',
@@ -253,7 +253,7 @@ export const updateTeamsMeeting = async (req, res) => {
       data: normalizeMeeting(row),
     });
   } catch (error) {
-    console.error('updateTeamsMeeting error:', error);
+    logger.error({ err: error }, 'updateTeamsMeeting error');
     res.status(500).json({
       status: 'error',
       message: 'Failed to update meeting',
@@ -284,7 +284,7 @@ export const cancelTeamsMeeting = async (req, res) => {
       data: { id, status: 'cancelled' },
     });
   } catch (error) {
-    console.error('cancelTeamsMeeting error:', error);
+    logger.error({ err: error }, 'cancelTeamsMeeting error');
     res.status(500).json({
       status: 'error',
       message: 'Failed to cancel meeting',

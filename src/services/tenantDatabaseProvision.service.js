@@ -4,6 +4,7 @@ import {
   normalizePostgresDatabaseName,
   isValidPostgresDatabaseName,
 } from "../utils/postgresDbName.js";
+import logger from "../utils/logger.js";
 
 const { Client } = pkg;
 
@@ -96,8 +97,9 @@ export async function createTenantPostgresDatabase(databaseName) {
     throw new Error(`Invalid database name: ${raw}`);
   }
   if (raw && raw !== databaseName) {
-    console.warn(
-      `Normalized PostgreSQL database name "${raw}" → "${databaseName}" (hyphens and special characters are not allowed)`,
+    logger.warn(
+      { raw, databaseName },
+      "Normalized PostgreSQL database name (hyphens and special characters are not allowed)",
     );
   }
   const cfg = getMaintenanceConnectionConfig();
@@ -190,7 +192,7 @@ export async function syncTenantDatabaseSchema(databaseName) {
     "ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS details TEXT",
   );
   await seedTenantDefaults(tenantDb).catch((err) =>
-    console.warn("seedTenantDefaults:", err.message),
+    logger.warn({ err }, "seedTenantDefaults"),
   );
   evictTenantDb(databaseName);
 }

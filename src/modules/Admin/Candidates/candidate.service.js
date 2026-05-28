@@ -13,6 +13,7 @@ import { ensureCandidateEnquiryCase } from '../../../services/candidateOnboardin
 import { DEFAULT_CASE_STAGE } from '../../../constants/immigrationCaseProcess.js';
 import { sanitizeApplicationPayload } from '../../../utils/applicationPayload.util.js';
 import { createWorkflowTask, getActiveAdminIds } from '../../../services/workflowTaskAutomation.service.js';
+import logger from '../../../utils/logger.js';
 
 const APPLICATION_PAYLOAD_USER_KEYS = new Set([
   'first_name',
@@ -151,7 +152,7 @@ export class CandidateService {
       user: candidate,
       plainPassword: generatedPassword,
       organisationId: organisation_id,
-    }).catch((err) => console.error("Candidate welcome email:", err));
+    }).catch((err) => logger.error({ err }, "Candidate welcome email"));
 
     // Background notification
     notifyUserCreated(this.repository.tenantDb, ROLES.ADMIN, {
@@ -160,7 +161,7 @@ export class CandidateService {
       role: "candidate",
       first_name: candidate.first_name,
       last_name: candidate.last_name,
-    }).catch(err => console.error("Notification Error:", err));
+    }).catch(err => logger.error({ err }, "Notification Error"));
 
     // Assign Task to Admins
     if (caseRecord && (!caseRecord.assignedcaseworkerId || caseRecord.assignedcaseworkerId.length === 0)) {
@@ -174,7 +175,7 @@ export class CandidateService {
           priority: 'high',
           dueInDays: 1,
           organisationId: organisation_id,
-        }).catch((err) => console.error("Create Admin Task Error:", err));
+        }).catch((err) => logger.error({ err }, "Create Admin Task Error"));
       }
     }
 
@@ -188,7 +189,7 @@ export class CandidateService {
         priority: 'high',
         dueInDays: 3,
         organisationId: organisation_id,
-      }).catch((err) => console.error("Create Candidate Task Error:", err));
+      }).catch((err) => logger.error({ err }, "Create Candidate Task Error"));
     }
 
     return {
@@ -407,7 +408,7 @@ export class CandidateService {
 
     if (Object.keys(userPatch).length > 0) {
       syncUserToPlatformOnly(userId, userPatch).catch((err) => {
-        console.error('Platform user sync after client update:', err?.message || err);
+        logger.error({ err }, 'Platform user sync after client update');
       });
     }
 

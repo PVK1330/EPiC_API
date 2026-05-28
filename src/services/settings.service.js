@@ -25,7 +25,7 @@ const MASK = "••••••••";
  * service is always functional, but operators should set a dedicated key.
  */
 function getDerivedKey() {
-  const raw = process.env.SETTINGS_ENCRYPTION_KEY || process.env.JWT_SECRET || "epic-secret-key";
+  const raw = process.env.SETTINGS_ENCRYPTION_KEY || process.env.JWT_SECRET;
   // If it looks like a 64-char hex string use it directly, otherwise hash it.
   if (/^[0-9a-fA-F]{64}$/.test(raw.trim())) {
     return Buffer.from(raw.trim(), "hex");

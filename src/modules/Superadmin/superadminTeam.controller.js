@@ -3,6 +3,7 @@ import { Op } from "sequelize";
 import platformDb from "../../models/index.js";
 import catchAsync from "../../utils/catchAsync.js";
 import ApiResponse from "../../utils/apiResponse.js";
+import logger from "../../utils/logger.js";
 import { recordPlatformAuditLog, createPlatformNotification } from "../../services/platformActivity.service.js";
 import {
   PLATFORM_MODULES,
@@ -153,7 +154,7 @@ export const inviteTeamMember = catchAsync(async (req, res) => {
       roleName: role.name,
     });
   } catch (mailErr) {
-    console.error("inviteTeamMember email", mailErr);
+    logger.error({ err: mailErr }, "inviteTeamMember email");
     welcomeEmail = { sent: false, reason: mailErr?.message || "send_failed" };
   }
 

@@ -1,5 +1,5 @@
 import { Server } from "socket.io";
-import jwt from "jsonwebtoken";
+import { verifyTokenAsync } from "../config/jwt.config.js";
 import platformDb from "../models/index.js";
 import { getTenantDb } from "../services/tenantDb.service.js";
 import { userRoom, threadRoom, orgRoom } from "./messagingRealtime.js";
@@ -45,14 +45,11 @@ export function initSocketIO(httpServer, app) {
   app.set("io", io);
 
   io.use((socket, next) => {
-    if (!process.env.JWT_SECRET) {
-      return next(new Error("Authentication error: Server misconfiguration"));
-    }
     const token = extractSocketToken(socket);
     if (!token) {
       return next(new Error("Authentication error: No token provided"));
     }
-    jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
+    verifyTokenAsync(token, (err, decoded) => {
       if (err) return next(new Error("Authentication error: Invalid token"));
       if (!decoded?.userId) {
         return next(new Error("Authentication error: Invalid token payload"));

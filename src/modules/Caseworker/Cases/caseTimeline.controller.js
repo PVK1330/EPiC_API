@@ -1,4 +1,5 @@
 import { recordAuditLog } from '../../../services/audit.service.js';
+import logger from '../../../utils/logger.js';
 
 
 /**
@@ -32,7 +33,7 @@ export const getCaseTimeline = async (req, res) => {
 
     res.json({ success: true, data: timeline });
   } catch (error) {
-    console.error('Error fetching case timeline:', error);
+    logger.error({ err: error }, 'Error fetching case timeline');
     res.status(500).json({ success: false, message: 'Failed to fetch timeline' });
   }
 };
@@ -69,7 +70,7 @@ export const addTimelineEntry = async (req, res) => {
 
     res.status(201).json({ success: true, data: timelineEntry });
   } catch (error) {
-    console.error('Error adding timeline entry:', error);
+    logger.error({ err: error }, 'Error adding timeline entry');
     res.status(500).json({ success: false, message: 'Failed to add timeline entry' });
   }
 };
@@ -111,7 +112,7 @@ export const getCaseTimelineStats = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('Error fetching timeline stats:', error);
+    logger.error({ err: error }, 'Error fetching timeline stats');
     res.status(500).json({ success: false, message: 'Failed to fetch timeline stats' });
   }
 };

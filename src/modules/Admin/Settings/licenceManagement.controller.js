@@ -9,6 +9,7 @@ import {
   NotificationTypes,
   NotificationPriority,
 } from "../../../services/notification.service.js";
+import logger from "../../../utils/logger.js";
 
 export const getAllLicenceApplications = async (req, res) => {
   try {
@@ -35,7 +36,7 @@ export const getAllLicenceApplications = async (req, res) => {
       data: applications,
     });
   } catch (error) {
-    console.error("Error fetching all licence applications:", error);
+    logger.error({ err: error }, "Error fetching all licence applications");
     res.status(500).json({
       status: "error",
       message: "Failed to fetch licence applications",
@@ -79,7 +80,7 @@ export const updateLicenceApplicationStatus = async (req, res) => {
           await profile.save();
         }
       } catch (err) {
-        console.error("Failed to update sponsor CoS allocation:", err);
+        logger.error({ err }, "Failed to update sponsor CoS allocation");
       }
     }
 
@@ -92,7 +93,7 @@ export const updateLicenceApplicationStatus = async (req, res) => {
         adminNotes,
       );
     } catch (notifyErr) {
-      console.error("Failed to send status notification:", notifyErr);
+      logger.error({ err: notifyErr }, "Failed to send status notification");
     }
 
     res.status(200).json({
@@ -101,7 +102,7 @@ export const updateLicenceApplicationStatus = async (req, res) => {
       data: application,
     });
   } catch (error) {
-    console.error("Error updating licence application status:", error);
+    logger.error({ err: error }, "Error updating licence application status");
     res.status(500).json({
       status: "error",
       message: "Failed to update licence application status",
@@ -136,8 +137,9 @@ export const getAdminLicenceApplicationDetails = async (req, res) => {
       data: application,
     });
   } catch (error) {
-    console.error(
-      "Error fetching licence application details for admin:",
+    logger.error(
+      { err: error },
+      "Error fetching licence application details for admin",
       error,
     );
     res.status(500).json({
@@ -171,7 +173,7 @@ export const requestAdditionalInformation = async (req, res) => {
     try {
       await notifyLicenceInfoRequested(application.userId, application);
     } catch (notifyErr) {
-      console.error("Failed to send info request notification:", notifyErr);
+      logger.error({ err: notifyErr }, "Failed to send info request notification");
     }
 
     res.status(200).json({
@@ -180,7 +182,7 @@ export const requestAdditionalInformation = async (req, res) => {
       data: application,
     });
   } catch (error) {
-    console.error("Error requesting additional information:", error);
+    logger.error({ err: error }, "Error requesting additional information");
     res.status(500).json({
       status: "error",
       message: "Failed to request information",
@@ -219,7 +221,7 @@ export const assignCaseworker = async (req, res) => {
         "Assigned to Review",
       );
     } catch (notifyErr) {
-      console.error("Failed to send assignment notifications:", notifyErr);
+      logger.error({ err: notifyErr }, "Failed to send assignment notifications");
     }
 
     res.status(200).json({
@@ -228,7 +230,7 @@ export const assignCaseworker = async (req, res) => {
       data: application,
     });
   } catch (error) {
-    console.error("Error assigning caseworker to licence:", error);
+    logger.error({ err: error }, "Error assigning caseworker to licence");
     res.status(500).json({
       status: "error",
       message: "Failed to assign caseworker",
@@ -256,7 +258,7 @@ export const deleteLicenceApplication = async (req, res) => {
       message: "Licence application deleted successfully",
     });
   } catch (error) {
-    console.error("Error deleting licence application:", error);
+    logger.error({ err: error }, "Error deleting licence application");
     res.status(500).json({
       status: "error",
       message: "Failed to delete licence application",
@@ -294,7 +296,7 @@ export const updateLicenceApplicationByAdmin = async (req, res) => {
       data: application,
     });
   } catch (error) {
-    console.error("Error updating licence application by admin:", error);
+    logger.error({ err: error }, "Error updating licence application by admin");
     res.status(500).json({
       status: "error",
       message: "Failed to update licence application",
@@ -331,7 +333,7 @@ export const getCosRequests = async (req, res) => {
       data: cosRequests,
     });
   } catch (error) {
-    console.error("Error fetching CoS requests:", error);
+    logger.error({ err: error }, "Error fetching CoS requests");
     res.status(500).json({
       status: "error",
       message: "Failed to fetch CoS requests",
@@ -430,7 +432,7 @@ export const assignCosRequestToCaseworker = async (req, res) => {
         }
       }
     } catch (err) {
-      console.error("Failed notifying assigned caseworker(s):", err);
+      logger.error({ err }, "Failed notifying assigned caseworker(s)");
     }
 
     try {
@@ -463,7 +465,7 @@ export const assignCosRequestToCaseworker = async (req, res) => {
         });
       }
     } catch (err) {
-      console.error("Failed notifying sponsor for CoS assignment:", err);
+      logger.error({ err }, "Failed notifying sponsor for CoS assignment");
     }
 
     res.status(200).json({
@@ -472,7 +474,7 @@ export const assignCosRequestToCaseworker = async (req, res) => {
       data: cosRequest,
     });
   } catch (error) {
-    console.error("Error assigning CoS request to caseworker:", error);
+    logger.error({ err: error }, "Error assigning CoS request to caseworker");
     res.status(500).json({
       status: "error",
       message: "Failed to assign CoS request",

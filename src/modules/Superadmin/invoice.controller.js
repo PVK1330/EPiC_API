@@ -1,7 +1,7 @@
 import platformDb from "../../models/index.js";
 import catchAsync from "../../utils/catchAsync.js";
 import ApiResponse from "../../utils/apiResponse.js";
-import { buildBrandedPdfDocDefinition, streamBrandedPdf } from "../../services/pdfGenerator.service.js";
+import { buildBrandedPdfDocDefinition, generateBrandedPdfBuffer } from "../../services/pdfGenerator.service.js";
 import { multiSheetXlsxBuffer, sendXlsxDownload } from "../../utils/excelExport.util.js";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -81,51 +81,62 @@ export const updateInvoiceStatus = catchAsync(async (req, res) => {
 });
 
 export const exportInvoicesPdf = catchAsync(async (req, res) => {
-  const invoices = await platformDb.Invoice.findAll({
-    include: [
-      {
-        model: platformDb.Organisation,
-        as: "organisation",
-        attributes: ["id", "name", "slug"],
+  try {
+    const invoices = await platformDb.Invoice.findAll({
+      include: [
+        {
+          model: platformDb.Organisation,
+          as: "organisation",
+          attributes: ["id", "name", "slug"],
+        },
+        {
+          model: platformDb.Subscription,
+          as: "subscription",
+          include: [
+            {
+              model: platformDb.Plan,
+              as: "plan",
+              attributes: ["name"],
+            },
+          ],
+        },
+      ],
+      order: [["createdAt", "DESC"]],
+      limit: 100,
+    });
+
+    const sections = invoices.map((inv) => ({
+      sectionTitle: `Invoice ${inv.invoice_number}`,
+      rows: [
+        { label: "Organisation", value: inv.organisation?.name || "—" },
+        { label: "Plan", value: inv.subscription?.plan?.name || "—" },
+        { label: "Amount", value: `£${inv.amount}` },
+        { label: "Status", value: inv.status },
+        {
+          label: "Due Date",
+          value: inv.due_at ? new Date(inv.due_at).toLocaleDateString() : "—",
+        },
+      ],
+    }));
+
+    const logoPath = path.join(__dirname, "../../assets/elitepic_logo.png");
+
+    const buffer = await generateBrandedPdfBuffer({
+      logoPath,
+      title: "Invoices Export",
+      sections,
+      metadata: {
+        subtitle: "Platform Billing Report",
+        reference: `Generated ${new Date().toLocaleDateString()}`,
       },
-      {
-        model: platformDb.Subscription,
-        as: "subscription",
-        include: [
-          {
-            model: platformDb.Plan,
-            as: "plan",
-            attributes: ["name"],
-          },
-        ],
-      },
-    ],
-    order: [["createdAt", "DESC"]],
-    limit: 100,
-  });
+    });
 
-  const sections = invoices.map(inv => ({
-    sectionTitle: `Invoice ${inv.invoice_number}`,
-    rows: [
-      { label: "Organisation", value: inv.organisation?.name || "—" },
-      { label: "Plan", value: inv.subscription?.plan?.name || "—" },
-      { label: "Amount", value: `£${inv.amount}` },
-      { label: "Status", value: inv.status },
-      { label: "Due Date", value: inv.due_at ? new Date(inv.due_at).toLocaleDateString() : "—" },
-    ],
-  }));
-
-  const logoPath = path.join(__dirname, "../../assets/elitepic_logo.png");
-
-  streamBrandedPdf(res, "invoices_export.pdf", {
-    logoPath,
-    title: "Invoices Export",
-    sections,
-    metadata: {
-      subtitle: "Platform Billing Report",
-      reference: `Generated ${new Date().toLocaleDateString()}`,
-    },
-  });
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", 'attachment; filename="invoices_export.pdf"');
+    res.status(200).send(buffer);
+  } catch (err) {
+    return ApiResponse.error(res, "Failed to export invoices PDF", 500, err);
+  }
 });
 
 export const exportFinancials = catchAsync(async (req, res) => {

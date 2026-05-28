@@ -1,3 +1,4 @@
+import logger from '../../../utils/logger.js';
 import {
   sendAnnouncement,
   resolveUserIdsByTargetRoles,
@@ -74,7 +75,7 @@ export const createTenantAnnouncement = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('createTenantAnnouncement error:', err);
+    logger.error({ err }, 'createTenantAnnouncement error');
     return res.status(500).json({
       status: 'error',
       message: err.message || 'Failed to send announcement',

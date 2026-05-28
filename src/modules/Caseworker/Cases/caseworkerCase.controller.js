@@ -1,7 +1,11 @@
 import { Op } from 'sequelize';
+import logger from '../../../utils/logger.js';
 import { ROLES } from '../../../middlewares/role.middleware.js';
 import { assertUsersInOrganisation } from '../../../utils/tenantScope.js';
 import { localDateStr } from '../../../utils/dateHelpers.js';
+import catchAsync from '../../../utils/catchAsync.js';
+import ApiResponse from '../../../utils/apiResponse.js';
+import { rowsToXlsxBuffer, sendXlsxDownload } from '../../../utils/excelExport.util.js';
 import {
   IMMIGRATION_CASE_STEPS,
   assignCasesToPipeline,
@@ -220,7 +224,7 @@ export const getMyCases = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Get My Cases Error:", error);
+    logger.error({ err: error }, "Get My Cases Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -354,7 +358,7 @@ export const getMyDashboardStats = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Get My Dashboard Stats Error:", error);
+    logger.error({ err: error }, "Get My Dashboard Stats Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -410,7 +414,7 @@ export const getMyPipelineCases = async (req, res) => {
       meta: { steps: IMMIGRATION_CASE_STEPS },
     });
   } catch (error) {
-    console.error("Get My Pipeline Cases Error:", error);
+    logger.error({ err: error }, "Get My Pipeline Cases Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -472,7 +476,7 @@ export const updateMyCaseStatus = async (req, res) => {
       data: { case: caseData },
     });
   } catch (error) {
-    console.error("Update My Case Status Error:", error);
+    logger.error({ err: error }, "Update My Case Status Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -598,7 +602,7 @@ export const createMyCase = async (req, res) => {
       data: { case: newCase },
     });
   } catch (error) {
-    console.error("Create My Case Error:", error);
+    logger.error({ err: error }, "Create My Case Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -712,7 +716,7 @@ export const updateMyCase = async (req, res) => {
       data: { case: caseData },
     });
   } catch (error) {
-    console.error("Update My Case Error:", error);
+    logger.error({ err: error }, "Update My Case Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -766,7 +770,7 @@ export const deleteMyCase = async (req, res) => {
       data: null,
     });
   } catch (error) {
-    console.error("Delete My Case Error:", error);
+    logger.error({ err: error }, "Delete My Case Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -1044,7 +1048,7 @@ export const getCaseDetails = async (req, res) => {
 
     res.status(200).json(response);
   } catch (error) {
-    console.error("Get Case Details Error:", error);
+    logger.error({ err: error }, "Get Case Details Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -1054,19 +1058,17 @@ export const getCaseDetails = async (req, res) => {
   }
 };
 
-// Export Cases to CSV (Caseworker can export their assigned cases)
-export const exportMyCases = async (req, res) => {
+export const exportMyCases = catchAsync(async (req, res) => {
   try {
     const userId = req.user.userId;
     const userRoleId = req.user.role_id;
 
     // Verify user is a caseworker
     if (userRoleId !== ROLES.CASEWORKER) {
-      return res.status(403).json({
-        status: "error",
-        message: "Access denied. Only caseworkers can export their assigned cases.",
-        data: null,
-      });
+      return ApiResponse.forbidden(
+        res,
+        "Access denied. Only caseworkers can export their assigned cases.",
+      );
     }
 
     const { search, status, priority, visaTypeId } = req.query;
@@ -1168,51 +1170,56 @@ export const exportMyCases = async (req, res) => {
       caseworkerMap[cw.id] = `${cw.first_name} ${cw.last_name}`;
     });
 
-    // Generate CSV
-    const csvHeader = ['Case ID', 'Candidate', 'Candidate Email', 'Sponsor', 'Sponsor Email', 'Visa Type', 'Petition Type', 'Priority', 'Status', 'Assigned Caseworkers', 'Submission Date', 'Target Date', 'LCA Number', 'Receipt Number', 'Salary Offered', 'Total Amount', 'Paid Amount', 'Created At'];
-    const csvRows = cases.map(c => {
+    const columns = [
+      { key: "caseId", header: "Case ID" },
+      { key: "candidate", header: "Candidate" },
+      { key: "candidateEmail", header: "Candidate Email" },
+      { key: "sponsor", header: "Sponsor" },
+      { key: "sponsorEmail", header: "Sponsor Email" },
+      { key: "visaType", header: "Visa Type" },
+      { key: "petitionType", header: "Petition Type" },
+      { key: "priority", header: "Priority" },
+      { key: "status", header: "Status" },
+      { key: "assignedCaseworkers", header: "Assigned Caseworkers" },
+      { key: "submissionDate", header: "Submission Date" },
+      { key: "targetDate", header: "Target Date" },
+      { key: "lcaNumber", header: "LCA Number" },
+      { key: "receiptNumber", header: "Receipt Number" },
+      { key: "salaryOffered", header: "Salary Offered" },
+      { key: "totalAmount", header: "Total Amount" },
+      { key: "paidAmount", header: "Paid Amount" },
+      { key: "createdAt", header: "Created At" },
+    ];
+
+    const rows = cases.map((c) => {
       const cwIds = Array.isArray(c.assignedcaseworkerId) ? c.assignedcaseworkerId : (c.assignedcaseworkerId ? [c.assignedcaseworkerId] : []);
       const cwNames = cwIds.map(id => caseworkerMap[id] || `ID:${id}`).join(', ');
       const sponsorName = c.sponsor?.sponsorProfile?.companyName || c.sponsor?.sponsorProfile?.tradingName || (c.sponsor ? `${c.sponsor.first_name} ${c.sponsor.last_name}` : 'N/A');
       
-      return [
-        c.caseId || 'N/A',
-        c.candidate ? `${c.candidate.first_name} ${c.candidate.last_name}` : 'N/A',
-        c.candidate?.email || 'N/A',
-        sponsorName,
-        c.sponsor?.email || 'N/A',
-        c.visaType?.name || 'N/A',
-        c.petitionType?.name || 'N/A',
-        c.priority,
-        c.status,
-        cwNames || 'N/A',
-        c.submissionDate || 'N/A',
-        c.targetSubmissionDate || 'N/A',
-        c.lcaNumber || 'N/A',
-        c.receiptNumber || 'N/A',
-        c.salaryOffered || 0,
-        c.totalAmount || 0,
-        c.paidAmount || 0,
-        c.created_at || 'N/A'
-      ];
+      return {
+        caseId: c.caseId || "N/A",
+        candidate: c.candidate ? `${c.candidate.first_name} ${c.candidate.last_name}` : "N/A",
+        candidateEmail: c.candidate?.email || "N/A",
+        sponsor: sponsorName,
+        sponsorEmail: c.sponsor?.email || "N/A",
+        visaType: c.visaType?.name || "N/A",
+        petitionType: c.petitionType?.name || "N/A",
+        priority: c.priority,
+        status: c.status,
+        assignedCaseworkers: cwNames || "N/A",
+        submissionDate: c.submissionDate || "N/A",
+        targetDate: c.targetSubmissionDate || "N/A",
+        lcaNumber: c.lcaNumber || "N/A",
+        receiptNumber: c.receiptNumber || "N/A",
+        salaryOffered: c.salaryOffered || 0,
+        totalAmount: c.totalAmount || 0,
+        paidAmount: c.paidAmount || 0,
+        createdAt: c.created_at || "N/A",
+      };
     });
-
-    const csvContent = [
-      csvHeader.join(','),
-      ...csvRows.map(row => row.map(cell => `"${cell}"`).join(','))
-    ].join('\n');
-
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', 'attachment; filename="cases_export.csv"');
-    res.send(csvContent);
-
-  } catch (error) {
-    console.error("Export My Cases Error:", error);
-    res.status(500).json({
-      status: "error",
-      message: "Failed to export cases",
-      data: null,
-      error: error.message,
-    });
+    const buffer = rowsToXlsxBuffer(rows, columns);
+    sendXlsxDownload(res, buffer, "cases_export.xlsx");
+  } catch (err) {
+    return ApiResponse.error(res, "Failed to export cases", 500, err);
   }
-};
+});

@@ -80,7 +80,7 @@ export const getRbacOverview = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Get RBAC Overview Error:", error);
+    logger.error({ err: error }, "Get RBAC Overview Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -137,7 +137,7 @@ export const getRbacMatrix = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Get RBAC Matrix Error:", error);
+    logger.error({ err: error }, "Get RBAC Matrix Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -220,7 +220,7 @@ export const getUsersWithRolesAndPermissions = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Get Users with Roles and Permissions Error:", error);
+    logger.error({ err: error }, "Get Users with Roles and Permissions Error");
     res.status(500).json({
       status: "error",
       message: "Failed to fetch users with roles and permissions",
@@ -289,7 +289,7 @@ export const getPermissionAudit = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Get Permission Audit Error:", error);
+    logger.error({ err: error }, "Get Permission Audit Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -326,7 +326,7 @@ export const getOrphanPermissions = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Get Orphan Permissions Error:", error);
+    logger.error({ err: error }, "Get Orphan Permissions Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -366,7 +366,7 @@ export const getRolesWithoutPermissions = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Get Roles Without Permissions Error:", error);
+    logger.error({ err: error }, "Get Roles Without Permissions Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -467,7 +467,7 @@ export const bulkAssignPermissions = async (req, res) => {
     });
   } catch (error) {
     await t.rollback();
-    console.error("Bulk Assign Permissions Error:", error);
+    logger.error({ err: error }, "Bulk Assign Permissions Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",

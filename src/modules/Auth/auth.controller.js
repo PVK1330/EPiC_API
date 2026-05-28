@@ -1,5 +1,4 @@
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
 import speakeasy from 'speakeasy';
 import QRCode from 'qrcode';
 import catchAsync from '../../utils/catchAsync.js';
@@ -27,6 +26,8 @@ import {
   syncUserToPlatformAndTenant,
 } from '../../services/userSync.service.js';
 import { permissionNamesToModuleIds } from '../../constants/platformModules.js';
+import { signToken, signShortToken, verifyToken, getCookieConfig } from '../../config/jwt.config.js';
+import logger from '../../utils/logger.js';
 
 const RESET_TOKEN_EXPIRY = '10m';
 const RESET_TOKEN_PURPOSE = 'password_reset';
@@ -130,7 +131,7 @@ async function resolveAllowedModules(user) {
       const permNames = (role?.permissions || []).map((p) => p.name).filter(Boolean);
       return permissionNamesToModuleIds(permNames);
     } catch (err) {
-      console.error('resolveAllowedModules (platform staff):', err);
+      logger.error({ err }, 'resolveAllowedModules (platform staff)');
       return [];
     }
   }
@@ -546,7 +547,12 @@ export const verifyOTP = catchAsync(async (req, res) => {
 
   const role = { name: ROLE_NAMES[verifiedUser.role_id] ?? null };
   const payload = buildJwtPayload(verifiedUser, role);
-  const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "7d" });
+  const token = signToken(payload);
+
+  // Set httpOnly cookie for secure token storage — XSS-resistant
+  res.cookie('token', token, getCookieConfig({
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  }));
 
   const userResponse = {
     id: verifiedUser.id,
@@ -711,7 +717,12 @@ export const login = catchAsync(async (req, res) => {
 
   const roleMeta = await resolveAuthRole(user);
   const payload = buildJwtPayload(user, { name: roleMeta.name });
-  const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '7d' });
+  const token = signToken(payload);
+
+  // Set httpOnly cookie for secure token storage — XSS-resistant
+  res.cookie('token', token, getCookieConfig({
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days, aligns with JWT expiry
+  }));
 
   let organisation = null;
   if (user.organisation_id && !isPlatformStaffUser(user)) {
@@ -740,11 +751,7 @@ export const login = catchAsync(async (req, res) => {
  * Logout
  */
 export const logout = (req, res) => {
-  res.clearCookie('token', {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
-  });
+  res.clearCookie('token', getCookieConfig());
   return ApiResponse.success(res, 'Logged out successfully.');
 };
 
@@ -796,7 +803,7 @@ export const forgotPassword = catchAsync(async (req, res) => {
   }
 
   if (process.env.NODE_ENV === "development") {
-    console.info(`[mail] Password reset OTP sent to ${recipient}`);
+    logger.info({ recipient }, "Password reset OTP sent");
   }
 
   return ApiResponse.success(res, "Password reset OTP sent to your email", {
@@ -826,10 +833,8 @@ export const verifyResetOTP = catchAsync(async (req, res) => {
     return ApiResponse.badRequest(res, "OTP expired");
   }
 
-  const resetToken = jwt.sign(
+  const resetToken = signShortToken(
     { email: user.email, purpose: RESET_TOKEN_PURPOSE },
-    process.env.JWT_SECRET,
-    { expiresIn: RESET_TOKEN_EXPIRY }
   );
 
   return ApiResponse.success(res, "OTP verified successfully", {
@@ -858,7 +863,7 @@ export const setPassword = catchAsync(async (req, res) => {
 
   let decodedResetToken;
   try {
-    decodedResetToken = jwt.verify(resetToken, process.env.JWT_SECRET);
+    decodedResetToken = verifyToken(resetToken);
   } catch {
     return ApiResponse.unauthorized(res, "Invalid or expired reset token");
   }
@@ -1080,7 +1085,12 @@ export const verify2FA = catchAsync(async (req, res) => {
 
   const role = { name: ROLE_NAMES[user.role_id] ?? null };
   const payload = buildJwtPayload(user, role);
-  const jwtToken = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '7d' });
+  const jwtToken = signToken(payload);
+
+  // Set httpOnly cookie for secure token storage — XSS-resistant
+  res.cookie('token', jwtToken, getCookieConfig({
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  }));
 
   let organisation = null;
   if (user.organisation_id && !isSuperAdminRole(user.role_id)) {
@@ -1128,4 +1138,81 @@ export const disable2FA = catchAsync(async (req, res) => {
   await mirrorPlatformUserById(userId);
 
   return ApiResponse.success(res, '2FA disabled successfully');
+});
+
+/**
+ * GET /api/auth/me
+ * Restore authenticated session after page refresh.
+ * Reads token from httpOnly cookie (set by login/verifyOTP/verify2FA).
+ * Returns the current user profile and allowed modules.
+ */
+export const me = catchAsync(async (req, res) => {
+  const user = req.user;
+
+  const roleMeta = await resolveAuthRole(user);
+  const allowedModules = await resolveAllowedModules(user);
+
+  let organisation = null;
+  if (user.organisation_id && !isPlatformStaffUser(user)) {
+    const org = await platformDb.Organisation.findByPk(user.organisation_id, {
+      attributes: ['id', 'slug', 'name', 'status'],
+    });
+    if (org) {
+      organisation = { id: org.id, slug: org.slug, name: org.name, status: org.status };
+    }
+  }
+
+  return ApiResponse.success(res, 'Session active', {
+    user: {
+      ...buildLoginUserResponse(user, roleMeta),
+      organisation,
+    },
+    allowedModules,
+  });
+});
+
+/**
+ * POST /api/auth/handoff
+ * Receives an impersonation token (from cross-domain superadmin handoff),
+ * verifies it, sets it as an httpOnly cookie, and returns the user profile.
+ * This replaces the old flow where the token was passed in the URL query param
+ * and stored in localStorage/Redux.
+ */
+export const handoff = catchAsync(async (req, res) => {
+  const { token } = req.body || {};
+
+  if (!token) {
+    return ApiResponse.badRequest(res, 'Missing handoff token');
+  }
+
+  // Verify the impersonation token
+  let decoded;
+  try {
+    decoded = verifyToken(token);
+  } catch {
+    return ApiResponse.unauthorized(res, 'Invalid or expired handoff token');
+  }
+
+  const user = await platformDb.User.findByPk(decoded.id, {
+    attributes: [
+      'id', 'email', 'first_name', 'last_name', 'role_id',
+      'organisation_id', 'status', 'gender', 'profile_pic',
+      'two_factor_enabled',
+    ],
+  });
+
+  if (!user) {
+    return ApiResponse.notFound(res, 'User not found');
+  }
+
+  // Set the impersonation token as httpOnly cookie
+  res.cookie('token', token, getCookieConfig({ maxAge: 7 * 24 * 60 * 60 * 1000 }));
+
+  const roleMeta = await resolveAuthRole(user);
+  const allowedModules = await resolveAllowedModules(user);
+
+  return ApiResponse.success(res, 'Handoff successful', {
+    user: buildLoginUserResponse(user, roleMeta),
+    allowedModules,
+  });
 });

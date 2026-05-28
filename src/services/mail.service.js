@@ -3,6 +3,7 @@ import nodemailer from "nodemailer";
 import platformDb from "../models/index.js";
 import { getSettingsByNamespace } from "./settings.service.js";
 import { generateFailureNoticeTemplate, generateDispatchReceiptTemplate } from "../utils/emailTemplates.js";
+import logger from "../utils/logger.js";
 
 const transportCache = new Map();
 const MASK = "••••••••";
@@ -41,7 +42,7 @@ export async function recipientDomainHasMx(email) {
     if (err?.code === "ENOTFOUND" || err?.code === "ENODATA") {
       return false;
     }
-    console.warn(`[mail] MX lookup inconclusive for ${domain}, allowing send:`, err?.code || err?.message);
+    logger.warn({ err, domain }, `[mail] MX lookup inconclusive for ${domain}, allowing send`);
     return true;
   }
 }
@@ -191,7 +192,7 @@ export async function loadPlatformSmtpConfig() {
       };
     }
   } catch (err) {
-    console.error("[mail] Failed to load platform SMTP from settings:", err.message);
+    logger.error({ err }, "[mail] Failed to load platform SMTP from settings");
   }
 
   return getPlatformSmtpConfigFromEnv();
@@ -445,10 +446,10 @@ async function notifySmtpOwnerOfDispatch(config, details) {
       html,
       text,
     });
-    console.log(`[mail] Dispatch receipt sent to SMTP owner ${ownerRecipient}`);
+    logger.info({ owner, ownerRecipient }, "[mail] Dispatch receipt sent to SMTP owner");
     return { notified: true, owner, ownerRecipient };
   } catch (err) {
-    console.error(`[mail] Could not send dispatch receipt to ${ownerRecipient}:`, err.message);
+    logger.error({ err, owner, ownerRecipient }, "[mail] Could not send dispatch receipt");
     return { notified: false, reason: "owner_receipt_failed", error: err.message };
   }
 }
@@ -477,10 +478,10 @@ async function notifySmtpOwnerOfFailure(config, details) {
       html,
       text,
     });
-    console.log(`[mail] Delivery failure notice sent to SMTP owner ${ownerRecipient}`);
+    logger.info({ owner, ownerRecipient }, "[mail] Delivery failure notice sent to SMTP owner");
     return { notified: true, owner, ownerRecipient };
   } catch (err) {
-    console.error(`[mail] Could not notify SMTP owner ${ownerRecipient}:`, err.message);
+    logger.error({ err, owner, ownerRecipient }, "[mail] Could not notify SMTP owner");
     return { notified: false, reason: "owner_notify_failed", error: err.message };
   }
 }
@@ -536,8 +537,9 @@ export async function sendTransactionalEmail({
     : await resolveSmtpConfig(organisationId);
 
   if (!isSmtpConfigComplete(config)) {
-    console.warn(
-      `[mail] No SMTP configured (org=${organisationId ?? "n/a"}) — set Superadmin Connectivity SMTP or EMAIL_USER/EMAIL_PASS in .env`,
+    logger.warn(
+      { organisationId: organisationId ?? "n/a" },
+      "[mail] No SMTP configured — set Superadmin Connectivity SMTP or EMAIL_USER/EMAIL_PASS in .env",
     );
     return { sent: false, reason: "mail_not_configured", usedSource: null };
   }
@@ -579,7 +581,7 @@ export async function sendTransactionalEmail({
       });
       ownerNotified = n.notified;
     }
-    console.warn("[mail] invalid recipient:", recipient);
+    logger.warn({ recipient }, "[mail] invalid recipient");
     return {
       sent: false,
       reason: "invalid_recipient",
@@ -650,13 +652,7 @@ export async function sendTransactionalEmail({
     };
   } catch (err) {
     const error = err?.message || "Email delivery failed";
-    console.error("[mail] send failed:", {
-      organisationId,
-      usedSource: config.source,
-      to: recipient,
-      error,
-      code: err?.code,
-    });
+    logger.error({ err, organisationId, recipient: to, usedSource: config.source, code: err?.code }, "[mail] send failed");
 
     let ownerNotified = false;
     if (notifyOwnerOnFailure) {
@@ -736,18 +732,19 @@ export async function sendOrganisationAdminWelcomeEmail({
 export async function verifyMailTransport(organisationId = null) {
   const config = await resolveSmtpConfig(organisationId);
   if (!isSmtpConfigComplete(config)) {
-    console.warn("[mail] Transport not configured");
+    logger.warn("[mail] Transport not configured");
     return { ok: false, source: null };
   }
   try {
     const transport = getTransporterForConfig(config);
     await transport.verify();
-    console.log(
-      `[mail] SMTP ready (${config.source}${organisationId ? `, org=${organisationId}` : ""})`,
+    logger.info(
+      { source: config.source, organisationId },
+      "[mail] SMTP ready",
     );
     return { ok: true, source: config.source };
   } catch (err) {
-    console.error(`[mail] SMTP verify failed (${config.source}):`, err.message);
+    logger.error({ err, source: config.source }, "[mail] SMTP verify failed");
     return { ok: false, source: config.source, error: err.message };
   }
 }

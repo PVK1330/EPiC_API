@@ -36,7 +36,7 @@ export const createRole = async (req, res) => {
       data: { role },
     });
   } catch (error) {
-    console.error('Error creating role:', error);
+    logger.error({ err: error }, 'Error creating role');
     res.status(500).json({
       status: 'error',
       message: 'Failed to create role',
@@ -84,7 +84,7 @@ export const getAllRoles = async (req, res) => {
       data: rolesData,
     });
   } catch (error) {
-    console.error('Error fetching roles:', error);
+    logger.error({ err: error }, 'Error fetching roles');
     res.status(500).json({
       status: 'error',
       message: 'Failed to fetch roles',
@@ -117,7 +117,7 @@ export const getRoleById = async (req, res) => {
       data: { role },
     });
   } catch (error) {
-    console.error('Error fetching role:', error);
+    logger.error({ err: error }, 'Error fetching role');
     res.status(500).json({
       status: 'error',
       message: 'Failed to fetch role',
@@ -163,7 +163,7 @@ export const getRoleWithPermissions = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('Error fetching role with permissions:', error);
+    logger.error({ err: error }, 'Error fetching role with permissions');
     res.status(500).json({
       status: 'error',
       message: 'Failed to fetch role with permissions',
@@ -213,7 +213,7 @@ export const updateRole = async (req, res) => {
       data: { role },
     });
   } catch (error) {
-    console.error('Error updating role:', error);
+    logger.error({ err: error }, 'Error updating role');
     res.status(500).json({
       status: 'error',
       message: 'Failed to update role',
@@ -266,7 +266,7 @@ export const deleteRole = async (req, res) => {
       data: null,
     });
   } catch (error) {
-    console.error('Error deleting role:', error);
+    logger.error({ err: error }, 'Error deleting role');
     res.status(500).json({
       status: 'error',
       message: 'Failed to delete role',
@@ -326,7 +326,7 @@ export const assignPermissionsToRole = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('Error assigning permissions to role:', error);
+    logger.error({ err: error }, 'Error assigning permissions to role');
     res.status(500).json({
       status: 'error',
       message: 'Failed to assign permissions to role',
@@ -367,7 +367,7 @@ export const getRolePermissions = async (req, res) => {
       data: { permissions: role.permissions || [] },
     });
   } catch (error) {
-    console.error('Error fetching role permissions:', error);
+    logger.error({ err: error }, 'Error fetching role permissions');
     res.status(500).json({
       status: 'error',
       message: 'Failed to fetch role permissions',
@@ -412,7 +412,7 @@ export const removePermissionFromRole = async (req, res) => {
       data: null,
     });
   } catch (error) {
-    console.error('Error removing permission from role:', error);
+    logger.error({ err: error }, 'Error removing permission from role');
     res.status(500).json({
       status: 'error',
       message: 'Failed to remove permission from role',
@@ -477,7 +477,7 @@ export const cloneRolePermissions = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('Error cloning role permissions:', error);
+    logger.error({ err: error }, 'Error cloning role permissions');
     res.status(500).json({
       status: 'error',
       message: 'Failed to clone role permissions',
@@ -536,7 +536,7 @@ export const updateUserRole = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('Error updating user role:', error);
+    logger.error({ err: error }, 'Error updating user role');
     res.status(500).json({
       status: 'error',
       message: 'Failed to update user role',

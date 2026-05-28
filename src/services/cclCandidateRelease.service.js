@@ -138,7 +138,7 @@ export async function syncCclReleaseForApprovedFees({
       caseRecord,
       ccl,
       performedBy,
-    }).catch((err) => console.error("attachCclTemplateToCase:", err));
+    }).catch((err) => logger.error({ err }, "attachCclTemplateToCase"));
     await ccl.reload();
   }
 

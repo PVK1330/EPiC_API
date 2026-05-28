@@ -1,5 +1,6 @@
 import { sendTransactionalEmail } from './mail.service.js';
 import { generateNotificationEmailTemplate } from '../utils/emailTemplates.js';
+import logger from '../utils/logger.js';
 
 const sendNotificationEmailToUser = async (tenantDb, userId, notification, organisationId = null) => {
   const user = await tenantDb.User.findByPk(userId, {
@@ -140,7 +141,7 @@ export const createNotification = async (data) => {
             await notification.update({ emailSent: true });
           }
         } catch (emailError) {
-          console.error(`Email send failed for notification ${notification.id}:`, emailError);
+          logger.error({ err: emailError, notificationId: notification.id }, "Email send failed for notification");
         }
       })();
     }
@@ -180,7 +181,7 @@ export const createNotification = async (data) => {
             }
           }
         } catch (err) {
-          console.error('Error sending copy to admins:', err);
+          logger.error({ err }, "Error sending copy to admins");
         }
       })();
     }
@@ -188,7 +189,7 @@ export const createNotification = async (data) => {
     await notification.reload();
     return notification;
   } catch (error) {
-    console.error('Error creating notification:', error);
+    logger.error({ err: error }, "Error creating notification");
     throw error;
   }
 };
@@ -225,7 +226,7 @@ export const notifyAdmins = async (tenantDb, notificationData) => {
       });
     }
   } catch (err) {
-    console.error('Error notifying admins:', err);
+    logger.error({ err }, "Error notifying admins");
   }
 };
 
@@ -250,7 +251,7 @@ export const createBulkNotifications = async (userIds, notificationData) => {
     );
     return notifications;
   } catch (error) {
-    console.error('Error creating bulk notifications:', error);
+    logger.error({ err: error }, "Error creating bulk notifications");
     throw error;
   }
 };
@@ -280,7 +281,7 @@ export const createNotificationForRole = async (roleId, notificationData) => {
     }
     return await createBulkNotifications(userIds, notificationData);
   } catch (error) {
-    console.error('Error creating role notification:', error);
+    logger.error({ err: error }, "Error creating role notification");
     throw error;
   }
 };
@@ -308,7 +309,7 @@ export const createNotificationForAllUsers = async (notificationData) => {
     }
     return await createBulkNotifications(userIds, notificationData);
   } catch (error) {
-    console.error('Error creating broadcast notification:', error);
+    logger.error({ err: error }, "Error creating broadcast notification");
     throw error;
   }
 };
@@ -332,7 +333,7 @@ export const markAsRead = async (tenantDb, notificationId) => {
 
     return notification;
   } catch (error) {
-    console.error('Error marking notification as read:', error);
+    logger.error({ err: error }, "Error marking notification as read");
     throw error;
   }
 };
@@ -358,7 +359,7 @@ export const markAllAsRead = async (tenantDb, userId) => {
     );
     return count;
   } catch (error) {
-    console.error('Error marking all notifications as read:', error);
+    logger.error({ err: error }, "Error marking all notifications as read");
     throw error;
   }
 };
@@ -378,7 +379,7 @@ export const deleteNotification = async (tenantDb, notificationId) => {
     await notification.destroy();
     return true;
   } catch (error) {
-    console.error('Error deleting notification:', error);
+    logger.error({ err: error }, "Error deleting notification");
     throw error;
   }
 };
@@ -398,7 +399,7 @@ export const getUnreadCount = async (tenantDb, userId) => {
     });
     return count;
   } catch (error) {
-    console.error('Error getting unread count:', error);
+    logger.error({ err: error }, "Error getting unread count");
     throw error;
   }
 };
@@ -457,7 +458,7 @@ export const getUserNotifications = async (tenantDb, userId, options = {}) => {
       },
     };
   } catch (error) {
-    console.error('Error getting user notifications:', error);
+    logger.error({ err: error }, "Error getting user notifications");
     throw error;
   }
 };
@@ -494,7 +495,7 @@ export const processScheduledNotifications = async (tenantDb) => {
             notification.organisationId ?? null,
           );
         } catch (emailError) {
-          console.error(`Scheduled email send failed for notification ${notification.id}:`, emailError);
+          logger.error({ err: emailError, notificationId: notification.id }, "Scheduled email send failed for notification");
         }
       }
 
@@ -506,7 +507,7 @@ export const processScheduledNotifications = async (tenantDb) => {
 
     return dueNotifications.length;
   } catch (error) {
-    console.error('Error processing scheduled notifications:', error);
+    logger.error({ err: error }, "Error processing scheduled notifications");
     throw error;
   }
 };
@@ -526,7 +527,7 @@ export const deleteExpiredNotifications = async (tenantDb) => {
       },
     });
   } catch (error) {
-    console.error('Error deleting expired notifications:', error);
+    logger.error({ err: error }, "Error deleting expired notifications");
     throw error;
   }
 };
@@ -598,7 +599,7 @@ export const notifyCaseCreated = async (tenantDb, caseData) => {
       });
     }
   } catch (err) {
-    console.error('Error in notifyCaseCreated:', err);
+    logger.error({ err }, "Error in notifyCaseCreated");
   }
 };
 

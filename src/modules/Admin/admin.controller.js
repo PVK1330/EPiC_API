@@ -9,6 +9,8 @@ import { isPlatformEmailTaken } from '../../utils/platformUserEmail.js';
 import { createUserOnPlatformAndTenant } from '../../services/userSync.service.js';
 import { sendTenantAdminWelcomeEmail } from '../../services/tenantUserMail.service.js';
 import { ensureAdminHasAllPermissions } from '../../seeders/permission.seeder.js';
+import { rowsToXlsxBuffer, sendXlsxDownload } from '../../utils/excelExport.util.js';
+import logger from '../../utils/logger.js';
 
 /** Tenant users with role "admin" (matches org provisioning + tenantSeed). */
 const ADMIN_ROLE_ID = ROLES.ADMIN;
@@ -102,7 +104,7 @@ export const createAdmin = catchAsync(async (req, res) => {
       organisationId,
     });
   } catch (emailError) {
-    console.error("Failed to send admin welcome email:", emailError);
+    logger.error({ err: emailError }, "Failed to send admin welcome email");
     welcomeEmail = { sent: false, reason: emailError?.message || "send_failed" };
   }
 
@@ -372,58 +374,73 @@ export const toggleAdminStatus = catchAsync(async (req, res) => {
   });
 });
 
-/**
- * Export Admins to CSV
- */
 export const exportAdmins = catchAsync(async (req, res) => {
-  const { search, status, role } = req.query;
+  try {
+    const { search, status, role } = req.query;
 
-  const whereClause = { role_id: ADMIN_ROLE_ID };
+    const whereClause = { role_id: ADMIN_ROLE_ID };
 
-  if (search) {
-    whereClause[Op.or] = [
-      { first_name: { [Op.iLike]: `%${search}%` } },
-      { last_name: { [Op.iLike]: `%${search}%` } },
-      { email: { [Op.iLike]: `%${search}%` } },
-      { mobile: { [Op.iLike]: `%${search}%` } }
+    if (search) {
+      whereClause[Op.or] = [
+        { first_name: { [Op.iLike]: `%${search}%` } },
+        { last_name: { [Op.iLike]: `%${search}%` } },
+        { email: { [Op.iLike]: `%${search}%` } },
+        { mobile: { [Op.iLike]: `%${search}%` } },
+      ];
+    }
+
+    if (status) whereClause.status = status;
+    if (role) whereClause.role_id = parseInt(role, 10) || ADMIN_ROLE_ID;
+
+    const admins = await req.tenantDb.User.findAll({
+      where: whereClause,
+      attributes: {
+        exclude: [
+          "password",
+          "otp_code",
+          "otp_expiry",
+          "password_reset_otp",
+          "password_reset_otp_expiry",
+          "temp_password",
+        ],
+      },
+      include: [
+        {
+          model: req.tenantDb.Role,
+          as: "role",
+          attributes: ["id", "name"],
+        },
+      ],
+      order: [["createdAt", "DESC"]],
+    });
+
+    const columns = [
+      { key: "id", header: "ID" },
+      { key: "firstName", header: "First Name" },
+      { key: "lastName", header: "Last Name" },
+      { key: "email", header: "Email" },
+      { key: "countryCode", header: "Country Code" },
+      { key: "mobile", header: "Mobile" },
+      { key: "role", header: "Role" },
+      { key: "status", header: "Status" },
+      { key: "createdAt", header: "Created At" },
     ];
+
+    const rows = admins.map((admin) => ({
+      id: admin.id,
+      firstName: admin.first_name,
+      lastName: admin.last_name,
+      email: admin.email,
+      countryCode: admin.country_code,
+      mobile: admin.mobile,
+      role: admin.role?.name || "N/A",
+      status: admin.status,
+      createdAt: admin.createdAt ? admin.createdAt.toISOString() : "",
+    }));
+
+    const buffer = rowsToXlsxBuffer(rows, columns);
+    sendXlsxDownload(res, buffer, "admins_export.xlsx");
+  } catch (err) {
+    return ApiResponse.error(res, "Failed to export admins", 500, err);
   }
-
-  if (status) whereClause.status = status;
-  if (role) whereClause.role_id = parseInt(role, 10) || ADMIN_ROLE_ID;
-
-  const admins = await req.tenantDb.User.findAll({
-    where: whereClause,
-    attributes: {
-      exclude: ['password', 'otp_code', 'otp_expiry', 'password_reset_otp', 'password_reset_otp_expiry', 'temp_password']
-    },
-    include: [{
-      model: req.tenantDb.Role,
-      as: "role",
-      attributes: ['id', 'name']
-    }],
-    order: [["createdAt", "DESC"]]
-  });
-
-  const csvHeader = ['ID', 'First Name', 'Last Name', 'Email', 'Country Code', 'Mobile', 'Role', 'Status', 'Created At'];
-  const csvRows = admins.map(admin => [
-    admin.id,
-    admin.first_name,
-    admin.last_name,
-    admin.email,
-    admin.country_code,
-    admin.mobile,
-    admin.role?.name || 'N/A',
-    admin.status,
-    admin.createdAt.toISOString()
-  ]);
-
-  const csvContent = [
-    csvHeader.join(','),
-    ...csvRows.map(row => row.map(cell => `"${cell}"`).join(','))
-  ].join('\n');
-
-  res.setHeader('Content-Type', 'text/csv');
-  res.setHeader('Content-Disposition', 'attachment; filename="admins_export.csv"');
-  return res.send(csvContent);
 });

@@ -7,9 +7,22 @@ ALTER TABLE "audit_logs"
   ADD COLUMN IF NOT EXISTS "details"     TEXT;
 
 -- Backfill resource from entity_type where resource is null
-UPDATE "audit_logs"
-SET "resource" = "entity_type"
-WHERE "resource" IS NULL AND "entity_type" IS NOT NULL;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = current_schema()
+      AND table_name = 'audit_logs'
+      AND column_name = 'entity_type'
+  ) THEN
+    EXECUTE '
+      UPDATE "audit_logs"
+      SET "resource" = "entity_type"
+      WHERE "resource" IS NULL AND "entity_type" IS NOT NULL
+    ';
+  END IF;
+END $$;
 
 -- Add index for common filter queries
 CREATE INDEX IF NOT EXISTS idx_audit_logs_status     ON "audit_logs" ("status");

@@ -1,11 +1,14 @@
+import logger from '../../../utils/logger.js';
 import path from 'path';
 import bcrypt from 'bcryptjs';
 import { Op } from 'sequelize';
 import { notifyCaseCreated } from '../../../services/notification.service.js';
 import { addTimelineEntry } from '../../../services/timeline.service.js';
 import { localDateStr } from '../../../utils/dateHelpers.js';
-import { streamBrandedPdf } from '../../../services/pdfGenerator.service.js';
+import { generateBrandedPdfBuffer } from '../../../services/pdfGenerator.service.js';
 import { rowsToXlsxBuffer, xlsxBufferToRows } from '../../../utils/excelExport.util.js';
+import catchAsync from '../../../utils/catchAsync.js';
+import ApiResponse from '../../../utils/apiResponse.js';
 import { generateStrongPassword } from '../../../utils/passwordGenerator.js';
 import { generateCaseId } from '../../../utils/case.utils.js';
 import { getWorkflowState } from '../../../services/caseWorkflowProcess.service.js';
@@ -298,7 +301,7 @@ export const getCandidateApplicationFieldSettings = async (req, res) => {
       data: settings.map((s) => s.toJSON()),
     });
   } catch (err) {
-    console.error('getCandidateApplicationFieldSettings error:', err);
+    logger.error({ err }, 'getCandidateApplicationFieldSettings error');
     res.status(500).json({
       status: 'error',
       message: 'Internal server error',
@@ -326,7 +329,7 @@ export const getCandidateApplicationCustomFields = async (req, res) => {
       data: customFields.map((f) => f.toJSON()),
     });
   } catch (err) {
-    console.error('getCandidateApplicationCustomFields error:', err);
+    logger.error({ err }, 'getCandidateApplicationCustomFields error');
     res.status(500).json({
       status: 'error',
       message: 'Internal server error',
@@ -437,7 +440,7 @@ export const getMyApplication = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('getMyApplication error:', err);
+    logger.error({ err }, 'getMyApplication error');
     res.status(500).json({
       status: 'error',
       message: 'Internal server error',
@@ -624,10 +627,10 @@ export const submitApplication = async (req, res) => {
         });
       }
     } catch (taskErr) {
-      console.error('Error syncing workflow tasks after application submit:', taskErr);
+      logger.error({ err: taskErr }, 'Error syncing workflow tasks after application submit');
     }
   } catch (err) {
-    console.error('submitApplication error:', err);
+    logger.error({ err }, 'submitApplication error');
     res.status(500).json({
       status: 'error',
       message: 'Internal server error',
@@ -686,7 +689,7 @@ export const saveDraft = async (req, res) => {
       data: { application },
     });
   } catch (err) {
-    console.error('saveDraft error:', err);
+    logger.error({ err }, 'saveDraft error');
     res.status(500).json({
       status: 'error',
       message: 'Internal server error',
@@ -713,7 +716,7 @@ export const unlockApplication = async (req, res) => {
 
     res.status(200).json({ success: true, message: 'Application unlocked successfully.' });
   } catch (err) {
-    console.error('unlockApplication error:', err);
+    logger.error({ err }, 'unlockApplication error');
     res.status(500).json({
       status: 'error',
       message: 'Internal server error',
@@ -848,7 +851,7 @@ export const adminUpdateCandidateApplication = async (req, res) => {
       },
       include: [
         { model: req.tenantDb.Role, as: 'role', attributes: ['id', 'name'] },
-        { model: CandidateApplication, as: 'application', required: false },
+        { model: req.tenantDb.CandidateApplication, as: 'application', required: false },
       ],
     });
 
@@ -858,7 +861,7 @@ export const adminUpdateCandidateApplication = async (req, res) => {
       data: { candidate: updatedCandidate },
     });
   } catch (err) {
-    console.error('adminUpdateCandidateApplication error:', err);
+    logger.error({ err }, 'adminUpdateCandidateApplication error');
     res.status(500).json({
       status: 'error',
       message: 'Internal server error',
@@ -933,7 +936,7 @@ export const exportCandidateApplicationsExcel = async (req, res) => {
     const candidates = await req.tenantDb.User.findAll({
       where: whereClause,
       attributes: ['id', 'first_name', 'last_name', 'email', 'country_code', 'mobile', 'status'],
-      include: [{ model: CandidateApplication, as: 'application', required: false }],
+      include: [{ model: req.tenantDb.CandidateApplication, as: 'application', required: false }],
       order: [['createdAt', 'DESC']],
     });
 
@@ -970,7 +973,7 @@ export const exportCandidateApplicationsExcel = async (req, res) => {
     );
     res.status(200).send(buf);
   } catch (err) {
-    console.error('exportCandidateApplicationsExcel error:', err);
+    logger.error({ err }, 'exportCandidateApplicationsExcel error');
     res.status(500).json({
       status: 'error',
       message: 'Internal server error',
@@ -987,7 +990,7 @@ function normalizeImportHeader(h) {
     .replace(/\s+/g, ' ');
 }
 
-async function buildImportHeaderMap() {
+async function buildImportHeaderMap(req) {
   const settings = await req.tenantDb.ApplicationFieldSetting.findAll();
   const map = {};
   map[normalizeImportHeader('User ID')] = 'meta:user_id';
@@ -1026,7 +1029,7 @@ export const importCandidateApplicationsExcel = async (req, res) => {
       });
     }
 
-    const headerMap = await buildImportHeaderMap();
+    const headerMap = await buildImportHeaderMap(req);
     const results = { success: [], errors: [] };
 
     let rowNum = 2;
@@ -1200,7 +1203,7 @@ export const importCandidateApplicationsExcel = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('importCandidateApplicationsExcel error:', err);
+    logger.error({ err }, 'importCandidateApplicationsExcel error');
     res.status(500).json({
       status: 'error',
       message: 'Internal server error',
@@ -1255,20 +1258,16 @@ async function buildFieldLabelMap(tenantDb) {
   return map;
 }
 
-export const downloadFilledApplicationPdf = async (req, res) => {
+export const downloadFilledApplicationPdf = catchAsync(async (req, res) => {
   try {
     const userId = resolveUserId(req);
     if (!userId) {
-      return res.status(401).json({ status: 'error', message: 'Invalid session', data: null });
+      return ApiResponse.unauthorized(res, 'Invalid session');
     }
 
     const application = await req.tenantDb.CandidateApplication.findOne({ where: { userId } });
     if (!application) {
-      return res.status(404).json({
-        status: 'error',
-        message: 'Application not found',
-        data: null,
-      });
+      return ApiResponse.notFound(res, 'Application not found');
     }
 
     const appJson = application.toJSON();
@@ -1318,7 +1317,7 @@ export const downloadFilledApplicationPdf = async (req, res) => {
     const candidateName =
       `${appJson.firstName || ''} ${appJson.lastName || ''}`.trim() || 'Candidate';
 
-    streamBrandedPdf(res, 'Filled_Application_Form.pdf', {
+    const buffer = await generateBrandedPdfBuffer({
       logoPath,
       title: 'Filled Application Form',
       sections,
@@ -1328,24 +1327,29 @@ export const downloadFilledApplicationPdf = async (req, res) => {
         candidateName,
       },
     });
-  } catch (err) {
-    console.error('downloadFilledApplicationPdf error:', err);
-    if (!res.headersSent) {
-      res.status(500).json({
-        status: 'error',
-        message: 'Internal server error',
-        data: null,
-        error: err.message,
-      });
-    }
-  }
-};
 
-export const downloadCaseSummaryPdf = async (req, res) => {
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename="Filled_Application_Form.pdf"',
+    );
+    res.status(200).send(buffer);
+  } catch (err) {
+    if (res.headersSent) return;
+    return ApiResponse.error(
+      res,
+      'Failed to generate filled application PDF',
+      500,
+      err,
+    );
+  }
+});
+
+export const downloadCaseSummaryPdf = catchAsync(async (req, res) => {
   try {
     const userId = resolveUserId(req);
     if (!userId) {
-      return res.status(401).json({ status: 'error', message: 'Invalid session', data: null });
+      return ApiResponse.unauthorized(res, 'Invalid session');
     }
 
     const application = await req.tenantDb.CandidateApplication.findOne({ where: { userId } });
@@ -1491,7 +1495,7 @@ export const downloadCaseSummaryPdf = async (req, res) => {
 
     const logoPath = path.join(process.cwd(), 'assets', 'elitepic_logo.png');
 
-    streamBrandedPdf(res, 'Case_Summary_Report.pdf', {
+    const buffer = await generateBrandedPdfBuffer({
       logoPath,
       title: 'Case Summary Report',
       sections,
@@ -1501,15 +1505,110 @@ export const downloadCaseSummaryPdf = async (req, res) => {
         candidateName: displayName,
       },
     });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename="Case_Summary_Report.pdf"',
+    );
+    res.status(200).send(buffer);
   } catch (err) {
-    console.error('downloadCaseSummaryPdf error:', err);
-    if (!res.headersSent) {
-      res.status(500).json({
-        status: 'error',
-        message: 'Internal server error',
-        data: null,
-        error: err.message,
-      });
-    }
+    if (res.headersSent) return;
+    return ApiResponse.error(
+      res,
+      'Failed to generate case summary PDF',
+      500,
+      err,
+    );
   }
-};
+});
+
+export const downloadCandidateApplicationPdf = catchAsync(async (req, res) => {
+  const { candidateId } = req.params;
+  const numId = Number(candidateId);
+  if (!Number.isFinite(numId) || numId <= 0) {
+    return ApiResponse.badRequest(res, "Invalid candidateId");
+  }
+
+  const application = await req.tenantDb.CandidateApplication.findOne({
+    where: { userId: numId },
+  });
+  if (!application) {
+    return ApiResponse.notFound(res, "Application not found");
+  }
+
+  const appJson = application.toJSON();
+  const labelMap = await buildFieldLabelMap(req.tenantDb);
+
+  const sections = PDF_APPLICATION_SECTIONS.map((sec) => ({
+    sectionTitle: sec.title,
+    rows: sec.fields.map((fieldKey) => ({
+      label: labelMap[fieldKey] || humanizeFieldKey(fieldKey),
+      value: formatApplicationScalar(fieldKey, appJson[fieldKey]),
+    })),
+  }));
+
+  const customDefs = await req.tenantDb.ApplicationCustomField.findAll({
+    where: { is_active: true },
+    order: [["display_order", "ASC"]],
+  });
+
+  const responses =
+    appJson.customResponses && typeof appJson.customResponses === "object"
+      ? appJson.customResponses
+      : {};
+
+  const customRows = [];
+  const seenKeys = new Set();
+  for (const cf of customDefs) {
+    const key = cf.field_id;
+    seenKeys.add(key);
+    const val = responses[key] ?? responses[String(cf.id)] ?? null;
+    customRows.push({
+      label: cf.label,
+      value: formatApplicationScalar(key, val),
+    });
+  }
+
+  for (const [k, v] of Object.entries(responses)) {
+    if (seenKeys.has(k)) continue;
+    customRows.push({
+      label: humanizeFieldKey(k),
+      value: formatApplicationScalar(k, v),
+    });
+  }
+
+  if (customRows.length) {
+    sections.push({
+      sectionTitle: "Additional Questions",
+      rows: customRows,
+    });
+  }
+
+  const logoPath = path.join(process.cwd(), "assets", "elitepic_logo.png");
+  const candidateName =
+    `${appJson.firstName || ""} ${appJson.lastName || ""}`.trim() || "Client";
+
+  const buffer = await generateBrandedPdfBuffer({
+    logoPath,
+    title: "Client Application",
+    sections,
+    metadata: {
+      subtitle: "Immigration application export (admin)",
+      reference: `Client application for ${candidateName}`,
+      candidateName,
+    },
+  });
+
+  const safe = candidateName
+    .replace(/\s+/g, "-")
+    .replace(/[^A-Za-z0-9_-]/g, "")
+    .toLowerCase();
+
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="application-${safe || "client"}.pdf"`,
+  );
+  res.status(200).send(buffer);
+});

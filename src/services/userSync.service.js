@@ -1,5 +1,6 @@
 import platformDb from "../models/index.js";
 import { findPlatformUserByEmail, normalizePlatformEmail } from "../utils/platformUserEmail.js";
+import logger from "../utils/logger.js";
 
 /**
  * Mirror a user row into the tenant database (same primary key as platform registry).
@@ -26,7 +27,7 @@ export async function mirrorUserToTenant(tenantDb, userInstanceOrPlain) {
     if (existingByEmail) {
        // If ID is different, we have a conflict. Since Registry is the source of truth, we delete the tenant one.
        await existingByEmail.destroy();
-       console.log(`⚠ Conflict resolved: Removed user with same email but different ID in tenant: ${email}`);
+       logger.warn({ email }, "Conflict resolved: Removed user with same email but different ID in tenant");
     }
   }
 

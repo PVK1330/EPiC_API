@@ -1,4 +1,7 @@
 import { Op } from 'sequelize';
+import catchAsync from '../../utils/catchAsync.js';
+import ApiResponse from '../../utils/apiResponse.js';
+import { rowsToXlsxBuffer, sendXlsxDownload } from '../../utils/excelExport.util.js';
 import {
   notifyCaseAssigned,
   notifyCaseStatusChanged,
@@ -31,6 +34,7 @@ import {
 } from '../../constants/immigrationCaseProcess.js';
 import { applyCaseStageChange } from '../../services/caseStageAutomation.service.js';
 import { bookBiometricDirect } from '../../services/caseWorkflowProcess.service.js';
+import logger from '../../utils/logger.js';
 
 
 // Helper function to generate next case ID like #CAS-001 securely
@@ -165,7 +169,7 @@ export const createCase = async (req, res) => {
           caseRecordId: newCase.id,
         });
       } catch (notifErr) {
-        console.error("notifyProposedAmountToCandidate (createCase):", notifErr);
+        logger.error({ err: notifErr }, "notifyProposedAmountToCandidate (createCase)");
       }
     }
 
@@ -179,7 +183,7 @@ export const createCase = async (req, res) => {
         organisationId,
       });
     } catch (stageTaskErr) {
-      console.error("syncWorkflowTasksForStage (createCase):", stageTaskErr);
+      logger.error({ err: stageTaskErr }, "syncWorkflowTasksForStage (createCase)");
     }
 
     // Send notifications to assigned caseworkers
@@ -198,14 +202,14 @@ export const createCase = async (req, res) => {
         try {
           await notifyCaseAssigned(req.tenantDb, caseworkerId, caseData);
         } catch (notifError) {
-          console.error('Failed to send notification to caseworker:', caseworkerId, notifError);
+          logger.error({ err: notifError, caseworkerId }, 'Failed to send notification to caseworker');
         }
       }
       // Notify Client (Candidate & Sponsor)
       try {
           await notifyCaseStatusChanged(req.tenantDb, [candidateId, sponsorId], caseData, 'None', 'Assigned');
       } catch (notifError) {
-          console.error('Failed to notify client of assignment:', notifError);
+          logger.error({ err: notifError }, 'Failed to notify client of assignment');
       }
       await createTasksOnCaseworkerAssignment({
         tenantDb: req.tenantDb,
@@ -214,7 +218,7 @@ export const createCase = async (req, res) => {
         assignedBy: req.user?.userId,
         organisationId,
         reason: notes || "Initial case creation assignment",
-      }).catch((err) => console.error('createTasksOnCaseworkerAssignment:', err));
+      }).catch((err) => logger.error({ err }, 'createTasksOnCaseworkerAssignment'));
     }
 
     // Record Audit Log
@@ -247,7 +251,7 @@ export const createCase = async (req, res) => {
       data: { case: newCase },
     });
   } catch (error) {
-    console.error("Create Case Error:", error);
+    logger.error({ err: error }, "Create Case Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -335,7 +339,7 @@ export const getCasesWithFilters = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Get Cases with Filters Error:", error);
+    logger.error({ err: error }, "Get Cases with Filters Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -432,7 +436,7 @@ export const getAllCases = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Get All Cases Error:", error);
+    logger.error({ err: error }, "Get All Cases Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -512,7 +516,7 @@ export const getCaseById = async (req, res) => {
       data: { case: caseData },
     });
   } catch (error) {
-    console.error("Get Case by ID Error:", error);
+    logger.error({ err: error }, "Get Case by ID Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -526,11 +530,11 @@ export const getCaseById = async (req, res) => {
 export const updateCase = async (req, res) => {
   try {
     const { id } = req.params;
-    console.log("Update Case - Request received for ID:", id);
+    logger.info({ caseId: id }, "Update Case - Request received");
     
     const caseData = (await req.tenantDb.Case.findOne({ where: { caseId: id } })) || 
                      (!isNaN(parseInt(id)) ? await req.tenantDb.Case.findOne({ where: { id: parseInt(id, 10) } }) : null);
-    console.log("Update Case - Found case:", caseData?.caseId);
+    logger.info({ caseRef: caseData?.caseId }, "Update Case - Found case");
 
     if (!caseData) {
       return res.status(404).json({
@@ -566,7 +570,7 @@ export const updateCase = async (req, res) => {
     const oldCwIds = caseData.assignedcaseworkerId || [];
 
     const oldStatus = caseData.status;
-    console.log("Update Case - Old status:", oldStatus, "New status:", status);
+    logger.info({ oldStatus, newStatus: status }, "Update Case - Status change");
 
     const previousStage = resolveCaseStage(caseData);
     let nextStage = caseStage !== undefined ? normalizeCaseStage(caseStage) : undefined;
@@ -614,10 +618,10 @@ export const updateCase = async (req, res) => {
       paidAmount: paidAmount !== undefined ? paidAmount : caseData.paidAmount,
       notes: notes !== undefined ? notes : caseData.notes,
     };
-    console.log("Update Case - Update data:", updateData);
+    logger.debug({ updateData }, "Update Case - Update data");
 
     await caseData.update(updateData);
-    console.log("Update Case - Update successful");
+    logger.info("Update Case - Update successful");
 
     if (nextStage !== undefined && nextStage !== previousStage) {
       if (nextStage === "biometrics_booked" && !caseData.biometricsDate) {
@@ -682,11 +686,11 @@ export const updateCase = async (req, res) => {
               candidateName: candidate ? `${candidate.first_name} ${candidate.last_name}` : 'Unknown',
             }, oldStatus, status);
           } catch (notifError) {
-            console.error('Failed to send status change notification:', notifError);
+            logger.error({ err: notifError }, 'Failed to send status change notification');
           }
         }
       } catch (error) {
-        console.error('Error in notification process:', error);
+        logger.error({ err: error }, 'Error in notification process');
       }
     }
 
@@ -712,11 +716,11 @@ export const updateCase = async (req, res) => {
               newCaseworkerIds: newCwIds,
               assignedBy: req.user?.userId,
               organisationId,
-            }).catch((err) => console.error('createTasksOnCaseworkerAssignment:', err));
+            }).catch((err) => logger.error({ err }, 'createTasksOnCaseworkerAssignment'));
             // Also notify client that new caseworkers are assigned
             await notifyCaseStatusChanged(req.tenantDb, [caseData.candidateId, caseData.sponsorId], caseInfo, 'Previous', 'New Caseworker Assigned');
         } catch (error) {
-            console.error('Error sending assignment notifications:', error);
+            logger.error({ err: error }, 'Error sending assignment notifications');
         }
     }
 
@@ -726,7 +730,7 @@ export const updateCase = async (req, res) => {
         data: { case: caseData },
     });
   } catch (error) {
-    console.error("Update Case Error:", error);
+    logger.error({ err: error }, "Update Case Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -760,7 +764,7 @@ export const deleteCase = async (req, res) => {
       data: null,
     });
   } catch (error) {
-    console.error("Delete Case Error:", error);
+    logger.error({ err: error }, "Delete Case Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -908,7 +912,7 @@ export const updatePipelineStage = async (req, res) => {
           organisationId: req.user?.organisation_id ?? null,
         });
       } catch (stageErr) {
-        console.error("applyCaseStageChange (pipeline):", stageErr);
+        logger.error({ err: stageErr }, "applyCaseStageChange (pipeline)");
       }
       await caseData.reload();
     } else if (nextStage === "biometrics_booked" && !caseData.biometricsDate) {
@@ -923,13 +927,12 @@ export const updatePipelineStage = async (req, res) => {
       data: { case: caseData },
     });
   } catch (error) {
-    console.error("Update Pipeline Stage Error:", error);
+    logger.error({ err: error }, "Update Pipeline Stage Error");
     res.status(500).json({ status: "error", message: "Internal server error", error: error.message });
   }
 };
 
-// Export Cases to CSV
-export const exportCases = async (req, res) => {
+export const exportCases = catchAsync(async (req, res) => {
   try {
     const { search, status, priority, visaType } = req.query;
 
@@ -1003,53 +1006,58 @@ export const exportCases = async (req, res) => {
       caseworkerMap[cw.id] = `${cw.first_name} ${cw.last_name}`;
     });
 
-    // Generate CSV
-    const csvHeader = ['Case ID', 'Candidate', 'Candidate Email', 'Sponsor', 'Sponsor Email', 'Visa Type', 'Petition Type', 'Priority', 'Status', 'Assigned Caseworkers', 'Submission Date', 'Target Date', 'LCA Number', 'Receipt Number', 'Salary Offered', 'Total Amount', 'Paid Amount', 'Created At'];
-    const csvRows = cases.map(c => {
+    const columns = [
+      { key: 'caseId', header: 'Case ID' },
+      { key: 'candidate', header: 'Candidate' },
+      { key: 'candidateEmail', header: 'Candidate Email' },
+      { key: 'sponsor', header: 'Sponsor' },
+      { key: 'sponsorEmail', header: 'Sponsor Email' },
+      { key: 'visaType', header: 'Visa Type' },
+      { key: 'petitionType', header: 'Petition Type' },
+      { key: 'priority', header: 'Priority' },
+      { key: 'status', header: 'Status' },
+      { key: 'assignedCaseworkers', header: 'Assigned Caseworkers' },
+      { key: 'submissionDate', header: 'Submission Date' },
+      { key: 'targetDate', header: 'Target Date' },
+      { key: 'lcaNumber', header: 'LCA Number' },
+      { key: 'receiptNumber', header: 'Receipt Number' },
+      { key: 'salaryOffered', header: 'Salary Offered' },
+      { key: 'totalAmount', header: 'Total Amount' },
+      { key: 'paidAmount', header: 'Paid Amount' },
+      { key: 'createdAt', header: 'Created At' },
+    ];
+
+    const rows = cases.map((c) => {
       const cwIds = Array.isArray(c.assignedcaseworkerId) ? c.assignedcaseworkerId : (c.assignedcaseworkerId ? [c.assignedcaseworkerId] : []);
       const cwNames = cwIds.map(id => caseworkerMap[id] || `ID:${id}`).join(', ');
       
-      return [
-        c.caseId || 'N/A',
-        c.candidate ? `${c.candidate.first_name} ${c.candidate.last_name}` : 'N/A',
-        c.candidate?.email || 'N/A',
-        c.sponsor ? `${c.sponsor.first_name} ${c.sponsor.last_name}` : 'N/A',
-        c.sponsor?.email || 'N/A',
-        c.visaType?.name || 'N/A',
-        c.petitionType?.name || 'N/A',
-        c.priority,
-        c.status,
-        cwNames || 'N/A',
-        c.submissionDate || 'N/A',
-        c.targetSubmissionDate || 'N/A',
-        c.lcaNumber || 'N/A',
-        c.receiptNumber || 'N/A',
-        c.salaryOffered || 0,
-        c.totalAmount || 0,
-        c.paidAmount || 0,
-        c.created_at || 'N/A'
-      ];
+      return {
+        caseId: c.caseId || 'N/A',
+        candidate: c.candidate ? `${c.candidate.first_name} ${c.candidate.last_name}` : 'N/A',
+        candidateEmail: c.candidate?.email || 'N/A',
+        sponsor: c.sponsor ? `${c.sponsor.first_name} ${c.sponsor.last_name}` : 'N/A',
+        sponsorEmail: c.sponsor?.email || 'N/A',
+        visaType: c.visaType?.name || 'N/A',
+        petitionType: c.petitionType?.name || 'N/A',
+        priority: c.priority,
+        status: c.status,
+        assignedCaseworkers: cwNames || 'N/A',
+        submissionDate: c.submissionDate || 'N/A',
+        targetDate: c.targetSubmissionDate || 'N/A',
+        lcaNumber: c.lcaNumber || 'N/A',
+        receiptNumber: c.receiptNumber || 'N/A',
+        salaryOffered: c.salaryOffered || 0,
+        totalAmount: c.totalAmount || 0,
+        paidAmount: c.paidAmount || 0,
+        createdAt: c.created_at || 'N/A',
+      };
     });
-
-    const csvContent = [
-      csvHeader.join(','),
-      ...csvRows.map(row => row.map(cell => `"${cell}"`).join(','))
-    ].join('\n');
-
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', 'attachment; filename="cases_export.csv"');
-    res.send(csvContent);
-
-  } catch (error) {
-    console.error("Export Cases Error:", error);
-    res.status(500).json({
-      status: "error",
-      message: "Internal server error",
-      data: null,
-      error: error.message
-    });
+    const buffer = rowsToXlsxBuffer(rows, columns);
+    sendXlsxDownload(res, buffer, 'cases_export.xlsx');
+  } catch (err) {
+    return ApiResponse.error(res, 'Failed to export cases', 500, err);
   }
-};
+});
 export const getTeamCapacity = async (req, res) => {
   try {
     const cases = await req.tenantDb.Case.findAll({
@@ -1174,7 +1182,7 @@ export const assignCase = async (req, res) => {
       await completePendingWorkflowTasks(req.tenantDb, {
         caseId: caseData.id,
         titlePattern: "%Review enquiry and assign caseworker%",
-      }).catch((err) => console.error("complete assign enquiry tasks:", err));
+      }).catch((err) => logger.error({ err }, "complete assign enquiry tasks"));
 
       const currentStage = resolveCaseStage(caseData);
       if (currentStage === "client_enquiry") {
@@ -1197,7 +1205,7 @@ export const assignCase = async (req, res) => {
             organisationId: req.user?.organisation_id ?? null,
           });
         } catch (stageErr) {
-          console.error("assignCase stage advance:", stageErr);
+          logger.error({ err: stageErr }, "assignCase stage advance");
         }
       }
     }
@@ -1218,7 +1226,7 @@ export const assignCase = async (req, res) => {
         try {
           await notifyCaseAssigned(req.tenantDb, cwId, notifData);
         } catch (notifErr) {
-          console.error("Failed to notify caseworker about assignment:", notifErr);
+          logger.error({ err: notifErr }, "Failed to notify caseworker about assignment");
         }
       }
       if (newCwIds.length > 0) {
@@ -1230,7 +1238,7 @@ export const assignCase = async (req, res) => {
           organisationId: req.user?.organisation_id ?? null,
           assignToNames: assignToName || null,
           reason: reason || null,
-        }).catch((err) => console.error('createTasksOnCaseworkerAssignment:', err));
+        }).catch((err) => logger.error({ err }, 'createTasksOnCaseworkerAssignment'));
       }
     }
 
@@ -1260,7 +1268,7 @@ export const assignCase = async (req, res) => {
         });
         await caseData.reload();
       } catch (cclSetupErr) {
-        console.error("applyAdminCclFeeOnCase (assignCase):", cclSetupErr);
+        logger.error({ err: cclSetupErr }, "applyAdminCclFeeOnCase (assignCase)");
       }
     } else if (
       !Number.isNaN(parsedProposed) &&
@@ -1274,7 +1282,7 @@ export const assignCase = async (req, res) => {
           caseRecordId: caseData.id,
         });
       } catch (feeErr) {
-        console.error("proposedAmount notify on assignCase:", feeErr);
+        logger.error({ err: feeErr }, "proposedAmount notify on assignCase");
       }
     }
 

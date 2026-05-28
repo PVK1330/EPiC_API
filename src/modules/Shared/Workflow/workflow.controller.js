@@ -47,6 +47,7 @@ import {
 import path from "path";
 import fs from "fs";
 import { buildCandidateCclApprovalTimeline } from "../../../utils/cclApprovalTimeline.utils.js";
+import logger from '../../../utils/logger.js';
 
 function organisationIdFromReq(req) {
   const id = req.user?.organisation_id;
@@ -184,7 +185,7 @@ export const getDataCaptureForm = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("getDataCaptureForm:", err);
+    logger.error({ err }, "getDataCaptureForm");
     res.status(500).json({ status: "error", message: err.message, data: null });
   }
 };
@@ -264,7 +265,7 @@ export const saveDataCaptureSubmission = async (req, res) => {
           });
           await caseRecord.reload();
         } catch (stageErr) {
-          console.error("DCS submit stage automation:", stageErr);
+          logger.error({ err: stageErr }, "DCS submit stage automation");
         }
       }
     }
@@ -275,7 +276,7 @@ export const saveDataCaptureSubmission = async (req, res) => {
       data: { submission },
     });
   } catch (err) {
-    console.error("saveDataCaptureSubmission:", err);
+    logger.error({ err }, "saveDataCaptureSubmission");
     res.status(500).json({ status: "error", message: err.message, data: null });
   }
 };
@@ -304,7 +305,7 @@ export const getStaffDataCapture = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("getStaffDataCapture:", err);
+    logger.error({ err }, "getStaffDataCapture");
     res.status(500).json({ status: "error", message: err.message, data: null });
   }
 };
@@ -386,7 +387,7 @@ export const sendDataCaptureRequest = async (req, res) => {
       caseRecord,
       sentBy: req.user?.userId,
       organisationId: organisationIdFromReq(req),
-    }).catch((err) => console.error("createTasksOnDataCaptureSent:", err));
+    }).catch((err) => logger.error({ err }, "createTasksOnDataCaptureSent"));
 
     res.status(200).json({
       status: "success",
@@ -394,7 +395,7 @@ export const sendDataCaptureRequest = async (req, res) => {
       data: { case: caseRecord, submission, email: emailResult },
     });
   } catch (err) {
-    console.error("sendDataCaptureRequest:", err);
+    logger.error({ err }, "sendDataCaptureRequest");
     res.status(500).json({ status: "error", message: err.message, data: null });
   }
 };
@@ -445,7 +446,7 @@ export const reviewDataCaptureSubmission = async (req, res) => {
             assigned_to: caseRecord.candidateId,
           },
         },
-      ).catch((err) => console.error("Failed to mark DCS task complete:", err));
+      ).catch((err) => logger.error({ err }, "Failed to mark DCS task complete"));
 
       await applyCaseStageChange({
         tenantDb: req.tenantDb,
@@ -464,13 +465,13 @@ export const reviewDataCaptureSubmission = async (req, res) => {
         reviewedBy: req.user?.userId,
         organisationId: organisationIdFromReq(req),
       }).catch((err) =>
-        console.error("createTasksOnDataCaptureRejected:", err),
+        logger.error({ err }, "createTasksOnDataCaptureRejected"),
       );
     }
 
     res.status(200).json({ status: "success", data: { submission } });
   } catch (err) {
-    console.error("reviewDataCaptureSubmission:", err);
+    logger.error({ err }, "reviewDataCaptureSubmission");
     res.status(500).json({ status: "error", message: err.message, data: null });
   }
 };
@@ -513,7 +514,7 @@ export const proposeCclFees = async (req, res) => {
       data: { ccl: result.ccl, case: result.caseRecord },
     });
   } catch (err) {
-    console.error("proposeCclFees:", err);
+    logger.error({ err }, "proposeCclFees");
     res.status(500).json({ status: "error", message: err.message, data: null });
   }
 };
@@ -567,7 +568,7 @@ export const reviewCclFees = async (req, res) => {
       data: { ccl: result.ccl, case: result.caseRecord },
     });
   } catch (err) {
-    console.error("reviewCclFees:", err);
+    logger.error({ err }, "reviewCclFees");
     res.status(500).json({ status: "error", message: err.message, data: null });
   }
 };
@@ -615,7 +616,7 @@ export const listCclFeePendingApprovals = async (req, res) => {
 
     res.status(200).json({ status: "success", data: { cases } });
   } catch (err) {
-    console.error("listCclFeePendingApprovals:", err);
+    logger.error({ err }, "listCclFeePendingApprovals");
     res.status(500).json({ status: "error", message: err.message, data: null });
   }
 };
@@ -677,7 +678,7 @@ export const getCandidateCcl = async (req, res) => {
         ccl,
         performedBy: null,
         visaTypeName: caseRecord.visaType?.name,
-      }).catch((err) => console.error("attachCclTemplateToCase:", err));
+      }).catch((err) => logger.error({ err }, "attachCclTemplateToCase"));
       await ccl.reload();
     }
 
@@ -729,7 +730,7 @@ export const getCandidateCcl = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("getCandidateCcl:", err);
+    logger.error({ err }, "getCandidateCcl");
     res.status(500).json({ status: "error", message: err.message, data: null });
   }
 };
@@ -815,7 +816,7 @@ export const downloadCandidateCcl = async (req, res) => {
         "client-care-letter.docx",
     );
   } catch (err) {
-    console.error("downloadCandidateCcl:", err);
+    logger.error({ err }, "downloadCandidateCcl");
     res.status(500).json({ status: "error", message: err.message, data: null });
   }
 };
@@ -934,7 +935,7 @@ export const acceptCcl = async (req, res) => {
           created_by: userId || assigneeId,
         });
       } catch (taskErr) {
-        console.error("Failed to assign UK visa portal task:", taskErr);
+        logger.error({ err: taskErr }, "Failed to assign UK visa portal task");
       }
     }
 
@@ -961,7 +962,7 @@ export const acceptCcl = async (req, res) => {
       data: { ccl, paid },
     });
   } catch (err) {
-    console.error("acceptCcl:", err);
+    logger.error({ err }, "acceptCcl");
     res.status(500).json({ status: "error", message: err.message, data: null });
   }
 };
@@ -1047,7 +1048,7 @@ export const confirmCclSigned = async (req, res) => {
           created_by: userId || assigneeId,
         });
       } catch (taskErr) {
-        console.error("Failed to assign UK visa portal task:", taskErr);
+        logger.error({ err: taskErr }, "Failed to assign UK visa portal task");
       }
     }
 
@@ -1067,7 +1068,7 @@ export const confirmCclSigned = async (req, res) => {
 
     res.status(200).json({ status: "success", data: { ccl } });
   } catch (err) {
-    console.error("confirmCclSigned:", err);
+    logger.error({ err }, "confirmCclSigned");
     res.status(500).json({ status: "error", message: err.message, data: null });
   }
 };
@@ -1137,7 +1138,7 @@ export const getDecisionDocuments = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("getDecisionDocuments:", err);
+    logger.error({ err }, "getDecisionDocuments");
     res.status(500).json({ status: "error", message: err.message, data: null });
   }
 };
@@ -1215,7 +1216,7 @@ export const getCandidatePaymentSchedule = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("getCandidatePaymentSchedule:", err);
+    logger.error({ err }, "getCandidatePaymentSchedule");
     res.status(500).json({ status: "error", message: err.message, data: null });
   }
 };
@@ -1315,7 +1316,7 @@ export const getCandidateTasks = async (req, res) => {
       data: { tasks },
     });
   } catch (err) {
-    console.error("getCandidateTasks:", err);
+    logger.error({ err }, "getCandidateTasks");
     res.status(500).json({ status: "error", message: err.message, data: null });
   }
 };
@@ -1395,9 +1396,9 @@ export const completeCandidateTask = async (req, res) => {
           caseStage = resolveCaseStage(caseRecord);
         }
       } catch (stageErr) {
-        console.error(
-          "completeCandidateTask Data Capture stage advance error:",
-          stageErr,
+        logger.error(
+          { err: stageErr },
+          "completeCandidateTask Data Capture stage advance error",
         );
       }
     }
@@ -1411,7 +1412,7 @@ export const completeCandidateTask = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("completeCandidateTask:", err);
+    logger.error({ err }, "completeCandidateTask");
     res.status(500).json({ status: "error", message: err.message, data: null });
   }
 };
@@ -1504,7 +1505,7 @@ export const getCandidateWorkflowProcess = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("getCandidateWorkflowProcess:", err);
+    logger.error({ err }, "getCandidateWorkflowProcess");
     res.status(500).json({ status: "error", message: err.message, data: null });
   }
 };
@@ -1557,7 +1558,7 @@ export const submitCandidateDraftReview = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("submitCandidateDraftReview:", err);
+    logger.error({ err }, "submitCandidateDraftReview");
     res.status(500).json({ status: "error", message: err.message, data: null });
   }
 };
@@ -1606,7 +1607,7 @@ export const submitCandidateBiometricAvailability = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("submitCandidateBiometricAvailability:", err);
+    logger.error({ err }, "submitCandidateBiometricAvailability");
     res.status(500).json({ status: "error", message: err.message, data: null });
   }
 };
@@ -1670,7 +1671,7 @@ export const candidateMarkBiometricAttended = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("candidateMarkBiometricAttended:", err);
+    logger.error({ err }, "candidateMarkBiometricAttended");
     res.status(500).json({ status: "error", message: err.message, data: null });
   }
 };
@@ -1711,7 +1712,7 @@ export const staffRecordVisaPortalSubmission = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("staffRecordVisaPortalSubmission:", err);
+    logger.error({ err }, "staffRecordVisaPortalSubmission");
     res.status(500).json({ status: "error", message: err.message, data: null });
   }
 };
@@ -1775,7 +1776,7 @@ export const staffSendBiometricSlot = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("staffSendBiometricSlot:", err);
+    logger.error({ err }, "staffSendBiometricSlot");
     res.status(500).json({ status: "error", message: err.message, data: null });
   }
 };
@@ -1815,7 +1816,7 @@ export const staffRecordBiometricDocsUploaded = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("staffRecordBiometricDocsUploaded:", err);
+    logger.error({ err }, "staffRecordBiometricDocsUploaded");
     res.status(500).json({ status: "error", message: err.message, data: null });
   }
 };
@@ -1856,7 +1857,7 @@ export const staffRecordVisaPortalReply = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("staffRecordVisaPortalReply:", err);
+    logger.error({ err }, "staffRecordVisaPortalReply");
     res.status(500).json({ status: "error", message: err.message, data: null });
   }
 };

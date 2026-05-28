@@ -1,3 +1,4 @@
+import logger from '../../../utils/logger.js';
 import { Op } from 'sequelize';
 
 /**
@@ -134,7 +135,7 @@ export const getCaseAuditLogs = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Get Case Audit Logs Error:", error);
+    logger.error({ err: error }, "Get Case Audit Logs Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",

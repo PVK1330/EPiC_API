@@ -1,3 +1,5 @@
+import logger from "../utils/logger.js";
+
 // Track which tenant DBs have had audit_logs columns ensured
 const _auditColsReady = new Set();
 
@@ -57,6 +59,6 @@ export const recordAuditLog = async ({
       details,
     });
   } catch (error) {
-    console.error('Failed to record audit log:', error);
+    logger.error({ err: error }, "Failed to record audit log");
   }
 };

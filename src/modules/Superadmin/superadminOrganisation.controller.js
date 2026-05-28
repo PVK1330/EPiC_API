@@ -1,7 +1,7 @@
 import { Op } from "sequelize";
 import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
 import platformDb from "../../models/index.js";
+import { signImpersonationToken } from "../../config/jwt.config.js";
 import {
   isPhysicalTenantDatabaseEnabled,
   provisionOrganisationTenantDatabase,
@@ -12,6 +12,7 @@ import { mirrorUserToTenant } from "../../services/userSync.service.js";
 import { seedTenantOrganisation } from "../../services/tenantSeed.service.js";
 import { getTenantDb } from "../../services/tenantDb.service.js";
 import { recordPlatformAuditLog, createPlatformNotification } from "../../services/platformActivity.service.js";
+import logger from "../../utils/logger.js";
 
 const Organisation = platformDb.Organisation;
 const User = platformDb.User;
@@ -108,7 +109,7 @@ export const listOrganisations = async (req, res) => {
       data: { organisations: rows },
     });
   } catch (err) {
-    console.error("listOrganisations", err);
+    logger.error({ err }, "listOrganisations");
     return res.status(500).json({
       status: "error",
       message: "Failed to list organisations",
@@ -154,7 +155,7 @@ export const getOrganisationById = async (req, res) => {
       data: { organisation: org },
     });
   } catch (err) {
-    console.error("getOrganisationById", err);
+    logger.error({ err }, "getOrganisationById");
     return res.status(500).json({
       status: "error",
       message: err?.message || "Failed to retrieve organisation",
@@ -253,7 +254,7 @@ export const createOrganisation = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("createOrganisation", err);
+    logger.error({ err }, "createOrganisation");
     const msg = err?.message || "Failed to create organisation";
     const permissionDenied =
       /permission denied|must be owner|createdb|insufficient privilege/i.test(msg);
@@ -405,9 +406,9 @@ export const createOrganisationWithAdmin = async (req, res) => {
         const tenantDb = getTenantDb(databaseName);
         await seedTenantOrganisation(tenantDb, org);
         await mirrorUserToTenant(tenantDb, admin);
-        console.log(`[Provisioning] Admin and Organisation mirrored to tenant DB: ${databaseName}`);
+        logger.info({ databaseName }, "Admin and Organisation mirrored to tenant DB");
       } catch (mirrorErr) {
-        console.error(`[Provisioning] Failed to mirror admin to tenant DB ${databaseName}:`, mirrorErr);
+        logger.error({ err: mirrorErr, databaseName }, "Failed to mirror admin to tenant DB");
       }
     }
 
@@ -420,18 +421,18 @@ export const createOrganisationWithAdmin = async (req, res) => {
           organisationId: org.id,
         });
         if (mailResult.sent) {
-          console.log(
-            `[Mail] Welcome email sent to ${admin.email} (${mailResult.deliveryRecipient || admin.email}) via ${mailResult.usedSource}`,
+          logger.info(
+            { adminEmail: admin.email, deliveryRecipient: mailResult.deliveryRecipient, usedSource: mailResult.usedSource },
+            "Welcome email sent to admin",
           );
         } else {
-          console.error(
-            `[Mail] Welcome email not sent to ${admin.email}:`,
-            mailResult.reason,
-            mailResult.error || "",
+          logger.warn(
+            { adminEmail: admin.email, reason: mailResult.reason, error: mailResult.error },
+            "Welcome email not sent to admin",
           );
         }
       } catch (mailErr) {
-        console.error("[Mail] Welcome email failed:", mailErr);
+        logger.error({ err: mailErr }, "Welcome email failed");
         mailResult = { sent: false, reason: "send_failed", error: mailErr?.message };
       }
     }
@@ -487,14 +488,14 @@ export const createOrganisationWithAdmin = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("createOrganisationWithAdmin", err);
+    logger.error({ err }, "createOrganisationWithAdmin");
 
     if (org?.id) {
       try {
         await removeOrganisationUsers(org.id);
         await org.destroy({ force: true });
       } catch (rollbackErr) {
-        console.error("Rollback organisation failed:", rollbackErr);
+        logger.error({ err: rollbackErr }, "Rollback organisation failed");
       }
     }
     if (physicalEnabled && databaseName) {
@@ -562,7 +563,7 @@ export const updateOrganisation = async (req, res) => {
           );
         }
       } catch (syncErr) {
-        console.error("Failed to sync organisation name to tenant DB:", syncErr);
+        logger.error({ err: syncErr }, "Failed to sync organisation name to tenant DB");
       }
     }
 
@@ -581,7 +582,7 @@ export const updateOrganisation = async (req, res) => {
       data: { organisation: org },
     });
   } catch (err) {
-    console.error("updateOrganisation", err);
+    logger.error({ err }, "updateOrganisation");
     return res.status(500).json({
       status: "error",
       message: err?.message || "Failed to update organisation",
@@ -625,7 +626,7 @@ export const deleteOrganisation = async (req, res) => {
       data: null,
     });
   } catch (err) {
-    console.error("deleteOrganisation", err);
+    logger.error({ err }, "deleteOrganisation");
     return res.status(500).json({
       status: "error",
       message: err?.message || "Failed to delete organisation",
@@ -668,7 +669,7 @@ export const suspendOrganisation = async (req, res) => {
       data: { organisation: org },
     });
   } catch (err) {
-    console.error("suspendOrganisation", err);
+    logger.error({ err }, "suspendOrganisation");
     return res.status(500).json({
       status: "error",
       message: err?.message || "Failed to suspend organisation",
@@ -711,7 +712,7 @@ export const activateOrganisation = async (req, res) => {
       data: { organisation: org },
     });
   } catch (err) {
-    console.error("activateOrganisation", err);
+    logger.error({ err }, "activateOrganisation");
     return res.status(500).json({
       status: "error",
       message: err?.message || "Failed to activate organisation",
@@ -800,18 +801,18 @@ export const createOrganisationAdmin = async (req, res) => {
         loginUrl,
       });
       if (mailResult.sent) {
-        console.log(
-          `[Mail] Welcome credentials sent to ${admin.email} via ${mailResult.usedSource}`,
+        logger.info(
+          { adminEmail: admin.email, usedSource: mailResult.usedSource },
+          "Welcome credentials sent to admin",
         );
       } else {
-        console.error(
-          `[Mail] Welcome email not sent to ${admin.email}:`,
-          mailResult.reason,
-          mailResult.error || "",
+        logger.warn(
+          { adminEmail: admin.email, reason: mailResult.reason, error: mailResult.error },
+          "Welcome email not sent to admin",
         );
       }
     } catch (mailErr) {
-      console.error("[Mail] Failed to send welcome email to new admin:", mailErr);
+      logger.error({ err: mailErr }, "Failed to send welcome email to new admin");
       mailResult = {
         sent: false,
         reason: "send_failed",
@@ -847,7 +848,7 @@ export const createOrganisationAdmin = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("createOrganisationAdmin", err);
+    logger.error({ err }, "createOrganisationAdmin");
 
     if (err.name === "SequelizeUniqueConstraintError") {
       const fields = err.fields || {};
@@ -909,16 +910,12 @@ export const impersonateOrganisationAdmin = async (req, res) => {
       });
     }
 
-    const token = jwt.sign(
-      {
-        id: admin.id,
-        email: admin.email,
-        role_id: admin.role_id,
-        organisation_id: admin.organisation_id,
-      },
-      process.env.JWT_SECRET || "epic-secret-key",
-      { expiresIn: "7d" }
-    );
+    const token = signImpersonationToken({
+      id: admin.id,
+      email: admin.email,
+      role_id: admin.role_id,
+      organisation_id: admin.organisation_id,
+    });
 
     return res.status(200).json({
       status: "success",
@@ -942,7 +939,7 @@ export const impersonateOrganisationAdmin = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("impersonateOrganisationAdmin", err);
+    logger.error({ err }, "impersonateOrganisationAdmin");
     return res.status(500).json({
       status: "error",
       message: err?.message || "Failed to impersonate admin",

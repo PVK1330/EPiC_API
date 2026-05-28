@@ -6,6 +6,7 @@ import {
   provisionOrganisationTenantDatabase,
   dropTenantPostgresDatabase,
 } from "../services/tenantDatabaseProvision.service.js";
+import logger from "../utils/logger.js";
 const Organisation = db.Organisation;
 const User = db.User;
 
@@ -38,7 +39,7 @@ export const listOrganisations = async (req, res) => {
       data: { organisations: rows },
     });
   } catch (err) {
-    console.error("listOrganisations", err);
+    logger.error({ err }, "listOrganisations");
     return res.status(500).json({
       status: "error",
       message: "Failed to list organisations",
@@ -109,7 +110,7 @@ export const createOrganisation = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("createOrganisation", err);
+    logger.error({ err }, "createOrganisation");
     const msg = err?.message || "Failed to create organisation";
     const permissionDenied =
       /permission denied|must be owner|createdb|insufficient privilege/i.test(msg);
@@ -156,7 +157,7 @@ export const updateOrganisation = async (req, res) => {
       data: { organisation: org },
     });
   } catch (err) {
-    console.error("updateOrganisation", err);
+    logger.error({ err }, "updateOrganisation");
     return res.status(500).json({
       status: "error",
       message: err?.message || "Failed to update organisation",
@@ -242,7 +243,7 @@ export const createOrganisationAdmin = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("createOrganisationAdmin", err);
+    logger.error({ err }, "createOrganisationAdmin");
     return res.status(500).json({
       status: "error",
       message: err?.message || "Failed to create admin",
@@ -288,7 +289,7 @@ export const getOrganisationById = async (req, res) => {
       data: { organisation: org },
     });
   } catch (err) {
-    console.error("getOrganisationById", err);
+    logger.error({ err }, "getOrganisationById");
     return res.status(500).json({
       status: "error",
       message: err?.message || "Failed to retrieve organisation",
@@ -312,7 +313,7 @@ export const deleteOrganisation = async (req, res) => {
       try {
         await dropTenantPostgresDatabase(org.database_name);
       } catch (err) {
-        console.error("Failed to drop tenant database:", err);
+        logger.error({ err }, "Failed to drop tenant database");
       }
     }
 
@@ -324,7 +325,7 @@ export const deleteOrganisation = async (req, res) => {
       data: null,
     });
   } catch (err) {
-    console.error("deleteOrganisation", err);
+    logger.error({ err }, "deleteOrganisation");
     return res.status(500).json({
       status: "error",
       message: err?.message || "Failed to delete organisation",
@@ -352,7 +353,7 @@ export const suspendOrganisation = async (req, res) => {
       data: { organisation: org },
     });
   } catch (err) {
-    console.error("suspendOrganisation", err);
+    logger.error({ err }, "suspendOrganisation");
     return res.status(500).json({
       status: "error",
       message: err?.message || "Failed to suspend organisation",
@@ -380,7 +381,7 @@ export const activateOrganisation = async (req, res) => {
       data: { organisation: org },
     });
   } catch (err) {
-    console.error("activateOrganisation", err);
+    logger.error({ err }, "activateOrganisation");
     return res.status(500).json({
       status: "error",
       message: err?.message || "Failed to activate organisation",
@@ -418,17 +419,13 @@ export const impersonateOrganisationAdmin = async (req, res) => {
       });
     }
 
-    const jwt = await import("jsonwebtoken");
-    const token = jwt.default.sign(
-      {
-        id: admin.id,
-        email: admin.email,
-        role_id: admin.role_id,
-        organisation_id: admin.organisation_id,
-      },
-      process.env.JWT_SECRET || "epic-secret-key",
-      { expiresIn: "7d" }
-    );
+    const { signImpersonationToken } = await import("../config/jwt.config.js");
+    const token = signImpersonationToken({
+      id: admin.id,
+      email: admin.email,
+      role_id: admin.role_id,
+      organisation_id: admin.organisation_id,
+    });
 
     return res.status(200).json({
       status: "success",
@@ -452,7 +449,7 @@ export const impersonateOrganisationAdmin = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("impersonateOrganisationAdmin", err);
+    logger.error({ err }, "impersonateOrganisationAdmin");
     return res.status(500).json({
       status: "error",
       message: err?.message || "Failed to impersonate admin",

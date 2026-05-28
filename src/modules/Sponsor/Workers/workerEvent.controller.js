@@ -1,3 +1,4 @@
+import logger from '../../../utils/logger.js';
 import {
   notifyAdmins,
   notifyUser,
@@ -62,7 +63,7 @@ const notifyInvolvedParties = async ({ tenantDb, workerCase, workerId, title, me
       metadata: { caseId: workerCase?.caseId },
     });
   } catch (err) {
-    console.error("Failed to notify admins for worker event:", err);
+    logger.error({ err }, "Failed to notify admins for worker event");
   }
 
   try {
@@ -78,7 +79,7 @@ const notifyInvolvedParties = async ({ tenantDb, workerCase, workerId, title, me
       sendEmail: true,
     });
   } catch (err) {
-    console.error("Failed to notify worker for worker event:", err);
+    logger.error({ err }, "Failed to notify worker for worker event");
   }
 
   const caseworkerIds = extractCaseworkerIds(workerCase?.assignedcaseworkerId);
@@ -96,7 +97,7 @@ const notifyInvolvedParties = async ({ tenantDb, workerCase, workerId, title, me
         sendEmail: true,
       });
     } catch (err) {
-      console.error(`Failed to notify caseworker ${caseworkerId} for worker event:`, err);
+      logger.error({ err, caseworkerId }, "Failed to notify caseworker for worker event");
     }
   }
 };
@@ -129,7 +130,7 @@ export const listWorkerEvents = async (req, res) => {
 
     return res.status(200).json({ status: "success", data });
   } catch (error) {
-    console.error("Error fetching worker events:", error);
+    logger.error({ err: error }, "Error fetching worker events");
     return res.status(500).json({ status: "error", message: "Internal server error" });
   }
 };
@@ -183,7 +184,7 @@ export const createWorkerEvent = async (req, res) => {
 
     return res.status(201).json({ status: "success", data: newEvent });
   } catch (error) {
-    console.error("Error creating worker event:", error);
+    logger.error({ err: error }, "Error creating worker event");
     return res.status(500).json({ status: "error", message: "Internal server error" });
   }
 };
@@ -247,7 +248,7 @@ export const updateWorkerEvent = async (req, res) => {
 
     return res.status(200).json({ status: "success", data: event });
   } catch (error) {
-    console.error("Error updating worker event:", error);
+    logger.error({ err: error }, "Error updating worker event");
     return res.status(500).json({ status: "error", message: "Internal server error" });
   }
 };
@@ -283,7 +284,7 @@ export const deleteWorkerEvent = async (req, res) => {
 
     return res.status(200).json({ status: "success", message: "Worker event deleted" });
   } catch (error) {
-    console.error("Error deleting worker event:", error);
+    logger.error({ err: error }, "Error deleting worker event");
     return res.status(500).json({ status: "error", message: "Internal server error" });
   }
 };

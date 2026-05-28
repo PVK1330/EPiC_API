@@ -1,6 +1,8 @@
 import PdfPrinter from "pdfmake";
 import fs from "fs";
+import logger from "../utils/logger.js";
 
+// Use pdfmake's built-in fonts (Roboto) or standard PDF fonts
 const fonts = {
   Roboto: {
     normal: "Helvetica",
@@ -8,7 +10,57 @@ const fonts = {
     italics: "Helvetica-Oblique",
     bolditalics: "Helvetica-BoldOblique",
   },
+  Helvetica: {
+    normal: "Helvetica",
+    bold: "Helvetica-Bold",
+    italics: "Helvetica-Oblique",
+    bolditalics: "Helvetica-BoldOblique",
+  }
 };
+
+export function generatePdfBufferFromDefinition(docDefinition) {
+  try {
+    logger.debug('[PDF Generator] Creating PDF printer...');
+    const printer = new PdfPrinter(fonts);
+    
+    logger.debug('[PDF Generator] Creating PDF document...');
+    const pdfDoc = printer.createPdfKitDocument(docDefinition);
+
+    return new Promise((resolve, reject) => {
+      const chunks = [];
+
+      pdfDoc.on("data", (chunk) => {
+        chunks.push(chunk);
+      });
+
+      pdfDoc.on("end", () => {
+        try {
+          logger.debug({ chunks: chunks.length }, '[PDF Generator] PDF generation completed');
+          resolve(Buffer.concat(chunks));
+        } catch (err) {
+          logger.error({ err }, '[PDF Generator] Error concatenating chunks');
+          reject(err);
+        }
+      });
+
+      pdfDoc.on("error", (err) => {
+        logger.error({ err }, '[PDF Generator] PDF document error');
+        reject(err);
+      });
+
+      logger.debug('[PDF Generator] Ending PDF document...');
+      pdfDoc.end();
+    });
+  } catch (error) {
+    logger.error({ err: error }, '[PDF Generator] Error in generatePdfBufferFromDefinition');
+    throw error;
+  }
+}
+
+export function generateBrandedPdfBuffer(options) {
+  const docDefinition = buildBrandedPdfDocDefinition(options);
+  return generatePdfBufferFromDefinition(docDefinition);
+}
 
 function escapePdfText(text) {
   if (text === null || text === undefined) return "";
@@ -216,7 +268,7 @@ export function streamBrandedPdf(res, attachmentFilename, options) {
     `attachment; filename="${attachmentFilename.replace(/"/g, "")}"`,
   );
   pdfDoc.on("error", (err) => {
-    console.error("PDF stream error:", err);
+    logger.error({ err }, "PDF stream error");
     if (!res.headersSent) {
       res.status(500).json({
         status: "error",

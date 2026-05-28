@@ -15,6 +15,7 @@ import {
   NotificationPriority,
 } from "./notification.service.js";
 import { sendWorkflowStageEmail } from "./workflowEmail.service.js";
+import logger from "../utils/logger.js";
 
 const EMPTY_STATE = {
   draftReview: { confirmed: null, confirmedAt: null },
@@ -341,7 +342,7 @@ export async function submitBiometricAvailability({
         await caseRecord.reload();
         stage = resolveCaseStage(caseRecord);
       } catch (stageErr) {
-        console.error("Stage sync error:", stageErr);
+        logger.error({ err: stageErr }, "Stage sync error");
       }
     }
   }
@@ -381,7 +382,7 @@ export async function submitBiometricAvailability({
       biometrics: { availability },
     });
   } catch (dbErr) {
-    console.error("Failed to save biometric availability to database:", dbErr);
+    logger.error({ err: dbErr }, "Failed to save biometric availability to database");
     return {
       ok: false,
       status: 500,
@@ -400,10 +401,7 @@ export async function submitBiometricAvailability({
       metadata: availability,
     });
   } catch (timelineErr) {
-    console.error(
-      "Failed to record timeline entry for biometric availability:",
-      timelineErr,
-    );
+    logger.error({ err: timelineErr }, "Failed to record timeline entry for biometric availability");
   }
 
   const caseLabel = caseRecord.caseId || `#${caseRecord.id}`;
@@ -423,11 +421,7 @@ export async function submitBiometricAvailability({
         organisationId,
       });
     } catch (taskErr) {
-      console.error(
-        "Failed to create biometrics task for admin:",
-        adminId,
-        taskErr,
-      );
+      logger.error({ err: taskErr, adminId }, "Failed to create biometrics task for admin");
     }
   }
   for (const cwId of caseworkerIds) {
@@ -444,11 +438,7 @@ export async function submitBiometricAvailability({
         organisationId,
       });
     } catch (taskErr) {
-      console.error(
-        "Failed to create biometrics task for caseworker:",
-        cwId,
-        taskErr,
-      );
+      logger.error({ err: taskErr, caseworkerId: cwId }, "Failed to create biometrics task for caseworker");
     }
   }
 
@@ -468,10 +458,7 @@ export async function submitBiometricAvailability({
         organisationId,
       }).catch(() => {});
     } catch (notifErr) {
-      console.error(
-        "Failed to send biometrics availability notification:",
-        notifErr,
-      );
+      logger.error({ err: notifErr }, "Failed to send biometrics availability notification");
     }
   }
 
@@ -487,10 +474,7 @@ export async function submitBiometricAvailability({
         sendEmail: false,
       });
     } catch (stageErr) {
-      console.error(
-        "Stage change error after biometric availability:",
-        stageErr,
-      );
+      logger.error({ err: stageErr }, "Stage change error after biometric availability");
     }
   }
 
@@ -610,7 +594,7 @@ export async function bookBiometricDirect({
       biometrics_date: dateLabel,
       appointment_instructions: instructions?.trim() || "",
     },
-  }).catch((err) => console.error("biometrics_booked email:", err));
+  }).catch((err) => logger.error({ err }, "biometrics_booked email"));
 
   return { ok: true, nextStage: "biometrics_booked", bookedSlot };
 }

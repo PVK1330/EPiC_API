@@ -1,6 +1,11 @@
+import logger from '../../../utils/logger.js';
 import Stripe from 'stripe';
 import { Op } from 'sequelize';
+import path from 'path';
 import { localDateStr } from '../../../utils/dateHelpers.js';
+import catchAsync from '../../../utils/catchAsync.js';
+import ApiResponse from '../../../utils/apiResponse.js';
+import { generateBrandedPdfBuffer } from '../../../services/pdfGenerator.service.js';
 import { notifyPaymentReceived, NotificationTypes } from '../../../services/notification.service.js';
 import { createWorkflowTask } from '../../../services/workflowTaskAutomation.service.js';
 import { evaluateCaseStageAfterEvent } from '../../../services/caseStageAutomation.service.js';
@@ -265,7 +270,7 @@ export const createPaymentIntent = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Stripe Payment Intent Error:", error);
+    logger.error({ err: error }, "Stripe Payment Intent Error");
     res.status(500).json({
       status: "error",
       message: error.message || "Failed to create payment intent",
@@ -342,7 +347,7 @@ export const createCaseCheckoutSession = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Stripe Checkout Session Error:", error);
+    logger.error({ err: error }, "Stripe Checkout Session Error");
     res.status(500).json({
       status: "error",
       message: error.message || "Failed to create checkout session",
@@ -414,7 +419,7 @@ export const verifyCheckoutSession = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("verifyCheckoutSession:", error);
+    logger.error({ err: error }, "verifyCheckoutSession");
     res.status(500).json({
       status: "error",
       message: error.message || "Failed to verify checkout session",
@@ -486,7 +491,7 @@ export const confirmPayment = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Stripe Payment Confirmation Error:", error);
+    logger.error({ err: error }, "Stripe Payment Confirmation Error");
     res.status(500).json({
       status: "error",
       message: error.message || "Failed to confirm payment",
@@ -534,7 +539,7 @@ export const getPaymentStatus = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Stripe Payment Status Error:", error);
+    logger.error({ err: error }, "Stripe Payment Status Error");
     res.status(500).json({
       status: "error",
       message: error.message || "Failed to retrieve payment status",
@@ -570,7 +575,7 @@ export const cancelPayment = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Stripe Payment Cancellation Error:", error);
+    logger.error({ err: error }, "Stripe Payment Cancellation Error");
     res.status(500).json({
       status: "error",
       message: error.message || "Failed to cancel payment",
@@ -600,7 +605,7 @@ export const createSetupIntent = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Stripe Setup Intent Error:", error);
+    logger.error({ err: error }, "Stripe Setup Intent Error");
     res.status(500).json({
       status: "error",
       message: error.message || "Failed to create setup intent",
@@ -617,7 +622,7 @@ export const handleWebhook = async (req, res) => {
   try {
     event = await constructStripeWebhookEvent(req.body, sig);
   } catch (err) {
-    console.log("Webhook signature verification failed.", err.message);
+    logger.warn({ errMessage: err.message }, "Webhook signature verification failed");
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
@@ -627,7 +632,7 @@ export const handleWebhook = async (req, res) => {
     // Payment Events
     case "payment_intent.succeeded": {
       const paymentIntent = event.data.object;
-      console.log("PaymentIntent was successful!", paymentIntent.id);
+      logger.info({ paymentIntentId: paymentIntent.id }, "PaymentIntent was successful");
       if (paymentIntent.metadata?.userId) {
         try {
           const userId = Number(paymentIntent.metadata.userId);
@@ -637,7 +642,7 @@ export const handleWebhook = async (req, res) => {
             caseRef: paymentIntent.metadata.caseId,
           });
         } catch (notifErr) {
-          console.error("Failed to record payment_intent.succeeded:", notifErr);
+          logger.error({ err: notifErr }, "Failed to record payment_intent.succeeded");
         }
       }
       break;
@@ -661,7 +666,7 @@ export const handleWebhook = async (req, res) => {
             });
           }
         } catch (err) {
-          console.error("Failed to record checkout.session.completed:", err);
+          logger.error({ err }, "Failed to record checkout.session.completed");
         }
       }
       break;
@@ -708,7 +713,7 @@ export const handleWebhook = async (req, res) => {
           const sub = await stripe.subscriptions.retrieve(successInvoice.subscription);
           await syncSubscriptionToCandidate(tenantDb, sub);
         } catch (err) {
-          console.error("invoice.payment_succeeded:", err);
+          logger.error({ err }, "invoice.payment_succeeded");
         }
       }
       break;
@@ -797,42 +802,42 @@ export const handleWebhook = async (req, res) => {
     // Customer Events
     case "customer.created":
       const customer = event.data.object;
-      console.log("Customer created!", customer.id);
+      logger.info({ customerId: customer.id }, "Customer created");
       // TODO: Handle new customer creation
       break;
 
     case "customer.updated":
       const updatedCustomer = event.data.object;
-      console.log("Customer updated!", updatedCustomer.id);
+      logger.info({ customerId: updatedCustomer.id }, "Customer updated");
       // TODO: Handle customer updates
       break;
 
     case "customer.deleted":
       const deletedCustomer = event.data.object;
-      console.log("Customer deleted!", deletedCustomer.id);
+      logger.info({ customerId: deletedCustomer.id }, "Customer deleted");
       // TODO: Handle customer deletion
       break;
 
     // Setup Intent Events
     case "setup_intent.created":
       const setupIntent = event.data.object;
-      console.log("Setup intent created!", setupIntent.id);
+      logger.info({ setupIntentId: setupIntent.id }, "Setup intent created");
       break;
 
     case "setup_intent.succeeded":
       const succeededSetup = event.data.object;
-      console.log("Setup intent succeeded!", succeededSetup.id);
+      logger.info({ setupIntentId: succeededSetup.id }, "Setup intent succeeded");
       // TODO: Handle successful setup intent
       break;
 
     case "setup_intent.failed":
       const failedSetup = event.data.object;
-      console.log("Setup intent failed!", failedSetup.id);
+      logger.info({ setupIntentId: failedSetup.id }, "Setup intent failed");
       // TODO: Handle failed setup intent
       break;
 
     default:
-      console.log(`Unhandled event type ${event.type}`);
+      logger.info({ eventType: event.type }, "Unhandled event type");
   }
 
   // Return a 200 response to acknowledge receipt of the event
@@ -871,7 +876,7 @@ export const createRefund = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Stripe Refund Error:", error);
+    logger.error({ err: error }, "Stripe Refund Error");
     res.status(500).json({
       status: "error",
       message: error.message || "Failed to create refund",
@@ -942,7 +947,7 @@ export const createSubscription = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Stripe Subscription Creation Error:", error);
+    logger.error({ err: error }, "Stripe Subscription Creation Error");
     res.status(500).json({
       status: "error",
       message: error.message || "Failed to create subscription",
@@ -1016,7 +1021,7 @@ export const renewSubscription = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Stripe Subscription Renewal Error:", error);
+    logger.error({ err: error }, "Stripe Subscription Renewal Error");
     res.status(500).json({
       status: "error",
       message: error.message || "Failed to renew subscription",
@@ -1060,7 +1065,7 @@ export const cancelSubscription = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Stripe Subscription Cancellation Error:", error);
+    logger.error({ err: error }, "Stripe Subscription Cancellation Error");
     res.status(500).json({
       status: "error",
       message: error.message || "Failed to cancel subscription",
@@ -1107,7 +1112,7 @@ export const getSubscriptionStatus = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Stripe Subscription Status Error:", error);
+    logger.error({ err: error }, "Stripe Subscription Status Error");
     res.status(500).json({
       status: "error",
       message: error.message || "Failed to retrieve subscription status",
@@ -1159,7 +1164,7 @@ export const updateSubscription = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Stripe Subscription Update Error:", error);
+    logger.error({ err: error }, "Stripe Subscription Update Error");
     res.status(500).json({
       status: "error",
       message: error.message || "Failed to update subscription",
@@ -1167,3 +1172,58 @@ export const updateSubscription = async (req, res) => {
     });
   }
 };
+
+export const exportInvoiceReceiptPdf = catchAsync(async (req, res) => {
+  const {
+    caseId,
+    amount,
+    date,
+    description = "Visa Application Fees",
+    candidateName = "Client",
+    isReceipt = true,
+    platformName = "EPiC Immigration Services",
+  } = req.body || {};
+
+  if (!caseId || amount === undefined || amount === null || !date) {
+    return ApiResponse.badRequest(res, "caseId, amount, and date are required");
+  }
+
+  const amountNum = Number(amount);
+  const totalAmountStr = `£${Number.isFinite(amountNum) ? amountNum.toFixed(2) : "0.00"}`;
+  const safeCaseId = String(caseId).replace(/[^A-Za-z0-9_-]/g, "_");
+  const invoiceNo = `INV-${safeCaseId}-${Date.now()}`;
+
+  const logoPath = path.join(process.cwd(), "assets", "elitepic_logo.png");
+
+  const sections = [
+    {
+      sectionTitle: isReceipt ? "Payment Receipt" : "Invoice",
+      rows: [
+        { label: "Description", value: description || "—" },
+        { label: "Qty", value: "1" },
+        { label: "Unit Price", value: totalAmountStr },
+        { label: "Total", value: totalAmountStr },
+        { label: "Billed To", value: candidateName || "Client" },
+        { label: "Case Reference", value: String(caseId) },
+        { label: "Receipt/Invoice No", value: invoiceNo },
+        { label: "Date", value: String(date) },
+      ],
+    },
+  ];
+
+  const buffer = await generateBrandedPdfBuffer({
+    logoPath,
+    title: isReceipt ? "PAYMENT RECEIPT" : "INVOICE",
+    sections,
+    metadata: {
+      subtitle: platformName || "EPiC Immigration Services",
+      reference: `Receipt/Invoice No: ${invoiceNo}`,
+      candidateName: candidateName || "Client",
+    },
+  });
+
+  const filename = `${isReceipt ? "Receipt" : "Invoice"}_${safeCaseId}.pdf`;
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  res.status(200).send(buffer);
+});

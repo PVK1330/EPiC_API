@@ -1,3 +1,4 @@
+import logger from '../../../utils/logger.js';
 import { Op } from 'sequelize';
 import {
   emitMessageNewAndConversationUpdated,
@@ -79,7 +80,7 @@ export const sendMessage = async (req, res) => {
     // Handle file upload if present
     if (req.file) {
       messageType = 'file';
-      const fileUrl = `/uploads/temp/${req.file.filename}`;
+      const fileUrl = `/api/documents/temp/${req.file.filename}`;
       // Store the file metadata as a JSON string in content
       content = JSON.stringify({
         url: fileUrl,
@@ -175,7 +176,7 @@ export const sendMessage = async (req, res) => {
         email: req.user.email,
       }, true /* skipAdminBroadcast */);
     } catch (notificationError) {
-      console.error('Failed to create message notification:', notificationError);
+      logger.error({ err: notificationError }, 'Failed to create message notification');
       // Don't fail the message sending if notification fails
     }
 
