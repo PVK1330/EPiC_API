@@ -174,13 +174,29 @@ export const getCaseDetails = async (req, res) => {
           model: req.tenantDb.User,
           as: 'candidate',
           attributes: ['id', 'first_name', 'last_name', 'email', 'mobile'],
-          required: false
+          required: false,
+          include: [
+            {
+              model: req.tenantDb.CandidateApplication,
+              as: 'application',
+              required: false,
+              attributes: ['id', 'dob', 'nationality', 'passportNumber', 'visaType', 'visaEndDate'],
+            },
+          ],
         },
         {
           model: req.tenantDb.User,
           as: 'sponsor',
           attributes: ['id', 'first_name', 'last_name', 'email', 'mobile'],
-          required: false
+          required: false,
+          include: [
+            {
+              model: req.tenantDb.SponsorProfile,
+              as: 'sponsorProfile',
+              required: false,
+              attributes: ['id', 'companyName', 'sponsorLicenceNumber', 'licenceStatus', 'licenceExpiryDate'],
+            },
+          ],
         },
         {
           model: req.tenantDb.VisaType,
@@ -338,8 +354,17 @@ export const getCaseDetails = async (req, res) => {
           updated_at: caseData.updated_at
         },
         
-        // Candidate Information
-        candidate: caseData.candidate,
+        // Candidate Information — include nested application fields (dob, nationality, passport)
+        candidate: caseData.candidate
+          ? {
+              ...caseData.candidate.toJSON(),
+              dob: caseData.candidate.application?.dob || null,
+              nationality: caseData.candidate.application?.nationality || null,
+              passport_number: caseData.candidate.application?.passportNumber || null,
+              visaEndDate: caseData.candidate.application?.visaEndDate || null,
+              visaType: caseData.candidate.application?.visaType || null,
+            }
+          : null,
         
         // Business Information
         business: {

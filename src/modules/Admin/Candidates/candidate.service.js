@@ -216,10 +216,31 @@ export class CandidateService {
 
     const includeClause = [
       { model: this.repository.tenantDb.Role, as: "role", attributes: ["id", "name"] },
-      { model: this.repository.tenantDb.CandidateApplication, as: "application", required: false, attributes: ["id", "userId", "status", "submittedAt", "visaType"] },
+      {
+        model: this.repository.tenantDb.CandidateApplication,
+        as: "application",
+        required: false,
+        attributes: [
+          "id", "userId", "status", "submittedAt",
+          "visaType", "visaEndDate",
+          "dob", "nationality",
+        ],
+      },
+      {
+        model: this.repository.tenantDb.Case,
+        as: "cases",
+        required: false,
+        attributes: ["id", "caseId", "status", "nationality", "visaTypeId", "totalAmount", "paidAmount"],
+        include: [
+          {
+            model: this.repository.tenantDb.VisaType,
+            as: "visaType",
+            required: false,
+            attributes: ["id", "name"],
+          },
+        ],
+      },
     ];
-
-    // TODO: Add complex Case filtering logic here if needed
 
     const { count, rows: candidates } = await this.repository.findAndCountAll({
       where: whereClause,
@@ -227,6 +248,7 @@ export class CandidateService {
       order: [["createdAt", "DESC"]],
       limit: limitNum,
       offset: offset,
+      distinct: true,
     });
 
     return {
