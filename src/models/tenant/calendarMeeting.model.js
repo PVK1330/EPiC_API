@@ -68,6 +68,14 @@ export default (sequelize, DataTypes) => {
         allowNull: true,
         defaultValue: "",
       },
+      meeting_provider: {
+        type: DataTypes.STRING(50),
+        allowNull: true,
+      },
+      external_event_id: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+      },
     },
     {
       tableName: "calendar_meetings",

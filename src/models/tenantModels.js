@@ -54,6 +54,7 @@ import RightToWorkRecordModel from "./tenant/rightToWorkRecord.model.js";
 import AbsenceRecordModel from "./tenant/absenceRecord.model.js";
 import SmsActivityLogModel from "./tenant/smsActivityLog.model.js";
 import ComplianceDocumentModel from "./tenant/complianceDocument.model.js";
+import CalendarConnectionModel from "./tenant/calendarConnection.model.js";
 
 /**
  * Register all models and associations on a Sequelize instance (main or tenant DB).
@@ -116,6 +117,7 @@ export function buildDb(sequelize) {
   db.AbsenceRecord = AbsenceRecordModel(sequelize, Sequelize.DataTypes);
   db.SmsActivityLog = SmsActivityLogModel(sequelize, Sequelize.DataTypes);
   db.ComplianceDocument = ComplianceDocumentModel(sequelize, Sequelize.DataTypes);
+  db.CalendarConnection = CalendarConnectionModel(sequelize, Sequelize.DataTypes);
 
   // Associations (Same as before)
   db.Conversation.belongsTo(db.User, { foreignKey: "participantOneId", as: "participantOne" });
@@ -217,6 +219,8 @@ export function buildDb(sequelize) {
   db.LicenceApplication.belongsTo(db.User, { foreignKey: "userId", as: "user" });
   db.CalendarMeeting.belongsTo(db.User, { foreignKey: "user_id", as: "user" });
   db.User.hasMany(db.CalendarMeeting, { foreignKey: "user_id", as: "calendarMeetings" });
+  db.CalendarConnection.belongsTo(db.User, { foreignKey: "user_id", as: "user" });
+  db.User.hasMany(db.CalendarConnection, { foreignKey: "user_id", as: "calendarConnections" });
   db.Organisation.hasMany(db.User, { foreignKey: "organisation_id", as: "users" });
   db.User.belongsTo(db.Organisation, { foreignKey: "organisation_id", as: "organisation" });
   db.Organisation.hasMany(db.Case, { foreignKey: "organisation_id", as: "cases" });

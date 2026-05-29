@@ -15,6 +15,8 @@ import { sanitizeApplicationPayload } from '../../../utils/applicationPayload.ut
 import { createWorkflowTask, getActiveAdminIds } from '../../../services/workflowTaskAutomation.service.js';
 import logger from '../../../utils/logger.js';
 import { recordTimelineEntry } from '../../../services/caseTimeline.service.js';
+import eventPublisher from '../../../core/events/eventPublisher.js';
+import { EVENTS } from '../../../core/events/eventRegistry.js';
 
 const APPLICATION_PAYLOAD_USER_KEYS = new Set([
   'first_name',
@@ -59,7 +61,7 @@ export class CandidateService {
     this.repository = new CandidateRepository(tenantDb);
   }
 
-  async createCandidate(data) {
+  async createCandidate(data, context, performedByUser) {
     const {
       first_name, last_name, email, country_code, mobile,
       password, application, applicationData, role_id = ROLES.CANDIDATE,
@@ -155,14 +157,14 @@ export class CandidateService {
       organisationId: organisation_id,
     }).catch((err) => logger.error({ err }, "Candidate welcome email"));
 
-    // Background notification
-    notifyUserCreated(this.repository.tenantDb, ROLES.ADMIN, {
-      id: candidate.id,
+    // Background notification via Event Bus
+    eventPublisher.publish(EVENTS.USER_CREATED, {
+      candidateId: candidate.id,
       email: candidate.email,
-      role: "candidate",
       first_name: candidate.first_name,
       last_name: candidate.last_name,
-    }).catch(err => logger.error({ err }, "Notification Error"));
+      organisationId: organisation_id
+    }, context).catch(err => logger.error({ err }, "Event Publish Error"));
 
     // Assign Task to Admins
     if (caseRecord && (!caseRecord.assignedcaseworkerId || caseRecord.assignedcaseworkerId.length === 0)) {
@@ -338,7 +340,7 @@ export class CandidateService {
     const application = await this.repository.findApplicationByUserId(userId);
     return application || null;
   }
-  async updateCandidateApplication(userId, applicationData, performedBy = null) {
+  async updateCandidateApplication(userId, applicationData, performedByUser = null, context = null) {
     const candidate = await this.repository.findById(userId);
     if (!candidate) throw new Error("Candidate not found");
 
@@ -528,23 +530,39 @@ export class CandidateService {
       });
     }
 
-    // Write timeline audit log after successful transaction
+    // Publish event for timeline audit log and notifications after successful transaction
     if (changes.length > 0) {
       try {
         const existingCase = await this.repository.findCaseByCandidateId(userId);
         if (existingCase) {
           const description = `Application form updated. Changed fields:\n${changes.join('\n')}`;
-          await recordTimelineEntry({
-            tenantDb: this.repository.tenantDb,
-            caseId: existingCase.id,
-            actionType: 'case_updated',
-            description,
-            performedBy: performedBy || null,
-            visibility: 'public',
-          });
+          
+          if (context) {
+            // Using central event bus (Phase 8/13 Integration)
+            eventPublisher.publish(EVENTS.PROFILE_UPDATED, {
+              entityId: existingCase.id,
+              entityType: 'case',
+              candidateId: userId,
+              assignedCaseworkerId: existingCase.assignedcaseworkerId,
+              performedById: performedByUser?.id || null,
+              performedByRole: performedByUser?.role?.name || performedByUser?.role || 'candidate',
+              description,
+              actionType: 'case_updated'
+            }, context);
+          } else {
+            // Fallback if context is not provided
+            await recordTimelineEntry({
+              tenantDb: this.repository.tenantDb,
+              caseId: existingCase.id,
+              actionType: 'case_updated',
+              description,
+              performedBy: performedByUser?.id || null,
+              visibility: 'public',
+            });
+          }
         }
       } catch (err) {
-        logger.error({ err }, 'Failed to record application update timeline entry');
+        logger.error({ err }, 'Failed to record application update event');
       }
     }
 

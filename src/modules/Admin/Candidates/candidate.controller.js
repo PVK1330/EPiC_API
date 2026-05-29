@@ -13,7 +13,7 @@ export const createCandidate = catchAsync(async (req, res) => {
   const result = await service.createCandidate({
     ...req.body,
     organisation_id: req.user.organisation_id
-  });
+  }, { tenantDb: req.tenantDb, io: req.app.get('io'), organisationId: req.user.organisation_id }, req.user);
   
   return ApiResponse.created(res, "Candidate created successfully", result);
 });
@@ -81,7 +81,8 @@ export const getCandidateApplication = catchAsync(async (req, res) => {
 export const updateCandidateApplication = catchAsync(async (req, res) => {
   const { id } = req.params;
   const service = new CandidateService(req.tenantDb);
-  const candidate = await service.updateCandidateApplication(id, req.body, req.user?.id);
+  const context = { tenantDb: req.tenantDb, io: req.app.get('io'), organisationId: req.user.organisation_id };
+  const candidate = await service.updateCandidateApplication(id, req.body, req.user, context);
 
   return ApiResponse.success(res, "Client updated successfully", {
     candidate,

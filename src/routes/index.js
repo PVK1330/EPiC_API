@@ -38,8 +38,9 @@ import applicationFieldsRoutes from '../modules/Shared/Cases/applicationFields.r
 import messageRoutes from '../modules/Shared/Messages/message.routes.js';
 import appointmentRoutes from '../modules/Shared/Appointments/appointment.routes.js';
 import calendarRoutes from '../modules/Shared/Calendar/calendar.routes.js';
-import microsoftRoutes from '../modules/Shared/Integrations/microsoft.routes.js';
+import microsoftRoutes from '../modules/Shared/Integrations/microsoft/microsoft.routes.js';
 import teamsMeetingRoutes from '../modules/Shared/Integrations/teamsMeeting.routes.js';
+import googleRoutes from '../modules/Shared/Integrations/google/google.routes.js';
 import escalationRoutes from '../modules/Shared/Cases/escalation.routes.js';
 
 import candidatePanelRoutes from '../modules/Candidate/index.js';
@@ -88,6 +89,7 @@ router.use('/appointments', appointmentRoutes);
 router.use('/calendar', calendarRoutes);
 router.use('/microsoft', microsoftRoutes);
 router.use('/teams-meetings', teamsMeetingRoutes);
+router.use('/google', googleRoutes);
 router.use('/cases/reschedule', rescheduleRoutes);
 router.use('/cases', caseRoutes);
 router.use('/escalations', escalationRoutes);

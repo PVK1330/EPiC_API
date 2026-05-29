@@ -30,10 +30,11 @@ npm run dev
 ```
 
 ### Step 2: Test Basic PDF Generation
-Open your browser or use curl to test the simple PDF endpoint:
+This endpoint is mounted under the admin dashboard routes and requires authentication.
+Use curl with a valid bearer token, or test from the authenticated frontend.
 
 ```
-http://localhost:5000/api/dashboard/test-pdf
+curl -H "Authorization: Bearer <token>" http://localhost:5000/api/dashboard/test-pdf
 ```
 
 **Expected Results:**
