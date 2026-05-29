@@ -1022,7 +1022,130 @@ export const recordManualCasePayment = async (req, res) => {
 };
 
 export const exportCaseCSV = catchAsync(async (req, res) => {
-  return exportCasePDF(req, res);
+  try {
+    const { id } = req.params;
+    const caseData = await fetchFullCaseData(req.tenantDb, id);
+    if (!caseData) return ApiResponse.notFound(res, 'Case not found');
+
+    const caseworkerIds = Array.isArray(caseData.assignedcaseworkerId)
+      ? caseData.assignedcaseworkerId
+      : caseData.assignedcaseworkerId ? [caseData.assignedcaseworkerId] : [];
+    let caseworkerNames = 'Unassigned';
+    if (caseworkerIds.length > 0) {
+      const cws = await req.tenantDb.User.findAll({
+        where: { id: caseworkerIds },
+        attributes: ['first_name', 'last_name'],
+      });
+      caseworkerNames = cws.map((u) => `${u.first_name} ${u.last_name}`).join(', ') || 'Unassigned';
+    }
+
+    // ── Sheet 1: Case Overview ───────────────────────────────────────────────
+    const overviewColumns = [
+      { key: 'field', header: 'Field' },
+      { key: 'value', header: 'Value' },
+    ];
+    const overviewRows = [
+      { field: 'Case ID',             value: caseData.caseId || '' },
+      { field: 'Status',              value: caseData.status || '' },
+      { field: 'Case Stage',          value: caseData.caseStage || '' },
+      { field: 'Priority',            value: caseData.priority || '' },
+      { field: 'Visa Type',           value: caseData.visaType?.name || '' },
+      { field: 'Candidate',           value: `${caseData.candidate?.first_name || ''} ${caseData.candidate?.last_name || ''}`.trim() },
+      { field: 'Candidate Email',     value: caseData.candidate?.email || '' },
+      { field: 'Candidate Mobile',    value: caseData.candidate?.mobile || '' },
+      { field: 'Sponsor',             value: `${caseData.sponsor?.first_name || ''} ${caseData.sponsor?.last_name || ''}`.trim() },
+      { field: 'Assigned Caseworkers',value: caseworkerNames },
+      { field: 'Job Title',           value: caseData.jobTitle || '' },
+      { field: 'Department',          value: caseData.department?.name || '' },
+      { field: 'LCA Number',          value: caseData.lcaNumber || '' },
+      { field: 'Receipt Number',      value: caseData.receiptNumber || '' },
+      { field: 'Salary Offered',      value: caseData.salaryOffered ?? '' },
+      { field: 'Total Fee',           value: caseData.totalAmount ?? '' },
+      { field: 'Paid Amount',         value: caseData.paidAmount ?? '' },
+      { field: 'Amount Status',       value: caseData.amountStatus || '' },
+      { field: 'Target Submission',   value: caseData.targetSubmissionDate ? localDateStr(new Date(caseData.targetSubmissionDate)) : '' },
+      { field: 'Submission Date',     value: caseData.submissionDate ? localDateStr(new Date(caseData.submissionDate)) : '' },
+      { field: 'Decision Date',       value: caseData.decisionDate ? localDateStr(new Date(caseData.decisionDate)) : '' },
+      { field: 'Biometrics Date',     value: caseData.biometricsDate ? localDateStr(new Date(caseData.biometricsDate)) : '' },
+      { field: 'Biometric Location',  value: caseData.biometricLocation || '' },
+      { field: 'Created At',          value: caseData.created_at ? localDateStr(new Date(caseData.created_at)) : '' },
+    ];
+
+    // ── Sheet 2: Tasks ───────────────────────────────────────────────────────
+    const taskColumns = [
+      { key: 'title',    header: 'Title' },
+      { key: 'status',   header: 'Status' },
+      { key: 'priority', header: 'Priority' },
+      { key: 'due_date', header: 'Due Date' },
+      { key: 'assignee', header: 'Assigned To' },
+    ];
+    const taskRows = (caseData.tasks || []).map((t) => ({
+      title:    t.title || '',
+      status:   t.status || '',
+      priority: t.priority || '',
+      due_date: t.due_date ? localDateStr(new Date(t.due_date)) : '',
+      assignee: t.assignee ? `${t.assignee.first_name} ${t.assignee.last_name}` : '',
+    }));
+
+    // ── Sheet 3: Payments ────────────────────────────────────────────────────
+    const paymentColumns = [
+      { key: 'date',    header: 'Payment Date' },
+      { key: 'amount',  header: 'Amount' },
+      { key: 'method',  header: 'Method' },
+      { key: 'invoice', header: 'Invoice Number' },
+      { key: 'status',  header: 'Status' },
+    ];
+    const paymentRows = (caseData.payments || []).map((p) => ({
+      date:    p.paymentDate ? localDateStr(new Date(p.paymentDate)) : '',
+      amount:  p.amount ?? '',
+      method:  p.paymentMethod || '',
+      invoice: p.invoiceNumber || '',
+      status:  p.paymentStatus || '',
+    }));
+
+    // ── Sheet 4: Documents ───────────────────────────────────────────────────
+    const docColumns = [
+      { key: 'name',       header: 'Document Name' },
+      { key: 'type',       header: 'Type' },
+      { key: 'status',     header: 'Status' },
+      { key: 'uploadedAt', header: 'Uploaded At' },
+      { key: 'uploader',   header: 'Uploaded By' },
+    ];
+    const docRows = (caseData.documents || []).map((d) => ({
+      name:       d.documentName || d.userFileName || '',
+      type:       d.documentType || '',
+      status:     d.status || '',
+      uploadedAt: d.uploadedAt ? localDateStr(new Date(d.uploadedAt)) : '',
+      uploader:   d.uploader ? `${d.uploader.first_name} ${d.uploader.last_name}` : '',
+    }));
+
+    // ── Sheet 5: Timeline ────────────────────────────────────────────────────
+    const timelineColumns = [
+      { key: 'date',        header: 'Date' },
+      { key: 'action',      header: 'Action Type' },
+      { key: 'description', header: 'Description' },
+      { key: 'performer',   header: 'Performed By' },
+    ];
+    const timelineRows = (caseData.timeline || []).map((t) => ({
+      date:        t.actionDate ? localDateStr(new Date(t.actionDate)) : '',
+      action:      t.actionType || '',
+      description: t.description || '',
+      performer:   t.performer ? `${t.performer.first_name} ${t.performer.last_name}` : 'System',
+    }));
+
+    const { multiSheetXlsxBuffer } = await import('../../../utils/excelExport.util.js');
+    const buf = multiSheetXlsxBuffer([
+      { name: 'Overview',  columns: overviewColumns,  rows: overviewRows },
+      { name: 'Tasks',     columns: taskColumns,      rows: taskRows },
+      { name: 'Payments',  columns: paymentColumns,   rows: paymentRows },
+      { name: 'Documents', columns: docColumns,       rows: docRows },
+      { name: 'Timeline',  columns: timelineColumns,  rows: timelineRows },
+    ]);
+
+    sendXlsxDownload(res, buf, `Case_${caseData.caseId}_Export.xlsx`);
+  } catch (err) {
+    return ApiResponse.error(res, 'Failed to export case data', 500, err);
+  }
 });
 
 export const exportCasePDF = catchAsync(async (req, res) => {

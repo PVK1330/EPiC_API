@@ -138,6 +138,73 @@ export const getAuditLogs = async (req, res) => {
   }
 };
 
+export const logClientEvent = async (req, res) => {
+  try {
+    const { action, details, entityType, entityId } = req.body;
+    if (!action) return res.status(400).json({ status: 'error', message: 'action is required' });
+
+    await req.tenantDb.AuditLog.create({
+      user_id:     req.user?.userId ?? null,
+      role:        req.user?.role ?? null,
+      action,
+      entity_type: entityType ?? 'client',
+      entity_id:   entityId ?? null,
+      details:     details ?? null,
+      ip_address:  req.ip ?? null,
+      status:      'Success',
+    }).catch(() => {});
+
+    res.status(200).json({ status: 'success', message: 'Event logged' });
+  } catch (error) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+};
+
+export const getAuditStats = async (req, res) => {
+  try {
+    const { dateRange } = req.query;
+    await ensureAuditLogColumns(req.tenantDb.sequelize);
+    const dateWhere = buildDateWhere(dateRange);
+
+    const [total, byAction, byStatus] = await Promise.all([
+      req.tenantDb.AuditLog.count({ where: dateWhere }),
+      req.tenantDb.AuditLog.findAll({
+        where:      dateWhere,
+        attributes: ['action', [req.tenantDb.sequelize.fn('COUNT', '*'), 'count']],
+        group:      ['action'],
+        raw:        true,
+      }),
+      req.tenantDb.AuditLog.findAll({
+        where:      dateWhere,
+        attributes: ['status', [req.tenantDb.sequelize.fn('COUNT', '*'), 'count']],
+        group:      ['status'],
+        raw:        true,
+      }),
+    ]);
+
+    res.status(200).json({
+      status: 'success',
+      data: { total, byAction, byStatus },
+    });
+  } catch (error) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+};
+
+export const getAuditActionTypes = async (req, res) => {
+  try {
+    await ensureAuditLogColumns(req.tenantDb.sequelize);
+    const rows = await req.tenantDb.AuditLog.findAll({
+      attributes: [[req.tenantDb.sequelize.fn('DISTINCT', req.tenantDb.sequelize.col('action')), 'action']],
+      raw: true,
+    });
+    const actions = rows.map((r) => r.action).filter(Boolean).sort();
+    res.status(200).json({ status: 'success', data: actions });
+  } catch (error) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+};
+
 export const exportAuditLogs = async (req, res) => {
   try {
     const { action, status, startDate, endDate, userId, role, entityType, entityId } = req.query;

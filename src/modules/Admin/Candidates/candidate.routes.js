@@ -29,6 +29,7 @@ router.post("/", validateCandidate, controller.createCandidate);
 router.get("/", controller.getAllCandidates);
 router.get("/:id", controller.getCandidateById);
 router.patch("/:id", validateCandidate, controller.updateCandidate);
+router.patch("/:id/toggle-status", controller.toggleCandidateStatus);
 router.delete("/:id", controller.deleteCandidate);
 router.post("/:id/reset-password", controller.resetCandidatePassword);
 router.get("/:id/application", controller.getCandidateApplication);

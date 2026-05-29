@@ -89,3 +89,13 @@ export const updateCandidateApplication = catchAsync(async (req, res) => {
     application: candidate?.application ?? null,
   });
 });
+
+// Toggle Candidate Status (active ↔ inactive)
+export const toggleCandidateStatus = catchAsync(async (req, res) => {
+  const { id } = req.params;
+  const candidate = await req.tenantDb.User.findOne({ where: { id, role_id: 1 } });
+  if (!candidate) return ApiResponse.notFound(res, 'Candidate not found');
+  const newStatus = candidate.status === 'active' ? 'inactive' : 'active';
+  await candidate.update({ status: newStatus });
+  return ApiResponse.success(res, `Status updated to ${newStatus}`, { status: newStatus });
+});

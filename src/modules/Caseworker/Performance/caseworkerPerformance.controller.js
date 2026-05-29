@@ -1,6 +1,6 @@
 import { Op } from 'sequelize';
 import logger from '../../../utils/logger.js';
-import { Parser } from 'json2csv';
+import { rowsToXlsxBuffer, sendXlsxDownload } from '../../../utils/excelExport.util.js';
 
 
 /**
@@ -402,82 +402,58 @@ export const exportCaseworkerPerformance = async (req, res) => {
       (avgCompletionScore * weights.avgCompletionTime)
     );
 
-    // Prepare CSV data
-    const csvData = [
-      {
-        'Metric': 'Overall Performance Score',
-        'Value': overallScore,
-        'Period': `${start.toLocaleDateString()} - ${end.toLocaleDateString()}`,
-      },
-      {
-        'Metric': 'SLA Compliance Rate',
-        'Value': `${slaRate}%`,
-        'Period': `${start.toLocaleDateString()} - ${end.toLocaleDateString()}`,
-      },
-      {
-        'Metric': 'Case Completion Rate',
-        'Value': `${completionRate}%`,
-        'Period': `${start.toLocaleDateString()} - ${end.toLocaleDateString()}`,
-      },
-      {
-        'Metric': 'Task Completion Rate',
-        'Value': `${taskCompletionRate}%`,
-        'Period': `${start.toLocaleDateString()} - ${end.toLocaleDateString()}`,
-      },
-      {
-        'Metric': 'Document Accuracy',
-        'Value': `${docAccuracy}%`,
-        'Period': `${start.toLocaleDateString()} - ${end.toLocaleDateString()}`,
-      },
-      {
-        'Metric': 'Average Completion Time',
-        'Value': `${avgCompletionTime} days`,
-        'Period': `${start.toLocaleDateString()} - ${end.toLocaleDateString()}`,
-      },
-      {
-        'Metric': 'Total Cases Assigned',
-        'Value': assignedCases.length,
-        'Period': `${start.toLocaleDateString()} - ${end.toLocaleDateString()}`,
-      },
-      {
-        'Metric': 'Cases Completed',
-        'Value': completedCases.length,
-        'Period': `${start.toLocaleDateString()} - ${end.toLocaleDateString()}`,
-      },
-      {
-        'Metric': 'Overdue Cases',
-        'Value': overdueCases.length,
-        'Period': `${start.toLocaleDateString()} - ${end.toLocaleDateString()}`,
-      },
-      {
-        'Metric': 'Total Tasks',
-        'Value': tasks.length,
-        'Period': `${start.toLocaleDateString()} - ${end.toLocaleDateString()}`,
-      },
-      {
-        'Metric': 'Completed Tasks',
-        'Value': completedTasks,
-        'Period': `${start.toLocaleDateString()} - ${end.toLocaleDateString()}`,
-      },
-      {
-        'Metric': 'Documents Reviewed',
-        'Value': reviewedDocuments.length,
-        'Period': `${start.toLocaleDateString()} - ${end.toLocaleDateString()}`,
-      },
-      {
-        'Metric': 'Documents Approved',
-        'Value': approvedDocs,
-        'Period': `${start.toLocaleDateString()} - ${end.toLocaleDateString()}`,
-      },
+    const period = `${start.toLocaleDateString('en-GB')} - ${end.toLocaleDateString('en-GB')}`;
+
+    const summaryColumns = [
+      { key: 'metric', header: 'Metric' },
+      { key: 'value',  header: 'Value' },
+      { key: 'period', header: 'Period' },
+    ];
+    const summaryRows = [
+      { metric: 'Overall Performance Score',  value: overallScore,              period },
+      { metric: 'SLA Compliance Rate',        value: `${slaRate}%`,             period },
+      { metric: 'Case Completion Rate',       value: `${completionRate}%`,      period },
+      { metric: 'Task Completion Rate',       value: `${taskCompletionRate}%`,  period },
+      { metric: 'Document Accuracy',          value: `${docAccuracy}%`,         period },
+      { metric: 'Average Completion Time',    value: `${avgCompletionTime} days`, period },
+      { metric: 'Total Cases Assigned',       value: assignedCases.length,      period },
+      { metric: 'Cases Completed',            value: completedCases.length,     period },
+      { metric: 'Overdue Cases',              value: overdueCases.length,       period },
+      { metric: 'Total Tasks',                value: tasks.length,              period },
+      { metric: 'Completed Tasks',            value: completedTasks,            period },
+      { metric: 'Documents Reviewed',         value: reviewedDocuments.length,  period },
+      { metric: 'Documents Approved',         value: approvedDocs,              period },
     ];
 
-    // Convert to CSV
-    const parser = new Parser();
-    const csv = parser.parse(csvData);
+    const caseColumns = [
+      { key: 'caseId',     header: 'Case ID' },
+      { key: 'candidate',  header: 'Candidate' },
+      { key: 'sponsor',    header: 'Sponsor' },
+      { key: 'visaType',   header: 'Visa Type' },
+      { key: 'status',     header: 'Status' },
+      { key: 'priority',   header: 'Priority' },
+      { key: 'target',     header: 'Target Date' },
+      { key: 'createdAt',  header: 'Created At' },
+    ];
+    const caseRows = assignedCases.map((c) => ({
+      caseId:    c.caseId || '',
+      candidate: c.candidate ? `${c.candidate.first_name} ${c.candidate.last_name}` : '',
+      sponsor:   c.sponsor   ? `${c.sponsor.first_name} ${c.sponsor.last_name}` : '',
+      visaType:  c.visaType?.name || '',
+      status:    c.status || '',
+      priority:  c.priority || '',
+      target:    c.targetSubmissionDate ? new Date(c.targetSubmissionDate).toLocaleDateString('en-GB') : '',
+      createdAt: c.created_at ? new Date(c.created_at).toLocaleDateString('en-GB') : '',
+    }));
 
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', 'attachment; filename=caseworker_performance_report.csv');
-    res.send(csv);
+    const { multiSheetXlsxBuffer } = await import('../../../utils/excelExport.util.js');
+    const buf = multiSheetXlsxBuffer([
+      { name: 'Performance Summary', columns: summaryColumns, rows: summaryRows },
+      { name: 'Assigned Cases',      columns: caseColumns,   rows: caseRows },
+    ]);
+
+    const date = new Date().toISOString().slice(0, 10);
+    sendXlsxDownload(res, buf, `caseworker_performance_${date}.xlsx`);
   } catch (error) {
     logger.error({ err: error }, 'Error exporting caseworker performance');
     res.status(500).json({

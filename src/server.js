@@ -80,11 +80,11 @@ async function bootstrapPlatform() {
     await platformDb.sequelize.authenticate();
     logger.info('Platform database connected');
 
-    await platformDb.sequelize.sync();
-    logger.info('Platform schema synchronized');
-
     await runPlatformMigrations();
     logger.info('Platform SQL migrations applied');
+
+    await platformDb.sequelize.sync();
+    logger.info('Platform schema synchronized');
 
     await seedRolesForDb(platformDb);
     await seedPermissionsForDb(platformDb);

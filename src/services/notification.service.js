@@ -1,5 +1,453 @@
 import logger from '../utils/logger.js';
 import { sendTransactionalEmail } from './mail.service.js';
+import { ROLES } from '../middlewares/role.middleware.js';
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+export const NotificationTypes = Object.freeze({
+  INFO: 'info',
+  SUCCESS: 'success',
+  WARNING: 'warning',
+  ERROR: 'error',
+  // semantic aliases used across the codebase
+  CASE_STATUS_CHANGED: 'info',
+  PAYMENT_RECEIVED: 'success',
+  SYSTEM_MAINTENANCE: 'warning',
+  CANDIDATE_ISSUE_REPORT: 'warning',
+  LICENCE_ASSIGNED: 'info',
+});
+
+export const NotificationPriority = Object.freeze({
+  LOW: 'low',
+  MEDIUM: 'medium',
+  HIGH: 'high',
+  URGENT: 'critical',
+  CRITICAL: 'critical',
+});
+
+// ─── Core helpers ─────────────────────────────────────────────────────────────
+
+/**
+ * Persist + optionally socket-deliver a single notification.
+ * @param {object} tenantDb
+ * @param {number} userId  - recipientId
+ * @param {object} payload - { type, priority, title, message, category, actionUrl,
+ *                            entityType, entityId, organisationId, metadata,
+ *                            isInternalAdminOnly, sendEmail, actionType }
+ */
+export async function notifyUser(tenantDb, userId, payload = {}) {
+  if (!tenantDb || !userId) return null;
+  try {
+    const {
+      type = NotificationTypes.INFO,
+      priority = NotificationPriority.MEDIUM,
+      title = '',
+      message = '',
+      category = 'system',
+      actionUrl = null,
+      entityType = null,
+      entityId = null,
+      organisationId = null,
+      metadata = {},
+      sendEmail: doEmail = false,
+      actionType = null,
+    } = payload;
+
+    const notification = await tenantDb.Notification.create({
+      title: String(title).slice(0, 255),
+      message: String(message),
+      category,
+      priority,
+      type,
+      recipientId: userId,
+      organisationId,
+      entityType,
+      entityId,
+      actionUrl,
+      metadata: { ...metadata, actionType },
+      isRead: false,
+      isArchived: false,
+    });
+
+    // Real-time delivery via Socket.IO (io attached to tenantDb at boot time)
+    const io = tenantDb._io;
+    if (io) {
+      io.to(`user:${userId}`).emit('notification:new', notification.toJSON());
+      const unread = await tenantDb.Notification.count({
+        where: { recipientId: userId, isRead: false },
+      });
+      io.to(`user:${userId}`).emit('notification:count', { count: unread });
+    }
+
+    if (doEmail) {
+      const user = await tenantDb.User.findByPk(userId, { attributes: ['email'] });
+      if (user?.email) {
+        await sendTransactionalEmail({
+          organisationId,
+          to: user.email,
+          subject: title,
+          html: `<p>${message}</p>`,
+        }).catch((err) => logger.error({ err }, 'notifyUser email failed'));
+      }
+    }
+
+    return notification;
+  } catch (err) {
+    logger.error({ err, userId, payload }, 'notifyUser failed');
+    return null;
+  }
+}
+
+/**
+ * Notify all admin-role users in the tenant DB.
+ */
+export async function notifyAdmins(tenantDb, payload = {}) {
+  if (!tenantDb) return;
+  try {
+    const admins = await tenantDb.User.findAll({
+      where: { role_id: ROLES.ADMIN, status: 'active' },
+      attributes: ['id'],
+    });
+    await Promise.all(admins.map((u) => notifyUser(tenantDb, u.id, payload)));
+  } catch (err) {
+    logger.error({ err }, 'notifyAdmins failed');
+  }
+}
+
+/**
+ * Notify a user that a task has been assigned to them.
+ * payload: { title, message, entityType, entityId, actionUrl, organisationId, metadata }
+ */
+export async function notifyTaskAssigned(tenantDb, assigneeId, payload = {}) {
+  return notifyUser(tenantDb, assigneeId, {
+    ...payload,
+    type: NotificationTypes.INFO,
+    priority: NotificationPriority.HIGH,
+    category: 'workflow',
+    actionType: 'task_assigned',
+  });
+}
+
+/**
+ * Notify all users with a given roleId that a new user has been created.
+ * @param {object} tenantDb
+ * @param {number} roleId
+ * @param {object} payload - { title, message, ... }
+ */
+export async function notifyUserCreated(tenantDb, roleId, payload = {}) {
+  if (!tenantDb || !roleId) return;
+  try {
+    const users = await tenantDb.User.findAll({
+      where: { role_id: roleId, status: 'active' },
+      attributes: ['id'],
+    });
+    await Promise.all(
+      users.map((u) =>
+        notifyUser(tenantDb, u.id, {
+          ...payload,
+          type: NotificationTypes.INFO,
+          priority: NotificationPriority.MEDIUM,
+          category: 'system',
+          actionType: 'user_created',
+        }),
+      ),
+    );
+  } catch (err) {
+    logger.error({ err }, 'notifyUserCreated failed');
+  }
+}
+
+/**
+ * Create a single notification (object-arg variant used by some controllers).
+ * @param {object} opts - { tenantDb, userId, type, priority, title, message, ... }
+ */
+export async function createNotification({ tenantDb, userId, ...rest }) {
+  return notifyUser(tenantDb, userId, rest);
+}
+
+/**
+ * Bulk-create notifications for a list of user IDs.
+ * @param {number[]} userIds
+ * @param {object}   opts   - { tenantDb, ...notifyUser payload }
+ */
+/**
+ * Notify admins that a new case has been created.
+ * @param {object} tenantDb
+ * @param {{ id: number, caseId: string, candidateName: string }} caseInfo
+ */
+/**
+ * Notify a user that their licence application status has changed.
+ * @param {number} userId
+ * @param {object} application - licence application record
+ * @param {string} [status]
+ * @param {string} [adminNotes]
+ */
+// ─── DB query helpers (used by notification controller) ───────────────────────
+
+/**
+ * Paginated fetch of notifications for a user.
+ */
+export async function getUserNotifications(tenantDb, userId, { page = 1, limit = 20, unreadOnly = false, type, priority } = {}) {
+  const where = { recipientId: userId };
+  if (unreadOnly) where.isRead = false;
+  if (type) where.type = type;
+  if (priority) where.priority = priority;
+  const offset = (page - 1) * limit;
+  const { count, rows } = await tenantDb.Notification.findAndCountAll({
+    where,
+    order: [['created_at', 'DESC']],
+    limit,
+    offset,
+  });
+  return { notifications: rows, total: count, page, totalPages: Math.ceil(count / limit) };
+}
+
+/**
+ * Count unread notifications for a user.
+ */
+export async function getUnreadCount(tenantDb, userId) {
+  return tenantDb.Notification.count({ where: { recipientId: userId, isRead: false } });
+}
+
+/**
+ * Hard-delete a single notification by id.
+ */
+export async function deleteNotification(tenantDb, id) {
+  return tenantDb.Notification.destroy({ where: { id } });
+}
+
+/**
+ * Delete all notifications older than 90 days. Returns count deleted.
+ */
+export async function deleteExpiredNotifications(tenantDb) {
+  const { Op } = await import('sequelize');
+  const cutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+  return tenantDb.Notification.destroy({ where: { created_at: { [Op.lt]: cutoff } } });
+}
+
+/**
+ * No-op stub — scheduled notifications not yet implemented.
+ */
+export async function processScheduledNotifications(tenantDb) {
+  return 0;
+}
+
+/**
+ * Notify all users of a specific role.
+ * @param {number} roleId
+ * @param {object} opts - { tenantDb, ...payload }
+ */
+export async function createNotificationForRole(roleId, opts = {}) {
+  const { tenantDb, ...payload } = opts;
+  if (!tenantDb || !roleId) return [];
+  const users = await tenantDb.User.findAll({
+    where: { role_id: roleId, status: 'active' },
+    attributes: ['id'],
+  });
+  return createBulkNotifications(users.map((u) => u.id), { tenantDb, ...payload });
+}
+
+/**
+ * Broadcast notification to ALL active users in the tenant.
+ * @param {object} opts - { tenantDb, ...payload }
+ */
+export async function createNotificationForAllUsers(opts = {}) {
+  const { tenantDb, ...payload } = opts;
+  if (!tenantDb) return [];
+  const users = await tenantDb.User.findAll({ where: { status: 'active' }, attributes: ['id'] });
+  return createBulkNotifications(users.map((u) => u.id), { tenantDb, ...payload });
+}
+
+// ─── Domain-specific notify helpers ───────────────────────────────────────────
+
+export async function notifyDocumentUploaded(tenantDb, userId, data = {}) {
+  return notifyUser(tenantDb, userId, {
+    type: NotificationTypes.INFO,
+    priority: NotificationPriority.MEDIUM,
+    category: 'document',
+    title: data.title ?? 'Document Uploaded',
+    message: data.message ?? 'A document has been uploaded.',
+    entityType: 'document',
+    entityId: data.id ?? null,
+    actionType: 'document_uploaded',
+    metadata: data,
+  });
+}
+
+export async function notifyDocumentReviewed(tenantDb, userId, data = {}, status) {
+  return notifyUser(tenantDb, userId, {
+    type: status === 'Approved' ? NotificationTypes.SUCCESS : NotificationTypes.WARNING,
+    priority: NotificationPriority.HIGH,
+    category: 'document',
+    title: data.title ?? `Document ${status ?? 'Reviewed'}`,
+    message: data.message ?? `Your document has been ${status ?? 'reviewed'}.`,
+    entityType: 'document',
+    entityId: data.id ?? null,
+    actionType: 'document_reviewed',
+    metadata: { ...data, status },
+  });
+}
+
+export async function notifyDocumentSubmittedToCandidate(tenantDb, userId, data = {}) {
+  return notifyUser(tenantDb, userId, {
+    type: NotificationTypes.INFO,
+    priority: NotificationPriority.MEDIUM,
+    category: 'document',
+    title: data.title ?? 'Document Submitted',
+    message: data.message ?? 'A document has been submitted for your review.',
+    entityType: 'document',
+    entityId: data.id ?? null,
+    actionType: 'document_submitted',
+    metadata: data,
+  });
+}
+
+export async function notifyMessageReceived(tenantDb, userId, data = {}, opts = {}) {
+  return notifyUser(tenantDb, userId, {
+    type: NotificationTypes.INFO,
+    priority: NotificationPriority.MEDIUM,
+    category: 'message',
+    title: data.title ?? 'New Message',
+    message: data.message ?? 'You have received a new message.',
+    entityType: 'conversation',
+    entityId: data.conversationId ?? null,
+    actionType: 'message_received',
+    metadata: data,
+    ...opts,
+  });
+}
+
+export async function notifyPaymentReceived(tenantDb, userId, data = {}) {
+  return notifyUser(tenantDb, userId, {
+    type: NotificationTypes.SUCCESS,
+    priority: NotificationPriority.HIGH,
+    category: 'payment',
+    title: data.title ?? 'Payment Received',
+    message: data.message ?? 'Your payment has been received.',
+    entityType: 'payment',
+    entityId: data.id ?? null,
+    actionType: 'payment_received',
+    metadata: data,
+  });
+}
+
+export async function notifyCaseAssigned(tenantDb, userId, data = {}) {
+  return notifyUser(tenantDb, userId, {
+    type: NotificationTypes.INFO,
+    priority: NotificationPriority.HIGH,
+    category: 'case',
+    title: data.title ?? `Case Assigned: ${data.caseId ?? ''}`,
+    message: data.message ?? 'A case has been assigned to you.',
+    entityType: 'case',
+    entityId: data.id ?? null,
+    actionType: 'case_assigned',
+    metadata: data,
+  });
+}
+
+export async function notifyCaseStatusChanged(tenantDb, userIds, data = {}, fromStatus, toStatus) {
+  const ids = Array.isArray(userIds) ? userIds : [userIds];
+  return createBulkNotifications(ids.filter(Boolean), {
+    tenantDb,
+    type: NotificationTypes.INFO,
+    priority: NotificationPriority.HIGH,
+    category: 'case',
+    title: data.title ?? `Case Status Updated`,
+    message: data.message ?? `Case status changed${fromStatus ? ` from ${fromStatus}` : ''}${toStatus ? ` to ${toStatus}` : ''}.`,
+    entityType: 'case',
+    entityId: data.id ?? null,
+    actionType: 'case_status_changed',
+    metadata: { ...data, fromStatus, toStatus },
+  });
+}
+
+export async function notifyProposedAmountToCandidate(tenantDb, userId, data = {}) {
+  return notifyUser(tenantDb, userId, {
+    type: NotificationTypes.INFO,
+    priority: NotificationPriority.HIGH,
+    category: 'case',
+    title: data.title ?? 'Proposed Amount Updated',
+    message: data.message ?? 'A proposed amount has been set for your case.',
+    entityType: 'case',
+    entityId: data.id ?? null,
+    actionType: 'proposed_amount',
+    metadata: data,
+  });
+}
+
+export async function notifyEscalationCreated(tenantDb, userId, data = {}) {
+  return notifyUser(tenantDb, userId, {
+    type: NotificationTypes.WARNING,
+    priority: NotificationPriority.HIGH,
+    category: 'case',
+    title: data.title ?? 'Escalation Created',
+    message: data.message ?? 'A new escalation has been assigned to you.',
+    entityType: 'escalation',
+    entityId: data.id ?? null,
+    actionType: 'escalation_created',
+    metadata: data,
+  });
+}
+
+export async function notifyEscalationResolved(tenantDb, userIds, data = {}) {
+  const ids = Array.isArray(userIds) ? userIds : [userIds];
+  return createBulkNotifications(ids.filter(Boolean), {
+    tenantDb,
+    type: NotificationTypes.SUCCESS,
+    priority: NotificationPriority.MEDIUM,
+    category: 'case',
+    title: data.title ?? 'Escalation Resolved',
+    message: data.message ?? `Escalation resolved: ${data.resolution ?? ''}`,
+    entityType: 'escalation',
+    entityId: data.id ?? null,
+    actionType: 'escalation_resolved',
+    metadata: data,
+  });
+}
+
+export async function notifyLicenceStatusChanged(userId, application, status, adminNotes) {
+  logger.info({ userId, appId: application?.id, status }, 'notifyLicenceStatusChanged');
+}
+
+/**
+ * Notify a user that more information is required for their licence application.
+ * @param {number} userId
+ * @param {object} application
+ */
+export async function notifyLicenceInfoRequested(userId, application) {
+  logger.info({ userId, appId: application?.id }, 'notifyLicenceInfoRequested');
+}
+
+/**
+ * Notify a caseworker that a licence application has been assigned to them.
+ * @param {number} userId
+ * @param {object} application
+ */
+export async function notifyLicenceAssigned(userId, application) {
+  logger.info({ userId, appId: application?.id }, 'notifyLicenceAssigned');
+}
+
+export async function notifyCaseCreated(tenantDb, { id, caseId, candidateName } = {}) {
+  return notifyAdmins(tenantDb, {
+    type: NotificationTypes.INFO,
+    priority: NotificationPriority.MEDIUM,
+    category: 'case',
+    title: `New Case Created: ${caseId ?? ''}`,
+    message: `A new case has been created for ${candidateName ?? 'a candidate'}.`,
+    entityType: 'case',
+    entityId: id ?? null,
+    actionType: 'case_created',
+  });
+}
+
+export async function createBulkNotifications(userIds, opts = {}) {
+  const { tenantDb, ...payload } = opts;
+  if (!tenantDb || !Array.isArray(userIds) || !userIds.length) return [];
+  const results = await Promise.all(
+    userIds.map((id) => notifyUser(tenantDb, id, payload)),
+  );
+  return results.filter(Boolean);
+}
 
 /**
  * Enterprise Centralized Notification Service
@@ -145,5 +593,36 @@ export const markAllAsRead = async (tenantDb, userId) => {
 export default {
   generateNotification,
   markAsRead,
-  markAllAsRead
+  markAllAsRead,
+  notifyUser,
+  notifyAdmins,
+  notifyTaskAssigned,
+  notifyUserCreated,
+  createNotification,
+  createBulkNotifications,
+  // DB helpers
+  getUserNotifications,
+  getUnreadCount,
+  deleteNotification,
+  deleteExpiredNotifications,
+  processScheduledNotifications,
+  createNotificationForRole,
+  createNotificationForAllUsers,
+  // domain helpers
+  notifyDocumentUploaded,
+  notifyDocumentReviewed,
+  notifyDocumentSubmittedToCandidate,
+  notifyMessageReceived,
+  notifyPaymentReceived,
+  notifyCaseAssigned,
+  notifyCaseStatusChanged,
+  notifyProposedAmountToCandidate,
+  notifyEscalationCreated,
+  notifyEscalationResolved,
+  notifyCaseCreated,
+  notifyLicenceStatusChanged,
+  notifyLicenceInfoRequested,
+  notifyLicenceAssigned,
+  NotificationTypes,
+  NotificationPriority,
 };

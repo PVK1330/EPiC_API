@@ -169,6 +169,11 @@ export const updateGoogleCalendarEvent = async ({ tenantDb, userId, eventId, tit
 };
 
 /**
+ * Cancels a Google Calendar event (alias for delete).
+ */
+export const cancelGoogleCalendarEvent = async (params) => deleteGoogleCalendarEvent(params);
+
+/**
  * Deletes a Google Calendar event.
  */
 export const deleteGoogleCalendarEvent = async ({ tenantDb, userId, eventId }) => {
