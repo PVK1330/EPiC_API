@@ -10,6 +10,8 @@ import { rowsToXlsxBuffer, xlsxBufferToRows } from '../../../utils/excelExport.u
 import catchAsync from '../../../utils/catchAsync.js';
 import ApiResponse from '../../../utils/apiResponse.js';
 import { generateStrongPassword } from '../../../utils/passwordGenerator.js';
+import { EVENTS } from '../../../core/events/eventRegistry.js';
+import eventPublisher from '../../../core/events/eventPublisher.js';
 import { generateCaseId } from '../../../utils/case.utils.js';
 import { getWorkflowState } from '../../../services/caseWorkflowProcess.service.js';
 import { resolveCaseStage, DEFAULT_CASE_STAGE } from '../../../constants/immigrationCaseProcess.js';
@@ -854,6 +856,22 @@ export const adminUpdateCandidateApplication = async (req, res) => {
         { model: req.tenantDb.CandidateApplication, as: 'application', required: false },
       ],
     });
+
+    // Fire PROFILE_UPDATED Event to trigger Timeline & Notifications (Phase 8/13 Integration)
+    const existingCase = await req.tenantDb.Case.findOne({ where: { candidateId } });
+    if (existingCase) {
+      const description = `Application form updated by Administrator/Caseworker.`;
+      eventPublisher.publish(EVENTS.PROFILE_UPDATED, {
+        entityId: existingCase.id,
+        entityType: 'case',
+        candidateId,
+        assignedCaseworkerId: existingCase.assignedcaseworkerId,
+        performedById: req.user?.id || null,
+        performedByRole: req.user?.role?.name || req.user?.role || 'admin',
+        description,
+        actionType: 'case_updated'
+      }, { tenantDb: req.tenantDb, io: req.app.get('io'), organisationId: req.user?.organisation_id }).catch(err => logger.error({ err }, 'Publish PROFILE_UPDATED error in admin update'));
+    }
 
     res.status(200).json({
       status: 'success',

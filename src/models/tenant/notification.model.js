@@ -7,61 +7,6 @@ export default (sequelize, DataTypes) => {
         primaryKey: true,
         autoIncrement: true,
       },
-      userId: {
-        type: DataTypes.INTEGER,
-        allowNull: false,
-        references: {
-          model: "users",
-          key: "id",
-        },
-        onUpdate: "CASCADE",
-        onDelete: "CASCADE",
-      },
-      roleId: {
-        type: DataTypes.INTEGER,
-        allowNull: true,
-        references: {
-          model: "roles",
-          key: "id",
-        },
-        onUpdate: "CASCADE",
-        onDelete: "SET NULL",
-        comment: "Optional: If set, notification is for all users with this role",
-      },
-      type: {
-        type: DataTypes.ENUM(
-          "info",
-          "success",
-          "warning",
-          "error",
-          "case_created",
-          "case_updated",
-          "case_assigned",
-          "case_status_changed",
-          "payment_received",
-          "payment_overdue",
-          "document_uploaded",
-          "document_reviewed",
-          "message_received",
-          "escalation_created",
-          "escalation_resolved",
-          "user_created",
-          "user_status_changed",
-          "system_maintenance",
-          "sla_breach",
-          "task_assigned",
-          "licence_assigned",
-          "licence_status_changed",
-          "licence_info_requested"
-        ),
-        allowNull: false,
-        defaultValue: "info",
-      },
-      priority: {
-        type: DataTypes.ENUM("low", "medium", "high", "urgent"),
-        allowNull: false,
-        defaultValue: "medium",
-      },
       title: {
         type: DataTypes.STRING(255),
         allowNull: false,
@@ -70,26 +15,65 @@ export default (sequelize, DataTypes) => {
         type: DataTypes.TEXT,
         allowNull: false,
       },
-      actionType: {
-        type: DataTypes.STRING(50),
-        allowNull: true,
-        comment: "Type of action that triggered this notification",
+      category: {
+        type: DataTypes.ENUM(
+          "case",
+          "document",
+          "payment",
+          "appointment",
+          "workflow",
+          "security",
+          "message",
+          "system"
+        ),
+        allowNull: false,
+        defaultValue: "system",
       },
-      entityId: {
+      priority: {
+        type: DataTypes.ENUM("low", "medium", "high", "critical"),
+        allowNull: false,
+        defaultValue: "low",
+      },
+      type: {
+        type: DataTypes.ENUM("info", "success", "warning", "error"),
+        allowNull: false,
+        defaultValue: "info",
+      },
+      recipientId: {
         type: DataTypes.INTEGER,
         allowNull: true,
-        comment: "ID of the related entity (case, user, document, etc.)",
+        field: "recipient_id",
+        references: {
+          model: "users",
+          key: "id",
+        },
+        onUpdate: "CASCADE",
+        onDelete: "CASCADE",
+      },
+      recipientRole: {
+        type: DataTypes.STRING(50),
+        allowNull: true,
+        field: "recipient_role",
+      },
+      organisationId: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        field: "organisation_id",
       },
       entityType: {
         type: DataTypes.STRING(50),
         allowNull: true,
-        comment: "Type of the related entity (case, user, document, etc.)",
+        field: "entity_type",
       },
-      metadata: {
-        type: DataTypes.JSON,
+      entityId: {
+        type: DataTypes.INTEGER,
         allowNull: true,
-        defaultValue: {},
-        comment: "Additional data for the notification",
+        field: "entity_id",
+      },
+      actionUrl: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+        field: "action_url",
       },
       isRead: {
         type: DataTypes.BOOLEAN,
@@ -101,60 +85,27 @@ export default (sequelize, DataTypes) => {
         allowNull: true,
         field: "read_at",
       },
-      sendEmail: {
+      isArchived: {
         type: DataTypes.BOOLEAN,
         defaultValue: false,
-        field: "send_email",
-        comment: "Whether to send this notification via email",
+        field: "is_archived",
       },
-      emailSent: {
-        type: DataTypes.BOOLEAN,
-        defaultValue: false,
-        field: "email_sent",
-      },
-      scheduledFor: {
-        type: DataTypes.DATE,
+      metadata: {
+        type: DataTypes.JSONB,
         allowNull: true,
-        field: "scheduled_for",
-        comment: "If set, notification will be sent at this time",
-      },
-      sentAt: {
-        type: DataTypes.DATE,
-        allowNull: true,
-        field: "sent_at",
-      },
-      expiresAt: {
-        type: DataTypes.DATE,
-        allowNull: true,
-        field: "expires_at",
-        comment: "Optional: Notification will be auto-deleted after this time",
-      },
+        defaultValue: {},
+      }
     },
     {
       tableName: "notifications",
       timestamps: true,
+      createdAt: "created_at",
+      updatedAt: "updated_at",
       indexes: [
-        {
-          fields: ["userId"],
-        },
-        {
-          fields: ["roleId"],
-        },
-        {
-          fields: ["type"],
-        },
-        {
-          fields: ["priority"],
-        },
-        {
-          fields: ["is_read"],
-        },
-        {
-          fields: ["scheduled_for"],
-        },
-        {
-          fields: ["entityId", "entityType"],
-        },
+        { fields: ["recipient_id"] },
+        { fields: ["category"] },
+        { fields: ["is_read"] },
+        { fields: ["entity_id", "entity_type"] },
       ],
     }
   );

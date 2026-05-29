@@ -21,6 +21,8 @@ router.post("/verify-otp",     ...withOrgContext, verifyOtpLimiter,      auth.ve
 router.post("/resend-otp",     ...withOrgContext, resendOtpLimiter,      auth.resendOTP);
 router.post("/login",          ...withOrgContext, loginLimiter,          auth.login);
 router.post("/logout",         globalAuthLimiter,                        auth.logout);
+router.post("/logout-all",     verifyTokenAndTenant, globalAuthLimiter,  auth.logoutAll);
+router.post("/refresh",        globalAuthLimiter,                        auth.refreshToken);
 router.post("/forgot-password",...withOrgContext, forgotPasswordLimiter,  auth.forgotPassword);
 router.post("/verify-reset-otp",...withOrgContext, globalAuthLimiter,    auth.verifyResetOTP);
 router.post("/set-password",   ...withOrgContext, globalAuthLimiter,     auth.setPassword);
@@ -35,7 +37,7 @@ router.post("/2fa/verify",       ...withOrgContext, verify2FALimiter,     auth.v
 router.post("/2fa/disable",      verifyTokenAndTenant, globalAuthLimiter, auth.disable2FA);
 
 // Session restoration after page refresh (reads token from httpOnly cookie)
-router.get("/me", verifyTokenAndTenant, auth.me);
+router.get("/me", verifyTokenAndTenant, auth.getMe);
 
 // Cross-domain impersonation handoff (sets httpOnly cookie from token)
 router.post("/handoff", auth.handoff);

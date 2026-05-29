@@ -13,6 +13,7 @@ import { recordStatusChange, recordTimelineEntry } from "./caseTimeline.service.
 import { sendWorkflowStageEmail } from "./workflowEmail.service.js";
 import { notifyWorkflowStageChange } from "./workflowNotifications.service.js";
 import { syncWorkflowTasksForStage } from "./workflowTaskAutomation.service.js";
+import { validateTransition, WORKFLOW_TYPES } from "./workflowEngine.service.js";
 import logger from "../utils/logger.js";
 
 const UPLOADED_STATUSES = new Set(["uploaded", "under_review", "approved"]);
@@ -80,6 +81,14 @@ export async function applyCaseStageChange({
   const nextStep = getStepById(nextStage);
   const legacyStatus = STAGE_TO_LEGACY_STATUS[nextStage] || caseRecord.status;
 
+  // 1. Validate Transition using centralized WorkflowEngine
+  const validation = validateTransition(WORKFLOW_TYPES.CASE, previousStage, nextStage);
+  if (!validation.valid) {
+    logger.warn({ caseId: caseRecord.id, previousStage, nextStage }, `Prevented invalid transition: ${validation.message}`);
+    throw new Error(`State Transition Error: ${validation.message}`);
+  }
+
+  // 2. Persist Change
   await caseRecord.update({
     caseStage: nextStage,
     status: legacyStatus,

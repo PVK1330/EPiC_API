@@ -3,6 +3,7 @@ import * as adminSettingsController from './admin.settings.controller.js';
 import * as smtpSettingsController from './smtp.settings.controller.js';
 import * as visaController from './visa.controller.js';
 import * as petitionTypeController from './petitionType.controller.js';
+import * as integrationsDashboardController from './integrationsDashboard.controller.js';
 import { verifyTokenAndTenant } from '../../../middlewares/authStack.middleware.js';
 import { checkRole, ROLES } from '../../../middlewares/role.middleware.js';
 import { handleProfilePicUpload, handleCclTemplateUpload, handleOrganisationLogoUpload } from '../../../middlewares/upload.middleware.js';
@@ -63,5 +64,10 @@ router.post("/organisation/logo", handleOrganisationLogoUpload, adminSettingsCon
 router.get("/smtp-settings", smtpSettingsController.getSmtpSettings);
 router.put("/smtp-settings", smtpSettingsController.updateSmtpSettings);
 router.post("/smtp-settings/test", smtpSettingsController.testSmtpSettings);
+
+router.get("/integrations/microsoft/dashboard", integrationsDashboardController.getMicrosoftDashboardStats);
+router.get("/integrations/google/dashboard", integrationsDashboardController.getGoogleDashboardStats);
+router.get("/integrations/retry-queue", integrationsDashboardController.getIntegrationRetryQueue);
+router.get("/integrations/sync-logs", integrationsDashboardController.getIntegrationSyncLogs);
 
 export default router;

@@ -1,4 +1,8 @@
 import { Op } from 'sequelize';
+import logger from '../../../utils/logger.js';
+import { getConnection } from './google/google.service.js';
+import { createGoogleMeetMeeting } from './google/googleMeeting.service.js';
+
 const makeJoinUrl = (id) =>
   `https://teams.microsoft.com/l/meetup-join/placeholder-${id}`;
 
@@ -24,6 +28,8 @@ const normalizeMeeting = (row) => {
     status: plain.status,
     event_type: plain.event_type || 'teams',
     location: plain.location || '',
+    meeting_provider: plain.meeting_provider || null,
+    external_event_id: plain.external_event_id || null,
     created_at:
       plain.created_at instanceof Date
         ? plain.created_at.toISOString()
@@ -59,6 +65,89 @@ export const createTeamsMeeting = async (req, res) => {
       });
     }
 
+    let meetingProvider = null;
+    let externalEventId = null;
+    let joinUrl = null;
+    let finalEventType = event_type || 'teams';
+    let finalLocation = location || '';
+
+    // ── Priority 1: Google Meet ────────────────────────────────────────────
+    let googleConnection = null;
+    try {
+      googleConnection = await getConnection(req.tenantDb, userId);
+    } catch (dbErr) {
+      logger.warn({ err: dbErr }, 'Failed to check Google connection, trying Microsoft next');
+    }
+
+    if (googleConnection) {
+      try {
+        const attendeeEmails = Array.isArray(attendees)
+          ? attendees.map(a => typeof a === 'string' ? a : a.email).filter(Boolean)
+          : [];
+
+        const meetResult = await createGoogleMeetMeeting({
+          tenantDb: req.tenantDb,
+          title: subject,
+          description: description || '',
+          startTime: start_time,
+          endTime: end_time,
+          attendees: attendeeEmails,
+          userId,
+        });
+
+        meetingProvider = 'google';
+        externalEventId = meetResult.eventId;
+        joinUrl = meetResult.meetUrl;
+        finalEventType = 'google';
+        finalLocation = 'Google Meet';
+
+        logger.info({ userId, eventId: meetResult.eventId }, 'Google Meet link generated successfully');
+      } catch (meetErr) {
+        logger.error({ err: meetErr, userId }, 'Failed to generate Google Meet link, falling back to Microsoft check');
+      }
+    }
+
+    // ── Priority 2: Microsoft Teams (only if Google did not produce a link) ──
+    if (!joinUrl) {
+      let microsoftConnection = null;
+      try {
+        if (!req.tenantDb?.CalendarConnection) {
+          throw new Error('CalendarConnection model not available');
+        }
+        microsoftConnection = await req.tenantDb.CalendarConnection.findOne({
+          where: { user_id: userId, provider: 'microsoft', is_active: true },
+        });
+      } catch (msDbErr) {
+        logger.warn({ err: msDbErr }, 'Failed to check Microsoft connection, proceeding without Teams link');
+      }
+
+      if (microsoftConnection) {
+        try {
+          const { createTeamsOnlineMeeting } = await import('./microsoft/microsoftMeeting.service.js');
+
+          const teamsResult = await createTeamsOnlineMeeting({
+            tenantDb: req.tenantDb,
+            title: subject,
+            description: description || '',
+            startTime: start_time,
+            endTime: end_time,
+            userId,
+          });
+
+          meetingProvider = 'microsoft';
+          externalEventId = teamsResult.eventId;
+          joinUrl = teamsResult.meetUrl;
+          finalEventType = 'teams';
+          finalLocation = 'Microsoft Teams';
+
+          logger.info({ userId, eventId: teamsResult.eventId }, 'Microsoft Teams link generated successfully');
+        } catch (teamsErr) {
+          logger.error({ err: teamsErr, userId }, 'Failed to generate Teams link, proceeding without meeting link');
+        }
+      }
+    }
+
+    // ── Priority 3: No integration — plain meeting ─────────────────────────
     const row = await req.tenantDb.CalendarMeeting.create({
       user_id: userId,
       subject,
@@ -69,14 +158,19 @@ export const createTeamsMeeting = async (req, res) => {
       meeting_type: meeting_type || 'online',
       reminder_minutes: reminder_minutes ?? 15,
       related_case_id: related_case_id || null,
-      event_type: event_type || 'teams',
-      location: location || '',
-      join_url: null,
+      event_type: finalEventType,
+      location: finalLocation,
+      meeting_provider: meetingProvider,
+      external_event_id: externalEventId,
+      join_url: joinUrl,
       status: 'scheduled',
     });
 
-    await row.update({ join_url: makeJoinUrl(row.id) });
-    await row.reload();
+    // If no external integration provided a real URL, generate placeholder
+    if (!joinUrl) {
+      await row.update({ join_url: makeJoinUrl(row.id) });
+      await row.reload();
+    }
 
     res.status(201).json({
       status: 'success',

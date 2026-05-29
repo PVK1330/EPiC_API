@@ -11,6 +11,9 @@ router.use(checkRole([ROLES.ADMIN]));
 // Summary KPIs
 router.get('/summary', financeController.getFinanceSummary);
 
+// Reconciliation
+router.get('/reconciliation', financeController.getPaymentReconciliation);
+
 // Transactions list + detail
 router.get('/transactions',          financeController.getTransactions);
 router.get('/transactions/:id',      financeController.getTransactionById);

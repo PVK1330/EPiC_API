@@ -14,6 +14,9 @@ import { DEFAULT_CASE_STAGE } from '../../../constants/immigrationCaseProcess.js
 import { sanitizeApplicationPayload } from '../../../utils/applicationPayload.util.js';
 import { createWorkflowTask, getActiveAdminIds } from '../../../services/workflowTaskAutomation.service.js';
 import logger from '../../../utils/logger.js';
+import { recordTimelineEntry } from '../../../services/caseTimeline.service.js';
+import eventPublisher from '../../../core/events/eventPublisher.js';
+import { EVENTS } from '../../../core/events/eventRegistry.js';
 
 const APPLICATION_PAYLOAD_USER_KEYS = new Set([
   'first_name',
@@ -58,7 +61,7 @@ export class CandidateService {
     this.repository = new CandidateRepository(tenantDb);
   }
 
-  async createCandidate(data) {
+  async createCandidate(data, context, performedByUser) {
     const {
       first_name, last_name, email, country_code, mobile,
       password, application, applicationData, role_id = ROLES.CANDIDATE,
@@ -154,14 +157,14 @@ export class CandidateService {
       organisationId: organisation_id,
     }).catch((err) => logger.error({ err }, "Candidate welcome email"));
 
-    // Background notification
-    notifyUserCreated(this.repository.tenantDb, ROLES.ADMIN, {
-      id: candidate.id,
+    // Background notification via Event Bus
+    eventPublisher.publish(EVENTS.USER_CREATED, {
+      candidateId: candidate.id,
       email: candidate.email,
-      role: "candidate",
       first_name: candidate.first_name,
       last_name: candidate.last_name,
-    }).catch(err => logger.error({ err }, "Notification Error"));
+      organisationId: organisation_id
+    }, context).catch(err => logger.error({ err }, "Event Publish Error"));
 
     // Assign Task to Admins
     if (caseRecord && (!caseRecord.assignedcaseworkerId || caseRecord.assignedcaseworkerId.length === 0)) {
@@ -217,10 +220,31 @@ export class CandidateService {
 
     const includeClause = [
       { model: this.repository.tenantDb.Role, as: "role", attributes: ["id", "name"] },
-      { model: this.repository.tenantDb.CandidateApplication, as: "application", required: false, attributes: ["id", "userId", "status", "submittedAt", "visaType"] },
+      {
+        model: this.repository.tenantDb.CandidateApplication,
+        as: "application",
+        required: false,
+        attributes: [
+          "id", "userId", "status", "submittedAt",
+          "visaType", "visaEndDate",
+          "dob", "nationality",
+        ],
+      },
+      {
+        model: this.repository.tenantDb.Case,
+        as: "cases",
+        required: false,
+        attributes: ["id", "caseId", "status", "nationality", "visaTypeId", "totalAmount", "paidAmount"],
+        include: [
+          {
+            model: this.repository.tenantDb.VisaType,
+            as: "visaType",
+            required: false,
+            attributes: ["id", "name"],
+          },
+        ],
+      },
     ];
-
-    // TODO: Add complex Case filtering logic here if needed
 
     const { count, rows: candidates } = await this.repository.findAndCountAll({
       where: whereClause,
@@ -228,6 +252,7 @@ export class CandidateService {
       order: [["createdAt", "DESC"]],
       limit: limitNum,
       offset: offset,
+      distinct: true,
     });
 
     return {
@@ -315,10 +340,11 @@ export class CandidateService {
     const application = await this.repository.findApplicationByUserId(userId);
     return application || null;
   }
-
-  async updateCandidateApplication(userId, applicationData) {
+  async updateCandidateApplication(userId, applicationData, performedByUser = null, context = null) {
     const candidate = await this.repository.findById(userId);
     if (!candidate) throw new Error("Candidate not found");
+
+    const existingApp = await this.repository.findApplicationByUserId(userId);
 
     const { userPatch, applicationPatch, caseworkerId } =
       splitApplicationUpdatePayload(applicationData);
@@ -337,6 +363,120 @@ export class CandidateService {
     ) {
       const exists = await this.repository.findByMobile(cc, mob, userId);
       if (exists) throw new Error("Mobile number already exists");
+    }
+
+    // Map labels for changes
+    const fieldLabels = {
+      first_name: "First Name",
+      last_name: "Last Name",
+      email: "Email",
+      country_code: "Country Code",
+      mobile: "Mobile Number",
+      dob: "Date of Birth",
+      nationality: "Nationality",
+      passportNumber: "Passport Number",
+      visaType: "Visa Type",
+      visaEndDate: "Visa End Date",
+      address: "Address",
+      relationshipStatus: "Relationship Status",
+      gender: "Gender",
+      brpNumber: "BRP Number",
+      niNumber: "National Insurance Number",
+      issuingAuthority: "Passport Issuing Authority",
+      issueDate: "Passport Issue Date",
+      expiryDate: "Passport Expiry Date",
+      contactNumber: "Contact Number",
+      contactNumber2: "Secondary Contact Number",
+      previousFullAddress: "Previous Full Address",
+      previousAddress: "Previous Address",
+      startDate: "Start Date",
+      endDate: "End Date",
+      birthCountry: "Country of Birth",
+      placeOfBirth: "Place of Birth",
+      passportAvailable: "Passport Available",
+      nationalIdCardNumber: "National ID Card Number",
+      nationalIdNumber: "National ID Number",
+      idIssuingAuthorityCard: "ID Card Issuing Authority",
+      idIssuingAuthorityNational: "National ID Issuing Authority",
+      otherNationality: "Other Nationality",
+      ukLicense: "UK License",
+      medicalTreatment: "Medical Treatment Details",
+      ukStayDuration: "Duration of stay in the UK",
+      parentName: "Parent Name",
+      parentRelation: "Parent Relation",
+      parentDob: "Parent Date of Birth",
+      parentNationality: "Parent Nationality",
+      sameNationality: "Same Nationality as Parent",
+      parent2Name: "Second Parent Name",
+      parent2Relation: "Second Parent Relation",
+      parent2Dob: "Second Parent Date of Birth",
+      parent2Nationality: "Second Parent Nationality",
+      parent2SameNationality: "Second Parent Same Nationality",
+      illegalEntry: "Illegal Entry",
+      overstayed: "Overstayed",
+      breach: "Breach of Conditions",
+      falseInfo: "False Information Provided",
+      otherBreach: "Other Breach of Conditions",
+      refusedVisa: "Visa Refusal",
+      refusedEntry: "Entry Refusal",
+      refusedPermission: "Permission Refusal",
+      refusedAsylum: "Asylum Refusal",
+      deported: "Deported",
+      removed: "Removed",
+      requiredToLeave: "Required to Leave",
+      banned: "Banned",
+      visitedOther: "Visited Other Countries",
+      countryVisited: "Countries Visited",
+      visitReason: "Visit Reason",
+      entryDate: "Visit Entry Date",
+      leaveDate: "Visit Leave Date",
+      sponsored: "Sponsored Case",
+      englishProof: "English Proof Type",
+    };
+
+    const normalizeValue = (val) => {
+      if (val === null || val === undefined) return "";
+      if (val instanceof Date) {
+        return val.toISOString().split('T')[0];
+      }
+      if (typeof val === 'string') {
+        if (/^\d{4}-\d{2}-\d{2}/.test(val)) {
+          return val.split('T')[0];
+        }
+        return val.trim();
+      }
+      return String(val).trim();
+    };
+
+    const isDifferent = (val1, val2) => {
+      return normalizeValue(val1) !== normalizeValue(val2);
+    };
+
+    // Calculate changes
+    const changes = [];
+    
+    // 1. Check User profile changes
+    for (const key of Object.keys(userPatch)) {
+      if (isDifferent(candidate[key], userPatch[key])) {
+        const label = fieldLabels[key] || key;
+        const oldVal = normalizeValue(candidate[key]) || "None";
+        const newVal = normalizeValue(userPatch[key]) || "None";
+        changes.push(`${label}: "${oldVal}" ➔ "${newVal}"`);
+      }
+    }
+
+    // 2. Check CandidateApplication changes
+    for (const key of Object.keys(sanitizedApplication)) {
+      if (key === 'customResponses') continue;
+      const label = fieldLabels[key] || key;
+      const oldVal = existingApp ? normalizeValue(existingApp[key]) : "";
+      const newVal = normalizeValue(sanitizedApplication[key]);
+      
+      if (isDifferent(oldVal, newVal)) {
+        const oldDisplay = oldVal || "None";
+        const newDisplay = newVal || "None";
+        changes.push(`${label}: "${oldDisplay}" ➔ "${newDisplay}"`);
+      }
     }
 
     await this.repository.transaction(async (t) => {
@@ -388,6 +528,42 @@ export class CandidateService {
       syncUserToPlatformOnly(userId, userPatch).catch((err) => {
         logger.error({ err }, 'Platform user sync after client update');
       });
+    }
+
+    // Publish event for timeline audit log and notifications after successful transaction
+    if (changes.length > 0) {
+      try {
+        const existingCase = await this.repository.findCaseByCandidateId(userId);
+        if (existingCase) {
+          const description = `Application form updated. Changed fields:\n${changes.join('\n')}`;
+          
+          if (context) {
+            // Using central event bus (Phase 8/13 Integration)
+            eventPublisher.publish(EVENTS.PROFILE_UPDATED, {
+              entityId: existingCase.id,
+              entityType: 'case',
+              candidateId: userId,
+              assignedCaseworkerId: existingCase.assignedcaseworkerId,
+              performedById: performedByUser?.id || null,
+              performedByRole: performedByUser?.role?.name || performedByUser?.role || 'candidate',
+              description,
+              actionType: 'case_updated'
+            }, context);
+          } else {
+            // Fallback if context is not provided
+            await recordTimelineEntry({
+              tenantDb: this.repository.tenantDb,
+              caseId: existingCase.id,
+              actionType: 'case_updated',
+              description,
+              performedBy: performedByUser?.id || null,
+              visibility: 'public',
+            });
+          }
+        }
+      } catch (err) {
+        logger.error({ err }, 'Failed to record application update event');
+      }
     }
 
     await candidate.reload({

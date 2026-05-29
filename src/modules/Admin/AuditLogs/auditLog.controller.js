@@ -1,9 +1,6 @@
 import { Op } from 'sequelize';
 import { rowsToXlsxBuffer, sendXlsxDownload } from '../../../utils/excelExport.util.js';
 
-/**
- * Build the date-range where clause from a dateRange query param.
- */
 function buildDateWhere(dateRange) {
   const today = new Date();
   if (!dateRange || dateRange === 'all' || dateRange === 'custom') return {};
@@ -16,43 +13,29 @@ function buildDateWhere(dateRange) {
   return { created_at: { [Op.gte]: startDate } };
 }
 
-// Track which tenant DBs have already had their columns ensured this process lifetime
 const _auditColsEnsured = new Set();
 
-/**
- * Ensure the audit_logs table has the columns the model expects.
- * Runs ALTER TABLE only once per tenant DB per process — cached after first call.
- */
 async function ensureAuditLogColumns(sequelize) {
   const key = sequelize.config?.database || sequelize.getDatabaseName?.() || 'default';
   if (_auditColsEnsured.has(key)) return;
 
-  await sequelize.query(
-    "ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS resource VARCHAR(255)",
-  ).catch(() => {});
-  await sequelize.query(
-    "ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'Success'",
-  ).catch(() => {});
-  await sequelize.query(
-    "ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS details TEXT",
-  ).catch(() => {});
+  await sequelize.query("ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS resource VARCHAR(255)").catch(() => {});
+  await sequelize.query("ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'Success'").catch(() => {});
+  await sequelize.query("ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS details TEXT").catch(() => {});
 
   _auditColsEnsured.add(key);
 }
 
-/**
- * Format a raw AuditLog row into the shape the frontend expects.
- */
 function formatLog(log) {
   const userObj = log.user;
   let userName = 'System';
   let initials  = 'SY';
-  let roleName  = 'System';
+  let roleName  = log.role || 'System';
 
   if (userObj) {
     userName = `${userObj.first_name || ''} ${userObj.last_name || ''}`.trim() || 'Unknown';
     initials  = `${userObj.first_name?.[0] || ''}${userObj.last_name?.[0] || ''}`.toUpperCase() || 'UK';
-    roleName  = userObj.role?.name || 'User';
+    roleName  = log.role || userObj.role?.name || 'User';
   }
 
   return {
@@ -63,6 +46,9 @@ function formatLog(log) {
     user:         userName,
     role:         roleName,
     action:       log.action || '',
+    entity_type:  log.entity_type || '-',
+    entity_id:    log.entity_id || '-',
+    field_name:   log.field_name || '-',
     resourceType: log.resource || log.entity_type || '-',
     resource:     log.resource || log.entity_type || '-',
     ipAddress:    log.ip_address || '-',
@@ -74,44 +60,45 @@ function formatLog(log) {
   };
 }
 
-// ─── GET /audit-logs  (list with filters + pagination) ───────────────────────
 export const getAuditLogs = async (req, res) => {
   try {
     const {
       page       = 1,
       limit      = 50,
-      dateRange  = 'last7',
-      actionType = 'all',
-      user       = 'all',
-      status     = 'all',
+      action,
+      status,
+      startDate,
+      endDate,
+      userId,
+      role,
+      entityType,
+      entityId
     } = req.query;
 
-    const pageNum  = Math.max(1, parseInt(page,  10) || 1);
-    const limitNum = Math.min(200, parseInt(limit, 10) || 50);
-    const offset   = (pageNum - 1) * limitNum;
+    const pageNum = parseInt(page, 10) || 1;
+    const limitNum = parseInt(limit, 10) || 50;
+    const offset = (pageNum - 1) * limitNum;
 
-    // Ensure columns exist (idempotent — safe on every call)
+    const whereClause = {};
+    if (action) whereClause.action = action;
+    if (status) whereClause.status = status;
+    if (userId) whereClause.user_id = userId;
+    if (role) whereClause.role = role;
+    if (entityType) whereClause.entity_type = entityType;
+    if (entityId) whereClause.entity_id = entityId;
+
+    if (startDate && endDate) {
+      whereClause.created_at = {
+        [Op.between]: [new Date(startDate), new Date(endDate)],
+      };
+    } else if (startDate) {
+      whereClause.created_at = { [Op.gte]: new Date(startDate) };
+    } else if (endDate) {
+      whereClause.created_at = { [Op.lte]: new Date(endDate) };
+    }
+
     await ensureAuditLogColumns(req.tenantDb.sequelize);
 
-    const whereClause = { ...buildDateWhere(dateRange) };
-
-    // Action filter
-    if (actionType !== 'all') {
-      if (actionType === 'login') {
-        whereClause.action = { [Op.iLike]: '%Login%' };
-      } else if (actionType === 'user_mgmt') {
-        whereClause.action = { [Op.iLike]: '%User%' };
-      } else {
-        whereClause.action = { [Op.iLike]: `%${actionType}%` };
-      }
-    }
-
-    // Status filter
-    if (status !== 'all') {
-      whereClause.status = status;
-    }
-
-    // User include (with optional name filter)
     const userInclude = {
       model:      req.tenantDb.User,
       as:         'user',
@@ -123,26 +110,6 @@ export const getAuditLogs = async (req, res) => {
         attributes: ['name'],
       }],
     };
-
-    if (user && user !== 'all') {
-      const parts     = user.trim().split(/\s+/);
-      const firstName = parts[0];
-      const lastName  = parts.slice(1).join(' ');
-      if (firstName && lastName) {
-        userInclude.where = {
-          first_name: { [Op.iLike]: `%${firstName}%` },
-          last_name:  { [Op.iLike]: `%${lastName}%`  },
-        };
-      } else {
-        userInclude.where = {
-          [Op.or]: [
-            { first_name: { [Op.iLike]: `%${firstName}%` } },
-            { last_name:  { [Op.iLike]: `%${firstName}%` } },
-          ],
-        };
-      }
-      userInclude.required = true;
-    }
 
     const { count, rows: auditLogs } = await req.tenantDb.AuditLog.findAndCountAll({
       where:    whereClause,
@@ -158,92 +125,40 @@ export const getAuditLogs = async (req, res) => {
 
     res.status(200).json({
       status:  'success',
-      message: 'Audit logs retrieved successfully',
-      data:    formattedLogs,          // flat array — frontend reads response.data.data
+      data:    formattedLogs,
       meta: {
-        pagination: {
-          total: count,
-          page:  pageNum,
-          limit: limitNum,
-          pages: Math.ceil(count / limitNum),
-        },
+        total: count,
+        page:  pageNum,
+        limit: limitNum,
+        pages: Math.ceil(count / limitNum),
       },
-    });
-  } catch (error) {
-    logger.error({ err: error }, 'Get Audit Logs Error');
-    res.status(500).json({
-      status:  'error',
-      message: 'Internal server error',
-      data:    null,
-      error:   error.message,
-    });
-  }
-};
-
-// ─── GET /audit-logs/stats  (summary counts) ─────────────────────────────────
-export const getAuditStats = async (req, res) => {
-  try {
-    // Ensure columns exist before querying them
-    await ensureAuditLogColumns(req.tenantDb.sequelize);
-
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-
-    const [total, successful, failed, today] = await Promise.all([
-      req.tenantDb.AuditLog.count(),
-      req.tenantDb.AuditLog.count({ where: { status: 'Success' } }),
-      req.tenantDb.AuditLog.count({ where: { status: 'Failed'  } }),
-      req.tenantDb.AuditLog.count({ where: { created_at: { [Op.gte]: todayStart } } }),
-    ]);
-
-    res.status(200).json({
-      status:  'success',
-      message: 'Audit stats retrieved successfully',
-      data: {
-        total_activities: total,
-        successful_count: successful,
-        failed_count:     failed,
-        today_count:      today,
-        total,
-        success: successful,
-        failed,
-      },
-    });
-  } catch (error) {
-    logger.error({ err: error }, 'Get Audit Stats Error');
-    res.status(500).json({ status: 'error', message: error.message });
-  }
-};
-
-// ─── GET /audit-logs/actions  (distinct action types) ────────────────────────
-export const getAuditActionTypes = async (req, res) => {
-  try {
-    const actions = await req.tenantDb.AuditLog.findAll({
-      attributes: [
-        [req.tenantDb.Sequelize.fn('DISTINCT', req.tenantDb.Sequelize.col('action')), 'action'],
-      ],
-      order: [['action', 'ASC']],
-    });
-
-    res.status(200).json({
-      status: 'success',
-      data:   actions.map(a => a.action).filter(Boolean),
     });
   } catch (error) {
     res.status(500).json({ status: 'error', message: error.message });
   }
 };
 
-// ─── GET /audit-logs/export  (Excel download) ─────────────────────────────────
 export const exportAuditLogs = async (req, res) => {
   try {
-    const { dateRange = 'all', status = 'all' } = req.query;
+    const { action, status, startDate, endDate, userId, role, entityType, entityId } = req.query;
 
-    // Ensure columns exist before querying them
     await ensureAuditLogColumns(req.tenantDb.sequelize);
 
-    const whereClause = { ...buildDateWhere(dateRange) };
-    if (status !== 'all') whereClause.status = status;
+    const whereClause = {};
+    if (action) whereClause.action = action;
+    if (status) whereClause.status = status;
+    if (userId) whereClause.user_id = userId;
+    if (role) whereClause.role = role;
+    if (entityType) whereClause.entity_type = entityType;
+    if (entityId) whereClause.entity_id = entityId;
+
+    if (startDate && endDate) {
+      whereClause.created_at = { [Op.between]: [new Date(startDate), new Date(endDate)] };
+    } else if (startDate) {
+      whereClause.created_at = { [Op.gte]: new Date(startDate) };
+    } else if (endDate) {
+      whereClause.created_at = { [Op.lte]: new Date(endDate) };
+    }
 
     const logs = await req.tenantDb.AuditLog.findAll({
       where:   whereClause,
@@ -258,26 +173,32 @@ export const exportAuditLogs = async (req, res) => {
 
     const columns = [
       { key: 'timestamp', header: 'Timestamp' },
-      { key: 'userName', header: 'User' },
+      { key: 'userName', header: 'Changed By' },
+      { key: 'role', header: 'Role' },
       { key: 'action', header: 'Action' },
-      { key: 'resource', header: 'Resource' },
+      { key: 'entity_type', header: 'Entity' },
+      { key: 'entity_id', header: 'Entity ID' },
+      { key: 'field_name', header: 'Field' },
+      { key: 'old_value', header: 'Old Value' },
+      { key: 'new_value', header: 'New Value' },
       { key: 'ip', header: 'IP Address' },
-      { key: 'status', header: 'Status' },
-      { key: 'details', header: 'Details' },
+      { key: 'status', header: 'Status' }
     ];
 
     const rows = logs.map(log => {
-      const userName = log.user
-        ? `${log.user.first_name || ''} ${log.user.last_name || ''}`.trim()
-        : 'System';
+      const userName = log.user ? `${log.user.first_name || ''} ${log.user.last_name || ''}`.trim() : 'System';
       return {
         timestamp: new Date(log.created_at).toLocaleString(),
         userName,
+        role: log.role || '',
         action: log.action || '',
-        resource: log.resource || log.entity_type || '',
+        entity_type: log.entity_type || '',
+        entity_id: log.entity_id || '',
+        field_name: log.field_name || '',
+        old_value: typeof log.old_value === 'object' ? JSON.stringify(log.old_value) : (log.old_value || ''),
+        new_value: typeof log.new_value === 'object' ? JSON.stringify(log.new_value) : (log.new_value || ''),
         ip: log.ip_address || '',
         status: log.status || '',
-        details: log.details || '',
       };
     });
 

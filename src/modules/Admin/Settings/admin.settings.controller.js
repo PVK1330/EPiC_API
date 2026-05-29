@@ -7,6 +7,7 @@ import path from 'path';
 import { ROLES } from '../../../middlewares/role.middleware.js';
 import platformDb from '../../../models/index.js';
 import { toPublicAssetUrl } from '../../../services/stripeTenant.service.js';
+import { normalizeStorageRelativePath } from '../../../utils/storagePath.util.js';
 import { seedTenantOrganisation } from '../../../services/tenantSeed.service.js';
 import logger from '../../../utils/logger.js';
 
@@ -1245,7 +1246,10 @@ export const uploadOrganisationLogo = async (req, res) => {
       return res.status(400).json({ status: "error", message: "Logo file is required" });
     }
 
-    const relativePath = req.file.path.replace(/\\/g, "/");
+    const relativePath = normalizeStorageRelativePath(req.file.path);
+    if (!relativePath) {
+      return res.status(400).json({ status: "error", message: "Could not resolve logo storage path" });
+    }
 
     await req.tenantDb.Organisation.update({ logoUrl: relativePath }, { where: { id: orgId } });
 

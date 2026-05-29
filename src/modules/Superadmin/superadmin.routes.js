@@ -64,6 +64,7 @@ router.get('/financials/export', invoiceController.exportFinancials);
 
 router.get('/transactions', paymentController.getAllTransactions);
 router.get('/transactions/:id', paymentController.getTransactionById);
+router.get('/payments/reconciliation', paymentController.getPaymentReconciliation);
 router.get('/gateway/status', paymentController.getGatewayStatus);
 router.post('/gateway/configure', paymentController.configureGateway);
 router.get('/dashboard/stats', paymentController.getDashboardStats);

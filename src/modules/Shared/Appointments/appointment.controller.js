@@ -4,6 +4,8 @@ import logger from '../../../utils/logger.js';
 import { sendAppointmentEmail } from '../../../services/email.service.js';
 import { generateAppointmentTemplate } from '../../../utils/emailTemplates.js';
 import { ROLES, hasFullAccessRole } from '../../../middlewares/role.middleware.js';
+import { syncAppointmentToMicrosoft, updateAppointmentInMicrosoft, cancelAppointmentInMicrosoft } from '../Integrations/microsoft/microsoftWorkflow.service.js';
+import { syncAppointmentToGoogle, updateAppointmentInGoogle, cancelAppointmentInGoogle } from '../Integrations/google/googleWorkflow.service.js';
 
 // Get appointments for the current user; admins see all appointments
 export const getMyAppointments = async (req, res) => {
@@ -162,6 +164,22 @@ export const createAppointment = async (req, res) => {
       }
     }
 
+    // --- Microsoft Integration ---
+    try {
+      const allStaffProfiles = await req.tenantDb.User.findAll({ where: { id: allStaffIds } });
+      await syncAppointmentToMicrosoft(req.tenantDb, appointment, candidate, allStaffProfiles);
+    } catch (err) {
+      logger.error({ err }, "Failed to trigger Microsoft Integration");
+    }
+
+    // --- Google Integration ---
+    try {
+      const allStaffProfiles = await req.tenantDb.User.findAll({ where: { id: allStaffIds } });
+      await syncAppointmentToGoogle(req.tenantDb, appointment, candidate, allStaffProfiles);
+    } catch (err) {
+      logger.error({ err }, "Failed to trigger Google Integration");
+    }
+
     res.status(201).json({
       status: "success",
       message: "Appointment created successfully",
@@ -235,6 +253,10 @@ export const updateAppointmentStatus = async (req, res) => {
     appointment.status = status;
     await appointment.save();
 
+    // Trigger update sync if status means rescheduling or some change? Wait, standard updating of time/date usually goes here or another endpoint. Assuming `updateAppointmentStatus` or similar. We will just fire update.
+    await updateAppointmentInMicrosoft(req.tenantDb, appointment);
+    await updateAppointmentInGoogle(req.tenantDb, appointment);
+
     res.status(200).json({
       status: "success",
       message: "Appointment status updated successfully",
@@ -274,7 +296,13 @@ export const deleteAppointment = async (req, res) => {
       });
     }
 
+    const hostId = appointment.caseworker_id;
+    const appointmentId = appointment.id;
+
     await appointment.destroy();
+
+    await cancelAppointmentInMicrosoft(req.tenantDb, hostId, appointmentId);
+    await cancelAppointmentInGoogle(req.tenantDb, hostId, appointmentId);
 
     res.status(200).json({
       status: "success",

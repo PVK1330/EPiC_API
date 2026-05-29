@@ -626,23 +626,77 @@ export const handleWebhook = async (req, res) => {
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
-  const { tenantDb } = await resolveTenantDbFromStripeObject(event.data?.object || {});
+  const { tenantDb, organisationId } = await resolveTenantDbFromStripeObject(event.data?.object || {});
 
+  // Idempotency: Duplicate Check
+  const existingEvent = await platformDb.StripeWebhookEvent.findOne({ where: { event_id: event.id } });
+  if (existingEvent) {
+    return res.json({ received: true, duplicate: true });
+  }
+
+  const webhookEventRecord = await platformDb.StripeWebhookEvent.create({
+    event_id: event.id,
+    event_type: event.type,
+    stripe_account_id: event.account || null,
+    tenant_id: organisationId || null,
+    processing_status: 'pending',
+  });
+
+  try {
+    await processStripeWebhookEvent(event, tenantDb, req);
+    
+    webhookEventRecord.processing_status = 'processed';
+    webhookEventRecord.processed_at = new Date();
+    await webhookEventRecord.save();
+    
+    return res.json({ received: true });
+  } catch (processErr) {
+    logger.error({ err: processErr, eventId: event.id }, "Webhook processing failed, pushing to retry queue");
+    
+    webhookEventRecord.processing_status = 'failed';
+    webhookEventRecord.error_message = processErr.message;
+    await webhookEventRecord.save();
+
+    await platformDb.PaymentWebhookRetryQueue.create({
+      event_id: event.id,
+      payload: event,
+      error_reason: processErr.message,
+      next_retry_at: new Date(Date.now() + 5 * 60 * 1000), // Retry in 5 minutes
+    });
+
+    // Return 200 to Stripe so it doesn't immediately backoff. We handle retries internally.
+    return res.json({ received: true, queued_for_retry: true });
+  }
+};
+
+const processStripeWebhookEvent = async (event, tenantDb, req) => {
   switch (event.type) {
     // Payment Events
     case "payment_intent.succeeded": {
       const paymentIntent = event.data.object;
       logger.info({ paymentIntentId: paymentIntent.id }, "PaymentIntent was successful");
       if (paymentIntent.metadata?.userId) {
-        try {
-          const userId = Number(paymentIntent.metadata.userId);
-          await finalizeStripePaymentForUser({
-            userId,
-            paymentIntent,
-            caseRef: paymentIntent.metadata.caseId,
+        const userId = Number(paymentIntent.metadata.userId);
+        const result = await finalizeStripePaymentForUser({
+          userId,
+          paymentIntent,
+          caseRef: paymentIntent.metadata.caseId,
+        });
+
+        if (result?.caseRecord && tenantDb) {
+          await tenantDb.CaseTimeline.create({
+            caseId: result.caseRecord.id,
+            action: 'PAYMENT_RECEIVED',
+            message: `Payment of £${paymentIntent.amount / 100} received successfully`,
+            performedBy: userId,
           });
-        } catch (notifErr) {
-          logger.error({ err: notifErr }, "Failed to record payment_intent.succeeded");
+          await tenantDb.AuditLog.create({
+            user_id: userId,
+            action: 'PAYMENT_SUCCEEDED',
+            details: `Payment intent ${paymentIntent.id} succeeded for £${paymentIntent.amount / 100} ${paymentIntent.currency.toUpperCase()}`,
+            ip_address: req.ip || req.connection?.remoteAddress,
+            status: 'Success'
+          });
         }
       }
       break;
@@ -651,22 +705,18 @@ export const handleWebhook = async (req, res) => {
     case "checkout.session.completed": {
       const session = event.data.object;
       if (session.payment_status === "paid" && session.metadata?.userId) {
-        try {
-          const userId = Number(session.metadata.userId);
-          const ctx = tenantDb
-            ? { stripe: (await getStripeForTenant(tenantDb)).stripe }
-            : null;
-          const paymentIntentId = session.payment_intent;
-          if (paymentIntentId && ctx?.stripe) {
-            const paymentIntent = await ctx.stripe.paymentIntents.retrieve(paymentIntentId);
-            await finalizeStripePaymentForUser({
-              userId,
-              paymentIntent,
-              caseRef: session.metadata.caseId,
-            });
-          }
-        } catch (err) {
-          logger.error({ err }, "Failed to record checkout.session.completed");
+        const userId = Number(session.metadata.userId);
+        const ctx = tenantDb
+          ? { stripe: (await getStripeForTenant(tenantDb)).stripe }
+          : null;
+        const paymentIntentId = session.payment_intent;
+        if (paymentIntentId && ctx?.stripe) {
+          const paymentIntent = await ctx.stripe.paymentIntents.retrieve(paymentIntentId);
+          await finalizeStripePaymentForUser({
+            userId,
+            paymentIntent,
+            caseRef: session.metadata.caseId,
+          });
         }
       }
       break;
@@ -675,16 +725,31 @@ export const handleWebhook = async (req, res) => {
     case "payment_intent.payment_failed": {
       const failedPayment = event.data.object;
       if (tenantDb && failedPayment.metadata?.userId) {
-        await notifyCandidatePaymentEvent(
-          tenantDb,
-          Number(failedPayment.metadata.userId),
-          {
-            title: "Payment failed",
-            message:
-              failedPayment.last_payment_error?.message ||
-              "Your card payment could not be completed. Please try again or use another method.",
-          },
-        );
+        const userId = Number(failedPayment.metadata.userId);
+        const failReason = failedPayment.last_payment_error?.message || "Insufficient funds or declined";
+        
+        await notifyCandidatePaymentEvent(tenantDb, userId, {
+          title: "Payment failed",
+          message: failReason,
+        });
+
+        const caseIdNumeric = failedPayment.metadata.numericCaseId ? parseInt(failedPayment.metadata.numericCaseId, 10) : null;
+        if (caseIdNumeric) {
+          await tenantDb.CaseTimeline.create({
+            caseId: caseIdNumeric,
+            action: 'PAYMENT_FAILED',
+            message: `Payment failed due to: ${failReason}`,
+            performedBy: userId,
+          });
+        }
+
+        await tenantDb.AuditLog.create({
+          user_id: userId,
+          action: 'PAYMENT_FAILED',
+          details: `Payment intent ${failedPayment.id} failed: ${failReason}`,
+          ip_address: req.ip || req.connection?.remoteAddress,
+          status: 'Failed'
+        });
       }
       break;
     }
@@ -705,16 +770,51 @@ export const handleWebhook = async (req, res) => {
       break;
     }
 
+    case "charge.refunded": {
+      const charge = event.data.object;
+      if (tenantDb && charge.metadata?.userId) {
+        const userId = Number(charge.metadata.userId);
+        const refundAmount = charge.amount_refunded / 100;
+        
+        await notifyCandidatePaymentEvent(tenantDb, userId, {
+          title: "Refund Issued",
+          message: `A refund of £${refundAmount} has been issued to your original payment method.`,
+          type: NotificationTypes.SUCCESS,
+        });
+
+        const caseIdNumeric = charge.metadata.numericCaseId ? parseInt(charge.metadata.numericCaseId, 10) : null;
+        if (caseIdNumeric) {
+          const caseRecord = await tenantDb.Case.findByPk(caseIdNumeric);
+          if (caseRecord) {
+            const newPaid = Math.max(0, (Number(caseRecord.paidAmount) || 0) - refundAmount);
+            await caseRecord.update({ paidAmount: newPaid, amountStatus: newPaid < Number(caseRecord.totalAmount) ? 'Pending' : caseRecord.amountStatus });
+            
+            await tenantDb.CaseTimeline.create({
+              caseId: caseIdNumeric,
+              action: 'PAYMENT_REFUNDED',
+              message: `Refund issued for £${refundAmount}`,
+              performedBy: userId,
+            });
+          }
+        }
+
+        await tenantDb.AuditLog.create({
+          user_id: userId,
+          action: 'PAYMENT_REFUNDED',
+          details: `Refund of £${refundAmount} processed for charge ${charge.id}`,
+          ip_address: req.ip || req.connection?.remoteAddress,
+          status: 'Success'
+        });
+      }
+      break;
+    }
+
     case "invoice.payment_succeeded": {
       const successInvoice = event.data.object;
       if (tenantDb && successInvoice.subscription) {
-        try {
-          const { stripe } = await getStripeForTenant(tenantDb);
-          const sub = await stripe.subscriptions.retrieve(successInvoice.subscription);
-          await syncSubscriptionToCandidate(tenantDb, sub);
-        } catch (err) {
-          logger.error({ err }, "invoice.payment_succeeded");
-        }
+        const { stripe } = await getStripeForTenant(tenantDb);
+        const sub = await stripe.subscriptions.retrieve(successInvoice.subscription);
+        await syncSubscriptionToCandidate(tenantDb, sub);
       }
       break;
     }
@@ -749,18 +849,99 @@ export const handleWebhook = async (req, res) => {
       break;
     }
 
-    case "customer.subscription.created": {
-      const createdSubscription = event.data.object;
-      if (tenantDb) {
-        await syncSubscriptionToCandidate(tenantDb, createdSubscription);
+    case "customer.created":
+    case "customer.updated": {
+      const customer = event.data.object;
+      logger.info({ customerId: customer.id, email: customer.email }, "Customer created or updated");
+      if (tenantDb && customer.metadata?.userId) {
+        const userId = Number(customer.metadata.userId);
+        await tenantDb.AuditLog.create({
+          user_id: userId,
+          action: event.type === 'customer.created' ? 'CUSTOMER_CREATED' : 'CUSTOMER_UPDATED',
+          details: `Stripe customer profile ${customer.id} synced`,
+          ip_address: req.ip || req.connection?.remoteAddress,
+          status: 'Success'
+        });
       }
       break;
     }
 
+    case "customer.deleted": {
+      const deletedCustomer = event.data.object;
+      logger.info({ customerId: deletedCustomer.id }, "Customer deleted");
+      if (tenantDb && deletedCustomer.metadata?.userId) {
+        const userId = Number(deletedCustomer.metadata.userId);
+        await tenantDb.AuditLog.create({
+          user_id: userId,
+          action: 'CUSTOMER_DELETED',
+          details: `Stripe customer profile ${deletedCustomer.id} deleted`,
+          ip_address: req.ip || req.connection?.remoteAddress,
+          status: 'Success'
+        });
+      }
+      break;
+    }
+
+    // Setup Intent Events
+    case "setup_intent.created":
+      break;
+
+    case "setup_intent.succeeded": {
+      const succeededSetup = event.data.object;
+      if (tenantDb && succeededSetup.metadata?.userId) {
+        const userId = Number(succeededSetup.metadata.userId);
+        await notifyCandidatePaymentEvent(tenantDb, userId, {
+          title: "Payment method saved",
+          message: "Your new payment method has been verified and saved successfully.",
+          type: NotificationTypes.SUCCESS,
+        });
+
+        const caseIdNumeric = succeededSetup.metadata.numericCaseId ? parseInt(succeededSetup.metadata.numericCaseId, 10) : null;
+        if (caseIdNumeric) {
+          await tenantDb.CaseTimeline.create({
+            caseId: caseIdNumeric,
+            action: 'PAYMENT_METHOD_SETUP',
+            message: `Payment method setup successful`,
+            performedBy: userId,
+          });
+        }
+
+        await tenantDb.AuditLog.create({
+          user_id: userId,
+          action: 'SETUP_INTENT_SUCCEEDED',
+          details: `Setup intent ${succeededSetup.id} succeeded`,
+          ip_address: req.ip || req.connection?.remoteAddress,
+          status: 'Success'
+        });
+      }
+      break;
+    }
+
+    case "setup_intent.failed": {
+      const failedSetup = event.data.object;
+      if (tenantDb && failedSetup.metadata?.userId) {
+        const userId = Number(failedSetup.metadata.userId);
+        await notifyCandidatePaymentEvent(tenantDb, userId, {
+          title: "Payment method failed",
+          message: failedSetup.last_setup_error?.message || "We could not verify your payment method.",
+        });
+
+        await tenantDb.AuditLog.create({
+          user_id: userId,
+          action: 'SETUP_INTENT_FAILED',
+          details: `Setup intent ${failedSetup.id} failed: ${failedSetup.last_setup_error?.message}`,
+          ip_address: req.ip || req.connection?.remoteAddress,
+          status: 'Failed'
+        });
+      }
+      break;
+    }
+
+    case "customer.subscription.created":
     case "customer.subscription.updated": {
-      const updatedSubscription = event.data.object;
+      const subscription = event.data.object;
       if (tenantDb) {
-        await syncSubscriptionToCandidate(tenantDb, updatedSubscription);
+        await syncSubscriptionToCandidate(tenantDb, subscription);
       }
       break;
     }
@@ -799,49 +980,9 @@ export const handleWebhook = async (req, res) => {
       break;
     }
 
-    // Customer Events
-    case "customer.created":
-      const customer = event.data.object;
-      logger.info({ customerId: customer.id }, "Customer created");
-      // TODO: Handle new customer creation
-      break;
-
-    case "customer.updated":
-      const updatedCustomer = event.data.object;
-      logger.info({ customerId: updatedCustomer.id }, "Customer updated");
-      // TODO: Handle customer updates
-      break;
-
-    case "customer.deleted":
-      const deletedCustomer = event.data.object;
-      logger.info({ customerId: deletedCustomer.id }, "Customer deleted");
-      // TODO: Handle customer deletion
-      break;
-
-    // Setup Intent Events
-    case "setup_intent.created":
-      const setupIntent = event.data.object;
-      logger.info({ setupIntentId: setupIntent.id }, "Setup intent created");
-      break;
-
-    case "setup_intent.succeeded":
-      const succeededSetup = event.data.object;
-      logger.info({ setupIntentId: succeededSetup.id }, "Setup intent succeeded");
-      // TODO: Handle successful setup intent
-      break;
-
-    case "setup_intent.failed":
-      const failedSetup = event.data.object;
-      logger.info({ setupIntentId: failedSetup.id }, "Setup intent failed");
-      // TODO: Handle failed setup intent
-      break;
-
     default:
       logger.info({ eventType: event.type }, "Unhandled event type");
   }
-
-  // Return a 200 response to acknowledge receipt of the event
-  res.json({ received: true });
 };
 
 // Refund Payment

@@ -2,6 +2,7 @@ import logger from '../../../utils/logger.js';
 import { sendTransactionalEmail } from '../../../services/mail.service.js';
 import { generateNotificationEmailTemplate } from '../../../utils/emailTemplates.js';
 import { notifyAdmins, notifyUser, NotificationTypes, NotificationPriority } from '../../../services/notification.service.js';
+import { validateTransition, WORKFLOW_TYPES } from '../../../services/workflowEngine.service.js';
 
 /**
  * Notification matrix for Licence Documents (Sponsor side)
@@ -164,6 +165,16 @@ export const updateLicenceApplication = async (req, res) => {
         // Sanitize date fields
         if (updateData.proposedStartDate === '' || updateData.proposedStartDate === 'Invalid date') {
             updateData.proposedStartDate = null;
+        }
+
+        if (updateData.status && updateData.status !== application.status) {
+            const validation = validateTransition(WORKFLOW_TYPES.LICENCE, application.status, updateData.status);
+            if (!validation.valid) {
+                return res.status(400).json({
+                    status: 'error',
+                    message: `Invalid state transition: ${validation.message}`
+                });
+            }
         }
 
         await application.update(updateData);

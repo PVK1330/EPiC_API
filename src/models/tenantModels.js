@@ -54,6 +54,12 @@ import RightToWorkRecordModel from "./tenant/rightToWorkRecord.model.js";
 import AbsenceRecordModel from "./tenant/absenceRecord.model.js";
 import SmsActivityLogModel from "./tenant/smsActivityLog.model.js";
 import ComplianceDocumentModel from "./tenant/complianceDocument.model.js";
+import CalendarConnectionModel from "./tenant/calendarConnection.model.js";
+import ChangeRequestModel from "./tenant/changeRequest.model.js";
+import ChangeRequestHistoryModel from "./tenant/changeRequestHistory.model.js";
+import IntegrationSyncLogModel from "./tenant/integrationSyncLog.model.js";
+import MeetingIntegrationModel from "./tenant/meetingIntegration.model.js";
+import IntegrationRetryQueueModel from "./tenant/integrationRetryQueue.model.js";
 
 /**
  * Register all models and associations on a Sequelize instance (main or tenant DB).
@@ -116,6 +122,12 @@ export function buildDb(sequelize) {
   db.AbsenceRecord = AbsenceRecordModel(sequelize, Sequelize.DataTypes);
   db.SmsActivityLog = SmsActivityLogModel(sequelize, Sequelize.DataTypes);
   db.ComplianceDocument = ComplianceDocumentModel(sequelize, Sequelize.DataTypes);
+  db.CalendarConnection = CalendarConnectionModel(sequelize, Sequelize.DataTypes);
+  db.ChangeRequest = ChangeRequestModel(sequelize, Sequelize.DataTypes);
+  db.ChangeRequestHistory = ChangeRequestHistoryModel(sequelize, Sequelize.DataTypes);
+  db.IntegrationSyncLog = IntegrationSyncLogModel(sequelize, Sequelize.DataTypes);
+  db.MeetingIntegration = MeetingIntegrationModel(sequelize, Sequelize.DataTypes);
+  db.IntegrationRetryQueue = IntegrationRetryQueueModel(sequelize, Sequelize.DataTypes);
 
   // Associations (Same as before)
   db.Conversation.belongsTo(db.User, { foreignKey: "participantOneId", as: "participantOne" });
@@ -217,6 +229,8 @@ export function buildDb(sequelize) {
   db.LicenceApplication.belongsTo(db.User, { foreignKey: "userId", as: "user" });
   db.CalendarMeeting.belongsTo(db.User, { foreignKey: "user_id", as: "user" });
   db.User.hasMany(db.CalendarMeeting, { foreignKey: "user_id", as: "calendarMeetings" });
+  db.CalendarConnection.belongsTo(db.User, { foreignKey: "user_id", as: "user" });
+  db.User.hasMany(db.CalendarConnection, { foreignKey: "user_id", as: "calendarConnections" });
   db.Organisation.hasMany(db.User, { foreignKey: "organisation_id", as: "users" });
   db.User.belongsTo(db.Organisation, { foreignKey: "organisation_id", as: "organisation" });
   db.Organisation.hasMany(db.Case, { foreignKey: "organisation_id", as: "cases" });
@@ -263,6 +277,22 @@ export function buildDb(sequelize) {
   db.ComplianceDocument.belongsTo(db.User, { foreignKey: "sponsorId", as: "sponsor" });
   db.ComplianceDocument.belongsTo(db.User, { foreignKey: "reviewedBy", as: "reviewer" });
   db.ComplianceDocument.belongsTo(db.Organisation, { foreignKey: "organisationId", as: "organisation" });
+
+  db.ChangeRequest.belongsTo(db.User, { foreignKey: "submitted_by", as: "submitter" });
+  db.ChangeRequest.belongsTo(db.User, { foreignKey: "reviewed_by", as: "reviewer" });
+  db.ChangeRequest.belongsTo(db.Case, { foreignKey: "case_id", as: "case" });
+  db.ChangeRequest.belongsTo(db.Organisation, { foreignKey: "organisation_id", as: "organisation" });
+  db.ChangeRequest.hasMany(db.ChangeRequestHistory, { foreignKey: "change_request_id", as: "history" });
+  db.ChangeRequestHistory.belongsTo(db.ChangeRequest, { foreignKey: "change_request_id", as: "changeRequest" });
+  db.ChangeRequestHistory.belongsTo(db.User, { foreignKey: "performed_by", as: "performer" });
+
+  db.IntegrationSyncLog.belongsTo(db.User, { foreignKey: "user_id", as: "user" });
+  db.User.hasMany(db.IntegrationSyncLog, { foreignKey: "user_id", as: "syncLogs" });
+
+  db.MeetingIntegration.belongsTo(db.Appointment, { foreignKey: "appointment_id", as: "appointment" });
+  db.Appointment.hasMany(db.MeetingIntegration, { foreignKey: "appointment_id", as: "integrations" });
+
+  db.IntegrationRetryQueue.belongsTo(db.User, { foreignKey: "user_id", as: "user" });
 
   return db;
 }
