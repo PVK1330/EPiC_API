@@ -8,6 +8,7 @@ import {
   NotificationPriority,
 } from "./notification.service.js";
 import { localDateStr } from "../utils/dateHelpers.js";
+import logger from "../utils/logger.js";
 
 const VISA_ALERT_DAYS = [120, 90, 60, 30];
 
@@ -60,7 +61,7 @@ const notifyCaseworkersAndAdmins = async ({
       sendEmail: true,
     });
   } catch (err) {
-    console.error("Failed to notify admins for compliance alert:", err);
+    logger.error({ err }, "Failed to notify admins for compliance alert");
   }
 
   for (const caseworkerId of caseworkerIds) {
@@ -78,7 +79,7 @@ const notifyCaseworkersAndAdmins = async ({
         organisationId,
       });
     } catch (err) {
-      console.error(`Failed to notify caseworker ${caseworkerId} for compliance alert:`, err);
+      logger.error({ err, caseworkerId }, "Failed to notify caseworker for compliance alert");
     }
   }
 };
@@ -271,7 +272,7 @@ const checkSponsorChangeRequestDeadlines = async (tenantDb, organisationId, toda
         sendEmail: true,
       });
     } catch (err) {
-      console.error("Failed to notify admins for sponsor change request alert:", err);
+      logger.error({ err }, "Failed to notify admins for sponsor change request alert");
     }
 
     if (request.sponsorId) {
@@ -292,7 +293,7 @@ const checkSponsorChangeRequestDeadlines = async (tenantDb, organisationId, toda
           organisationId,
         });
       } catch (err) {
-        console.error(`Failed to notify sponsor ${request.sponsorId} for change request alert:`, err);
+        logger.error({ err, sponsorId: request.sponsorId }, "Failed to notify sponsor for change request alert");
       }
     }
   }
@@ -343,14 +344,15 @@ export async function runComplianceAlerts() {
         changeRequestAlerts += result.changeRequestAlerts;
         organisationsProcessed += 1;
       } catch (err) {
-        console.error(`Compliance alerts failed for org ${org.id}:`, err);
+        logger.error({ err, organisationId: org.id }, "Compliance alerts failed for org");
       }
     }
 
-    console.log(
-      `✔ Compliance alerts completed: ${organisationsProcessed} organisations, ${visaAlerts} visa alerts, ${workerEventAlerts} worker event alerts, ${rtwAlerts} RTW alerts, ${changeRequestAlerts} change request alerts`,
+    logger.info(
+      { organisationsProcessed, visaAlerts, workerEventAlerts, rtwAlerts, changeRequestAlerts },
+      "Compliance alerts completed",
     );
   } catch (error) {
-    console.error("Compliance alerts check failed:", error);
+    logger.error({ err: error }, "Compliance alerts check failed");
   }
 }

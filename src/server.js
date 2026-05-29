@@ -2,6 +2,14 @@
 process.env.TZ = process.env.TZ || "Asia/Kolkata";
 
 import "dotenv/config";
+
+// ── CRITICAL: Validate mandatory env vars BEFORE anything else ────────────────
+// NOTE: validateRequiredEnv still uses console.* because it runs BEFORE the
+// logger is initialised (the logger itself depends on env vars being valid).
+import { validateRequiredEnv } from "./utils/validateEnv.js";
+validateRequiredEnv();
+
+import logger from "./utils/logger.js";
 import app from "./app.js";
 import platformDb from "./models/index.js";
 import { seedPlans } from "./seeders/plan.seeder.js";
@@ -44,7 +52,7 @@ async function ensureOrganisationTenantDatabase(org) {
 
   const { created } = await ensureTenantPostgresDatabase(databaseName);
   if (created) {
-    console.log(`✔ Created tenant database: ${databaseName}`);
+    logger.info({ databaseName }, 'Created tenant database');
   }
 
   await syncTenantDatabaseSchema(databaseName);
@@ -61,22 +69,22 @@ async function bootstrapPlatform() {
       process.env.DB_NAME,
       "epic_central",
     );
-    console.log(`Ensuring Platform Database exists: ${centralDbName}...`);
+    logger.info({ centralDbName }, 'Ensuring platform database exists');
     const dbResult = await createTenantPostgresDatabase(centralDbName);
     if (dbResult.created) {
-      console.log(`✔ Created new platform database: ${centralDbName}`);
+      logger.info({ centralDbName }, 'Created new platform database');
     } else {
-      console.log(`✔ Platform database verified: ${centralDbName}`);
+      logger.info({ centralDbName }, 'Platform database verified');
     }
 
     await platformDb.sequelize.authenticate();
-    console.log("Platform database connected");
+    logger.info('Platform database connected');
 
     await platformDb.sequelize.sync();
-    console.log("✔ Platform schema synchronized");
+    logger.info('Platform schema synchronized');
 
     await runPlatformMigrations();
-    console.log("✔ Platform SQL migrations applied");
+    logger.info('Platform SQL migrations applied');
 
     await seedRolesForDb(platformDb);
     await seedPermissionsForDb(platformDb);
@@ -109,18 +117,16 @@ async function bootstrapPlatform() {
       try {
         const tenantDb = await ensureOrganisationTenantDatabase(org);
         await ensureAdminHasAllPermissions(tenantDb);
-        console.log(`✔ Tenant DB ready: ${org.slug} (${org.database_name})`);
+        logger.info({ orgSlug: org.slug, databaseName: org.database_name }, 'Tenant DB ready');
       } catch (err) {
-        console.error(
-          `Tenant provision failed for org ${org.id}:`,
-          err.message,
-        );
+        logger.error({ err, orgId: org.id }, 'Tenant provision failed');
       }
     }
 
     logCorsConfiguration();
-    console.log(
-      `Timezone: ${process.env.TZ} (${new Date().toString().match(/\((.+)\)/)?.[1] || "—"})`,
+    logger.info(
+      { timezone: process.env.TZ },
+      `Timezone configured`,
     );
 
     const server = http.createServer(app);
@@ -147,14 +153,12 @@ async function bootstrapPlatform() {
     runComplianceAlerts();
 
     server.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
+      logger.info({ port: PORT }, 'Server started');
     });
   } catch (err) {
-    console.error("Failed to bootstrap EPiC project:", err);
+    logger.fatal({ err }, 'Failed to bootstrap EPiC project');
     process.exit(1);
   }
 }
 
 bootstrapPlatform();
-
-//test

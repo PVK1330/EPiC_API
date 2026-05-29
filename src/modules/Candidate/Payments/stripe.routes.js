@@ -13,6 +13,7 @@ router.use(verifyToken, attachTenantDb);
 // Case fee checkout (after admin approves CCL)
 router.post("/create-checkout-session", stripeController.createCaseCheckoutSession);
 router.get("/verify-session/:session_id", stripeController.verifyCheckoutSession);
+router.post("/export-invoice-receipt-pdf", stripeController.exportInvoiceReceiptPdf);
 
 // Payment Intent Routes
 router.post("/create-payment-intent", stripeController.createPaymentIntent);

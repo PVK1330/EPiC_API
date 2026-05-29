@@ -1,3 +1,5 @@
+import logger from '../../../utils/logger.js';
+
 const addDays = (dateString, days) => {
   const date = new Date(dateString);
   let count = 0;
@@ -51,7 +53,7 @@ export const createChangeRequest = async (req, res) => {
 
     return res.status(201).json({ status: "success", data: newRequest });
   } catch (error) {
-    console.error("Error creating sponsor change request:", error);
+    logger.error({ err: error }, "Error creating sponsor change request");
     return res.status(500).json({ status: "error", message: "Internal server error" });
   }
 };
@@ -79,7 +81,7 @@ export const getChangeRequestsBySponsor = async (req, res) => {
 
     return res.status(200).json({ status: "success", data });
   } catch (error) {
-    console.error("Error fetching sponsor change requests:", error);
+    logger.error({ err: error }, "Error fetching sponsor change requests");
     return res.status(500).json({ status: "error", message: "Internal server error" });
   }
 };
@@ -111,7 +113,7 @@ export const updateChangeRequestStatus = async (req, res) => {
 
     return res.status(200).json({ status: "success", data: request });
   } catch (error) {
-    console.error("Error updating sponsor change request:", error);
+    logger.error({ err: error }, "Error updating sponsor change request");
     return res.status(500).json({ status: "error", message: "Internal server error" });
   }
 };

@@ -1,5 +1,6 @@
 import { Op } from 'sequelize';
 import { ROLES } from '../../../middlewares/role.middleware.js';
+import logger from '../../../utils/logger.js';
 
 function getUserId(req) {
   return req.user?.userId ?? req.user?.id;
@@ -33,7 +34,7 @@ export const listPetitionTypes = async (req, res) => {
       data: { petition_types: rows.map((r) => ({ id: r.id, name: r.name, sort_order: r.sort_order })) },
     });
   } catch (error) {
-    console.error("listPetitionTypes error:", error);
+    logger.error({ err: error }, "listPetitionTypes error");
     res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
   }
 };
@@ -63,7 +64,7 @@ export const createPetitionType = async (req, res) => {
       data: { petition_type: { id: row.id, name: row.name, sort_order: row.sort_order } },
     });
   } catch (error) {
-    console.error("createPetitionType error:", error);
+    logger.error({ err: error }, "createPetitionType error");
     if (error.name === "SequelizeUniqueConstraintError") {
       return res.status(400).json({ status: "error", message: "A petition type with this name already exists", data: null });
     }
@@ -107,7 +108,7 @@ export const updatePetitionType = async (req, res) => {
       data: { petition_type: { id: row.id, name: row.name, sort_order: row.sort_order } },
     });
   } catch (error) {
-    console.error("updatePetitionType error:", error);
+    logger.error({ err: error }, "updatePetitionType error");
     res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
   }
 };
@@ -126,7 +127,7 @@ export const deletePetitionType = async (req, res) => {
     await row.destroy();
     res.status(200).json({ status: "success", message: "Petition type deleted.", data: null });
   } catch (error) {
-    console.error("deletePetitionType error:", error);
+    logger.error({ err: error }, "deletePetitionType error");
     res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
   }
 };
@@ -148,7 +149,7 @@ export const dropdownPetitionType = async (req, res) => {
       data: { petition_types: rows },
     });
   } catch (error) {
-    console.error("dropdownPetitionType error:", error);
+    logger.error({ err: error }, "dropdownPetitionType error");
     res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
   }
 };

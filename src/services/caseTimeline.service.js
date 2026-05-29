@@ -1,3 +1,5 @@
+import logger from "../utils/logger.js";
+
 /**
  * Records a timeline entry for a case in the tenant database.
  */
@@ -27,7 +29,7 @@ export const recordTimelineEntry = async ({
       visibility,
     });
   } catch (error) {
-    console.error("Failed to record timeline entry:", error);
+    logger.error({ err: error }, "Failed to record timeline entry");
   }
 };
 

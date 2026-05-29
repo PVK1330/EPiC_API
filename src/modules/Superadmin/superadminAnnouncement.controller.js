@@ -1,4 +1,5 @@
 import { broadcastPlatformAnnouncement } from '../../services/announcement.service.js';
+import logger from '../../utils/logger.js';
 
 export const createPlatformAnnouncement = async (req, res) => {
   try {
@@ -39,7 +40,7 @@ export const createPlatformAnnouncement = async (req, res) => {
       data: { summary },
     });
   } catch (err) {
-    console.error('createPlatformAnnouncement error:', err);
+    logger.error({ err }, 'createPlatformAnnouncement error');
     return res.status(500).json({
       status: 'error',
       message: err.message || 'Failed to send announcement',

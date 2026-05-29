@@ -44,7 +44,7 @@ export const getCaseTimeline = async (req, res) => {
       data: timeline
     });
   } catch (error) {
-    console.error("Get Timeline Error:", error);
+    logger.error({ err: error }, "Get Timeline Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -123,7 +123,7 @@ export const createTimelineEntry = async (req, res) => {
       data: createdEntry
     });
   } catch (error) {
-    console.error("Create Timeline Entry Error:", error);
+    logger.error({ err: error }, "Create Timeline Entry Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -186,7 +186,7 @@ export const updateTimelineEntry = async (req, res) => {
       data: updatedEntry
     });
   } catch (error) {
-    console.error("Update Timeline Entry Error:", error);
+    logger.error({ err: error }, "Update Timeline Entry Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -230,7 +230,7 @@ export const deleteTimelineEntry = async (req, res) => {
       data: null
     });
   } catch (error) {
-    console.error("Delete Timeline Entry Error:", error);
+    logger.error({ err: error }, "Delete Timeline Entry Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",

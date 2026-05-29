@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   getCaseworkerPerformance,
   getCaseworkerActivityLog,
+  exportCaseworkerPerformance,
 } from './caseworkerPerformance.controller.js';
 import { verifyTokenAndTenant } from '../../../middlewares/authStack.middleware.js';
 import { checkRole, ROLES } from '../../../middlewares/role.middleware.js';
@@ -13,5 +14,6 @@ router.use(checkRole([ROLES.CASEWORKER, ROLES.ADMIN]));
 
 router.get("/performance", getCaseworkerPerformance);
 router.get("/activity-log", getCaseworkerActivityLog);
+router.get("/performance/export", exportCaseworkerPerformance);
 
 export default router;

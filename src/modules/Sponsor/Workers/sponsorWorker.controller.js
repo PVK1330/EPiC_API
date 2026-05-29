@@ -5,6 +5,7 @@ import crypto from 'crypto';
 import { generateCaseId } from '../../../utils/case.utils.js';
 import { notifyAdmins, createNotification, NotificationTypes, NotificationPriority } from '../../../services/notification.service.js';
 import { ROLES } from '../../../middlewares/role.middleware.js';
+import logger from '../../../utils/logger.js';
 
 const REQUIRED_DOCUMENT_KEYS = ['passport', 'visaCopy', 'cosCopy', 'contract', 'payslips'];
 
@@ -142,7 +143,7 @@ export const addSponsoredWorker = async (req, res) => {
         html: generateCredentialsTemplate(email, tempPassword, loginUrl),
       });
     } catch (mailErr) {
-      console.error('Failed to send credentials email:', mailErr);
+      logger.error({ err: mailErr }, 'Failed to send credentials email');
     }
 
     try {
@@ -159,12 +160,12 @@ export const addSponsoredWorker = async (req, res) => {
         metadata: { sponsorId, workerEmail: email, caseRef: caseId }
       });
     } catch (err) {
-      console.error('Failed to notify admins for sponsored worker add:', err);
+      logger.error({ err }, 'Failed to notify admins for sponsored worker add');
     }
 
   } catch (err) {
     await transaction.rollback();
-    console.error('addSponsoredWorker error:', err);
+    logger.error({ err }, 'addSponsoredWorker error');
     if (err?.name === 'SequelizeUniqueConstraintError') {
       return res.status(400).json({
         status: 'error',
@@ -238,7 +239,7 @@ export const getSponsoredWorkers = async (req, res) => {
       data: transformed
     });
   } catch (err) {
-    console.error('getSponsoredWorkers error:', err);
+    logger.error({ err }, 'getSponsoredWorkers error');
     res.status(500).json({
       status: 'error',
       message: 'Internal server error',
@@ -432,7 +433,7 @@ export const getEmployeeRecords = async (req, res) => {
       data: [...internalEmployees, ...workerEmployees]
     });
   } catch (err) {
-    console.error('getEmployeeRecords error:', err);
+    logger.error({ err }, 'getEmployeeRecords error');
     res.status(500).json({
       status: 'error',
       message: 'Internal server error',
@@ -520,7 +521,7 @@ export const getSponsoredWorkerDetails = async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('getSponsoredWorkerDetails error:', err);
+    logger.error({ err }, 'getSponsoredWorkerDetails error');
     res.status(500).json({
       status: 'error',
       message: 'Internal server error',
@@ -577,7 +578,7 @@ export const updateSponsoredWorker = async (req, res) => {
     res.status(200).json({ status: 'success', message: 'Worker updated successfully' });
   } catch (err) {
     await transaction.rollback();
-    console.error('updateSponsoredWorker error:', err);
+    logger.error({ err }, 'updateSponsoredWorker error');
     res.status(500).json({ status: 'error', message: 'Internal server error' });
   }
 };
@@ -612,7 +613,7 @@ export const deleteSponsoredWorker = async (req, res) => {
     res.status(200).json({ status: 'success', message: 'Worker removed successfully' });
   } catch (err) {
     await transaction.rollback();
-    console.error('deleteSponsoredWorker error:', err);
+    logger.error({ err }, 'deleteSponsoredWorker error');
     res.status(500).json({ status: 'error', message: 'Internal server error' });
   }
 };
@@ -657,7 +658,7 @@ export const updateWorkerStatus = async (req, res) => {
         sendEmail: false,
       });
     } catch (err) {
-      console.error('createNotification failed:', err);
+      logger.error({ err }, 'createNotification failed');
     }
 
     try {
@@ -671,7 +672,7 @@ export const updateWorkerStatus = async (req, res) => {
         entityType: 'case'
       });
     } catch (err) {
-      console.error('notifyAdmins failed:', err);
+      logger.error({ err }, 'notifyAdmins failed');
     }
 
     if (candidate?.email) {
@@ -690,12 +691,12 @@ export const updateWorkerStatus = async (req, res) => {
           })
         });
       } catch (err) {
-        console.error('Email failed:', err);
+        logger.error({ err }, 'Email failed');
       }
     }
 
   } catch (err) {
-    console.error('updateWorkerStatus error:', err);
+    logger.error({ err }, 'updateWorkerStatus error');
     res.status(500).json({ status: 'error', message: 'Internal server error' });
   }
 };
@@ -741,7 +742,7 @@ export const createAbsenceRecord = async (req, res) => {
 
     return res.status(201).json({ status: 'success', data: record });
   } catch (err) {
-    console.error('createAbsenceRecord error:', err);
+    logger.error({ err }, 'createAbsenceRecord error');
     return res.status(500).json({ status: 'error', message: 'Internal server error' });
   }
 };
@@ -769,7 +770,7 @@ export const getAbsenceByWorker = async (req, res) => {
 
     return res.status(200).json({ status: 'success', data: records });
   } catch (err) {
-    console.error('getAbsenceByWorker error:', err);
+    logger.error({ err }, 'getAbsenceByWorker error');
     return res.status(500).json({ status: 'error', message: 'Internal server error' });
   }
 };
@@ -800,7 +801,7 @@ export const updateAbsenceRecord = async (req, res) => {
 
     return res.status(200).json({ status: 'success', data: record });
   } catch (err) {
-    console.error('updateAbsenceRecord error:', err);
+    logger.error({ err }, 'updateAbsenceRecord error');
     return res.status(500).json({ status: 'error', message: 'Internal server error' });
   }
 };
@@ -830,7 +831,7 @@ export const createSmsLog = async (req, res) => {
 
     return res.status(201).json({ status: 'success', data: record });
   } catch (err) {
-    console.error('createSmsLog error:', err);
+    logger.error({ err }, 'createSmsLog error');
     return res.status(500).json({ status: 'error', message: 'Internal server error' });
   }
 };
@@ -853,7 +854,7 @@ export const getSmsLogsBySponsor = async (req, res) => {
 
     return res.status(200).json({ status: 'success', data: records });
   } catch (err) {
-    console.error('getSmsLogsBySponsor error:', err);
+    logger.error({ err }, 'getSmsLogsBySponsor error');
     return res.status(500).json({ status: 'error', message: 'Internal server error' });
   }
 };

@@ -10,6 +10,10 @@ import {
   syncUserToPlatformAndTenant,
 } from '../../../services/userSync.service.js';
 import { sendTenantSponsorWelcomeEmail } from '../../../services/tenantUserMail.service.js';
+import catchAsync from '../../../utils/catchAsync.js';
+import ApiResponse from '../../../utils/apiResponse.js';
+import { rowsToXlsxBuffer, sendXlsxDownload } from '../../../utils/excelExport.util.js';
+import logger from '../../../utils/logger.js';
 
 // Multer configuration for file upload
 const upload = multer({ storage: multer.memoryStorage() });
@@ -184,7 +188,7 @@ export const createSponsor = async (req, res) => {
         firstName: first_name,
       });
     } catch (emailError) {
-      console.error("Failed to send sponsor welcome email:", emailError);
+      logger.error({ err: emailError }, "Failed to send sponsor welcome email");
     }
 
     try {
@@ -196,7 +200,7 @@ export const createSponsor = async (req, res) => {
         last_name: sponsor.last_name,
       });
     } catch (notifError) {
-      console.error("Failed to send user creation notification:", notifError);
+      logger.error({ err: notifError }, "Failed to send user creation notification");
     }
 
     const { password: _, ...sponsorData } = sponsor.toJSON();
@@ -215,7 +219,7 @@ export const createSponsor = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Create Sponsor Error:", error);
+    logger.error({ err: error }, "Create Sponsor Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -286,7 +290,7 @@ export const getAllSponsors = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Get All Sponsors Error:", error);
+    logger.error({ err: error }, "Get All Sponsors Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -328,7 +332,7 @@ export const getSponsorById = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Get Sponsor by ID Error:", error);
+    logger.error({ err: error }, "Get Sponsor by ID Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -567,7 +571,7 @@ export const updateSponsor = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Update Sponsor Error:", error);
+    logger.error({ err: error }, "Update Sponsor Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -600,7 +604,7 @@ export const deleteSponsor = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Delete Sponsor Error:", error);
+    logger.error({ err: error }, "Delete Sponsor Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -667,7 +671,7 @@ export const resetSponsorPassword = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Reset Sponsor Password Error:", error);
+    logger.error({ err: error }, "Reset Sponsor Password Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -704,7 +708,7 @@ export const toggleSponsorStatus = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Toggle Sponsor Status Error:", error);
+    logger.error({ err: error }, "Toggle Sponsor Status Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -797,7 +801,7 @@ export const bulkImportSponsors = async (req, res) => {
             firstName: sponsor.first_name,
           });
         } catch (emailError) {
-          console.error(`Failed to send sponsor email to ${sponsor.email}:`, emailError);
+          logger.error({ err: emailError, email: sponsor.email }, 'Failed to send sponsor email');
         }
 
         try {
@@ -809,7 +813,7 @@ export const bulkImportSponsors = async (req, res) => {
             last_name: sponsor.last_name,
           });
         } catch (notifError) {
-          console.error(`Failed to send notification for ${sponsor.email}:`, notifError);
+          logger.error({ err: notifError, email: sponsor.email }, 'Failed to send notification');
         }
 
         results.success.push({
@@ -839,7 +843,7 @@ export const bulkImportSponsors = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Bulk Import Sponsors Error:", error);
+    logger.error({ err: error }, "Bulk Import Sponsors Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -849,8 +853,7 @@ export const bulkImportSponsors = async (req, res) => {
   }
 };
 
-// Export Sponsors to CSV
-export const exportSponsors = async (req, res) => {
+export const exportSponsors = catchAsync(async (req, res) => {
   try {
     const { search, status, licenceStatus, riskLevel } = req.query;
 
@@ -891,39 +894,39 @@ export const exportSponsors = async (req, res) => {
       order: [["createdAt", "DESC"]]
     });
 
-    // Generate CSV
-    const csvHeader = ['ID', 'First Name', 'Last Name', 'Email', 'Country Code', 'Mobile', 'Company Name', 'Licence Status', 'Risk Level', 'Role', 'Status', 'Created At'];
-    const csvRows = sponsors.map(sponsor => [
-      sponsor.id,
-      sponsor.first_name,
-      sponsor.last_name,
-      sponsor.email,
-      sponsor.country_code,
-      sponsor.mobile,
-      sponsor.sponsorProfile?.companyName || '',
-      sponsor.sponsorProfile?.licenceStatus || '',
-      sponsor.sponsorProfile?.riskLevel || '',
-      sponsor.role?.name || 'N/A',
-      sponsor.status,
-      sponsor.createdAt.toISOString()
-    ]);
+    const columns = [
+      { key: 'id', header: 'ID' },
+      { key: 'firstName', header: 'First Name' },
+      { key: 'lastName', header: 'Last Name' },
+      { key: 'email', header: 'Email' },
+      { key: 'countryCode', header: 'Country Code' },
+      { key: 'mobile', header: 'Mobile' },
+      { key: 'companyName', header: 'Company Name' },
+      { key: 'licenceStatus', header: 'Licence Status' },
+      { key: 'riskLevel', header: 'Risk Level' },
+      { key: 'role', header: 'Role' },
+      { key: 'status', header: 'Status' },
+      { key: 'createdAt', header: 'Created At' },
+    ];
 
-    const csvContent = [
-      csvHeader.join(','),
-      ...csvRows.map(row => row.map(cell => `"${cell}"`).join(','))
-    ].join('\n');
+    const rows = sponsors.map((sponsor) => ({
+      id: sponsor.id,
+      firstName: sponsor.first_name,
+      lastName: sponsor.last_name,
+      email: sponsor.email,
+      countryCode: sponsor.country_code,
+      mobile: sponsor.mobile,
+      companyName: sponsor.sponsorProfile?.companyName || '',
+      licenceStatus: sponsor.sponsorProfile?.licenceStatus || '',
+      riskLevel: sponsor.sponsorProfile?.riskLevel || '',
+      role: sponsor.role?.name || 'N/A',
+      status: sponsor.status,
+      createdAt: sponsor.createdAt ? sponsor.createdAt.toISOString() : '',
+    }));
 
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', 'attachment; filename="sponsors_export.csv"');
-    res.send(csvContent);
-
-  } catch (error) {
-    console.error("Export Sponsors Error:", error);
-    res.status(500).json({
-      status: "error",
-      message: "Internal server error",
-      data: null,
-      error: error.message
-    });
+    const buffer = rowsToXlsxBuffer(rows, columns);
+    sendXlsxDownload(res, buffer, 'sponsors_export.xlsx');
+  } catch (err) {
+    return ApiResponse.error(res, 'Failed to export sponsors', 500, err);
   }
-};
+});

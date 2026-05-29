@@ -7,6 +7,7 @@ import { Op, fn, col, literal } from 'sequelize';
 import { localDateStr } from '../../../utils/dateHelpers.js';
 import catchAsync from '../../../utils/catchAsync.js';
 import ApiResponse from '../../../utils/apiResponse.js';
+import { rowsToXlsxBuffer, sendXlsxDownload } from '../../../utils/excelExport.util.js';
 
 // ─── GET /admin/finance/summary ───────────────────────────────────────────────
 export const getFinanceSummary = catchAsync(async (req, res) => {
@@ -217,7 +218,7 @@ export const updateTransactionStatus = catchAsync(async (req, res) => {
   return ApiResponse.success(res, 'Transaction status updated', { payment });
 });
 
-// ─── GET /admin/finance/export/csv ───────────────────────────────────────────
+// ─── GET /admin/finance/export/xlsx ──────────────────────────────────────────
 export const exportTransactionsCsv = catchAsync(async (req, res) => {
   const { startDate, endDate, status } = req.query;
 
@@ -234,7 +235,7 @@ export const exportTransactionsCsv = catchAsync(async (req, res) => {
     where.created_at = range;
   }
 
-  const rows = await req.tenantDb.CasePayment.findAll({
+  const payments = await req.tenantDb.CasePayment.findAll({
     where,
     include: [{
       model:      req.tenantDb.Case,
@@ -249,29 +250,34 @@ export const exportTransactionsCsv = catchAsync(async (req, res) => {
     order: [['created_at', 'DESC']],
   });
 
-  const esc = (v) => `"${String(v || '').replace(/"/g, '""')}"`;
-  let csv = '\uFEFFDate,Invoice Number,Client,Case ID,Amount,Payment Method,Status,Description\n';
+  const columns = [
+    { key: 'date', header: 'Date' },
+    { key: 'invoiceNumber', header: 'Invoice Number' },
+    { key: 'client', header: 'Client' },
+    { key: 'caseId', header: 'Case ID' },
+    { key: 'amount', header: 'Amount' },
+    { key: 'paymentMethod', header: 'Payment Method' },
+    { key: 'status', header: 'Status' },
+    { key: 'description', header: 'Description' },
+  ];
 
-  rows.forEach(r => {
+  const rows = payments.map((r) => {
     const client = r.Case?.candidate
-      ? `${r.Case.candidate.first_name} ${r.Case.candidate.last_name}`
+      ? `${r.Case.candidate.first_name || ''} ${r.Case.candidate.last_name || ''}`.trim()
       : 'Unknown';
-    csv += [
-      esc(new Date(r.created_at).toLocaleDateString()),
-      esc(r.invoiceNumber),
-      esc(client),
-      esc(r.Case?.caseId || 'N/A'),
-      esc(parseFloat(r.amount).toFixed(2)),
-      esc(r.paymentMethod),
-      esc(r.paymentStatus),
-      esc(r.description),
-    ].join(',') + '\n';
+    return {
+      date: new Date(r.created_at).toLocaleDateString(),
+      invoiceNumber: r.invoiceNumber || '',
+      client,
+      caseId: r.Case?.caseId || 'N/A',
+      amount: parseFloat(r.amount).toFixed(2),
+      paymentMethod: r.paymentMethod || '',
+      status: r.paymentStatus || '',
+      description: r.description || '',
+    };
   });
 
-  res.setHeader('Content-Type', 'text/csv');
-  res.setHeader(
-    'Content-Disposition',
-    `attachment; filename=Finance_Export_${new Date().toISOString().slice(0, 10)}.csv`,
-  );
-  return res.status(200).send(csv);
+  const buffer = rowsToXlsxBuffer(rows, columns);
+  const filename = `Finance_Export_${new Date().toISOString().slice(0, 10)}.xlsx`;
+  sendXlsxDownload(res, buffer, filename);
 });

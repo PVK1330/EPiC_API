@@ -1,3 +1,4 @@
+import logger from '../../../utils/logger.js';
 import { Op, fn, col, literal } from 'sequelize';
 import { localDateStr } from '../../../utils/dateHelpers.js';
 import { multiSheetXlsxBuffer, sendXlsxDownload } from '../../../utils/excelExport.util.js';
@@ -139,7 +140,7 @@ export async function computeCaseAnalyticsData(req) {
        ORDER BY count DESC`,
       { type: req.tenantDb.Sequelize.QueryTypes.SELECT }
     ).catch((err) => {
-      console.error('VisaType Query Error:', err);
+      logger.error({ err }, 'VisaType Query Error');
       return [];
     }),
 
@@ -204,7 +205,7 @@ export const getCaseAnalytics = async (req, res) => {
       data,
     });
   } catch (error) {
-    console.error('getCaseAnalytics Error:', error);
+    logger.error({ err: error }, 'getCaseAnalytics Error');
     res.status(500).json({ status: 'error', message: error.message, data: null });
   }
 };
@@ -296,7 +297,7 @@ export const getWorkloadReport = async (req, res) => {
       data,
     });
   } catch (error) {
-    console.error('getWorkloadReport Error:', error);
+    logger.error({ err: error }, 'getWorkloadReport Error');
     res.status(500).json({ status: 'error', message: error.message, data: null });
   }
 };
@@ -438,7 +439,7 @@ export const getFinancialReport = async (req, res) => {
       data,
     });
   } catch (error) {
-    console.error('getFinancialReport Error:', error);
+    logger.error({ err: error }, 'getFinancialReport Error');
     res.status(500).json({ status: 'error', message: error.message, data: null });
   }
 };
@@ -497,7 +498,7 @@ export const getFinancialTransactions = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('getFinancialTransactions Error:', error);
+    logger.error({ err: error }, 'getFinancialTransactions Error');
     res.status(500).json({ status: 'error', message: error.message });
   }
 };
@@ -665,7 +666,7 @@ export const getPerformanceReport = async (req, res) => {
       data: performanceData,
     });
   } catch (error) {
-    console.error('getPerformanceReport Error:', error);
+    logger.error({ err: error }, 'getPerformanceReport Error');
     res.status(500).json({ status: 'error', message: error.message, data: null });
   }
 };
@@ -915,7 +916,7 @@ export const exportReportingExcel = async (req, res) => {
     const day = localDateStr();
     sendXlsxDownload(res, buffer, `reports_${day}`);
   } catch (error) {
-    console.error('exportReportingExcel Error:', error);
+    logger.error({ err: error }, 'exportReportingExcel Error');
     res.status(500).json({
       status: 'error',
       message: error.message || 'Export failed',
@@ -1008,7 +1009,7 @@ export const getReportingSummary = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('getReportingSummary Error:', error);
+    logger.error({ err: error }, 'getReportingSummary Error');
     res.status(500).json({ status: 'error', message: error.message, data: null });
   }
 };

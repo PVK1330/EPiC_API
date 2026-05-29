@@ -1,3 +1,4 @@
+import logger from '../../../utils/logger.js';
 import path from 'path';
 import fs from 'fs';
 
@@ -33,7 +34,7 @@ export const getDocumentsBySponsor = async (req, res) => {
 
     return res.status(200).json({ status: 'success', data: documents });
   } catch (error) {
-    console.error('getDocumentsBySponsor error:', error);
+    logger.error({ err: error }, 'getDocumentsBySponsor error');
     return res.status(500).json({ status: 'error', message: error.message || 'Internal server error' });
   }
 };
@@ -83,7 +84,7 @@ export const uploadComplianceDocument = async (req, res) => {
       data: document,
     });
   } catch (error) {
-    console.error('uploadComplianceDocument error:', error);
+    logger.error({ err: error }, 'uploadComplianceDocument error');
     return res.status(500).json({ status: 'error', message: error.message || 'Internal server error' });
   }
 };
@@ -117,7 +118,7 @@ export const updateDocumentMetadata = async (req, res) => {
 
     return res.status(200).json({ status: 'success', data: document });
   } catch (error) {
-    console.error('updateDocumentMetadata error:', error);
+    logger.error({ err: error }, 'updateDocumentMetadata error');
     return res.status(500).json({ status: 'error', message: error.message || 'Internal server error' });
   }
 };
@@ -137,7 +138,7 @@ export const deleteComplianceDocument = async (req, res) => {
       try {
         fs.unlinkSync(document.documentPath);
       } catch (e) {
-        console.error('Error deleting file:', e);
+        logger.error({ err: e }, 'Error deleting compliance file');
       }
     }
 
@@ -148,7 +149,7 @@ export const deleteComplianceDocument = async (req, res) => {
       message: 'Document deleted successfully',
     });
   } catch (error) {
-    console.error('deleteComplianceDocument error:', error);
+    logger.error({ err: error }, 'deleteComplianceDocument error');
     return res.status(500).json({ status: 'error', message: error.message || 'Internal server error' });
   }
 };

@@ -1,4 +1,5 @@
 import platformDb from "../models/index.js";
+import logger from "../utils/logger.js";
 
 /**
  * Record an audit log entry in the platform central database.
@@ -21,7 +22,7 @@ export const recordPlatformAuditLog = async ({
       status: status || "Success"
     });
   } catch (error) {
-    console.error("Failed to record platform audit log:", error);
+    logger.error({ err: error }, "Failed to record platform audit log");
   }
 };
 
@@ -41,6 +42,6 @@ export const createPlatformNotification = async ({
       isRead: false
     });
   } catch (error) {
-    console.error("Failed to create platform notification:", error);
+    logger.error({ err: error }, "Failed to create platform notification");
   }
 };

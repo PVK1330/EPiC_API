@@ -81,7 +81,7 @@ export const getCandidateApplication = catchAsync(async (req, res) => {
 export const updateCandidateApplication = catchAsync(async (req, res) => {
   const { id } = req.params;
   const service = new CandidateService(req.tenantDb);
-  const candidate = await service.updateCandidateApplication(id, req.body);
+  const candidate = await service.updateCandidateApplication(id, req.body, req.user?.id);
 
   return ApiResponse.success(res, "Client updated successfully", {
     candidate,

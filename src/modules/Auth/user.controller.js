@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import path from 'path';
 import fs from 'fs';
 import platformDb from '../../models/index.js';
+import logger from '../../utils/logger.js';
 
 // Get user profile
 export const profile = async (req, res) => {
@@ -220,7 +221,7 @@ export const changeOwnPassword = async (req, res) => {
       data: null,
     });
   } catch (err) {
-    console.error("changeOwnPassword error:", err);
+    logger.error({ err }, "changeOwnPassword error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -354,7 +355,7 @@ export const dropdownSponsors = async (req, res) => {
       data: { sponsors: formattedSponsors }
     });
   } catch (err) {
-    console.error("dropdownSponsors error:", err);
+    logger.error({ err }, "dropdownSponsors error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",

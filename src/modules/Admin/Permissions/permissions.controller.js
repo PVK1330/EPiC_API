@@ -44,7 +44,7 @@ export const getAllPermissions = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Get All Permissions Error:", error);
+    logger.error({ err: error }, "Get All Permissions Error");
     res.status(500).json({
       status: "error",
       message: "Failed to fetch permissions",
@@ -84,7 +84,7 @@ export const getPermissionById = async (req, res) => {
       data: { permission },
     });
   } catch (error) {
-    console.error("Get Permission by ID Error:", error);
+    logger.error({ err: error }, "Get Permission by ID Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -130,7 +130,7 @@ export const createPermission = async (req, res) => {
       data: { permission },
     });
   } catch (error) {
-    console.error("Create Permission Error:", error);
+    logger.error({ err: error }, "Create Permission Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -195,7 +195,7 @@ export const updatePermission = async (req, res) => {
       data: { permission: updatedPermission },
     });
   } catch (error) {
-    console.error("Update Permission Error:", error);
+    logger.error({ err: error }, "Update Permission Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -228,7 +228,7 @@ export const deletePermission = async (req, res) => {
       data: null,
     });
   } catch (error) {
-    console.error("Delete Permission Error:", error);
+    logger.error({ err: error }, "Delete Permission Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -291,7 +291,7 @@ export const checkUserPermission = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Check User Permission Error:", error);
+    logger.error({ err: error }, "Check User Permission Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",

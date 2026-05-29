@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { seedApplicationFieldSettingsForDb } from '../../seeders/applicationFieldSettings.seeder.js';
+import logger from '../../utils/logger.js';
 
 // Get all field settings
 export const getFieldSettings = async (req, res) => {
@@ -21,7 +22,7 @@ export const getFieldSettings = async (req, res) => {
       data: parsedSettings
     });
   } catch (error) {
-    console.error("Get Field Settings Error:", error);
+    logger.error({ err: error }, "Get Field Settings Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -60,7 +61,7 @@ export const batchUpdateFieldVisibility = async (req, res) => {
       data: null
     });
   } catch (error) {
-    console.error("Batch Update Field Visibility Error:", error);
+    logger.error({ err: error }, "Batch Update Field Visibility Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -129,7 +130,7 @@ export const updateFieldVisibilityById = async (req, res) => {
       data: parsed,
     });
   } catch (error) {
-    console.error("Update Field Visibility By Id Error:", error);
+    logger.error({ err: error }, "Update Field Visibility By Id Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -170,7 +171,7 @@ export const updateSingleFieldVisibility = async (req, res) => {
       data: setting
     });
   } catch (error) {
-    console.error("Update Single Field Visibility Error:", error);
+    logger.error({ err: error }, "Update Single Field Visibility Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -201,7 +202,7 @@ export const getCustomFields = async (req, res) => {
       data: parsedFields
     });
   } catch (error) {
-    console.error("Get Custom Fields Error:", error);
+    logger.error({ err: error }, "Get Custom Fields Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -256,7 +257,7 @@ export const createCustomField = async (req, res) => {
       data: customField
     });
   } catch (error) {
-    console.error("Create Custom Field Error:", error);
+    logger.error({ err: error }, "Create Custom Field Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -302,7 +303,7 @@ export const updateCustomField = async (req, res) => {
       data: customField
     });
   } catch (error) {
-    console.error("Update Custom Field Error:", error);
+    logger.error({ err: error }, "Update Custom Field Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -335,7 +336,7 @@ export const deleteCustomField = async (req, res) => {
       data: null
     });
   } catch (error) {
-    console.error("Delete Custom Field Error:", error);
+    logger.error({ err: error }, "Delete Custom Field Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -380,7 +381,7 @@ export const updateFieldSetting = async (req, res) => {
       data: setting
     });
   } catch (error) {
-    console.error("Update Field Setting Error:", error);
+    logger.error({ err: error }, "Update Field Setting Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",

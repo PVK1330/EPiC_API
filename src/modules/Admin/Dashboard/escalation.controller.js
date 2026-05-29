@@ -2,6 +2,7 @@ import { Op } from 'sequelize';
 import { notifyEscalationCreated, notifyEscalationResolved } from '../../../services/notification.service.js';
 import { rowsToXlsxBuffer, sendXlsxDownload } from '../../../utils/excelExport.util.js';
 import { localDateStr } from '../../../utils/dateHelpers.js';
+import logger from '../../../utils/logger.js';
 
 
 /** Shared filters for listing and export (DRY). */
@@ -131,7 +132,7 @@ export const createEscalation = async (req, res) => {
           priority: severity,
         });
       } catch (notifError) {
-        console.error('Failed to send escalation notification:', notifError);
+        logger.error({ err: notifError }, 'Failed to send escalation notification');
       }
     }
 
@@ -141,7 +142,7 @@ export const createEscalation = async (req, res) => {
       data: escalation,
     });
   } catch (error) {
-    console.error("Error creating escalation:", error);
+    logger.error({ err: error }, "Error creating escalation");
     res.status(500).json({
       status: "error",
       message: "Failed to create escalation",
@@ -182,7 +183,7 @@ export const getAllEscalations = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Error fetching escalations:", error);
+    logger.error({ err: error }, "Error fetching escalations");
     res.status(500).json({
       status: "error",
       message: "Failed to fetch escalations",
@@ -226,7 +227,7 @@ export const getEscalationById = async (req, res) => {
       data: escalationData,
     });
   } catch (error) {
-    console.error("Error fetching escalation:", error);
+    logger.error({ err: error }, "Error fetching escalation");
     res.status(500).json({
       status: "error",
       message: "Failed to fetch escalation",
@@ -296,7 +297,7 @@ export const updateEscalation = async (req, res) => {
             resolution: notes || 'Escalation resolved',
           });
         } catch (notifError) {
-          console.error('Failed to send escalation resolved notification:', notifError);
+          logger.error({ err: notifError }, 'Failed to send escalation resolved notification');
         }
       }
     }
@@ -325,7 +326,7 @@ export const updateEscalation = async (req, res) => {
       data: escalationData,
     });
   } catch (error) {
-    console.error("Error updating escalation:", error);
+    logger.error({ err: error }, "Error updating escalation");
     res.status(500).json({
       status: "error",
       message: "Failed to update escalation",
@@ -354,7 +355,7 @@ export const deleteEscalation = async (req, res) => {
       message: "Escalation deleted successfully",
     });
   } catch (error) {
-    console.error("Error deleting escalation:", error);
+    logger.error({ err: error }, "Error deleting escalation");
     res.status(500).json({
       status: "error",
       message: "Failed to delete escalation",
@@ -397,7 +398,7 @@ export const getEscalationKPI = async (req, res) => {
       data: kpi,
     });
   } catch (error) {
-    console.error("Error fetching KPI:", error);
+    logger.error({ err: error }, "Error fetching KPI");
     res.status(500).json({
       status: "error",
       message: "Failed to fetch KPI",
@@ -462,7 +463,7 @@ export const exportEscalationsExcel = async (req, res) => {
     const day = localDateStr();
     sendXlsxDownload(res, buffer, `escalations_${day}`);
   } catch (error) {
-    console.error("Error exporting escalations:", error);
+    logger.error({ err: error }, "Error exporting escalations");
     res.status(500).json({
       status: "error",
       message: "Failed to export escalations",
@@ -528,7 +529,7 @@ export const assignEscalation = async (req, res) => {
       data: escalationData,
     });
   } catch (error) {
-    console.error("Error assigning escalation:", error);
+    logger.error({ err: error }, "Error assigning escalation");
     res.status(500).json({
       status: "error",
       message: "Failed to assign escalation",

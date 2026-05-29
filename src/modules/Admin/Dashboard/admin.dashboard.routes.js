@@ -24,5 +24,6 @@ router.get("/quick-actions", dashboardController.getQuickActions);
 // Export Snapshot
 router.get("/export-snapshot", dashboardController.exportDashboardSnapshot);
 router.get("/export-pdf", dashboardController.exportDashboardPDF);
+router.get("/test-pdf", dashboardController.testPdfGeneration);
 
 export default router;

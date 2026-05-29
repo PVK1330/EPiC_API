@@ -3,6 +3,8 @@ import path from 'path';
 import fs from 'fs';
 import { Op } from 'sequelize';
 
+import logger from '../../../utils/logger.js';
+
 /**
  * Resolve user ID from request
  */
@@ -37,9 +39,7 @@ function excludeSensitiveUserAttrs() {
 export const getProfile = async (req, res) => {
   try {
     const userId = resolveUserId(req);
-    console.log('getProfile - userId:', userId);
-    console.log('getProfile - req.user:', req.user);
-    console.log('getProfile - req.body:', req.body);
+    logger.info({ userId }, 'getProfile');
     if (!userId) {
       return res.status(401).json({ status: 'error', message: 'Invalid session' });
     }
@@ -88,7 +88,7 @@ export const getProfile = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('getProfile error:', err);
+    logger.error({ err }, 'getProfile error');
     res.status(500).json({
       status: 'error',
       message: 'Internal server error',
@@ -103,8 +103,7 @@ export const getProfile = async (req, res) => {
 export const updateProfile = async (req, res) => {
   try {
     const userId = resolveUserId(req);
-    console.log('updateProfile - userId:', userId);
-    console.log('updateProfile - body:', req.body);
+    logger.info({ userId }, 'updateProfile');
     
     if (!userId) {
       return res.status(401).json({ status: 'error', message: 'Invalid session' });
@@ -208,7 +207,7 @@ export const updateProfile = async (req, res) => {
           try {
             profileUpdate[field] = JSON.parse(value);
           } catch (e) {
-            console.warn(`Failed to parse JSON for ${field}:`, value);
+            logger.warn({ field, value }, 'Failed to parse JSON');
           }
         } else {
           profileUpdate[field] = value;
@@ -217,7 +216,7 @@ export const updateProfile = async (req, res) => {
     });
 
     if (Object.keys(profileUpdate).length > 0) {
-      console.log('updateProfile - updating with:', profileUpdate);
+      logger.info({ profileUpdate }, 'updateProfile - applying changes');
       await profile.update(profileUpdate);
     }
 
@@ -252,7 +251,7 @@ export const updateProfile = async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('updateProfile error:', err);
+    logger.error({ err }, 'updateProfile error');
     res.status(500).json({
       status: 'error',
       message: 'Internal server error',
@@ -299,7 +298,7 @@ export const updateKeyPersonnel = async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('updateKeyPersonnel error:', err);
+    logger.error({ err }, 'updateKeyPersonnel error');
     res.status(500).json({
       status: 'error',
       message: 'Failed to update Key Personnel',
@@ -344,7 +343,7 @@ export const changePassword = async (req, res) => {
       message: 'Password updated successfully'
     });
   } catch (err) {
-    console.error('changePassword error:', err);
+    logger.error({ err }, 'changePassword error');
     res.status(500).json({
       status: 'error',
       message: 'Internal server error',

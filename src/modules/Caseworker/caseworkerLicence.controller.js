@@ -1,4 +1,5 @@
 import { Op } from 'sequelize';
+import logger from '../../utils/logger.js';
 import { 
     notifyLicenceStatusChanged, 
     notifyLicenceInfoRequested, 
@@ -26,7 +27,7 @@ export const getAssignedLicenceApplications = async (req, res) => {
             data: applications
         });
     } catch (error) {
-        console.error('Error fetching assigned licence applications:', error);
+        logger.error({ err: error }, 'Error fetching assigned licence applications');
         res.status(500).json({
             status: 'error',
             message: 'Failed to fetch assigned licence applications',
@@ -72,10 +73,10 @@ export const updateLicenceReviewStatus = async (req, res) => {
                     const requestedAlloc = parseInt(application.cosAllocation || 0);
                     profile.cosAllocation = currentAlloc + requestedAlloc;
                     await profile.save();
-                    console.log(`Updated CoS Allocation for user ${application.userId}: ${currentAlloc} -> ${profile.cosAllocation}`);
+                    logger.info({ userId: application.userId, previousAlloc: currentAlloc, newAlloc: profile.cosAllocation }, 'Updated CoS Allocation');
                 }
             } catch (err) {
-                console.error('Failed to update SponsorProfile CoS allocation:', err);
+                logger.error({ err }, 'Failed to update SponsorProfile CoS allocation');
             }
         }
 
@@ -104,7 +105,7 @@ export const updateLicenceReviewStatus = async (req, res) => {
                 }
             });
         } catch (notifyErr) {
-            console.error('Failed to send caseworker decision notifications:', notifyErr);
+            logger.error({ err: notifyErr }, 'Failed to send caseworker decision notifications');
         }
 
         res.status(200).json({
@@ -113,7 +114,7 @@ export const updateLicenceReviewStatus = async (req, res) => {
             data: application
         });
     } catch (error) {
-        console.error('Error updating licence review status:', error);
+        logger.error({ err: error }, 'Error updating licence review status');
         res.status(500).json({
             status: 'error',
             message: 'Failed to update status',

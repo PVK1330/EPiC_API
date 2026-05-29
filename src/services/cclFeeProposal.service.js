@@ -130,7 +130,7 @@ export async function submitCclFeeProposal({
     priority: "high",
     dueInDays: 1,
     organisationId,
-  }).catch((err) => console.error("createAdminWorkflowTask:", err));
+  }).catch((err) => logger.error({ err }, "createAdminWorkflowTask"));
 
   await recordTimelineEntry({
     tenantDb,
@@ -151,7 +151,7 @@ export async function submitCclFeeProposal({
     ccl,
     proposedBy,
     organisationId,
-  }).catch((err) => console.error("notifyCclFeeProposed:", err));
+  }).catch((err) => logger.error({ err }, "notifyCclFeeProposed"));
 
   return { ok: true, ccl, caseRecord };
 }
@@ -219,7 +219,7 @@ export async function reviewCclFeeProposal({
       reviewNotes,
       proposedBy: ccl.proposedBy,
       organisationId,
-    }).catch((err) => console.error("notifyCclFeeRejected:", err));
+    }).catch((err) => logger.error({ err }, "notifyCclFeeRejected"));
 
     return { ok: true, ccl, caseRecord };
   }
@@ -285,7 +285,7 @@ export async function reviewCclFeeProposal({
     caseRecord,
     ccl,
     performedBy: reviewedBy,
-  }).catch((err) => console.error("attachCclTemplateToCase:", err));
+  }).catch((err) => logger.error({ err }, "attachCclTemplateToCase"));
 
   await ccl.reload();
 
@@ -294,7 +294,7 @@ export async function reviewCclFeeProposal({
     caseRecord,
     ccl,
     organisationId,
-  }).catch((err) => console.error("notifyCclFeeApproved:", err));
+  }).catch((err) => logger.error({ err }, "notifyCclFeeApproved"));
 
 
 

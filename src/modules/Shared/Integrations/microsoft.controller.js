@@ -36,7 +36,7 @@ export const getMicrosoftStatus = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('Microsoft status error:', error);
+    logger.error({ err: error }, 'Microsoft status error');
     res.status(500).json({
       status: 'error',
       message: 'Failed to load Microsoft status',
@@ -59,7 +59,7 @@ export const getMicrosoftAuthUrl = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('Microsoft auth URL error:', error);
+    logger.error({ err: error }, 'Microsoft auth URL error');
     res.status(500).json({
       status: 'error',
       message: 'Failed to build Microsoft auth URL',
@@ -85,7 +85,7 @@ export const disconnectMicrosoft = async (req, res) => {
       data: { disconnected: true },
     });
   } catch (error) {
-    console.error('Microsoft disconnect error:', error);
+    logger.error({ err: error }, 'Microsoft disconnect error');
     res.status(500).json({
       status: 'error',
       message: 'Failed to disconnect',

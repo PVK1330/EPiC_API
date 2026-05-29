@@ -4,6 +4,7 @@ import {
   resolveDataCaptureTemplate,
 } from "./dataCaptureSheet.service.js";
 import { wrapEpicEmail } from "../utils/epicEmailLayout.js";
+import logger from "../utils/logger.js";
 
 /** Workflow stage → email_templates.template_key */
 export const STAGE_EMAIL_TEMPLATE = {
@@ -284,7 +285,7 @@ export async function sendWorkflowStageEmail({
       attachmentFilename: mailAttachments[0]?.filename || null,
     };
   } catch (err) {
-    console.error("sendWorkflowStageEmail error:", err.message);
+    logger.error({ err }, "sendWorkflowStageEmail error");
     return { sent: false, error: err.message };
   }
 }
