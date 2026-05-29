@@ -44,6 +44,26 @@ export default (sequelize) => {
       type: DataTypes.JSONB,
       allowNull: true
     },
+    entity_type: {
+      type: DataTypes.STRING(100),
+      allowNull: true
+    },
+    entity_id: {
+      type: DataTypes.STRING(100),
+      allowNull: true
+    },
+    field_name: {
+      type: DataTypes.STRING(100),
+      allowNull: true
+    },
+    role: {
+      type: DataTypes.STRING(100),
+      allowNull: true
+    },
+    user_agent: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    },
     organisation_id: {
       type: DataTypes.INTEGER,
       allowNull: true,

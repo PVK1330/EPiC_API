@@ -132,6 +132,26 @@ export const getGoogleCallback = async (req, res) => {
       details,
     );
 
+    if (req.tenantDb.AuditLog) {
+      await req.tenantDb.AuditLog.create({
+        user_id: tenantUserId,
+        action: 'GOOGLE_CONNECTED',
+        details: `Successfully connected Google account: ${profile.email}`,
+        status: 'Success'
+      }).catch(() => {});
+    }
+
+    if (req.tenantDb.CaseTimeline) {
+      await req.tenantDb.CaseTimeline.create({
+        case_id: null,
+        type: 'GOOGLE_CONNECTED',
+        title: 'Google Integration',
+        description: `Google Calendar & Meet integration activated.`,
+        icon: 'check-circle',
+        created_by: tenantUserId,
+      }).catch(() => {});
+    }
+
     logger.info(
       { userId: tenantUserId, googleEmail: profile.email },
       "Successfully connected Google Calendar integration",
@@ -183,13 +203,20 @@ export const getGoogleStatus = async (req, res) => {
       });
     }
 
+    const isTokenExpired = connection.expires_at && new Date(connection.expires_at) < new Date();
+
     return res.status(200).json({
-      connected: true,
+      connected: connection.is_active,
       email: connection.email,
       status: "success",
       data: {
-        connected: true,
+        connected: connection.is_active,
+        status: connection.last_sync_status || (connection.is_active ? 'CONNECTED' : 'DISCONNECTED'),
         email: connection.email,
+        isTokenExpired,
+        lastSuccessfulSync: connection.last_successful_sync,
+        lastFailedSync: connection.last_failed_sync,
+        errorMessage: connection.error_message,
         updatedAt: connection.updated_at,
       },
     });
@@ -226,6 +253,15 @@ export const disconnectGoogle = async (req, res) => {
         message: "No active Google integration found to disconnect.",
         data: null,
       });
+    }
+
+    if (req.tenantDb.AuditLog) {
+      await req.tenantDb.AuditLog.create({
+        user_id: tenantUserId,
+        action: 'GOOGLE_DISCONNECTED',
+        details: `Disconnected Google account.`,
+        status: 'Success'
+      }).catch(() => {});
     }
 
     return res.status(200).json({

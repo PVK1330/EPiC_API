@@ -8,7 +8,7 @@ import logger from "../../../../utils/logger.js";
  * Ensures user has a valid Microsoft Graph access token.
  * Refreshes automatically if expired. Enforces encryption boundaries.
  */
-export const getOrRefreshAccessToken = async (connection) => {
+export const getOrRefreshAccessToken = async (tenantDb, connection) => {
   if (!connection) {
     throw new Error("Missing calendar connection context.");
   }
@@ -70,6 +70,8 @@ export const getOrRefreshAccessToken = async (connection) => {
     const patch = {
       access_token: encryptedAccess,
       expires_at: expiresAt,
+      last_sync_status: 'CONNECTED',
+      last_successful_sync: new Date(),
     };
 
     // Sometimes Microsoft returns a new refresh token, if so, encrypt and save it
@@ -79,14 +81,44 @@ export const getOrRefreshAccessToken = async (connection) => {
 
     await connection.update(patch);
 
+    if (tenantDb && tenantDb.AuditLog) {
+      await tenantDb.AuditLog.create({
+        user_id: connection.user_id,
+        action: 'MICROSOFT_TOKEN_REFRESHED',
+        details: 'Microsoft Graph access token was refreshed automatically',
+        status: 'Success'
+      }).catch(() => {});
+    }
+
     return newAccessToken;
   } catch (error) {
     logger.error({ err: error, userId: connection.user_id }, "Failed to refresh Microsoft OAuth token");
 
-    if (error.message?.includes("invalid_grant")) {
-      await connection.update({ is_active: false });
+    if (error.message?.includes("invalid_grant") || error.message?.includes("interaction_required")) {
+      await connection.update({ 
+        is_active: false, 
+        last_sync_status: 'REAUTH_REQUIRED',
+        last_failed_sync: new Date(),
+        error_message: error.message 
+      });
+
+      if (tenantDb && tenantDb.AuditLog) {
+        await tenantDb.AuditLog.create({
+          user_id: connection.user_id,
+          action: 'MICROSOFT_TOKEN_EXPIRED',
+          details: 'Microsoft connection revoked or refresh token expired. Reauth required.',
+          status: 'Failed'
+        }).catch(() => {});
+      }
+
       throw new Error("Your Microsoft connection has been revoked or expired. Please reconnect.");
     }
+
+    await connection.update({ 
+      last_sync_status: 'TOKEN_EXPIRED',
+      last_failed_sync: new Date(),
+      error_message: error.message 
+    });
 
     throw error;
   }

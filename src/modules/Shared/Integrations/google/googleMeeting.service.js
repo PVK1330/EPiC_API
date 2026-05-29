@@ -37,7 +37,7 @@ export const createGoogleMeetMeeting = async ({
   }
 
   // Auto replenish token if expired
-  const accessToken = await getOrRefreshAccessToken(connection);
+  const accessToken = await getOrRefreshAccessToken(tenantDb, connection);
 
   // Load tenant-specific Google OAuth config if available
   let tenantGoogleConfig = null;
@@ -121,6 +121,82 @@ export const createGoogleMeetMeeting = async ({
     };
   } catch (error) {
     logger.error({ err: error, userId }, "Failed to create meeting on Google Calendar");
+    throw new Error("Google Calendar API error: " + (error.message || error));
+  }
+};
+
+/**
+ * Updates a Google Calendar event.
+ */
+export const updateGoogleCalendarEvent = async ({ tenantDb, userId, eventId, title, description, startTime, endTime, attendees = [] }) => {
+  const connection = await getConnection(tenantDb, userId);
+  if (!connection) return null;
+  const accessToken = await getOrRefreshAccessToken(tenantDb, connection);
+
+  let tenantGoogleConfig = null;
+  try {
+    const platformDb = (await import("../../../../models/index.js")).default;
+    const org = await platformDb.Organisation.findByPk(connection.organisation_id, { attributes: ["smtp_settings"] });
+    tenantGoogleConfig = org?.smtp_settings?.google || org?.smtp_settings?.integrations?.google || null;
+  } catch (e) {}
+
+  const oauth2Client = getOAuth2Client(tenantGoogleConfig);
+  if (!oauth2Client) throw new Error("Google OAuth client not configured.");
+  oauth2Client.setCredentials({ access_token: accessToken });
+
+  const calendar = google.calendar({ version: "v3", auth: oauth2Client });
+
+  const formattedAttendees = Array.isArray(attendees) ? attendees.map((email) => ({ email })) : [];
+
+  const eventPayload = {
+    summary: title,
+    description: description || "",
+    start: { dateTime: new Date(startTime).toISOString(), timeZone: "UTC" },
+    end: { dateTime: new Date(endTime).toISOString(), timeZone: "UTC" },
+    attendees: formattedAttendees,
+  };
+
+  try {
+    const response = await calendar.events.patch({
+      calendarId: "primary",
+      eventId,
+      resource: eventPayload,
+    });
+    return response.data;
+  } catch (error) {
+    throw new Error("Google Calendar API error: " + (error.message || error));
+  }
+};
+
+/**
+ * Deletes a Google Calendar event.
+ */
+export const deleteGoogleCalendarEvent = async ({ tenantDb, userId, eventId }) => {
+  const connection = await getConnection(tenantDb, userId);
+  if (!connection) return null;
+  const accessToken = await getOrRefreshAccessToken(tenantDb, connection);
+
+  let tenantGoogleConfig = null;
+  try {
+    const platformDb = (await import("../../../../models/index.js")).default;
+    const org = await platformDb.Organisation.findByPk(connection.organisation_id, { attributes: ["smtp_settings"] });
+    tenantGoogleConfig = org?.smtp_settings?.google || org?.smtp_settings?.integrations?.google || null;
+  } catch (e) {}
+
+  const oauth2Client = getOAuth2Client(tenantGoogleConfig);
+  if (!oauth2Client) throw new Error("Google OAuth client not configured.");
+  oauth2Client.setCredentials({ access_token: accessToken });
+
+  const calendar = google.calendar({ version: "v3", auth: oauth2Client });
+
+  try {
+    await calendar.events.delete({
+      calendarId: "primary",
+      eventId,
+    });
+    return true;
+  } catch (error) {
+    if (error.code === 404 || error.response?.status === 404) return true;
     throw new Error("Google Calendar API error: " + (error.message || error));
   }
 };

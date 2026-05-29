@@ -697,9 +697,36 @@ export const login = catchAsync(async (req, res) => {
     return ApiResponse.forbidden(res, 'Account is inactive or suspended.');
   }
 
+  if (user.locked_until && new Date(user.locked_until) > new Date()) {
+    platformDb.PlatformAuditLog.create({
+      user_id: user.id, action: 'FAILED_LOGIN',
+      details: 'Attempted login on locked account', ip_address: req.ip || req.connection?.remoteAddress, status: 'Failed'
+    }).catch(() => {});
+    return ApiResponse.forbidden(res, 'Account is locked due to multiple failed attempts. Please try again later.');
+  }
+
   const isMatch = await bcrypt.compare(password, user.password);
   if (!isMatch) {
+    user.failed_login_attempts = (user.failed_login_attempts || 0) + 1;
+    if (user.failed_login_attempts >= 5) {
+      user.locked_until = new Date(Date.now() + 30 * 60 * 1000);
+      platformDb.PlatformAuditLog.create({
+        user_id: user.id, action: 'ACCOUNT_LOCKED',
+        details: 'Account locked due to 5 failed attempts', ip_address: req.ip || req.connection?.remoteAddress, status: 'Success'
+      }).catch(() => {});
+    }
+    await user.save();
+    platformDb.PlatformAuditLog.create({
+      user_id: user.id, action: 'FAILED_LOGIN',
+      details: 'Invalid password', ip_address: req.ip || req.connection?.remoteAddress, status: 'Failed'
+    }).catch(() => {});
     return ApiResponse.unauthorized(res, 'Invalid credentials.');
+  }
+
+  if (user.failed_login_attempts > 0) {
+    user.failed_login_attempts = 0;
+    user.locked_until = null;
+    await user.save();
   }
 
   try {
@@ -719,9 +746,31 @@ export const login = catchAsync(async (req, res) => {
   const payload = buildJwtPayload(user, { name: roleMeta.name });
   const token = signToken(payload);
 
+  const crypto = await import('crypto');
+  const refreshTokenString = crypto.randomBytes(40).toString('hex');
+  const hashedRefresh = await bcrypt.hash(refreshTokenString, 10);
+
+  const deviceString = req.headers['user-agent'] || 'Unknown Device';
+
+  await platformDb.UserSession.create({
+    user_id: user.id,
+    refresh_token_hash: hashedRefresh,
+    device: deviceString,
+    browser: deviceString,
+    ip_address: req.ip || req.connection?.remoteAddress,
+  });
+
+  platformDb.PlatformAuditLog.create({
+    user_id: user.id, action: 'LOGIN',
+    details: 'User logged in successfully', ip_address: req.ip || req.connection?.remoteAddress, status: 'Success'
+  }).catch(() => {});
+
   // Set httpOnly cookie for secure token storage — XSS-resistant
   res.cookie('token', token, getCookieConfig({
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days, aligns with JWT expiry
+    maxAge: 15 * 60 * 1000, // 15 mins
+  }));
+  res.cookie('refreshToken', refreshTokenString, getCookieConfig({
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   }));
 
   let organisation = null;
@@ -750,10 +799,119 @@ export const login = catchAsync(async (req, res) => {
 /**
  * Logout
  */
-export const logout = (req, res) => {
+export const logout = catchAsync(async (req, res) => {
+  const refreshTokenStr = req.cookies?.refreshToken;
+  
+  if (refreshTokenStr && req.user?.id) {
+    const sessions = await platformDb.UserSession.findAll({ where: { user_id: req.user.id } });
+    for (const session of sessions) {
+      const isMatch = await bcrypt.compare(refreshTokenStr, session.refresh_token_hash);
+      if (isMatch) {
+        await session.destroy();
+        break;
+      }
+    }
+  }
+
+  platformDb.PlatformAuditLog.create({
+    user_id: req.user?.id || null, action: 'LOGOUT',
+    details: 'User logged out', ip_address: req.ip || req.connection?.remoteAddress, status: 'Success'
+  }).catch(() => {});
+
   res.clearCookie('token', getCookieConfig());
+  res.clearCookie('refreshToken', getCookieConfig());
   return ApiResponse.success(res, 'Logged out successfully.');
-};
+});
+
+export const logoutAll = catchAsync(async (req, res) => {
+  if (req.user?.id) {
+    await platformDb.UserSession.destroy({ where: { user_id: req.user.id } });
+  }
+  res.clearCookie('token', getCookieConfig());
+  res.clearCookie('refreshToken', getCookieConfig());
+  return ApiResponse.success(res, 'Logged out of all devices successfully.');
+});
+
+export const refreshToken = catchAsync(async (req, res) => {
+  const oldRefresh = req.cookies?.refreshToken;
+  if (!oldRefresh) {
+    return ApiResponse.unauthorized(res, 'No refresh token provided');
+  }
+
+  // Allow verifyToken to ignore expiration for the purpose of getting user ID
+  const decoded = verifyToken(req.cookies?.token, true) || {}; 
+  const userId = decoded.id;
+  
+  if (!userId) {
+    return ApiResponse.unauthorized(res, 'Invalid session state');
+  }
+
+  const user = await platformDb.User.findByPk(userId);
+  if (!user || user.status !== 'active') {
+    return ApiResponse.unauthorized(res, 'User inactive');
+  }
+
+  const sessions = await platformDb.UserSession.findAll({ where: { user_id: user.id } });
+  let currentSession = null;
+  for (const session of sessions) {
+    const isMatch = await bcrypt.compare(oldRefresh, session.refresh_token_hash);
+    if (isMatch) {
+      currentSession = session;
+      break;
+    }
+  }
+
+  if (!currentSession) {
+    res.clearCookie('token', getCookieConfig());
+    res.clearCookie('refreshToken', getCookieConfig());
+    return ApiResponse.unauthorized(res, 'Invalid refresh token');
+  }
+
+  const roleMeta = await resolveAuthRole(user);
+  const payload = buildJwtPayload(user, { name: roleMeta.name });
+  const newToken = signToken(payload);
+
+  const crypto = await import('crypto');
+  const newRefreshString = crypto.randomBytes(40).toString('hex');
+  const newHash = await bcrypt.hash(newRefreshString, 10);
+
+  currentSession.refresh_token_hash = newHash;
+  currentSession.last_active = new Date();
+  await currentSession.save();
+
+  platformDb.PlatformAuditLog.create({
+    user_id: user.id, action: 'REFRESH_TOKEN_ROTATED',
+    details: 'Token rotated', ip_address: req.ip || req.connection?.remoteAddress, status: 'Success'
+  }).catch(() => {});
+
+  res.cookie('token', newToken, getCookieConfig({ maxAge: 15 * 60 * 1000 }));
+  res.cookie('refreshToken', newRefreshString, getCookieConfig({ maxAge: 7 * 24 * 60 * 60 * 1000 }));
+  
+  return ApiResponse.success(res, 'Token refreshed');
+});
+
+export const getMe = catchAsync(async (req, res) => {
+  if (!req.user) return ApiResponse.unauthorized(res, 'Not logged in');
+  const user = await platformDb.User.findByPk(req.user.id);
+  if (!user) return ApiResponse.unauthorized(res, 'User not found');
+  const roleMeta = await resolveAuthRole(user);
+  const allowedModules = await resolveAllowedModules(user);
+  
+  let organisation = null;
+  if (user.organisation_id && !isPlatformStaffUser(user)) {
+    const org = await platformDb.Organisation.findByPk(user.organisation_id, {
+      attributes: ['id', 'slug', 'name', 'status'],
+    });
+    if (org) {
+      organisation = { id: org.id, slug: org.slug, name: org.name, status: org.status };
+    }
+  }
+
+  return ApiResponse.success(res, 'User profile', {
+    user: { ...buildLoginUserResponse(user, roleMeta), organisation },
+    allowedModules
+  });
+});
 
 /**
  * Forgot Password - Send OTP

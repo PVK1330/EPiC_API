@@ -83,6 +83,26 @@ export const getMicrosoftCallback = async (req, res) => {
       details
     );
 
+    if (req.tenantDb.AuditLog) {
+      await req.tenantDb.AuditLog.create({
+        user_id: req.user.id,
+        action: 'MICROSOFT_CONNECTED',
+        details: `Successfully connected Microsoft account: ${profile.email}`,
+        status: 'Success'
+      }).catch(() => {});
+    }
+
+    if (req.tenantDb.CaseTimeline) {
+      await req.tenantDb.CaseTimeline.create({
+        case_id: null, // Note: Global user timeline
+        type: 'MICROSOFT_CONNECTED',
+        title: 'Microsoft Integration',
+        description: `Microsoft Outlook & Teams integration activated.`,
+        icon: 'check-circle',
+        created_by: req.user.id,
+      }).catch(() => {});
+    }
+
     logger.info({ userId: req.user.id }, "Successfully connected Microsoft Teams Calendar integration");
     return res.redirect(`${frontendUrl}/${req.user?.role || 'caseworker'}/settings/integrations?sync=microsoft_success`);
   } catch (error) {
@@ -118,9 +138,13 @@ export const getMicrosoftStatus = async (req, res) => {
       status: "success",
       message: "Microsoft integration status",
       data: {
-        isConnected: true,
+        isConnected: connection.is_active,
+        status: connection.last_sync_status || (connection.is_active ? 'CONNECTED' : 'DISCONNECTED'),
         microsoftEmail: connection.email,
         isTokenExpired,
+        lastSuccessfulSync: connection.last_successful_sync,
+        lastFailedSync: connection.last_failed_sync,
+        errorMessage: connection.error_message
       },
     });
   } catch (error) {
@@ -147,6 +171,15 @@ export const disconnectMicrosoft = async (req, res) => {
         message: "No active Microsoft integration found.",
         data: null,
       });
+    }
+
+    if (req.tenantDb.AuditLog) {
+      await req.tenantDb.AuditLog.create({
+        user_id: req.user.id,
+        action: 'MICROSOFT_DISCONNECTED',
+        details: `Disconnected Microsoft account.`,
+        status: 'Success'
+      }).catch(() => {});
     }
 
     return res.status(200).json({

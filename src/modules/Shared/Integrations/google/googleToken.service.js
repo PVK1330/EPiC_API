@@ -9,10 +9,11 @@ import logger from "../../../../utils/logger.js";
  * Ensures user has a valid access token. Checks expiration and performs
  * automatic token replenishment if expired. Enforces encryption boundaries.
  * 
+ * @param {object} tenantDb - The tenant database context
  * @param {object} connection - The calendar_connections Sequelize row instance
  * @returns {Promise<string>} Valid decrypted access token
  */
-export const getOrRefreshAccessToken = async (connection) => {
+export const getOrRefreshAccessToken = async (tenantDb, connection) => {
   if (!connection) {
     throw new Error("Missing calendar connection context.");
   }
@@ -78,7 +79,18 @@ export const getOrRefreshAccessToken = async (connection) => {
     await connection.update({
       access_token: encryptedAccess,
       expires_at: new Date(expiryInMs),
+      last_sync_status: 'CONNECTED',
+      last_successful_sync: new Date(),
     });
+
+    if (tenantDb && tenantDb.AuditLog) {
+      await tenantDb.AuditLog.create({
+        user_id: connection.user_id,
+        action: 'GOOGLE_TOKEN_REFRESHED',
+        details: 'Google OAuth access token was refreshed automatically',
+        status: 'Success'
+      }).catch(() => {});
+    }
 
     return newAccessToken;
   } catch (error) {
@@ -89,10 +101,31 @@ export const getOrRefreshAccessToken = async (connection) => {
       error.message?.includes("invalid_grant") || 
       error.response?.data?.error === "invalid_grant"
     ) {
-      await connection.update({ is_active: false });
+      await connection.update({ 
+        is_active: false,
+        last_sync_status: 'REAUTH_REQUIRED',
+        last_failed_sync: new Date(),
+        error_message: error.message 
+      });
+
+      if (tenantDb && tenantDb.AuditLog) {
+        await tenantDb.AuditLog.create({
+          user_id: connection.user_id,
+          action: 'GOOGLE_TOKEN_EXPIRED',
+          details: 'Google connection revoked or refresh token expired. Reauth required.',
+          status: 'Failed'
+        }).catch(() => {});
+      }
+
       throw new Error("Your Google Calendar connection has been revoked or expired. Please reconnect.");
     }
     
+    await connection.update({ 
+      last_sync_status: 'TOKEN_EXPIRED',
+      last_failed_sync: new Date(),
+      error_message: error.message 
+    });
+
     throw error;
   }
 };

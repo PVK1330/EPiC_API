@@ -1,0 +1,5 @@
+ALTER TABLE "calendar_connections"
+ADD COLUMN IF NOT EXISTS "last_sync_status" VARCHAR(50) DEFAULT 'DISCONNECTED',
+ADD COLUMN IF NOT EXISTS "last_successful_sync" TIMESTAMPTZ,
+ADD COLUMN IF NOT EXISTS "last_failed_sync" TIMESTAMPTZ,
+ADD COLUMN IF NOT EXISTS "error_message" TEXT;

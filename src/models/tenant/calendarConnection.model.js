@@ -60,6 +60,22 @@ export default (sequelize, DataTypes) => {
         type: DataTypes.BOOLEAN,
         defaultValue: true,
       },
+      last_sync_status: {
+        type: DataTypes.STRING(50),
+        defaultValue: 'DISCONNECTED',
+      },
+      last_successful_sync: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
+      last_failed_sync: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
+      error_message: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
     },
     {
       tableName: "calendar_connections",
