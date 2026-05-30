@@ -64,7 +64,7 @@ export const getGoogleCallback = async (req, res) => {
 
   if (!req.user) {
     logger.error("Unauthorized Google OAuth callback — could not restore session from state/cookie");
-    const fallback = (process.env.FRONTEND_URL || "http://localhost:5173").replace(/\/$/, "");
+    const fallback = (process.env.FRONTEND_URL?.split(",")[0]?.trim() || "http://localhost:5173").replace(/\/$/, "");
     return res.redirect(`${fallback}/login?sync=google_unauthorized`);
   }
 

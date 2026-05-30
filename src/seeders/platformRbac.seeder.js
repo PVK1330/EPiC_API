@@ -29,8 +29,6 @@ export async function seedPlatformRbacForDb(db) {
   const { Role, Permission } = db;
 
   await db.sequelize.query(
-  );
-  await db.sequelize.query(
     `UPDATE roles SET scope = 'platform' WHERE id = 5 OR name = 'superadmin'`,
   );
 

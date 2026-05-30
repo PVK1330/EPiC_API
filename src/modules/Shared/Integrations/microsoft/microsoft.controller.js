@@ -12,11 +12,12 @@ import logger from "../../../../utils/logger.js";
 export const getMicrosoftAuthUrl = async (req, res) => {
   try {
     const authHeader = req.headers.authorization || req.headers.Authorization;
-    const token = (authHeader && authHeader.startsWith("Bearer ")) 
-      ? authHeader.split(" ")[1] 
+    const token = (authHeader && authHeader.startsWith("Bearer "))
+      ? authHeader.split(" ")[1]
       : req.cookies?.token;
 
-    const authUrl = microsoftOauth.getAuthUrl(token || "");
+    const tenantConfig = await microsoftOauth.loadTenantMicrosoftConfig(req.user?.organisation_id);
+    const authUrl = microsoftOauth.getAuthUrl(token || "", tenantConfig);
 
     return res.status(200).json({
       status: "success",
@@ -42,7 +43,7 @@ export const getMicrosoftAuthUrl = async (req, res) => {
  */
 export const getMicrosoftCallback = async (req, res) => {
   const { code } = req.query;
-  const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+  const frontendUrl = (process.env.FRONTEND_URL?.split(",")[0]?.trim() || "http://localhost:5173").replace(/\/$/, "");
 
   if (!req.user) {
     logger.error("Unauthorized callback request - missing Microsoft user context");
@@ -55,8 +56,9 @@ export const getMicrosoftCallback = async (req, res) => {
   }
 
   try {
-    const tokens = await microsoftOauth.exchangeCodeForTokens(code);
-    
+    const tenantConfig = await microsoftOauth.loadTenantMicrosoftConfig(req.user?.organisation_id);
+    const tokens = await microsoftOauth.exchangeCodeForTokens(code, tenantConfig);
+
     if (!tokens.access_token) {
       throw new Error("No access token returned from Microsoft Graph authorization");
     }

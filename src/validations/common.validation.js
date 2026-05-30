@@ -41,3 +41,5 @@ export const currencySchema = z
 // Common enums
 export const RoleEnum = z.enum(['candidate', 'caseworker', 'admin', 'sponsor', 'superadmin']);
 export const CaseStatusEnum = z.enum(['enquiry', 'consultation', 'submitted', 'approved']);
+// Matches the User model status ENUM('active', 'inactive', 'suspended').
+export const UserStatusEnum = z.enum(['active', 'inactive', 'suspended']);

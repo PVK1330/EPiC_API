@@ -2,66 +2,114 @@
 // Created at: 2026-05-29
 
 import logger from "../../../../utils/logger.js";
+import platformDb from "../../../../models/index.js";
+import { decryptValue } from "../../../../services/settings.service.js";
+
+const GRAPH_SCOPES = [
+  "offline_access",
+  "User.Read",
+  "OnlineMeetings.ReadWrite",
+  "Calendars.ReadWrite",
+].join(" ");
+
+function trimOrNull(value) {
+  if (value == null) return null;
+  const trimmed = String(value).trim();
+  return trimmed || null;
+}
+
+/**
+ * Merge per-organisation Microsoft OAuth settings with server env fallbacks.
+ * Tenant secrets are stored encrypted; decryptValue passes plain text through.
+ * Returns null when client id, secret, or redirect URI are still missing.
+ */
+export function resolveMicrosoftOAuthConfig(tenantConfig = null) {
+  const tenant =
+    tenantConfig && typeof tenantConfig === "object" ? tenantConfig : {};
+
+  const tenantSecret = trimOrNull(tenant.client_secret || tenant.clientSecret);
+
+  const merged = {
+    client_id: trimOrNull(tenant.client_id || tenant.clientId) ||
+      trimOrNull(process.env.MICROSOFT_CLIENT_ID),
+    client_secret:
+      (tenantSecret ? decryptValue(tenantSecret) : null) ||
+      trimOrNull(process.env.MICROSOFT_CLIENT_SECRET),
+    redirect_uri: trimOrNull(tenant.redirect_uri || tenant.redirectUri) ||
+      trimOrNull(process.env.MICROSOFT_REDIRECT_URI),
+    authority: trimOrNull(tenant.authority) ||
+      trimOrNull(process.env.MICROSOFT_AUTHORITY) ||
+      "https://login.microsoftonline.com/common",
+  };
+
+  if (!merged.client_id || !merged.client_secret || !merged.redirect_uri) {
+    return null;
+  }
+  return merged;
+}
+
+export function isMicrosoftOAuthConfigured(tenantConfig = null) {
+  return resolveMicrosoftOAuthConfig(tenantConfig) !== null;
+}
+
+/** Load optional per-org Microsoft block from organisations.smtp_settings. */
+export async function loadTenantMicrosoftConfig(organisationId) {
+  if (!organisationId) return null;
+  try {
+    const org = await platformDb.Organisation.findByPk(organisationId, {
+      attributes: ["id", "smtp_settings"],
+    });
+    const raw = org?.smtp_settings || {};
+    return raw?.microsoft || raw?.integrations?.microsoft || null;
+  } catch (err) {
+    logger.warn({ err }, "Failed to read organisation Microsoft OAuth settings");
+    return null;
+  }
+}
 
 /**
  * Builds the Microsoft OAuth2 consent screen authorization URL.
  */
-export const getAuthUrl = (state) => {
-  const clientId = process.env.MICROSOFT_CLIENT_ID;
-  const redirectUri = process.env.MICROSOFT_REDIRECT_URI;
-  const authority = process.env.MICROSOFT_AUTHORITY || "https://login.microsoftonline.com/common";
-
-  if (!clientId || !redirectUri) {
-    throw new Error("Microsoft OAuth configuration is missing. Ensure MICROSOFT_CLIENT_ID and MICROSOFT_REDIRECT_URI are set.");
+export const getAuthUrl = (state, tenantConfig = null) => {
+  const config = resolveMicrosoftOAuthConfig(tenantConfig);
+  if (!config) {
+    throw new Error("Microsoft OAuth configuration is missing. Ensure MICROSOFT_CLIENT_ID and MICROSOFT_REDIRECT_URI are set (or add Microsoft credentials under organisation settings).");
   }
 
-  // Graph scopes for calendars and online meetings
-  const scopes = [
-    "offline_access",
-    "User.Read",
-    "OnlineMeetings.ReadWrite",
-    "Calendars.ReadWrite"
-  ].join(" ");
-
   const params = new URLSearchParams({
-    client_id: clientId,
+    client_id: config.client_id,
     response_type: "code",
-    redirect_uri: redirectUri,
+    redirect_uri: config.redirect_uri,
     response_mode: "query",
-    scope: scopes,
+    scope: GRAPH_SCOPES,
   });
 
   if (state) {
     params.append("state", state);
   }
 
-  return `${authority}/oauth2/v2.0/authorize?${params.toString()}`;
+  return `${config.authority}/oauth2/v2.0/authorize?${params.toString()}`;
 };
 
 /**
  * Exchanges Microsoft auth code for access and refresh tokens.
  */
-export const exchangeCodeForTokens = async (code) => {
-  const clientId = process.env.MICROSOFT_CLIENT_ID;
-  const clientSecret = process.env.MICROSOFT_CLIENT_SECRET;
-  const redirectUri = process.env.MICROSOFT_REDIRECT_URI;
-  const authority = process.env.MICROSOFT_AUTHORITY || "https://login.microsoftonline.com/common";
-
-  const scopes = [
-    "offline_access",
-    "User.Read",
-    "OnlineMeetings.ReadWrite",
-    "Calendars.ReadWrite"
-  ].join(" ");
+export const exchangeCodeForTokens = async (code, tenantConfig = null) => {
+  const config = resolveMicrosoftOAuthConfig(tenantConfig);
+  if (!config) {
+    throw new Error("Microsoft OAuth is not configured. Cannot exchange code for tokens.");
+  }
 
   const params = new URLSearchParams({
-    client_id: clientId,
-    client_secret: clientSecret,
+    client_id: config.client_id,
+    client_secret: config.client_secret,
     code,
-    redirect_uri: redirectUri,
+    redirect_uri: config.redirect_uri,
     grant_type: "authorization_code",
-    scope: scopes,
+    scope: GRAPH_SCOPES,
   });
+
+  const authority = config.authority;
 
   const url = `${authority}/oauth2/v2.0/token`;
 

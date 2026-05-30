@@ -16,7 +16,8 @@ export const exportWorkloadCSV = catchAsync(async (req, res) => {
       });
     }
 
-    const { timeRange = "30days" } = req.query;
+    // sheet = 'team' | 'tasks' | 'deadlines' | undefined (all)
+    const { timeRange = "30days", sheet } = req.query;
 
     // Calculate date range
     const now = new Date();
@@ -167,8 +168,89 @@ export const exportWorkloadCSV = catchAsync(async (req, res) => {
       { key: "workloadLevel", header: "Workload Level" },
     ];
 
-    const buffer = rowsToXlsxBuffer(workloadData, columns);
-    sendXlsxDownload(res, buffer, `workload_report_${localDateStr()}.xlsx`);
+    const { multiSheetXlsxBuffer } = await import('../../../utils/excelExport.util.js');
+    const sheets = [];
+
+    // ── Team Workload sheet ──────────────────────────────────────
+    if (!sheet || sheet === 'team') {
+      sheets.push({ name: 'Team Workload', columns, rows: workloadData });
+    }
+
+    // ── Pending Tasks sheet ──────────────────────────────────────
+    if (!sheet || sheet === 'tasks') {
+      const tasks = await req.tenantDb.Task.findAll({
+        where: { status: { [Op.notIn]: ['completed'] } },
+        include: [
+          { model: req.tenantDb.Case, as: 'case', attributes: ['id', 'caseId', 'status'], required: false },
+          { model: req.tenantDb.User, as: 'assignee', attributes: ['id', 'first_name', 'last_name'], required: false },
+        ],
+        order: [['due_date', 'ASC']],
+      });
+      const taskCols = [
+        { key: 'title',    header: 'Task' },
+        { key: 'status',   header: 'Status' },
+        { key: 'priority', header: 'Priority' },
+        { key: 'caseId',   header: 'Case ID' },
+        { key: 'assignee', header: 'Assigned To' },
+        { key: 'due',      header: 'Due Date' },
+      ];
+      const taskRows = tasks.map((t) => ({
+        title:    t.title || '',
+        status:   t.status || '',
+        priority: t.priority || '',
+        caseId:   t.case?.caseId || t.case?.id || '',
+        assignee: t.assignee ? `${t.assignee.first_name} ${t.assignee.last_name}` : 'Unassigned',
+        due:      t.due_date ? localDateStr(new Date(t.due_date)) : '',
+      }));
+      sheets.push({ name: 'Pending Tasks', columns: taskCols, rows: taskRows });
+    }
+
+    // ── Deadline Monitor sheet ───────────────────────────────────
+    if (!sheet || sheet === 'deadlines') {
+      const deadlineCases = await req.tenantDb.Case.findAll({
+        where: { status: { [Op.notIn]: ['Completed', 'Closed', 'Cancelled'] } },
+        include: [{ model: req.tenantDb.User, as: 'candidate', attributes: ['id', 'first_name', 'last_name'], required: false }],
+        order: [['targetSubmissionDate', 'ASC']],
+      });
+      const cwUsers = await req.tenantDb.User.findAll({ where: { role_id: 2 }, attributes: ['id', 'first_name', 'last_name'] });
+      const cwMap = {};
+      cwUsers.forEach((u) => { cwMap[u.id] = `${u.first_name} ${u.last_name}`; });
+
+      const now = new Date();
+      const dlCols = [
+        { key: 'caseId',     header: 'Case ID' },
+        { key: 'candidate',  header: 'Candidate' },
+        { key: 'caseworker', header: 'Caseworker' },
+        { key: 'status',     header: 'Status' },
+        { key: 'deadline',   header: 'Deadline' },
+        { key: 'daysLeft',   header: 'Days Remaining' },
+        { key: 'risk',       header: 'Risk' },
+      ];
+      const dlRows = deadlineCases.map((c) => {
+        const cwName = Array.isArray(c.assignedcaseworkerId) && c.assignedcaseworkerId.length
+          ? cwMap[c.assignedcaseworkerId[0]] || 'Unassigned'
+          : 'Unassigned';
+        const deadline = c.targetSubmissionDate ? new Date(c.targetSubmissionDate) : null;
+        const daysLeft = deadline ? Math.ceil((deadline - now) / (1000 * 60 * 60 * 24)) : null;
+        const risk = !deadline ? 'No Deadline' : daysLeft < 0 ? 'Breached' : daysLeft < 14 ? 'At Risk' : 'On Track';
+        return {
+          caseId:     c.caseId || c.id,
+          candidate:  c.candidate ? `${c.candidate.first_name} ${c.candidate.last_name}` : 'Unknown',
+          caseworker: cwName,
+          status:     c.status || '',
+          deadline:   deadline ? localDateStr(deadline) : '',
+          daysLeft:   daysLeft !== null ? daysLeft : '',
+          risk,
+        };
+      });
+      sheets.push({ name: 'Deadline Monitor', columns: dlCols, rows: dlRows });
+    }
+
+    const label = sheet ? `workload_${sheet}` : 'workload_all';
+    const buf = sheets.length === 1
+      ? rowsToXlsxBuffer(sheets[0].rows, sheets[0].columns)
+      : multiSheetXlsxBuffer(sheets);
+    sendXlsxDownload(res, buf, `${label}_${localDateStr()}.xlsx`);
   } catch (error) {
     return ApiResponse.error(res, "Failed to export workload", 500, error);
   }
