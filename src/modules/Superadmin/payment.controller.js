@@ -120,11 +120,7 @@ export const getGatewayStatus = catchAsync(async (req, res) => {
 });
 
 export const configureGateway = catchAsync(async (req, res) => {
-  const { publishable_key, secret_key, webhook_secret, currency, platform_fee } = req.body;
-
-  if (!publishable_key || !secret_key) {
-    return ApiResponse.badRequest(res, "Publishable key and secret key are required");
-  }
+  const { publishable_key, secret_key, webhook_secret, currency, platform_fee } = req.validated.body;
 
   const upserts = [
     { key: 'stripe_publishable_key', value: String(publishable_key).trim() },

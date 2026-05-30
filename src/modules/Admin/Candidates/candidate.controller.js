@@ -11,7 +11,7 @@ import catchAsync from '../../../utils/catchAsync.js';
 export const createCandidate = catchAsync(async (req, res) => {
   const service = new CandidateService(req.tenantDb);
   const result = await service.createCandidate({
-    ...req.body,
+    ...req.validated.body,
     organisation_id: req.user.organisation_id
   }, { tenantDb: req.tenantDb, io: req.app.get('io'), organisationId: req.user.organisation_id }, req.user);
   
@@ -28,7 +28,7 @@ export const getAllCandidates = catchAsync(async (req, res) => {
 
 // Get Candidate by ID
 export const getCandidateById = catchAsync(async (req, res) => {
-  const { id } = req.params;
+  const { id } = req.validated.params;
   const service = new CandidateService(req.tenantDb);
   const candidate = await service.getCandidateById(id);
   
@@ -37,9 +37,9 @@ export const getCandidateById = catchAsync(async (req, res) => {
 
 // Update Candidate
 export const updateCandidate = catchAsync(async (req, res) => {
-  const { id } = req.params;
+  const { id } = req.validated.params;
   const service = new CandidateService(req.tenantDb);
-  const candidate = await service.updateCandidate(id, req.body);
+  const candidate = await service.updateCandidate(id, req.validated.body);
   
   return ApiResponse.success(res, "Candidate updated successfully", { candidate });
 });

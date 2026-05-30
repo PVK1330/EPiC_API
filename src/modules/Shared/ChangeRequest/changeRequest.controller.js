@@ -29,7 +29,7 @@ const addHistory = async (tenantDb, changeRequestId, action, performedBy, role, 
 
 export const createRequest = async (req, res) => {
   try {
-    const { entityType, entityId, fieldName, requestedValue, reason, changeCategory, riskLevel, caseId } = req.body;
+    const { entityType, entityId, fieldName, requestedValue, reason, changeCategory, riskLevel, caseId } = req.validated.body;
     const submittedBy = req.user.id;
     const role = req.user.role?.name || 'Candidate';
     const organisationId = req.user.organisation_id || null;
@@ -209,7 +209,7 @@ export const approveRequest = async (req, res) => {
 
     cr.status = 'APPROVED';
     cr.reviewed_by = req.user.id;
-    cr.review_notes = req.body.notes || 'Approved automatically by workflow';
+    cr.review_notes = req.validated.body.notes || 'Approved automatically by workflow';
     await cr.save();
 
     await addHistory(req.tenantDb, cr.id, 'APPROVED', req.user.id, role, cr.review_notes);
@@ -284,7 +284,7 @@ export const rejectRequest = async (req, res) => {
 
     cr.status = 'REJECTED';
     cr.reviewed_by = req.user.id;
-    cr.review_notes = req.body.notes || 'No reason provided';
+    cr.review_notes = req.validated.body.notes || 'No reason provided';
     await cr.save();
 
     await addHistory(req.tenantDb, cr.id, 'REJECTED', req.user.id, role, cr.review_notes);
@@ -330,7 +330,7 @@ export const escalateRequest = async (req, res) => {
 
     cr.status = 'ESCALATED';
     cr.reviewed_by = req.user.id;
-    cr.review_notes = req.body.notes || 'Escalated for higher review';
+    cr.review_notes = req.validated.body.notes || 'Escalated for higher review';
     await cr.save();
 
     await addHistory(req.tenantDb, cr.id, 'ESCALATED', req.user.id, role, cr.review_notes);

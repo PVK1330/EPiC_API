@@ -68,7 +68,7 @@ export const getMyAppointments = async (req, res) => {
 // Create a new appointment
 export const createAppointment = async (req, res) => {
   try {
-    const { title, description, date, time, platform, meeting_url, case_id, staff_ids } = req.body;
+    const { title, description, date, time, platform, meeting_url, case_id, staff_ids } = req.validated.body;
     const candidate_id = req.user.userId;
 
     // Primary caseworker is the first one in the list
@@ -230,7 +230,7 @@ export const getAvailableStaff = async (req, res) => {
 export const updateAppointmentStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status } = req.body;
+    const { status } = req.validated.body;
 
     const appointment = await req.tenantDb.Appointment.findByPk(id);
     if (!appointment) {

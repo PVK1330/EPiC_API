@@ -243,13 +243,13 @@ async function resolveUserForPasswordReset(req, email) {
     });
     if (org?.database_name && org.status !== "suspended") {
       const orgTenantDb = getTenantDb(org.database_name);
-      await mirrorUserToTenant(orgTenantDb, platformUser).catch(() => {});
+      await mirrorUserToTenant(orgTenantDb, platformUser).catch(() => { });
       return { user: platformUser, tenantDb: orgTenantDb };
     }
   }
 
   if (tenantDb) {
-    await mirrorUserToTenant(tenantDb, platformUser).catch(() => {});
+    await mirrorUserToTenant(tenantDb, platformUser).catch(() => { });
   }
   return { user: platformUser, tenantDb };
 }
@@ -296,75 +296,9 @@ export const register = catchAsync(async (req, res) => {
     role_id,
     date_of_birth,
     organisation_id: bodyOrgId,
-  } = req.body;
+  } = req.validated.body;
 
-  // ── Basic field presence ──────────────────────────────────────────────────
-  if (!first_name || !String(first_name).trim()) {
-    return ApiResponse.badRequest(res, "First name is required");
-  }
-  if (!last_name || !String(last_name).trim()) {
-    return ApiResponse.badRequest(res, "Last name is required");
-  }
-  if (!email || !String(email).trim()) {
-    return ApiResponse.badRequest(res, "Email is required");
-  }
-
-  // ── Email format ──────────────────────────────────────────────────────────
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(String(email).trim())) {
-    return ApiResponse.badRequest(res, "Invalid email address");
-  }
-
-  // ── Password ──────────────────────────────────────────────────────────────
-  if (!password || password.length < 8) {
-    return ApiResponse.badRequest(res, "Password must be at least 8 characters");
-  }
-
-  // ── Mobile number ─────────────────────────────────────────────────────────
-  if (!mobile || !String(mobile).trim()) {
-    return ApiResponse.badRequest(res, "Mobile number is required");
-  }
-  const mobileStr = String(mobile).trim().replace(/\s+/g, "");
-  // Must be 7–15 digits (E.164 body, without country code)
-  if (!/^\d{7,15}$/.test(mobileStr)) {
-    return ApiResponse.badRequest(
-      res,
-      "Mobile number must be between 7 and 15 digits and contain only numbers",
-    );
-  }
-  if (!country_code || !String(country_code).trim()) {
-    return ApiResponse.badRequest(res, "Country code is required (e.g. +44)");
-  }
-  // Country code: optional leading +, then 1–4 digits
-  if (!/^\+?\d{1,4}$/.test(String(country_code).trim())) {
-    return ApiResponse.badRequest(res, "Invalid country code (e.g. +44, +91)");
-  }
-
-  // ── Date of birth ─────────────────────────────────────────────────────────
-  if (date_of_birth) {
-    const dob = new Date(date_of_birth);
-    if (isNaN(dob.getTime())) {
-      return ApiResponse.badRequest(res, "Invalid date of birth");
-    }
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    if (dob >= today) {
-      return ApiResponse.badRequest(res, "Date of birth cannot be today or a future date");
-    }
-    // Must be at least 16 years old
-    const minAge = new Date(today);
-    minAge.setFullYear(minAge.getFullYear() - 16);
-    if (dob > minAge) {
-      return ApiResponse.badRequest(res, "You must be at least 16 years old to register");
-    }
-  }
-
-  // ── Role ──────────────────────────────────────────────────────────────────
   const parsedRoleId = Number(role_id);
-  const validRoles = [1, 2, 3, 4];
-  if (!validRoles.includes(parsedRoleId)) {
-    return ApiResponse.badRequest(res, "Invalid role. Allowed values: 1 (candidate), 2 (caseworker), 3 (admin), 4 (business)");
-  }
 
   // ── Resolve organisation / tenant DB ──────────────────────────────────────
   // If a body organisation_id is supplied (e.g. from a plain /register call
@@ -480,7 +414,7 @@ export const register = catchAsync(async (req, res) => {
  * Verify OTP and activate user
  */
 export const verifyOTP = catchAsync(async (req, res) => {
-  const { email, otp, organisation_id: bodyOrgId } = req.body;
+  const { email, otp, organisation_id: bodyOrgId } = req.validated.body;
   const emailNorm = normalizePlatformEmail(email);
 
   // ── Resolve organisation context from body (same as register) ──────────
@@ -502,7 +436,7 @@ export const verifyOTP = catchAsync(async (req, res) => {
       503,
     );
   }
-  
+
   const { UnverifiedUser } = tenantDb;
   const unverifiedUser = await UnverifiedUser.findOne({ where: { email: emailNorm } });
 
@@ -596,7 +530,7 @@ export const verifyOTP = catchAsync(async (req, res) => {
  * Resend OTP for registration
  */
 export const resendOTP = catchAsync(async (req, res) => {
-  const { email, organisation_id: bodyOrgId } = req.body;
+  const { email, organisation_id: bodyOrgId } = req.validated.body;
   const emailNorm = normalizePlatformEmail(email);
 
   // ── Resolve organisation context from body (same as register/verifyOTP) ──
@@ -666,11 +600,7 @@ export const resendOTP = catchAsync(async (req, res) => {
  * Login
  */
 export const login = catchAsync(async (req, res) => {
-  const { email, password } = req.body;
-
-  if (!email || !password) {
-    return ApiResponse.badRequest(res, 'Email and password are required.');
-  }
+  const { email, password, userType } = req.validated.body;
 
   const emailNorm = normalizePlatformEmail(email);
   let user = await findPlatformUserForLogin(platformDb, emailNorm, req.organisationContext);
@@ -726,7 +656,7 @@ export const login = catchAsync(async (req, res) => {
     platformDb.PlatformAuditLog.create({
       user_id: user.id, action: 'FAILED_LOGIN',
       details: 'Attempted login on locked account', ip_address: req.ip || req.connection?.remoteAddress, status: 'Failed'
-    }).catch(() => {});
+    }).catch(() => { });
     return ApiResponse.forbidden(res, 'Account is locked due to multiple failed attempts. Please try again later.');
   }
 
@@ -738,13 +668,13 @@ export const login = catchAsync(async (req, res) => {
       platformDb.PlatformAuditLog.create({
         user_id: user.id, action: 'ACCOUNT_LOCKED',
         details: 'Account locked due to 5 failed attempts', ip_address: req.ip || req.connection?.remoteAddress, status: 'Success'
-      }).catch(() => {});
+      }).catch(() => { });
     }
     await user.save();
     platformDb.PlatformAuditLog.create({
       user_id: user.id, action: 'FAILED_LOGIN',
       details: 'Invalid password', ip_address: req.ip || req.connection?.remoteAddress, status: 'Failed'
-    }).catch(() => {});
+    }).catch(() => { });
     return ApiResponse.unauthorized(res, 'Invalid credentials.');
   }
 
@@ -788,7 +718,7 @@ export const login = catchAsync(async (req, res) => {
   platformDb.PlatformAuditLog.create({
     user_id: user.id, action: 'LOGIN',
     details: 'User logged in successfully', ip_address: req.ip || req.connection?.remoteAddress, status: 'Success'
-  }).catch(() => {});
+  }).catch(() => { });
 
   // Set httpOnly cookie for secure token storage — XSS-resistant
   res.cookie('token', token, getCookieConfig({
@@ -826,7 +756,7 @@ export const login = catchAsync(async (req, res) => {
  */
 export const logout = catchAsync(async (req, res) => {
   const refreshTokenStr = req.cookies?.refreshToken;
-  
+
   if (refreshTokenStr && req.user?.id) {
     const sessions = await platformDb.UserSession.findAll({ where: { user_id: req.user.id } });
     for (const session of sessions) {
@@ -841,7 +771,7 @@ export const logout = catchAsync(async (req, res) => {
   platformDb.PlatformAuditLog.create({
     user_id: req.user?.id || null, action: 'LOGOUT',
     details: 'User logged out', ip_address: req.ip || req.connection?.remoteAddress, status: 'Success'
-  }).catch(() => {});
+  }).catch(() => { });
 
   res.clearCookie('token', getCookieConfig());
   res.clearCookie('refreshToken', getCookieConfig());
@@ -864,9 +794,9 @@ export const refreshToken = catchAsync(async (req, res) => {
   }
 
   // Allow verifyToken to ignore expiration for the purpose of getting user ID
-  const decoded = verifyToken(req.cookies?.token, true) || {}; 
+  const decoded = verifyToken(req.cookies?.token, true) || {};
   const userId = decoded.id;
-  
+
   if (!userId) {
     return ApiResponse.unauthorized(res, 'Invalid session state');
   }
@@ -907,11 +837,11 @@ export const refreshToken = catchAsync(async (req, res) => {
   platformDb.PlatformAuditLog.create({
     user_id: user.id, action: 'REFRESH_TOKEN_ROTATED',
     details: 'Token rotated', ip_address: req.ip || req.connection?.remoteAddress, status: 'Success'
-  }).catch(() => {});
+  }).catch(() => { });
 
   res.cookie('token', newToken, getCookieConfig({ maxAge: 15 * 60 * 1000 }));
   res.cookie('refreshToken', newRefreshString, getCookieConfig({ maxAge: 7 * 24 * 60 * 60 * 1000 }));
-  
+
   return ApiResponse.success(res, 'Token refreshed');
 });
 
@@ -921,7 +851,7 @@ export const getMe = catchAsync(async (req, res) => {
   if (!user) return ApiResponse.unauthorized(res, 'User not found');
   const roleMeta = await resolveAuthRole(user);
   const allowedModules = await resolveAllowedModules(user);
-  
+
   let organisation = null;
   if (user.organisation_id && !isPlatformStaffUser(user)) {
     const org = await platformDb.Organisation.findByPk(user.organisation_id, {
@@ -942,7 +872,7 @@ export const getMe = catchAsync(async (req, res) => {
  * Forgot Password - Send OTP
  */
 export const forgotPassword = catchAsync(async (req, res) => {
-  const email = String(req.body?.email || "").trim().toLowerCase();
+  const email = String(req.validated.body?.email || "").trim().toLowerCase();
   const { user, tenantDb } = await resolveUserForPasswordReset(req, email);
 
   if (!user) {
@@ -1000,8 +930,8 @@ export const forgotPassword = catchAsync(async (req, res) => {
  * Verify Password Reset OTP
  */
 export const verifyResetOTP = catchAsync(async (req, res) => {
-  const email = String(req.body?.email || "").trim().toLowerCase();
-  const { otp } = req.body;
+  const email = String(req.validated.body?.email || "").trim().toLowerCase();
+  const { otp } = req.validated.body;
   const { user } = await resolveUserForPasswordReset(req, email);
 
   if (!user) {
@@ -1032,8 +962,8 @@ export const verifyResetOTP = catchAsync(async (req, res) => {
  * Set New Password using Reset Token
  */
 export const setPassword = catchAsync(async (req, res) => {
-  const email = String(req.body?.email || "").trim().toLowerCase();
-  const { password, confirmPassword, resetToken } = req.body;
+  const email = String(req.validated.body?.email || "").trim().toLowerCase();
+  const { password, confirmPassword, resetToken } = req.validated.body;
   const { user, tenantDb } = await resolveUserForPasswordReset(req, email);
 
   if (!user) {
@@ -1112,7 +1042,7 @@ export const setPassword = catchAsync(async (req, res) => {
  * Resend OTP for authenticated user
  */
 export const resendOtpUser = catchAsync(async (req, res) => {
-  const { email } = req.body;
+  const { email } = req.validated.body;
   const user = await platformDb.User.findOne({ where: { email } });
 
   if (!user) {
@@ -1141,7 +1071,7 @@ export const resendOtpUser = catchAsync(async (req, res) => {
  * Verify OTP for authenticated user
  */
 export const verifyOtpUser = catchAsync(async (req, res) => {
-  const { email, otp } = req.body;
+  const { email, otp } = req.validated.body;
   const user = await platformDb.User.findOne({ where: { email } });
 
   if (!user) {
@@ -1224,7 +1154,7 @@ export const setup2FA = catchAsync(async (req, res) => {
  */
 export const verify2FASetup = catchAsync(async (req, res) => {
   const userId = req.user.userId;
-  const { token } = req.body;
+  const { token } = req.validated.body;
   const user = await platformDb.User.findByPk(userId);
 
   if (!user || !user.two_factor_secret) return ApiResponse.badRequest(res, '2FA setup not initiated');
@@ -1247,7 +1177,7 @@ export const verify2FASetup = catchAsync(async (req, res) => {
  * 2FA - Verify Login
  */
 export const verify2FA = catchAsync(async (req, res) => {
-  const { email, token } = req.body;
+  const { email, token } = req.validated.body;
   const user = await platformDb.User.findOne({ where: { email } });
 
   if (!user || !user.two_factor_secret) return ApiResponse.badRequest(res, '2FA not enabled');
@@ -1362,7 +1292,7 @@ export const me = catchAsync(async (req, res) => {
  * and stored in localStorage/Redux.
  */
 export const handoff = catchAsync(async (req, res) => {
-  const { token } = req.body || {};
+  const { token } = req.validated.body || {};
 
   if (!token) {
     return ApiResponse.badRequest(res, 'Missing handoff token');
@@ -1387,7 +1317,7 @@ export const handoff = catchAsync(async (req, res) => {
   if (!user) {
     return ApiResponse.notFound(res, 'User not found');
   }
-  
+
   const roleMeta = await resolveAuthRole(user);
   const allowedModules = await resolveAllowedModules(user);
 

@@ -13,18 +13,6 @@ function buildDateWhere(dateRange) {
   return { created_at: { [Op.gte]: startDate } };
 }
 
-const _auditColsEnsured = new Set();
-
-async function ensureAuditLogColumns(sequelize) {
-  const key = sequelize.config?.database || sequelize.getDatabaseName?.() || 'default';
-  if (_auditColsEnsured.has(key)) return;
-
-  await sequelize.query("ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS resource VARCHAR(255)").catch(() => {});
-  await sequelize.query("ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'Success'").catch(() => {});
-  await sequelize.query("ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS details TEXT").catch(() => {});
-
-  _auditColsEnsured.add(key);
-}
 
 function formatLog(log) {
   const userObj = log.user;
@@ -97,7 +85,6 @@ export const getAuditLogs = async (req, res) => {
       whereClause.created_at = { [Op.lte]: new Date(endDate) };
     }
 
-    await ensureAuditLogColumns(req.tenantDb.sequelize);
 
     const userInclude = {
       model:      req.tenantDb.User,
@@ -163,7 +150,6 @@ export const logClientEvent = async (req, res) => {
 export const getAuditStats = async (req, res) => {
   try {
     const { dateRange } = req.query;
-    await ensureAuditLogColumns(req.tenantDb.sequelize);
     const dateWhere = buildDateWhere(dateRange);
 
     const [total, byAction, byStatus] = await Promise.all([
@@ -193,7 +179,6 @@ export const getAuditStats = async (req, res) => {
 
 export const getAuditActionTypes = async (req, res) => {
   try {
-    await ensureAuditLogColumns(req.tenantDb.sequelize);
     const rows = await req.tenantDb.AuditLog.findAll({
       attributes: [[req.tenantDb.sequelize.fn('DISTINCT', req.tenantDb.sequelize.col('action')), 'action']],
       raw: true,
@@ -209,7 +194,6 @@ export const exportAuditLogs = async (req, res) => {
   try {
     const { action, status, startDate, endDate, userId, role, entityType, entityId } = req.query;
 
-    await ensureAuditLogColumns(req.tenantDb.sequelize);
 
     const whereClause = {};
     if (action) whereClause.action = action;

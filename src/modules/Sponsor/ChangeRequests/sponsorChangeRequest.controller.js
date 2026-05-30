@@ -28,11 +28,7 @@ const resolveStatus = (dateReported, reportingDeadline) => {
 export const createChangeRequest = async (req, res) => {
   try {
     const sponsorId = req.user.userId;
-    const { changeType, description, eventDate, notes } = req.body;
-
-    if (!changeType || !eventDate) {
-      return res.status(400).json({ status: "error", message: "changeType and eventDate are required" });
-    }
+    const { changeType, description, eventDate, notes } = req.validated.body;
 
     const reportingDeadline = addDays(eventDate, 20);
     const organisationId = req.user?.organisation_id != null ? Number(req.user.organisation_id) : null;
@@ -90,7 +86,7 @@ export const updateChangeRequestStatus = async (req, res) => {
   try {
     const sponsorId = req.user.userId;
     const { id } = req.params;
-    const { status, notes, dateReported, reportedBy } = req.body;
+    const { status, notes, dateReported, reportedBy } = req.validated.body;
 
     const request = await req.tenantDb.SponsorChangeRequest.findOne({ where: { id, sponsorId } });
     if (!request) {

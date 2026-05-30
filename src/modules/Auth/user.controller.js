@@ -66,7 +66,7 @@ export const editProfile = async (req, res) => {
     const userId = req.user.userId;
     
     // Get editable fields from request body
-    const body = req.body || {};
+    const body = req.validated.body || {};
     const { first_name, last_name, country_code, mobile, gender } = body;
 
     // Find user by ID
@@ -76,15 +76,6 @@ export const editProfile = async (req, res) => {
       return res.status(404).json({
         status: "error",
         message: "User not found",
-        data: null
-      });
-    }
-
-    // Validate required fields
-    if (!first_name || !last_name) {
-      return res.status(400).json({
-        status: "error",
-        message: "First name and last name are required",
         data: null
       });
     }
@@ -171,23 +162,7 @@ export const editProfile = async (req, res) => {
 export const changeOwnPassword = async (req, res) => {
   try {
     const userId = req.user.userId;
-    const { new_password } = req.body || {};
-
-    if (!new_password) {
-      return res.status(400).json({
-        status: "error",
-        message: "new_password is required",
-        data: null,
-      });
-    }
-
-    if (new_password.length < 8) {
-      return res.status(400).json({
-        status: "error",
-        message: "New password must be at least 8 characters",
-        data: null,
-      });
-    }
+    const { new_password } = req.validated.body || {};
 
     let full = null;
     if (req.tenantDb) {

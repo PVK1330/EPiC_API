@@ -50,26 +50,7 @@ export const createSponsor = async (req, res) => {
       riskLevel,
       riskPct,
       outstandingBalance
-    } = req.body;
-
-    // Validate required fields
-    if (!first_name || !last_name || !email || !country_code || !mobile || !companyName) {
-      return res.status(400).json({
-        status: "error",
-        message: "First name, last name, email, country code, mobile, and company name are required",
-        data: null
-      });
-    }
-
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return res.status(400).json({
-        status: "error",
-        message: "Invalid email format",
-        data: null
-      });
-    }
+    } = req.validated.body;
 
     const organisationId =
       req.user?.organisation_id != null ? Number(req.user.organisation_id) : null;
@@ -395,7 +376,7 @@ export const updateSponsor = async (req, res) => {
       sponsoredWorkers,
       notes,
       riskPct
-    } = req.body;
+    } = req.validated.body;
 
     // Find sponsor
     const sponsor = await req.tenantDb.User.findOne({ where: { id, role_id: 4 } });
@@ -403,15 +384,6 @@ export const updateSponsor = async (req, res) => {
       return res.status(404).json({
         status: "error",
         message: "Sponsor not found",
-        data: null
-      });
-    }
-
-    // Validate required fields
-    if (!first_name || !last_name || !email || !country_code || !mobile || !companyName) {
-      return res.status(400).json({
-        status: "error",
-        message: "First name, last name, email, country code, mobile, and company name are required",
         data: null
       });
     }
@@ -618,31 +590,7 @@ export const deleteSponsor = async (req, res) => {
 export const resetSponsorPassword = async (req, res) => {
   try {
     const { id } = req.params;
-    const { new_password, confirm_password } = req.body;
-
-    if (!new_password || !confirm_password) {
-      return res.status(400).json({
-        status: "error",
-        message: "New password and confirm password are required",
-        data: null
-      });
-    }
-
-    if (new_password !== confirm_password) {
-      return res.status(400).json({
-        status: "error",
-        message: "Passwords do not match",
-        data: null
-      });
-    }
-
-    if (new_password.length < 6) {
-      return res.status(400).json({
-        status: "error",
-        message: "Password must be at least 6 characters long",
-        data: null
-      });
-    }
+    const { new_password, confirm_password } = req.validated.body;
 
     const sponsor = await req.tenantDb.User.findOne({ where: { id, role_id: 4 } });
     if (!sponsor) {

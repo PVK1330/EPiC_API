@@ -83,28 +83,9 @@ async function bootstrapPlatform() {
     await runPlatformMigrations();
     logger.info('Platform SQL migrations applied');
 
-    await platformDb.sequelize.sync();
-    logger.info('Platform schema synchronized');
-
     await seedRolesForDb(platformDb);
     await seedPermissionsForDb(platformDb);
     await seedPlatformRbacForDb(platformDb);
-
-    await platformDb.sequelize.query(
-      'ALTER TABLE "organisations" ADD COLUMN IF NOT EXISTS "database_name" VARCHAR(63);',
-    );
-    await platformDb.sequelize.query(
-      'ALTER TABLE "organisations" ADD COLUMN IF NOT EXISTS "plan_id" INTEGER;',
-    );
-    await platformDb.sequelize.query(
-      'ALTER TABLE "organisations" ADD COLUMN IF NOT EXISTS "smtp_settings" JSONB DEFAULT NULL;',
-    );
-    await platformDb.sequelize.query(
-      'ALTER TABLE "organisations" ADD COLUMN IF NOT EXISTS "deleted_at" TIMESTAMPTZ;',
-    );
-    await platformDb.sequelize.query(
-      "CREATE INDEX IF NOT EXISTS idx_organisations_deleted_at ON organisations (deleted_at);",
-    );
 
     await seedPlans();
     await seedModules();

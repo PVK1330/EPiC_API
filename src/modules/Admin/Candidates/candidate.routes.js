@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import * as controller from './candidate.controller.js';
-import { validateCandidate } from './candidate.validator.js';
+import { validate } from '../../../middlewares/validate.middleware.js';
+import * as schema from '../../../validations/candidate.validation.js';
 import { verifyTokenAndTenant } from '../../../middlewares/authStack.middleware.js';
 import { checkRole, ROLES } from '../../../middlewares/role.middleware.js';
 import * as candidateApplicationController from '../../Candidate/Application/candidateApplication.controller.js';
@@ -25,11 +26,11 @@ router.post(
   candidateApplicationController.importCandidateApplicationsExcel
 );
 
-router.post("/", validateCandidate, controller.createCandidate);
+router.post("/", validate(schema.createCandidateSchema), controller.createCandidate);
 router.get("/", controller.getAllCandidates);
-router.get("/:id", controller.getCandidateById);
-router.patch("/:id", validateCandidate, controller.updateCandidate);
-router.patch("/:id/toggle-status", controller.toggleCandidateStatus);
+router.get("/:id", validate(schema.getCandidateSchema), controller.getCandidateById);
+router.patch("/:id", validate(schema.updateCandidateSchema), controller.updateCandidate);
+router.patch("/:id/toggle-status", validate(schema.getCandidateSchema), controller.toggleCandidateStatus);
 router.delete("/:id", controller.deleteCandidate);
 router.post("/:id/reset-password", controller.resetCandidatePassword);
 router.get("/:id/application", controller.getCandidateApplication);

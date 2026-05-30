@@ -210,7 +210,7 @@ export const createPaymentIntent = async (req, res) => {
       currency = "gbp",
       payment_method_id,
       metadata = {},
-    } = req.body;
+    } = req.validated.body;
 
     const userId = req.user?.userId;
     const tenantDb = req.tenantDb;
@@ -432,7 +432,7 @@ export const verifyCheckoutSession = async (req, res) => {
 export const confirmPayment = async (req, res) => {
   try {
     const { stripe } = await getStripeForRequest(req);
-    const { payment_intent_id, payment_method_id } = req.body;
+    const { payment_intent_id, payment_method_id } = req.validated.body;
 
     if (!payment_intent_id) {
       return res.status(400).json({
@@ -552,7 +552,7 @@ export const getPaymentStatus = async (req, res) => {
 export const cancelPayment = async (req, res) => {
   try {
     const { stripe } = await getStripeForRequest(req);
-    const { payment_intent_id } = req.body;
+    const { payment_intent_id } = req.validated.body;
 
     if (!payment_intent_id) {
       return res.status(400).json({
@@ -588,7 +588,7 @@ export const cancelPayment = async (req, res) => {
 export const createSetupIntent = async (req, res) => {
   try {
     const { stripe } = await getStripeForRequest(req);
-    const { customer_id } = req.body;
+    const { customer_id } = req.validated.body;
 
     const setupIntent = await stripe.setupIntents.create({
       customer: customer_id,
@@ -989,7 +989,7 @@ const processStripeWebhookEvent = async (event, tenantDb, req) => {
 export const createRefund = async (req, res) => {
   try {
     const { stripe } = await getStripeForRequest(req);
-    const { payment_intent_id, amount, reason } = req.body;
+    const { payment_intent_id, amount, reason } = req.validated.body;
 
     if (!payment_intent_id) {
       return res.status(400).json({
@@ -1035,7 +1035,7 @@ export const createSubscription = async (req, res) => {
       price_id,
       payment_method_id,
       metadata = {},
-    } = req.body;
+    } = req.validated.body;
 
     if (!customer_id || !price_id) {
       return res.status(400).json({
@@ -1101,7 +1101,7 @@ export const createSubscription = async (req, res) => {
 export const renewSubscription = async (req, res) => {
   try {
     const { stripe } = await getStripeForRequest(req);
-    const { subscription_id, payment_method_id } = req.body;
+    const { subscription_id, payment_method_id } = req.validated.body;
 
     if (!subscription_id) {
       return res.status(400).json({
@@ -1175,7 +1175,7 @@ export const renewSubscription = async (req, res) => {
 export const cancelSubscription = async (req, res) => {
   try {
     const { stripe } = await getStripeForRequest(req);
-    const { subscription_id, cancel_at_period_end = true } = req.body;
+    const { subscription_id, cancel_at_period_end = true } = req.validated.body;
 
     if (!subscription_id) {
       return res.status(400).json({
@@ -1266,7 +1266,7 @@ export const getSubscriptionStatus = async (req, res) => {
 export const updateSubscription = async (req, res) => {
   try {
     const { stripe } = await getStripeForRequest(req);
-    const { subscription_id, price_id, quantity = 1, metadata = {} } = req.body;
+    const { subscription_id, price_id, quantity = 1, metadata = {} } = req.validated.body;
 
     if (!subscription_id || !price_id) {
       return res.status(400).json({
@@ -1323,7 +1323,7 @@ export const exportInvoiceReceiptPdf = catchAsync(async (req, res) => {
     candidateName = "Client",
     isReceipt = true,
     platformName = "EPiC Immigration Services",
-  } = req.body || {};
+  } = req.validated.body || {};
 
   if (!caseId || amount === undefined || amount === null || !date) {
     return ApiResponse.badRequest(res, "caseId, amount, and date are required");
