@@ -19,6 +19,10 @@ router.get('/unread-count', notificationController.getUnreadNotificationCount);
 // Get notification statistics
 router.get('/stats', notificationController.getNotificationStats);
 
+// Get / update the authenticated user's notification preferences
+router.get('/preferences', notificationController.getNotificationPreferences);
+router.patch('/preferences', notificationController.updateNotificationPreferences);
+
 // Mark a specific notification as read
 router.patch('/:id/mark-read', notificationController.markNotificationAsRead);
 

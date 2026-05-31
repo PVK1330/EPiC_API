@@ -1,6 +1,7 @@
 import logger from '../utils/logger.js';
 import { sendTransactionalEmail } from './mail.service.js';
 import { ROLES } from '../middlewares/role.middleware.js';
+import { getIO } from '../realtime/ioRegistry.js';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
@@ -53,6 +54,22 @@ export async function notifyUser(tenantDb, userId, payload = {}) {
       actionType = null,
     } = payload;
 
+    // Resolve recipient delivery preferences (in-app + email + per-category).
+    let sendSocket = true;
+    let sendEmail = doEmail;
+    let prefs = null;
+    if (tenantDb.NotificationPreference) {
+      prefs = await tenantDb.NotificationPreference.findOne({ where: { userId } }).catch(() => null);
+      if (prefs) {
+        if (!prefs.inAppNotifications) sendSocket = false;
+        if (!prefs.emailNotifications) sendEmail = false;
+        // Per-category overrides — silence both channels for the disabled category.
+        if (category === 'case' && prefs.caseUpdates === false) { sendSocket = false; sendEmail = false; }
+        if (category === 'payment' && prefs.paymentNotifications === false) { sendSocket = false; sendEmail = false; }
+        if (category === 'appointment' && prefs.appointmentNotifications === false) { sendSocket = false; sendEmail = false; }
+      }
+    }
+
     const notification = await tenantDb.Notification.create({
       title: String(title).slice(0, 255),
       message: String(message),
@@ -69,9 +86,10 @@ export async function notifyUser(tenantDb, userId, payload = {}) {
       isArchived: false,
     });
 
-    // Real-time delivery via Socket.IO (io attached to tenantDb at boot time)
-    const io = tenantDb._io;
-    if (io) {
+    // Real-time delivery via Socket.IO (io attached to tenantDb at boot time,
+    // falling back to the global IO registry registered at socket server boot).
+    const io = tenantDb._io || getIO();
+    if (io && sendSocket) {
       io.to(`user:${userId}`).emit('notification:new', notification.toJSON());
       const unread = await tenantDb.Notification.count({
         where: { recipientId: userId, isRead: false },
@@ -79,7 +97,7 @@ export async function notifyUser(tenantDb, userId, payload = {}) {
       io.to(`user:${userId}`).emit('notification:count', { count: unread });
     }
 
-    if (doEmail) {
+    if (sendEmail) {
       const user = await tenantDb.User.findByPk(userId, { attributes: ['email'] });
       if (user?.email) {
         await sendTransactionalEmail({
