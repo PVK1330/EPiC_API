@@ -303,16 +303,19 @@ export async function notifyDocumentSubmittedToCandidate(tenantDb, userId, data 
 }
 
 export async function notifyMessageReceived(tenantDb, userId, data = {}, opts = {}) {
+  // `data` may be a Sequelize model instance with circular include/parent refs,
+  // which breaks JSONB serialization of metadata. Flatten to a plain object.
+  const plain = typeof data?.get === 'function' ? data.get({ plain: true }) : data;
   return notifyUser(tenantDb, userId, {
     type: NotificationTypes.INFO,
     priority: NotificationPriority.MEDIUM,
     category: 'message',
-    title: data.title ?? 'New Message',
-    message: data.message ?? 'You have received a new message.',
+    title: plain.title ?? 'New Message',
+    message: plain.message ?? 'You have received a new message.',
     entityType: 'conversation',
-    entityId: data.conversationId ?? null,
+    entityId: plain.conversationId ?? null,
     actionType: 'message_received',
-    metadata: data,
+    metadata: plain,
     ...opts,
   });
 }

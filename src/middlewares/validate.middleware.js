@@ -57,7 +57,9 @@ export const validate = (schema) => async (req, res, next) => {
     return next();
   } catch (error) {
     if (error instanceof z.ZodError) {
-      const errors = error.errors.map((e) => ({
+      // Zod v4 exposes issues on `.issues`; `.errors` was the v3 name.
+      const issues = error.issues ?? error.errors ?? [];
+      const errors = issues.map((e) => ({
         field: e.path.join("."),
         message: e.message,
       }));

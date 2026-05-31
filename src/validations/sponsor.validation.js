@@ -28,6 +28,10 @@ export const createSponsorSchema = z.object({
     riskLevel: z.string().trim().max(50).optional().nullable(),
     riskPct: z.coerce.number().optional().nullable(),
     outstandingBalance: z.coerce.number().optional().nullable(),
+    authorisingName: z.string().trim().max(200).optional().nullable(),
+    authorisingPhone: z.string().trim().max(50).optional().nullable(),
+    authorisingEmail: z.string().email().optional().nullable(),
+    notes: z.string().optional().nullable(),
   }).strict().refine((data) => {
     if (data.password || data.confirm_password) {
       return data.password === data.confirm_password;
