@@ -35,10 +35,11 @@ export async function resolveTenantUserId(req) {
 }
 
 export function buildFrontendOAuthRedirect(req, sync) {
-  const frontendUrl = (process.env.FRONTEND_URL || "http://localhost:5173").replace(
-    /\/$/,
-    "",
-  );
+  // FRONTEND_URL may be a comma-separated list (used by CORS); a redirect needs a
+  // single valid URL, so take the first entry — matches the rest of the codebase.
+  const frontendUrl = (
+    process.env.FRONTEND_URL?.split(",")[0]?.trim() || "http://localhost:5173"
+  ).replace(/\/$/, "");
   const role = String(req.user?.role_name || "caseworker").toLowerCase();
 
   if (role === "admin") {

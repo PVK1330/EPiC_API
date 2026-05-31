@@ -1,5 +1,6 @@
 import platformDb from "../../../../models/index.js";
 import logger from "../../../../utils/logger.js";
+import { decryptValue } from "../../../../services/settings.service.js";
 
 function trimOrNull(value) {
   if (value == null) return null;
@@ -39,12 +40,14 @@ export function resolveGoogleOAuthConfig(tenantConfig = null) {
     envRedirect = genericRedirect;
   }
 
+  // Tenant secrets are stored encrypted; decryptValue passes plain text through
+  // unchanged, so this is safe for legacy/plain values and env fallbacks too.
+  const tenantSecret = trimOrNull(tenant.client_secret || tenant.clientSecret);
   const merged = {
     client_id:
       trimOrNull(tenant.client_id || tenant.clientId) || envClientId,
     client_secret:
-      trimOrNull(tenant.client_secret || tenant.clientSecret) ||
-      envClientSecret,
+      (tenantSecret ? decryptValue(tenantSecret) : null) || envClientSecret,
     redirect_uri:
       trimOrNull(tenant.redirect_uri || tenant.redirectUri) || envRedirect,
   };

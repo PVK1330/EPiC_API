@@ -3,9 +3,6 @@ import logger from '../../../utils/logger.js';
 import { getConnection } from './google/google.service.js';
 import { createGoogleMeetMeeting } from './google/googleMeeting.service.js';
 
-const makeJoinUrl = (id) =>
-  `https://teams.microsoft.com/l/meetup-join/placeholder-${id}`;
-
 const normalizeMeeting = (row) => {
   const plain = row.get ? row.get({ plain: true }) : row;
   return {
@@ -55,6 +52,7 @@ export const createTeamsMeeting = async (req, res) => {
       related_case_id,
       event_type,
       location,
+      meeting_provider: requestedProvider,
     } = req.body;
 
     if (!subject || !start_time || !end_time) {
@@ -68,23 +66,37 @@ export const createTeamsMeeting = async (req, res) => {
     let meetingProvider = null;
     let externalEventId = null;
     let joinUrl = null;
-    let finalEventType = event_type || 'teams';
+    let finalEventType = event_type || 'meeting';
     let finalLocation = location || '';
 
-    // ── Priority 1: Google Meet ────────────────────────────────────────────
-    let googleConnection = null;
-    try {
-      googleConnection = await getConnection(req.tenantDb, userId);
-    } catch (dbErr) {
-      logger.warn({ err: dbErr }, 'Failed to check Google connection, trying Microsoft next');
-    }
+    // Normalise the requested platform. 'none' (or unset/'in-person'/'phone')
+    // means the user does not want an online meeting link generated.
+    const provider = String(requestedProvider || '').toLowerCase();
+    const wantsGoogle = provider === 'google' || provider === 'google_meet';
+    const wantsMicrosoft = provider === 'microsoft' || provider === 'teams';
 
-    if (googleConnection) {
+    const attendeeEmails = Array.isArray(attendees)
+      ? attendees.map(a => (typeof a === 'string' ? a : a.email)).filter(Boolean)
+      : [];
+
+    // ── Google Meet (explicitly requested) ─────────────────────────────────
+    if (wantsGoogle) {
+      let googleConnection = null;
       try {
-        const attendeeEmails = Array.isArray(attendees)
-          ? attendees.map(a => typeof a === 'string' ? a : a.email).filter(Boolean)
-          : [];
+        googleConnection = await getConnection(req.tenantDb, userId);
+      } catch (dbErr) {
+        logger.warn({ err: dbErr }, 'Failed to check Google connection');
+      }
 
+      if (!googleConnection) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Google Meet is not connected for your account. Connect Google from the calendar, then try again.',
+          data: { provider: 'google', connected: false },
+        });
+      }
+
+      try {
         const meetResult = await createGoogleMeetMeeting({
           tenantDb: req.tenantDb,
           title: subject,
@@ -94,21 +106,24 @@ export const createTeamsMeeting = async (req, res) => {
           attendees: attendeeEmails,
           userId,
         });
-
         meetingProvider = 'google';
         externalEventId = meetResult.eventId;
         joinUrl = meetResult.meetUrl;
         finalEventType = 'google';
         finalLocation = 'Google Meet';
-
-        logger.info({ userId, eventId: meetResult.eventId }, 'Google Meet link generated successfully');
+        logger.info({ userId, eventId: meetResult.eventId }, 'Google Meet link generated');
       } catch (meetErr) {
-        logger.error({ err: meetErr, userId }, 'Failed to generate Google Meet link, falling back to Microsoft check');
+        logger.error({ err: meetErr, userId }, 'Failed to generate Google Meet link');
+        return res.status(502).json({
+          status: 'error',
+          message: 'Could not create the Google Meet link. Your Google connection may need to be reconnected.',
+          data: { provider: 'google' },
+        });
       }
     }
 
-    // ── Priority 2: Microsoft Teams (only if Google did not produce a link) ──
-    if (!joinUrl) {
+    // ── Microsoft Teams (explicitly requested) ─────────────────────────────
+    if (wantsMicrosoft) {
       let microsoftConnection = null;
       try {
         if (!req.tenantDb?.CalendarConnection) {
@@ -118,36 +133,44 @@ export const createTeamsMeeting = async (req, res) => {
           where: { user_id: userId, provider: 'microsoft', is_active: true },
         });
       } catch (msDbErr) {
-        logger.warn({ err: msDbErr }, 'Failed to check Microsoft connection, proceeding without Teams link');
+        logger.warn({ err: msDbErr }, 'Failed to check Microsoft connection');
       }
 
-      if (microsoftConnection) {
-        try {
-          const { createTeamsOnlineMeeting } = await import('./microsoft/microsoftMeeting.service.js');
+      if (!microsoftConnection) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Microsoft Teams is not connected for your account. Connect Microsoft from the calendar, then try again.',
+          data: { provider: 'microsoft', connected: false },
+        });
+      }
 
-          const teamsResult = await createTeamsOnlineMeeting({
-            tenantDb: req.tenantDb,
-            title: subject,
-            description: description || '',
-            startTime: start_time,
-            endTime: end_time,
-            userId,
-          });
-
-          meetingProvider = 'microsoft';
-          externalEventId = teamsResult.eventId;
-          joinUrl = teamsResult.meetUrl;
-          finalEventType = 'teams';
-          finalLocation = 'Microsoft Teams';
-
-          logger.info({ userId, eventId: teamsResult.eventId }, 'Microsoft Teams link generated successfully');
-        } catch (teamsErr) {
-          logger.error({ err: teamsErr, userId }, 'Failed to generate Teams link, proceeding without meeting link');
-        }
+      try {
+        const { createTeamsOnlineMeeting } = await import('./microsoft/microsoftMeeting.service.js');
+        const teamsResult = await createTeamsOnlineMeeting({
+          tenantDb: req.tenantDb,
+          title: subject,
+          description: description || '',
+          startTime: start_time,
+          endTime: end_time,
+          userId,
+        });
+        meetingProvider = 'microsoft';
+        externalEventId = teamsResult.eventId;
+        joinUrl = teamsResult.meetUrl;
+        finalEventType = 'teams';
+        finalLocation = 'Microsoft Teams';
+        logger.info({ userId, eventId: teamsResult.eventId }, 'Microsoft Teams link generated');
+      } catch (teamsErr) {
+        logger.error({ err: teamsErr, userId }, 'Failed to generate Teams link');
+        return res.status(502).json({
+          status: 'error',
+          message: 'Could not create the Microsoft Teams link. Your Microsoft connection may need to be reconnected.',
+          data: { provider: 'microsoft' },
+        });
       }
     }
 
-    // ── Priority 3: No integration — plain meeting ─────────────────────────
+    // ── No online provider requested — plain calendar entry ────────────────
     const row = await req.tenantDb.CalendarMeeting.create({
       user_id: userId,
       subject,
@@ -165,12 +188,6 @@ export const createTeamsMeeting = async (req, res) => {
       join_url: joinUrl,
       status: 'scheduled',
     });
-
-    // If no external integration provided a real URL, generate placeholder
-    if (!joinUrl) {
-      await row.update({ join_url: makeJoinUrl(row.id) });
-      await row.reload();
-    }
 
     res.status(201).json({
       status: 'success',

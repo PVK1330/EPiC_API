@@ -674,13 +674,19 @@ export const getPerformanceReport = async (req, res) => {
 /** Multi-sheet workbook; reuses compute* payloads (same filters as JSON report APIs). */
 export const exportReportingExcel = async (req, res) => {
   try {
-    const { startDate, endDate } = req.query;
+    const { startDate, endDate, sheet } = req.query;
+
+    // sheet = 'cases' | 'workload' | 'financial' | 'performance' | undefined (all)
+    const wantCases      = !sheet || sheet === 'cases';
+    const wantWorkload   = !sheet || sheet === 'workload';
+    const wantFinancial  = !sheet || sheet === 'financial';
+    const wantPerformance= !sheet || sheet === 'performance';
 
     const [cases, workload, financial, performance] = await Promise.all([
-      computeCaseAnalyticsData(req).catch(() => null),
-      computeWorkloadReportData(req).catch(() => null),
-      computeFinancialReportData(req).catch(() => null),
-      computePerformanceReportData(req).catch(() => null),
+      wantCases       ? computeCaseAnalyticsData(req).catch(() => null)      : null,
+      wantWorkload    ? computeWorkloadReportData(req).catch(() => null)      : null,
+      wantFinancial   ? computeFinancialReportData(req).catch(() => null)     : null,
+      wantPerformance ? computePerformanceReportData(req).catch(() => null)   : null,
     ]);
 
     /** @type {{ name: string, columns: { key: string, header: string }[], rows: Record<string, unknown>[] }[]} */
@@ -937,7 +943,8 @@ export const exportReportingExcel = async (req, res) => {
 
     const buffer = multiSheetXlsxBuffer(sheets);
     const day = localDateStr();
-    sendXlsxDownload(res, buffer, `reports_${day}`);
+    const label = sheet ? `report_${sheet}` : 'reports_all';
+    sendXlsxDownload(res, buffer, `${label}_${day}`);
   } catch (error) {
     logger.error({ err: error }, 'exportReportingExcel Error');
     res.status(500).json({

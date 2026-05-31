@@ -32,6 +32,8 @@ export async function seedPlatformRbacForDb(db) {
     `ALTER TABLE roles ADD COLUMN IF NOT EXISTS scope VARCHAR(50) DEFAULT 'tenant'`,
   );
   await db.sequelize.query(
+=======
+>>>>>>> edf974ce55c26b4536cad168acb31f6fb29f56de
     `UPDATE roles SET scope = 'platform' WHERE id = 5 OR name = 'superadmin'`,
   );
 
