@@ -707,13 +707,17 @@ export const login = catchAsync(async (req, res) => {
 
   const deviceString = req.headers['user-agent'] || 'Unknown Device';
 
-  await platformDb.UserSession.create({
-    user_id: user.id,
-    refresh_token_hash: hashedRefresh,
-    device: deviceString,
-    browser: deviceString,
-    ip_address: req.ip || req.connection?.remoteAddress,
-  });
+  try {
+    await platformDb.UserSession.create({
+      user_id: user.id,
+      refresh_token_hash: hashedRefresh,
+      device: deviceString,
+      browser: deviceString,
+      ip_address: req.ip || req.connection?.remoteAddress,
+    });
+  } catch (sessionErr) {
+    logger.warn({ err: sessionErr }, 'UserSession.create failed — continuing login');
+  }
 
   platformDb.PlatformAuditLog.create({
     user_id: user.id, action: 'LOGIN',
@@ -731,10 +735,17 @@ export const login = catchAsync(async (req, res) => {
   let organisation = null;
   if (user.organisation_id && !isPlatformStaffUser(user)) {
     const org = await platformDb.Organisation.findByPk(user.organisation_id, {
-      attributes: ['id', 'slug', 'name', 'status'],
+      attributes: ['id', 'slug', 'name', 'status', 'timezone', 'date_format'],
     });
     if (org) {
-      organisation = { id: org.id, slug: org.slug, name: org.name, status: org.status };
+      organisation = {
+        id: org.id,
+        slug: org.slug,
+        name: org.name,
+        status: org.status,
+        timezone: org.timezone,
+        date_format: org.date_format,
+      };
     }
   }
 
@@ -855,10 +866,17 @@ export const getMe = catchAsync(async (req, res) => {
   let organisation = null;
   if (user.organisation_id && !isPlatformStaffUser(user)) {
     const org = await platformDb.Organisation.findByPk(user.organisation_id, {
-      attributes: ['id', 'slug', 'name', 'status'],
+      attributes: ['id', 'slug', 'name', 'status', 'timezone', 'date_format'],
     });
     if (org) {
-      organisation = { id: org.id, slug: org.slug, name: org.name, status: org.status };
+      organisation = {
+        id: org.id,
+        slug: org.slug,
+        name: org.name,
+        status: org.status,
+        timezone: org.timezone,
+        date_format: org.date_format,
+      };
     }
   }
 
@@ -1208,10 +1226,17 @@ export const verify2FA = catchAsync(async (req, res) => {
   let organisation = null;
   if (user.organisation_id && !isSuperAdminRole(user.role_id)) {
     const org = await platformDb.Organisation.findByPk(user.organisation_id, {
-      attributes: ['id', 'slug', 'name', 'status'],
+      attributes: ['id', 'slug', 'name', 'status', 'timezone', 'date_format'],
     });
     if (org) {
-      organisation = { id: org.id, slug: org.slug, name: org.name, status: org.status };
+      organisation = {
+        id: org.id,
+        slug: org.slug,
+        name: org.name,
+        status: org.status,
+        timezone: org.timezone,
+        date_format: org.date_format,
+      };
     }
   }
 
@@ -1268,10 +1293,17 @@ export const me = catchAsync(async (req, res) => {
   let organisation = null;
   if (user.organisation_id && !isPlatformStaffUser(user)) {
     const org = await platformDb.Organisation.findByPk(user.organisation_id, {
-      attributes: ['id', 'slug', 'name', 'status'],
+      attributes: ['id', 'slug', 'name', 'status', 'timezone', 'date_format'],
     });
     if (org) {
-      organisation = { id: org.id, slug: org.slug, name: org.name, status: org.status };
+      organisation = {
+        id: org.id,
+        slug: org.slug,
+        name: org.name,
+        status: org.status,
+        timezone: org.timezone,
+        date_format: org.date_format,
+      };
     }
   }
 

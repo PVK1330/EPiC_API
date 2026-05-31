@@ -83,6 +83,49 @@ async function bootstrapPlatform() {
     await runPlatformMigrations();
     logger.info('Platform SQL migrations applied');
 
+    // Ensure platform tables exist (idempotent)
+    await platformDb.sequelize.sync({ alter: false }).catch(() => {});
+
+    // Ensure critical platform tables exist that sequelize.sync may miss
+    await platformDb.sequelize.query(
+      `CREATE TABLE IF NOT EXISTS user_sessions (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        refresh_token_hash VARCHAR(255) NOT NULL,
+        device VARCHAR(255),
+        browser VARCHAR(255),
+        ip_address VARCHAR(100),
+        last_active TIMESTAMPTZ DEFAULT NOW(),
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )`
+    ).catch(() => {});
+
+    await platformDb.sequelize.query(
+      `CREATE TABLE IF NOT EXISTS platform_audit_logs (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        action VARCHAR(100) NOT NULL,
+        details TEXT,
+        ip_address VARCHAR(100),
+        status VARCHAR(20) DEFAULT 'Success',
+        category VARCHAR(50),
+        "user" VARCHAR(100),
+        org VARCHAR(100),
+        description TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )`
+    ).catch(() => {});
+
+    // Add missing columns to existing tables
+    await platformDb.sequelize.query(
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_login_attempts INTEGER DEFAULT 0`
+    ).catch(() => {});
+    await platformDb.sequelize.query(
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_until TIMESTAMPTZ`
+    ).catch(() => {});
+
     await seedRolesForDb(platformDb);
     await seedPermissionsForDb(platformDb);
     await seedPlatformRbacForDb(platformDb);

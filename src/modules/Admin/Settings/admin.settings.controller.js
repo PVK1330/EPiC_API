@@ -105,6 +105,11 @@ export const getMe = async (req, res) => {
 
     const organisation = await loadOrganisationForRequest(req);
 
+    const orgDisplay = {
+      timezone: organisation?.timezone ?? prefs.timezone,
+      date_format: organisation?.date_format ?? prefs.date_format,
+    };
+
     const plain = user.toJSON();
 
     res.status(200).json({
@@ -149,11 +154,11 @@ export const getMe = async (req, res) => {
 
           payment_alerts: prefs.payment_alerts,
 
-          timezone: prefs.timezone,
+          timezone: orgDisplay.timezone,
 
           language: prefs.language,
 
-          date_format: prefs.date_format,
+          date_format: orgDisplay.date_format,
 
           data_collection: prefs.data_collection,
 
@@ -302,11 +307,9 @@ export const patchMe = async (req, res) => {
 
     if (payment_alerts !== undefined) prefUpdates.payment_alerts = Boolean(payment_alerts);
 
-    if (timezone !== undefined) prefUpdates.timezone = String(timezone);
+    // timezone & date_format are org-wide — persisted on the organisation, not per-user prefs.
 
     if (language !== undefined) prefUpdates.language = String(language);
-
-    if (date_format !== undefined) prefUpdates.date_format = String(date_format);
 
     if (data_collection !== undefined) prefUpdates.data_collection = Boolean(data_collection);
 
@@ -317,6 +320,8 @@ export const patchMe = async (req, res) => {
       await prefs.update(prefUpdates);
 
     }
+
+    await persistOrganisationDisplaySettings(req, { timezone, date_format });
 
 
 
@@ -348,7 +353,12 @@ export const patchMe = async (req, res) => {
 
     await prefs.reload();
 
+    const organisation = await loadOrganisationForRequest(req);
 
+    const orgDisplay = {
+      timezone: organisation?.timezone ?? prefs.timezone,
+      date_format: organisation?.date_format ?? prefs.date_format,
+    };
 
     const plain = user.toJSON();
 
@@ -392,11 +402,11 @@ export const patchMe = async (req, res) => {
 
           payment_alerts: prefs.payment_alerts,
 
-          timezone: prefs.timezone,
+          timezone: orgDisplay.timezone,
 
           language: prefs.language,
 
-          date_format: prefs.date_format,
+          date_format: orgDisplay.date_format,
 
           data_collection: prefs.data_collection,
 
@@ -468,17 +478,17 @@ export const patchMePreferences = async (req, res) => {
 
     if (payment_alerts !== undefined) prefUpdates.payment_alerts = Boolean(payment_alerts);
 
-    if (timezone !== undefined) prefUpdates.timezone = String(timezone);
+    // timezone & date_format are org-wide — persisted on the organisation, not per-user prefs.
 
     if (language !== undefined) prefUpdates.language = String(language);
-
-    if (date_format !== undefined) prefUpdates.date_format = String(date_format);
 
     if (data_collection !== undefined) prefUpdates.data_collection = Boolean(data_collection);
 
 
 
-    if (Object.keys(prefUpdates).length === 0) {
+    const orgDisplayChanged = timezone !== undefined || date_format !== undefined;
+
+    if (Object.keys(prefUpdates).length === 0 && !orgDisplayChanged) {
 
       return res.status(400).json({ status: "error", message: "No preference fields to update", data: null });
 
@@ -486,13 +496,24 @@ export const patchMePreferences = async (req, res) => {
 
 
 
-    await prefs.update(prefUpdates);
+    if (Object.keys(prefUpdates).length > 0) {
+
+      await prefs.update(prefUpdates);
+
+    }
+
+    await persistOrganisationDisplaySettings(req, { timezone, date_format });
 
     await prefs.reload();
 
     await user.reload({ include: [{ model: req.tenantDb.Role, as: "role", attributes: ["id", "name"] }] });
 
+    const organisation = await loadOrganisationForRequest(req);
 
+    const orgDisplay = {
+      timezone: organisation?.timezone ?? prefs.timezone,
+      date_format: organisation?.date_format ?? prefs.date_format,
+    };
 
     const plain = user.toJSON();
 
@@ -538,11 +559,11 @@ export const patchMePreferences = async (req, res) => {
 
           payment_alerts: prefs.payment_alerts,
 
-          timezone: prefs.timezone,
+          timezone: orgDisplay.timezone,
 
           language: prefs.language,
 
-          date_format: prefs.date_format,
+          date_format: orgDisplay.date_format,
 
           data_collection: prefs.data_collection,
 
@@ -1200,7 +1221,37 @@ async function loadOrganisationForRequest(req) {
     name: plain.name,
     slug: plain.slug,
     logoUrl: toPublicAssetUrl(plain.logoUrl),
+    timezone: plain.timezone,
+    date_format: plain.date_format,
   };
+}
+
+/**
+ * Org-wide timezone/date_format is the source of truth on the platform
+ * Organisation row (delivered to every panel via /api/auth/me). The admin
+ * settings UI edits these via the preferences payload, so we persist them
+ * to the organisation (platform + tenant mirror) rather than per-user prefs.
+ */
+async function persistOrganisationDisplaySettings(req, { timezone, date_format }) {
+  const orgId = req.user?.organisation_id;
+  if (!orgId) return null;
+
+  const updates = {};
+  if (timezone !== undefined) updates.timezone = String(timezone);
+  if (date_format !== undefined) updates.date_format = String(date_format);
+  if (Object.keys(updates).length === 0) return null;
+
+  await platformDb.Organisation.update(updates, { where: { id: orgId } });
+  try {
+    await req.tenantDb.Organisation.update(updates, { where: { id: orgId } });
+  } catch (syncErr) {
+    logger.warn({ errMessage: syncErr.message }, "Tenant organisation timezone sync skipped");
+  }
+
+  const row = await platformDb.Organisation.findByPk(orgId, {
+    attributes: ["timezone", "date_format"],
+  });
+  return row ? { timezone: row.timezone, date_format: row.date_format } : null;
 }
 
 /** GET organisation branding — any authenticated tenant user (header logo) */

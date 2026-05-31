@@ -43,6 +43,6 @@ router.post("/2fa/disable",      verifyTokenAndTenant, globalAuthLimiter, valida
 router.get("/me", verifyTokenAndTenant, auth.getMe);
 
 // Cross-domain impersonation handoff (sets httpOnly cookie from token)
-router.post("/handoff", auth.handoff);
+router.post("/handoff", globalAuthLimiter, validate(schema.handoffSchema), auth.handoff);
 
 export default router;

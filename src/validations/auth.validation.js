@@ -83,6 +83,12 @@ export const disable2faSchema = z.object({
   }).strict(),
 });
 
+export const handoffSchema = z.object({
+  body: z.object({
+    token: z.string().min(1, 'Handoff token is required'),
+  }).strict(),
+});
+
 export const resendOtpUserSchema = z.object({
   body: z.object({
     email: emailSchema,

@@ -46,6 +46,16 @@ export default (sequelize, DataTypes) => {
         allowNull: true,
         field: "logo_url",
       },
+      timezone: {
+        type: DataTypes.STRING(64),
+        allowNull: false,
+        defaultValue: "Europe/London",
+      },
+      date_format: {
+        type: DataTypes.STRING(20),
+        allowNull: false,
+        defaultValue: "DD/MM/YYYY",
+      },
     },
     {
       tableName: "organisations",

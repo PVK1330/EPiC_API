@@ -54,6 +54,18 @@ export default (sequelize, DataTypes) => {
         allowNull: true,
         field: "logo_url",
       },
+      // Org-wide display timezone (IANA id) + date format — admin-selectable,
+      // applied across every panel for formatting dates/times.
+      timezone: {
+        type: DataTypes.STRING(64),
+        allowNull: false,
+        defaultValue: "Europe/London",
+      },
+      date_format: {
+        type: DataTypes.STRING(20),
+        allowNull: false,
+        defaultValue: "DD/MM/YYYY",
+      },
     },
     {
       tableName: "organisations",
