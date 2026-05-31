@@ -13,10 +13,10 @@ export default function registerNotificationHandlers(io, socket) {
       
       // Emit the updated count
       const unreadCount = await socket.tenantDb.Notification.count({ 
-        where: { recipientId: socket.user.id, isRead: false } 
+        where: { recipientId: socket.user.userId, isRead: false } 
       });
       
-      io.to(`user:${socket.user.id}`).emit('notification:count', { count: unreadCount });
+      io.to(`user:${socket.user.userId}`).emit('notification:count', { count: unreadCount });
       
       if (typeof callback === 'function') {
         callback({ status: 'success', notification });
@@ -35,15 +35,15 @@ export default function registerNotificationHandlers(io, socket) {
       if (!socket.tenantDb || !notificationId) return;
 
       await socket.tenantDb.Notification.destroy({ 
-        where: { id: notificationId, recipientId: socket.user.id } 
+        where: { id: notificationId, recipientId: socket.user.userId } 
       });
 
       // Emit the updated count
       const unreadCount = await socket.tenantDb.Notification.count({ 
-        where: { recipientId: socket.user.id, isRead: false } 
+        where: { recipientId: socket.user.userId, isRead: false } 
       });
       
-      io.to(`user:${socket.user.id}`).emit('notification:count', { count: unreadCount });
+      io.to(`user:${socket.user.userId}`).emit('notification:count', { count: unreadCount });
       
       if (typeof callback === 'function') {
         callback({ status: 'success' });

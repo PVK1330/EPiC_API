@@ -479,15 +479,24 @@ export class CandidateService {
       }
     }
 
+    // Attribute audit/timeline writes from the afterUpdate hook to the real actor
+    // (falls back to null inside the hook if the id isn't a user in this tenant DB).
+    const performedById = Number(performedByUser?.userId ?? performedByUser?.id) || null;
+    const hookOptions = {
+      performedBy: performedById,
+      role: performedByUser?.role?.name || performedByUser?.role || 'admin',
+      organisationId: candidate.organisation_id ?? null,
+    };
+
     await this.repository.transaction(async (t) => {
       if (Object.keys(userPatch).length > 0) {
-        await candidate.update(userPatch, { transaction: t });
+        await candidate.update(userPatch, { transaction: t, ...hookOptions });
       }
 
       let app = await this.repository.findApplicationByUserId(userId, t);
 
       if (app) {
-        await this.repository.updateApplication(app, sanitizedApplication, t);
+        await this.repository.updateApplication(app, sanitizedApplication, t, hookOptions);
       } else {
         app = await this.repository.createApplication(
           {

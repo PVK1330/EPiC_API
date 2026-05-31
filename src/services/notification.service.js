@@ -2,6 +2,7 @@ import logger from '../utils/logger.js';
 import { sendTransactionalEmail } from './mail.service.js';
 import { ROLES } from '../middlewares/role.middleware.js';
 import { getIO } from '../realtime/ioRegistry.js';
+import { userRoom } from '../realtime/messagingRealtime.js';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
@@ -86,15 +87,16 @@ export async function notifyUser(tenantDb, userId, payload = {}) {
       isArchived: false,
     });
 
-    // Real-time delivery via Socket.IO (io attached to tenantDb at boot time,
-    // falling back to the global IO registry registered at socket server boot).
+    // Real-time delivery via Socket.IO. Prefer the io attached to tenantDb at
+    // boot time, falling back to the shared server instance from the registry.
+    // Honors the recipient's in-app/category preferences (sendSocket).
     const io = tenantDb._io || getIO();
     if (io && sendSocket) {
-      io.to(`user:${userId}`).emit('notification:new', notification.toJSON());
+      io.to(userRoom(userId)).emit('notification:new', notification.toJSON());
       const unread = await tenantDb.Notification.count({
         where: { recipientId: userId, isRead: false },
       });
-      io.to(`user:${userId}`).emit('notification:count', { count: unread });
+      io.to(userRoom(userId)).emit('notification:count', { count: unread });
     }
 
     if (sendEmail) {
