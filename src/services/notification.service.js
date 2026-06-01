@@ -55,6 +55,22 @@ export async function notifyUser(tenantDb, userId, payload = {}) {
       actionType = null,
     } = payload;
 
+    // Resolve recipient delivery preferences (in-app + email + per-category).
+    let sendSocket = true;
+    let sendEmail = doEmail;
+    let prefs = null;
+    if (tenantDb.NotificationPreference) {
+      prefs = await tenantDb.NotificationPreference.findOne({ where: { userId } }).catch(() => null);
+      if (prefs) {
+        if (!prefs.inAppNotifications) sendSocket = false;
+        if (!prefs.emailNotifications) sendEmail = false;
+        // Per-category overrides — silence both channels for the disabled category.
+        if (category === 'case' && prefs.caseUpdates === false) { sendSocket = false; sendEmail = false; }
+        if (category === 'payment' && prefs.paymentNotifications === false) { sendSocket = false; sendEmail = false; }
+        if (category === 'appointment' && prefs.appointmentNotifications === false) { sendSocket = false; sendEmail = false; }
+      }
+    }
+
     const notification = await tenantDb.Notification.create({
       title: String(title).slice(0, 255),
       message: String(message),
@@ -73,8 +89,10 @@ export async function notifyUser(tenantDb, userId, payload = {}) {
     });
 
     // Real-time delivery via the centralized Socket.IO instance (ioRegistry).
-    const io = getIO();
-    if (io) {
+    // `tenantDb._io` is legacy/unused, so this resolves to getIO(). Honors the
+    // recipient's in-app/category preferences (sendSocket).
+    const io = tenantDb._io || getIO();
+    if (io && sendSocket) {
       io.to(userRoom(userId)).emit('notification:new', notification.toJSON());
       const unread = await tenantDb.Notification.count({
         where: { userId, isRead: false },
@@ -82,7 +100,7 @@ export async function notifyUser(tenantDb, userId, payload = {}) {
       io.to(userRoom(userId)).emit('notification:count', { count: unread });
     }
 
-    if (doEmail) {
+    if (sendEmail) {
       const user = await tenantDb.User.findByPk(userId, { attributes: ['email'] });
       if (user?.email) {
         await sendTransactionalEmail({
@@ -306,16 +324,19 @@ export async function notifyDocumentSubmittedToCandidate(tenantDb, userId, data 
 }
 
 export async function notifyMessageReceived(tenantDb, userId, data = {}, opts = {}) {
+  // `data` may be a Sequelize model instance with circular include/parent refs,
+  // which breaks JSONB serialization of metadata. Flatten to a plain object.
+  const plain = typeof data?.get === 'function' ? data.get({ plain: true }) : data;
   return notifyUser(tenantDb, userId, {
     type: NotificationTypes.INFO,
     priority: NotificationPriority.MEDIUM,
     category: 'message',
-    title: data.title ?? 'New Message',
-    message: data.message ?? 'You have received a new message.',
+    title: plain.title ?? 'New Message',
+    message: plain.message ?? 'You have received a new message.',
     entityType: 'conversation',
-    entityId: data.conversationId ?? null,
+    entityId: plain.conversationId ?? null,
     actionType: 'message_received',
-    metadata: data,
+    metadata: plain,
     ...opts,
   });
 }

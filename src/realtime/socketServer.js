@@ -7,9 +7,27 @@ import { registerIO } from "./ioRegistry.js";
 import registerNotificationHandlers from "./notificationRealtime.js";
 import { corsOriginDelegate } from "../config/frontendOrigins.js";
 
+/** Parse a `cookie` header string into a name→value map. */
+function parseCookies(cookieHeader) {
+  const out = {};
+  if (typeof cookieHeader !== "string" || !cookieHeader) return out;
+  for (const part of cookieHeader.split(";")) {
+    const idx = part.indexOf("=");
+    if (idx === -1) continue;
+    const name = part.slice(0, idx).trim();
+    const value = part.slice(idx + 1).trim();
+    if (name) out[name] = decodeURIComponent(value);
+  }
+  return out;
+}
+
 function extractSocketToken(socket) {
   const authToken = socket.handshake.auth?.token;
-  if (typeof authToken === "string" && authToken.trim()) return authToken.trim();
+  // "httpOnly" is a placeholder the frontend stores when the real JWT lives in
+  // an HttpOnly cookie; ignore it so we fall through to the cookie below.
+  if (typeof authToken === "string" && authToken.trim() && authToken.trim() !== "httpOnly") {
+    return authToken.trim();
+  }
 
   const q = socket.handshake.query?.token;
   if (typeof q === "string" && q.trim()) return q.trim();
@@ -25,6 +43,11 @@ function extractSocketToken(socket) {
 
   const headerToken = socket.handshake.headers?.token;
   if (typeof headerToken === "string" && headerToken.trim()) return headerToken.trim();
+
+  // Auth is cookie-based (HttpOnly `token` cookie set at login). The browser
+  // sends it on the Socket.IO handshake when the client uses withCredentials.
+  const cookies = parseCookies(socket.handshake.headers?.cookie);
+  if (cookies.token && cookies.token.trim()) return cookies.token.trim();
 
   return null;
 }
@@ -60,7 +83,7 @@ export function initSocketIO(httpServer, app) {
     });
   });
 
-  io.on("connection", (socket) => {
+  io.on("connection", async (socket) => {
     const uid = Number(socket.user.userId);
     if (!Number.isFinite(uid) || uid <= 0) {
       socket.disconnect(true);
@@ -71,6 +94,18 @@ export function initSocketIO(httpServer, app) {
     const orgId = socket.user.organisation_id != null ? Number(socket.user.organisation_id) : null;
     if (orgId && !Number.isNaN(orgId)) {
       socket.join(orgRoom(orgId));
+
+      // Resolve the tenant DB once so notification handlers can use socket.tenantDb.
+      try {
+        const org = await platformDb.Organisation.findByPk(orgId, {
+          attributes: ["database_name"],
+        });
+        if (org?.database_name) {
+          socket.tenantDb = getTenantDb(org.database_name);
+        }
+      } catch {
+        // Non-fatal: messaging still works; notification socket actions will no-op.
+      }
     }
 
     // Client→server notification handlers (mark-read / delete + count refresh).

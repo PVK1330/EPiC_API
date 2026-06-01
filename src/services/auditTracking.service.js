@@ -12,8 +12,22 @@ export async function trackFieldChanges(instance, options = {}) {
     const AuditLog = sequelize.models.AuditLog;
     if (!AuditLog) return;
 
-    // We can extract performedBy from options if passed during .update(..., { performedBy: userId })
-    const performedBy = options.performedBy || 1;
+    // We can extract performedBy from options if passed during .update(..., { performedBy: userId }).
+    // Default to null (NOT 1) — audit_logs.user_id is a nullable FK to users, and a stale id
+    // (e.g. an admin not mirrored into this tenant DB) raises a FK violation that aborts the
+    // caller's transaction ("current transaction is aborted"). Resolve to a real user or null.
+    const rawPerformedBy = options.performedBy != null ? Number(options.performedBy) : null;
+    let performedBy = null;
+    if (Number.isFinite(rawPerformedBy) && rawPerformedBy > 0) {
+      const User = sequelize.models.User;
+      const actor = User
+        ? await User.findByPk(rawPerformedBy, {
+            attributes: ['id'],
+            transaction: options.transaction,
+          })
+        : null;
+      performedBy = actor ? rawPerformedBy : null;
+    }
     const role = options.role || 'system';
     const ipAddress = options.ipAddress || null;
     const userAgent = options.userAgent || null;

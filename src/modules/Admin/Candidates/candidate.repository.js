@@ -60,8 +60,8 @@ export class CandidateRepository {
     });
   }
 
-  async updateApplication(application, updateData, transaction) {
-    return await application.update(updateData, { transaction });
+  async updateApplication(application, updateData, transaction, hookOptions = {}) {
+    return await application.update(updateData, { transaction, ...hookOptions });
   }
 
   async createCase(caseData, transaction) {

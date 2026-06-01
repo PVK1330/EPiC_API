@@ -49,7 +49,11 @@ export const createSponsor = async (req, res) => {
       sponsoredWorkers,
       riskLevel,
       riskPct,
-      outstandingBalance
+      outstandingBalance,
+      authorisingName,
+      authorisingPhone,
+      authorisingEmail,
+      notes
     } = req.validated.body;
 
     const organisationId =
@@ -154,6 +158,10 @@ export const createSponsor = async (req, res) => {
     if (riskLevel) profileData.riskLevel = riskLevel;
     if (riskPct) profileData.riskPct = riskPct;
     if (outstandingBalance) profileData.outstandingBalance = outstandingBalance;
+    if (authorisingName) profileData.authorisingName = authorisingName;
+    if (authorisingPhone) profileData.authorisingPhone = authorisingPhone;
+    if (authorisingEmail) profileData.authorisingEmail = authorisingEmail;
+    if (notes) profileData.notes = notes;
 
     await req.tenantDb.SponsorProfile.create({
       userId: sponsor.id,

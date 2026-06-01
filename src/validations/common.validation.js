@@ -63,4 +63,5 @@ export const CaseStatusEnum = z.enum([
   "submitted",
   "approved",
 ]);
+// Matches the User model status ENUM('active', 'inactive', 'suspended').
 export const UserStatusEnum = z.enum(["active", "inactive", "suspended"]);
