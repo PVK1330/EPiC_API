@@ -77,7 +77,7 @@ export const getAllNotifications = async (req, res) => {
       ...(unreadOnly === 'true' && { isRead: false }),
       ...(type && { type }),
       ...(priority && { priority }),
-      ...(specificUserId && { recipientId: specificUserId }),
+      ...(specificUserId && { userId: specificUserId }),
     };
 
     const { count, rows: notifications } = await req.tenantDb.Notification.findAndCountAll({
@@ -99,7 +99,7 @@ export const getAllNotifications = async (req, res) => {
           ],
         },
       ],
-      order: [['created_at', 'DESC']],
+      order: [['createdAt', 'DESC']],
       limit: parsedLimit,
       offset: (parsedPage - 1) * parsedLimit,
     });
@@ -464,7 +464,7 @@ export const getNotificationStats = async (req, res) => {
 
     const numericUserId = Number(userId);
     const unreadCount = await getUnreadCount(req.tenantDb, numericUserId);
-    const totalCount = await req.tenantDb.Notification.count({ where: { recipientId: numericUserId } });
+    const totalCount = await req.tenantDb.Notification.count({ where: { userId: numericUserId } });
     const readCount = totalCount - unreadCount;
 
     // Count by type
@@ -473,7 +473,7 @@ export const getNotificationStats = async (req, res) => {
         'type',
         [req.tenantDb.sequelize.fn('COUNT', req.tenantDb.sequelize.col('id')), 'count'],
       ],
-      where: { recipientId: numericUserId },
+      where: { userId: numericUserId },
       group: ['type'],
       raw: true,
     });
@@ -484,7 +484,7 @@ export const getNotificationStats = async (req, res) => {
         'priority',
         [req.tenantDb.sequelize.fn('COUNT', req.tenantDb.sequelize.col('id')), 'count'],
       ],
-      where: { recipientId: numericUserId },
+      where: { userId: numericUserId },
       group: ['priority'],
       raw: true,
     });

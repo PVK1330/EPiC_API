@@ -86,6 +86,22 @@ export const updateCandidateApplication = catchAsync(async (req, res) => {
   });
 });
 
+// Assign (or unassign) a candidate to a business/sponsor
+export const assignCandidateBusiness = catchAsync(async (req, res) => {
+  const { id } = req.validated.params;
+  const { businessId } = req.validated.body;
+  const service = new CandidateService(req.tenantDb);
+  const result = await service.assignBusiness(id, businessId, {
+    organisationId: req.user.organisation_id,
+  });
+
+  return ApiResponse.success(
+    res,
+    businessId == null ? 'Candidate unassigned from business' : 'Candidate assigned to business',
+    result,
+  );
+});
+
 // Toggle Candidate Status (active ↔ inactive)
 export const toggleCandidateStatus = catchAsync(async (req, res) => {
   const { id } = req.params;

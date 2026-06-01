@@ -1353,8 +1353,18 @@ export const handoff = catchAsync(async (req, res) => {
   const roleMeta = await resolveAuthRole(user);
   const allowedModules = await resolveAllowedModules(user);
 
+  // Set the impersonation token as the httpOnly cookie so subsequent
+  // tenant-panel requests authenticate as the impersonated admin (not the
+  // superadmin whose cookie may still be present on a shared parent domain).
+  // maxAge tracks the impersonation token's own expiry; if the JWT carries an
+  // exp claim, align the cookie lifetime to it, otherwise fall back to 1h.
+  const cookieMaxAge = decoded?.exp
+    ? Math.max(decoded.exp * 1000 - Date.now(), 0)
+    : 60 * 60 * 1000;
+  res.cookie('token', token, getCookieConfig({ maxAge: cookieMaxAge }));
+
   return ApiResponse.success(res, 'Handoff successful', {
     user: buildLoginUserResponse(user, roleMeta),
     allowedModules,
   });
-}); 
+});

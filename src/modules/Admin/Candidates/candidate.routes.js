@@ -37,6 +37,7 @@ router.get("/", checkRole(STAFF), controller.getAllCandidates);
 router.get("/:id", checkRole(STAFF), validate(schema.getCandidateSchema), controller.getCandidateById);
 router.patch("/:id", checkRole(STAFF), validate(schema.updateCandidateSchema), controller.updateCandidate);
 router.patch("/:id/toggle-status", checkRole(STAFF), validate(schema.getCandidateSchema), controller.toggleCandidateStatus);
+router.patch("/:id/assign-business", checkRole(STAFF), validate(schema.assignCandidateBusinessSchema), controller.assignCandidateBusiness);
 router.delete("/:id", checkRole(STAFF), controller.deleteCandidate);
 router.post("/:id/reset-password", checkRole(STAFF), validate(schema.resetCandidatePasswordSchema), controller.resetCandidatePassword);
 

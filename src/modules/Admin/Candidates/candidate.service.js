@@ -2,7 +2,7 @@ import bcrypt from 'bcryptjs';
 import { Op } from 'sequelize';
 import { CandidateRepository } from './candidate.repository.js';
 import { generateStrongPassword } from '../../../utils/passwordGenerator.js';
-import { notifyUserCreated } from '../../../services/notification.service.js';
+import { notifyUserCreated, notifyUser } from '../../../services/notification.service.js';
 import { ROLES } from '../../../middlewares/role.middleware.js';
 import {
   createUserOnPlatformAndTenant,
@@ -299,13 +299,28 @@ export class CandidateService {
         model: this.repository.tenantDb.Case,
         as: "cases",
         required: false,
-        attributes: ["id", "caseId", "status", "nationality", "visaTypeId", "totalAmount", "paidAmount"],
+        attributes: ["id", "caseId", "status", "nationality", "visaTypeId", "totalAmount", "paidAmount", "sponsorId"],
         include: [
           {
             model: this.repository.tenantDb.VisaType,
             as: "visaType",
             required: false,
             attributes: ["id", "name"],
+          },
+          {
+            // Assigned business/sponsor (Case.sponsorId → User), with company name.
+            model: this.repository.tenantDb.User,
+            as: "sponsor",
+            required: false,
+            attributes: ["id", "first_name", "last_name", "email"],
+            include: [
+              {
+                model: this.repository.tenantDb.SponsorProfile,
+                as: "sponsorProfile",
+                required: false,
+                attributes: ["companyName"],
+              },
+            ],
           },
         ],
       },
@@ -718,5 +733,100 @@ export class CandidateService {
     });
 
     return candidate;
+  }
+
+  /**
+   * Assign (or unassign) a candidate to a business/sponsor.
+   *
+   * The business panel resolves its candidates via Case.sponsorId
+   * (see Sponsor/Workers getSponsoredWorkers), so assigning sets the
+   * candidate's case.sponsorId to the chosen sponsor user. Passing
+   * businessId = null clears the assignment.
+   *
+   * @param {number} candidateId
+   * @param {number|null} businessId - sponsor (role 4) user id, or null to unassign
+   * @param {object} [context] - { organisationId } for notifications
+   */
+  async assignBusiness(candidateId, businessId, context = {}) {
+    const tenantDb = this.repository.tenantDb;
+
+    const candidate = await tenantDb.User.findOne({
+      where: { id: candidateId, role_id: ROLES.CANDIDATE },
+      attributes: ['id', 'first_name', 'last_name', 'email', 'organisation_id'],
+    });
+    if (!candidate) {
+      const err = new Error('Candidate not found');
+      err.status = 404;
+      throw err;
+    }
+
+    let business = null;
+    if (businessId != null) {
+      business = await tenantDb.User.findOne({
+        where: { id: businessId, role_id: ROLES.BUSINESS },
+        attributes: ['id', 'first_name', 'last_name', 'email', 'status'],
+        include: [
+          {
+            model: tenantDb.SponsorProfile,
+            as: 'sponsorProfile',
+            required: false,
+            attributes: ['companyName'],
+          },
+        ],
+      });
+      if (!business) {
+        const err = new Error('Business (sponsor) not found');
+        err.status = 404;
+        throw err;
+      }
+      if (business.status !== 'active') {
+        const err = new Error('Cannot assign to an inactive business');
+        err.status = 400;
+        throw err;
+      }
+    }
+
+    // Ensure the candidate has a case to carry the assignment.
+    let caseRecord = await this.repository.findCaseByCandidateId(candidateId);
+    if (!caseRecord) {
+      if (businessId == null) {
+        // Nothing to unassign from — return a no-op result.
+        return { candidateId, businessId: null, caseId: null };
+      }
+      caseRecord = await ensureCandidateEnquiryCase(tenantDb, candidateId, {
+        organisationId: context.organisationId ?? candidate.organisation_id ?? null,
+      });
+    }
+
+    await caseRecord.update({ sponsorId: businessId });
+
+    // Notify the business that a candidate was assigned to them.
+    if (business) {
+      const companyName = business.sponsorProfile?.companyName || 'your business';
+      notifyUser(tenantDb, business.id, {
+        type: 'info',
+        priority: 'medium',
+        category: 'case',
+        title: 'Candidate Assigned',
+        message: `${candidate.first_name} ${candidate.last_name} has been assigned to ${companyName}.`,
+        actionType: 'candidate_assigned',
+        entityType: 'user',
+        entityId: candidate.id,
+        organisationId: context.organisationId ?? candidate.organisation_id ?? null,
+      }).catch((err) => logger.error({ err }, 'assignBusiness notify failed'));
+    }
+
+    return {
+      candidateId,
+      businessId,
+      caseId: caseRecord.id,
+      business: business
+        ? {
+            id: business.id,
+            name: `${business.first_name} ${business.last_name}`.trim(),
+            companyName: business.sponsorProfile?.companyName || null,
+          }
+        : null,
+    };
   }
 }

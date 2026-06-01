@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx --no-install esbuild src/pages/admin/AdminCandidates.jsx --bundle --external:react --external:react-dom --external:react-icons/* --external:framer-motion --external:lucide-react --external:react-router-dom --external:react-redux --external:react-hot-toast --format=esm --outfile=/dev/null --loader:.jsx=jsx)",
+      "Bash(node -e ' *)",
+      "Bash(node -e \"const fs=require\\('fs'\\);const p=require\\('@babel/parser'\\);try{p.parse\\(fs.readFileSync\\('src/pages/business/BusinessDashboard.jsx','utf8'\\),{sourceType:'module',plugins:['jsx']}\\);console.log\\('BusinessDashboard.jsx OK'\\);}catch\\(e\\){console.log\\('ERR',e.message\\);}\")"
+    ]
+  }
+}
