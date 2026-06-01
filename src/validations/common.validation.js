@@ -12,6 +12,19 @@ export const passwordSchema = z
   .min(8, "Password must be at least 8 characters")
   .max(100, "Password cannot exceed 100 characters");
 
+/**
+ * Strong password policy for security-sensitive flows (password resets, etc.):
+ * minimum 12 characters with upper, lower, digit and special-character classes.
+ */
+export const strongPasswordSchema = z
+  .string()
+  .min(12, "Password must be at least 12 characters")
+  .max(100, "Password cannot exceed 100 characters")
+  .regex(/[a-z]/, "Password must contain a lowercase letter")
+  .regex(/[A-Z]/, "Password must contain an uppercase letter")
+  .regex(/[0-9]/, "Password must contain a number")
+  .regex(/[^A-Za-z0-9]/, "Password must contain a special character");
+
 export const phoneSchema = z
   .string()
   .trim()
@@ -50,6 +63,4 @@ export const CaseStatusEnum = z.enum([
   "submitted",
   "approved",
 ]);
-// Matches the User model status ENUM('active', 'inactive', 'suspended').
-export const UserStatusEnum = z.enum(["active", "inactive", "suspended"]);
 export const UserStatusEnum = z.enum(["active", "inactive", "suspended"]);

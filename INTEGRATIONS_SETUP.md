@@ -18,6 +18,15 @@ When a user connects their account and an appointment is created, the app
 5. Re-syncs on appointment update, and deletes the event on cancel.
 6. Retries failed syncs via an internal retry queue + writes audit logs.
 
+> **Required secret — `SETTINGS_ENCRYPTION_KEY`.** OAuth client secrets and
+> access/refresh tokens are encrypted at rest with this dedicated AES-256 key.
+> It must be a **64-char hex string (32 bytes)** and **different from
+> `JWT_SECRET`** — the server refuses to start otherwise. Generate one with:
+> `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`.
+> If you are upgrading an existing deployment that previously relied on the old
+> `JWT_SECRET` fallback, run the one-time re-encryption migration after setting
+> the new key: `npm run reencrypt:secrets -- --dry-run` then `npm run reencrypt:secrets`.
+
 Relevant code (no need to touch it):
 
 - Google OAuth:      `src/modules/Shared/Integrations/google/google.oauth.js`

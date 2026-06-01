@@ -9,6 +9,7 @@ import {
   getRequestUserId,
   resolveTenantUserId,
 } from "./google.integration.util.js";
+import { createOAuthState } from "../../../../services/oauthState.service.js";
 import logger from "../../../../utils/logger.js";
 
 /**
@@ -34,7 +35,16 @@ export const getGoogleAuthUrl = async (req, res) => {
       });
     }
 
-    const authUrl = googleOauth.getAuthUrl(token || "", tenantGoogleConfig);
+    // OAuth 2.0 CSRF protection: a random, single-use, server-stored nonce is
+    // the `state`. The session token is kept server-side (NOT in the URL).
+    const state = await createOAuthState({
+      userId: req.user.id,
+      organisationId: req.user.organisation_id,
+      provider: "google",
+      authToken: token,
+    });
+
+    const authUrl = googleOauth.getAuthUrl(state, tenantGoogleConfig);
 
     return res.status(200).json({
       status: "success",

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { emailSchema, phoneSchema, uuidSchema } from './common.validation.js';
+import { emailSchema, phoneSchema, uuidSchema, strongPasswordSchema } from './common.validation.js';
 
 export const createCandidateSchema = z.object({
   body: z.object({
@@ -28,4 +28,20 @@ export const getCandidateSchema = z.object({
   params: z.object({
     id: z.coerce.number().int().positive(),
   }),
+});
+
+export const resetCandidatePasswordSchema = z.object({
+  params: z.object({
+    id: z.coerce.number().int().positive(),
+  }),
+  body: z
+    .object({
+      new_password: strongPasswordSchema,
+      confirm_password: z.string().min(1, 'Confirm password is required'),
+    })
+    .strict()
+    .refine((data) => data.new_password === data.confirm_password, {
+      message: 'Passwords do not match',
+      path: ['confirm_password'],
+    }),
 });

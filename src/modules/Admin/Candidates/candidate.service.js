@@ -56,6 +56,71 @@ function splitApplicationUpdatePayload(data) {
   return { userPatch, applicationPatch: payload, caseworkerId };
 }
 
+// ── Candidate update field policy ──────────────────────────────────────────
+// Whitelist: only these profile fields may be updated via updateCandidate().
+// There is no `phone`/`address` column on users — contact is country_code+mobile.
+export const CANDIDATE_UPDATABLE_FIELDS = Object.freeze([
+  "first_name",
+  "last_name",
+  "email",
+  "country_code",
+  "mobile",
+  "gender",
+  "profile_pic",
+]);
+
+// Privilege-/security-sensitive columns. Any attempt to set one through a
+// profile update is treated as a mass-assignment attack: logged and rejected.
+// Credentials (password) must go through resetCandidatePassword() only.
+export const CANDIDATE_PROTECTED_FIELDS = Object.freeze([
+  "id",
+  "role_id",
+  "organisation_id",
+  "status",
+  "password",
+  "temp_password",
+  "is_email_verified",
+  "is_otp_verified",
+  "otp_code",
+  "otp_expiry",
+  "password_reset_otp",
+  "password_reset_otp_expiry",
+  "two_factor_secret",
+  "two_factor_enabled",
+  "two_factor_backup_codes",
+  "password_changed_at",
+  "failed_login_attempts",
+  "locked_until",
+  "last_login",
+]);
+
+/**
+ * Partition an incoming candidate-update payload into the fields that may be
+ * persisted vs. those that are rejected. `application` is handled separately
+ * by the application-sync logic and is ignored here.
+ *
+ * @param {object} data
+ * @returns {{ updateData: object, protectedAttempts: string[], unknownFields: string[] }}
+ */
+export function partitionCandidateUpdate(data = {}) {
+  const updateData = {};
+  const protectedAttempts = [];
+  const unknownFields = [];
+
+  for (const key of Object.keys(data || {})) {
+    if (key === "application") continue; // synced separately, not a user column
+    if (CANDIDATE_UPDATABLE_FIELDS.includes(key)) {
+      updateData[key] = data[key];
+    } else if (CANDIDATE_PROTECTED_FIELDS.includes(key)) {
+      protectedAttempts.push(key);
+    } else {
+      unknownFields.push(key);
+    }
+  }
+
+  return { updateData, protectedAttempts, unknownFields };
+}
+
 export class CandidateService {
   constructor(tenantDb) {
     this.repository = new CandidateRepository(tenantDb);
@@ -276,7 +341,28 @@ export class CandidateService {
     const candidate = await this.repository.findById(id);
     if (!candidate) throw new Error("Candidate not found");
 
-    const { email, country_code, mobile, application, ...updateData } = data;
+    // Whitelist-based update: only CANDIDATE_UPDATABLE_FIELDS may be persisted.
+    // Protected fields (role_id, organisation_id, status, password, verification
+    // /2FA/OTP, etc.) are rejected; unknown fields are dropped.
+    const { updateData, protectedAttempts, unknownFields } = partitionCandidateUpdate(data);
+
+    if (protectedAttempts.length > 0) {
+      logger.warn(
+        { candidateId: id, fields: protectedAttempts },
+        "Blocked attempt to modify protected candidate fields (mass-assignment)",
+      );
+      const err = new Error(`Cannot modify protected field(s): ${protectedAttempts.join(", ")}`);
+      err.status = 400;
+      throw err;
+    }
+    if (unknownFields.length > 0) {
+      logger.warn(
+        { candidateId: id, fields: unknownFields },
+        "Rejected unknown field(s) on candidate update",
+      );
+    }
+
+    const { email, country_code, mobile, application } = data;
 
     if (email && email !== candidate.email) {
       const exists = await this.repository.findByEmail(email, id);
@@ -324,6 +410,41 @@ export class CandidateService {
     });
 
     return await this.repository.findById(id);
+  }
+
+  /**
+   * Reset a candidate's password securely.
+   *
+   * - Hashes with bcrypt (cost 12); a raw password is never persisted.
+   * - Runs inside a tenant DB transaction. The platform User row (the source of
+   *   truth for authentication) is updated *within* the transaction, so if the
+   *   platform sync fails the tenant password update is rolled back — the two
+   *   stores never diverge on a partial failure.
+   *
+   * @param {number|string} id - candidate (tenant user) id
+   * @param {string} newPassword - already-validated strong password
+   * @returns {Promise<boolean>}
+   */
+  async resetCandidatePassword(id, newPassword) {
+    if (!newPassword || typeof newPassword !== 'string') {
+      throw new Error('A new password is required');
+    }
+
+    const candidate = await this.repository.findById(id);
+    if (!candidate) throw new Error('Candidate not found');
+
+    const hashedPassword = await bcrypt.hash(newPassword, 12);
+
+    await this.repository.transaction(async (t) => {
+      // 1. Tenant user
+      await candidate.update({ password: hashedPassword }, { transaction: t });
+
+      // 2. Platform user (auth source of truth). If this throws, the tenant
+      //    transaction above rolls back. timeoutMs=0 -> await the update fully.
+      await syncUserToPlatformOnly(candidate.id, { password: hashedPassword }, 0);
+    });
+
+    return true;
   }
 
   async deleteCandidate(id) {

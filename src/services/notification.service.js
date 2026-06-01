@@ -1,6 +1,8 @@
 import logger from '../utils/logger.js';
 import { sendTransactionalEmail } from './mail.service.js';
 import { ROLES } from '../middlewares/role.middleware.js';
+import { getIO } from '../realtime/ioRegistry.js';
+import { userRoom } from '../realtime/messagingRealtime.js';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
@@ -59,8 +61,9 @@ export async function notifyUser(tenantDb, userId, payload = {}) {
       category,
       priority,
       type,
-      recipientId: userId,
+      userId,
       organisationId,
+      actionType,
       entityType,
       entityId,
       actionUrl,
@@ -69,14 +72,14 @@ export async function notifyUser(tenantDb, userId, payload = {}) {
       isArchived: false,
     });
 
-    // Real-time delivery via Socket.IO (io attached to tenantDb at boot time)
-    const io = tenantDb._io;
+    // Real-time delivery via the centralized Socket.IO instance (ioRegistry).
+    const io = getIO();
     if (io) {
-      io.to(`user:${userId}`).emit('notification:new', notification.toJSON());
+      io.to(userRoom(userId)).emit('notification:new', notification.toJSON());
       const unread = await tenantDb.Notification.count({
-        where: { recipientId: userId, isRead: false },
+        where: { userId, isRead: false },
       });
-      io.to(`user:${userId}`).emit('notification:count', { count: unread });
+      io.to(userRoom(userId)).emit('notification:count', { count: unread });
     }
 
     if (doEmail) {
@@ -188,14 +191,14 @@ export async function createNotification({ tenantDb, userId, ...rest }) {
  * Paginated fetch of notifications for a user.
  */
 export async function getUserNotifications(tenantDb, userId, { page = 1, limit = 20, unreadOnly = false, type, priority } = {}) {
-  const where = { recipientId: userId };
+  const where = { userId, isArchived: false };
   if (unreadOnly) where.isRead = false;
   if (type) where.type = type;
   if (priority) where.priority = priority;
   const offset = (page - 1) * limit;
   const { count, rows } = await tenantDb.Notification.findAndCountAll({
     where,
-    order: [['created_at', 'DESC']],
+    order: [['createdAt', 'DESC']],
     limit,
     offset,
   });
@@ -206,7 +209,7 @@ export async function getUserNotifications(tenantDb, userId, { page = 1, limit =
  * Count unread notifications for a user.
  */
 export async function getUnreadCount(tenantDb, userId) {
-  return tenantDb.Notification.count({ where: { recipientId: userId, isRead: false } });
+  return tenantDb.Notification.count({ where: { userId, isRead: false, isArchived: false } });
 }
 
 /**
@@ -222,7 +225,7 @@ export async function deleteNotification(tenantDb, id) {
 export async function deleteExpiredNotifications(tenantDb) {
   const { Op } = await import('sequelize');
   const cutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
-  return tenantDb.Notification.destroy({ where: { created_at: { [Op.lt]: cutoff } } });
+  return tenantDb.Notification.destroy({ where: { createdAt: { [Op.lt]: cutoff } } });
 }
 
 /**
@@ -499,15 +502,15 @@ export const generateNotification = async (context, payload) => {
       emailHtml = emailHtml.replace(regex, templateData[key]);
     });
 
-    // 3. Save to Database
+    // 3. Save to Database (canonical columns: userId / roleId)
     const notification = await tenantDb.Notification.create({
       title,
       message,
       category,
       priority,
       type,
-      recipientId,
-      recipientRole,
+      userId: recipientId,
+      roleId: recipientRole,
       organisationId,
       entityType,
       entityId,
@@ -538,14 +541,16 @@ export const generateNotification = async (context, payload) => {
       deliveryStatus: 'pending'
     });
 
-    // 6. Deliver via Socket.IO
-    if (sendSocket && io && recipientId) {
-      io.to(`user:${recipientId}`).emit('notification:new', notification);
-      
+    // 6. Deliver via Socket.IO (prefer the explicit context io, else the
+    //    centralized registry instance).
+    const ioInstance = io || getIO();
+    if (sendSocket && ioInstance && recipientId) {
+      ioInstance.to(userRoom(recipientId)).emit('notification:new', notification);
+
       // Update unread count
-      const unreadCount = await tenantDb.Notification.count({ where: { recipientId, isRead: false } });
-      io.to(`user:${recipientId}`).emit('notification:count', { count: unreadCount });
-      
+      const unreadCount = await tenantDb.Notification.count({ where: { userId: recipientId, isRead: false } });
+      ioInstance.to(userRoom(recipientId)).emit('notification:count', { count: unreadCount });
+
       await delivery.update({ socketDelivered: true, socketDeliveredAt: new Date() });
     }
 
@@ -586,14 +591,27 @@ export const markAsRead = async (tenantDb, notificationId) => {
 export const markAllAsRead = async (tenantDb, userId) => {
   return await tenantDb.Notification.update(
     { isRead: true, readAt: new Date() },
-    { where: { recipientId: userId, isRead: false } }
+    { where: { userId, isRead: false } }
   );
+};
+
+/**
+ * Archive (or un-archive) a single notification. Archived notifications are
+ * hidden from the default list/unread queries.
+ */
+export const setNotificationArchived = async (tenantDb, notificationId, archived = true) => {
+  const notification = await tenantDb.Notification.findByPk(notificationId);
+  if (notification) {
+    await notification.update({ isArchived: Boolean(archived) });
+  }
+  return notification;
 };
 
 export default {
   generateNotification,
   markAsRead,
   markAllAsRead,
+  setNotificationArchived,
   notifyUser,
   notifyAdmins,
   notifyTaskAssigned,

@@ -55,10 +55,14 @@ export const verifyResetOtpSchema = z.object({
 });
 
 export const setPasswordSchema = z.object({
+  // OTP was already verified at /verify-reset-otp, which issued resetToken.
+  // The controller reads { email, password, confirmPassword, resetToken } and
+  // enforces the password match / length itself.
   body: z.object({
     email: emailSchema,
-    otp: z.string().length(6, 'OTP must be 6 digits'),
-    newPassword: passwordSchema,
+    password: passwordSchema,
+    confirmPassword: z.string().min(1, 'Confirm password is required'),
+    resetToken: z.string().min(1, 'Reset token is required'),
     organisationId: z.string().optional(),
   }).strict(),
 });

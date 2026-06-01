@@ -13,6 +13,7 @@ import {
   NotificationTypes,
   NotificationPriority,
 } from '../../../services/notification.service.js';
+import logger from '../../../utils/logger.js';
 
 const validNotificationTypes = new Set(Object.values(NotificationTypes));
 const validPriorities = new Set(Object.values(NotificationPriority));

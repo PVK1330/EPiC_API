@@ -3,6 +3,7 @@
 
 import * as microsoftOauth from "./microsoft.oauth.js";
 import * as microsoftService from "./microsoft.service.js";
+import { createOAuthState } from "../../../../services/oauthState.service.js";
 import logger from "../../../../utils/logger.js";
 
 /**
@@ -17,7 +18,17 @@ export const getMicrosoftAuthUrl = async (req, res) => {
       : req.cookies?.token;
 
     const tenantConfig = await microsoftOauth.loadTenantMicrosoftConfig(req.user?.organisation_id);
-    const authUrl = microsoftOauth.getAuthUrl(token || "", tenantConfig);
+
+    // OAuth 2.0 CSRF protection: a random, single-use, server-stored nonce is
+    // the `state`. The session token is kept server-side (NOT in the URL).
+    const state = await createOAuthState({
+      userId: req.user.id,
+      organisationId: req.user.organisation_id,
+      provider: "microsoft",
+      authToken: token,
+    });
+
+    const authUrl = microsoftOauth.getAuthUrl(state, tenantConfig);
 
     return res.status(200).json({
       status: "success",

@@ -53,18 +53,14 @@ export const deleteCandidate = catchAsync(async (req, res) => {
   return ApiResponse.success(res, "Candidate deleted successfully");
 });
 
-// Reset Password
+// Reset Password — strength + match are enforced by resetCandidatePasswordSchema.
 export const resetCandidatePassword = catchAsync(async (req, res) => {
-  const { id } = req.params;
-  const { new_password, confirm_password } = req.body;
-  
-  if (new_password !== confirm_password) {
-    return ApiResponse.badRequest(res, "Passwords do not match");
-  }
+  const { id } = req.validated.params;
+  const { new_password } = req.validated.body;
 
   const service = new CandidateService(req.tenantDb);
-  await service.updateCandidate(id, { password: new_password }); // Simple reuse of update for now or add specific method
-  
+  await service.resetCandidatePassword(id, new_password);
+
   return ApiResponse.success(res, "Password reset successfully");
 });
 

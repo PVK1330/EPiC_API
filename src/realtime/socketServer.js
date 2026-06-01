@@ -4,6 +4,7 @@ import platformDb from "../models/index.js";
 import { getTenantDb } from "../services/tenantDb.service.js";
 import { userRoom, threadRoom, orgRoom } from "./messagingRealtime.js";
 import { registerIO } from "./ioRegistry.js";
+import registerNotificationHandlers from "./notificationRealtime.js";
 import { corsOriginDelegate } from "../config/frontendOrigins.js";
 
 function extractSocketToken(socket) {
@@ -71,6 +72,9 @@ export function initSocketIO(httpServer, app) {
     if (orgId && !Number.isNaN(orgId)) {
       socket.join(orgRoom(orgId));
     }
+
+    // Client→server notification handlers (mark-read / delete + count refresh).
+    registerNotificationHandlers(io, socket);
 
     socket.on("thread:subscribe", async (payload, ack) => {
       const reply = (result) => {

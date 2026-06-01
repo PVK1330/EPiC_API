@@ -14,6 +14,7 @@ import PlatformNotificationModel from "./platform/platformNotification.model.js"
 import UserSessionModel from "./platform/userSession.model.js";
 import StripeWebhookEventModel from "./platform/stripeWebhookEvent.model.js";
 import PaymentWebhookRetryQueueModel from "./platform/paymentWebhookRetryQueue.model.js";
+import OAuthStateModel from "./platform/oauthState.model.js";
 import RoleModel from "./tenant/role.model.js";
 import PermissionModel from "./tenant/permission.model.js";
 import RolePermissionModel from "./tenant/rolePermission.model.js";
@@ -50,6 +51,7 @@ db.PlatformNotification = PlatformNotificationModel(sequelize, Sequelize.DataTyp
 db.UserSession = UserSessionModel(sequelize, Sequelize.DataTypes);
 db.StripeWebhookEvent = StripeWebhookEventModel(sequelize, Sequelize.DataTypes);
 db.PaymentWebhookRetryQueue = PaymentWebhookRetryQueueModel(sequelize, Sequelize.DataTypes);
+db.OAuthState = OAuthStateModel(sequelize, Sequelize.DataTypes);
 db.Role = RoleModel(sequelize, Sequelize.DataTypes);
 db.Permission = PermissionModel(sequelize, Sequelize.DataTypes);
 db.RolePermission = RolePermissionModel(sequelize, Sequelize.DataTypes);
