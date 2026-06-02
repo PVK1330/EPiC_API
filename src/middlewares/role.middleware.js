@@ -1,4 +1,6 @@
 import ApiResponse from '../utils/apiResponse.js';
+import { recordAuditLog } from '../services/audit.service.js';
+import logger from '../utils/logger.js';
 
 export const ROLES = {
   CANDIDATE: 1,
@@ -70,5 +72,71 @@ export const checkAnyPermission = (permissions) => {
     }
 
     return ApiResponse.forbidden(res, "You do not have any of the required permissions for this action");
+  };
+};
+
+/**
+ * Authorize a request when the caller either holds one of `allowedRoles`
+ * (unconditional access) OR is the owner of the targeted resource
+ * (the id route param equals their own user id). Anyone else is denied with
+ * 403 Forbidden, and the denied attempt is recorded in the audit log.
+ *
+ * This is the reusable guard for self-service endpoints that privileged staff
+ * may also reach on behalf of others, while preventing candidates (or any
+ * non-privileged role) from reaching another user's record (IDOR).
+ *
+ * @param {Array<number>} [allowedRoles=[]] - roles granted unconditional access
+ * @param {Object} [options]
+ * @param {string} [options.idParam='id'] - route param holding the target user id
+ * @param {string} [options.resource='candidate'] - label used in the audit log
+ * @returns {import('express').RequestHandler}
+ */
+export const ensureSelfOrRole = (allowedRoles = [], options = {}) => {
+  const { idParam = 'id', resource = 'candidate' } = options;
+
+  return (req, res, next) => {
+    if (!req.user) {
+      return ApiResponse.unauthorized(res, "Authentication required");
+    }
+
+    // Privileged roles (e.g. admin / caseworker) get through unconditionally.
+    if (allowedRoles.includes(req.user.role_id)) {
+      return next();
+    }
+
+    // Otherwise the caller may only act on their OWN record. Compare as strings
+    // because route params are always strings while userId may be numeric.
+    const targetId = String(req.params?.[idParam] ?? "");
+    const selfId = String(req.user.userId ?? req.user.id ?? "");
+    if (targetId !== "" && selfId !== "" && targetId === selfId) {
+      return next();
+    }
+
+    // Denied: record the attempt (fire-and-forget; never blocks the response)
+    // and refuse with 403.
+    const denial = {
+      reason: "Unauthorized cross-account access attempt (IDOR)",
+      method: req.method,
+      path: req.originalUrl,
+      targetId: req.params?.[idParam] ?? null,
+      roleId: req.user.role_id ?? null,
+    };
+
+    recordAuditLog({
+      tenantDb: req.tenantDb,
+      userId: req.user.userId ?? req.user.id ?? null,
+      action: "ACCESS_DENIED",
+      resource,
+      status: "Failed",
+      details: JSON.stringify(denial),
+      req,
+    }).catch((err) => logger.error({ err }, "Failed to audit denied access"));
+
+    logger.warn(
+      { userId: denial.targetId, actor: req.user.userId ?? req.user.id, ...denial },
+      "Denied unauthorized access attempt",
+    );
+
+    return ApiResponse.forbidden(res, "You do not have permission to access this resource");
   };
 };

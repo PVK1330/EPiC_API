@@ -1,9 +1,16 @@
 /**
  * settings.service.js
  * Helpers for reading/writing platform_settings key-value rows.
- * Sensitive values (SMTP password, S3 keys) are encrypted with AES-256-GCM
- * using SETTINGS_ENCRYPTION_KEY from the environment (falls back to JWT_SECRET
- * padded/hashed to 32 bytes so the app still works without a dedicated key).
+ *
+ * Sensitive values (SMTP password, S3 keys, OAuth client secrets, OAuth tokens)
+ * are encrypted at rest with AES-256-GCM using a DEDICATED key,
+ * SETTINGS_ENCRYPTION_KEY (a 64-char hex string = 32 bytes).
+ *
+ * SECURITY: there is intentionally NO fallback to JWT_SECRET. Reusing the JWT
+ * signing secret as the encryption key means a single secret compromise yields
+ * both session forgery AND decryption of every stored OAuth secret/token. The
+ * key is mandatory and validated at startup by validateEnv.js. Generate one
+ * with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
  */
 
 import crypto from "crypto";
@@ -17,20 +24,31 @@ const { PlatformSetting } = platformDb;
 
 const ALGO = "aes-256-gcm";
 const MASK = "••••••••";
+const KEY_HEX_RE = /^[0-9a-fA-F]{64}$/; // 32 bytes, hex-encoded
 
 /**
- * Derive a 32-byte key from the env variable.
- * SETTINGS_ENCRYPTION_KEY should be a 64-char hex string (32 bytes).
- * If it is not set we fall back to a SHA-256 hash of JWT_SECRET so the
- * service is always functional, but operators should set a dedicated key.
+ * Derive the 32-byte AES key from SETTINGS_ENCRYPTION_KEY.
+ *
+ * Mandatory dedicated key — NO fallback to JWT_SECRET. Must be a 64-char hex
+ * string (32 bytes). Throws if missing or malformed (belt-and-suspenders;
+ * validateEnv.js already aborts startup, so this should never fire at runtime).
  */
 function getDerivedKey() {
-  const raw = process.env.SETTINGS_ENCRYPTION_KEY || process.env.JWT_SECRET;
-  // If it looks like a 64-char hex string use it directly, otherwise hash it.
-  if (/^[0-9a-fA-F]{64}$/.test(raw.trim())) {
-    return Buffer.from(raw.trim(), "hex");
+  const raw = process.env.SETTINGS_ENCRYPTION_KEY;
+  if (!raw || !raw.trim()) {
+    throw new Error(
+      "SETTINGS_ENCRYPTION_KEY is not set. Server startup should have been aborted by validateEnv.js. " +
+        "Set a dedicated 64-char hex key (32 bytes) and restart.",
+    );
   }
-  return crypto.createHash("sha256").update(raw).digest();
+  const trimmed = raw.trim();
+  if (!KEY_HEX_RE.test(trimmed)) {
+    throw new Error(
+      "SETTINGS_ENCRYPTION_KEY must be a 64-character hex string (32 bytes). " +
+        'Generate one with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"',
+    );
+  }
+  return Buffer.from(trimmed, "hex");
 }
 
 /**

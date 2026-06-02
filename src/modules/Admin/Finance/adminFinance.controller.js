@@ -62,6 +62,55 @@ export const getFinanceSummary = catchAsync(async (req, res) => {
   });
 });
 
+// ─── GET /admin/finance/reconciliation ─────────────────────────────────────────
+export const getPaymentReconciliation = catchAsync(async (req, res) => {
+  const { page = 1, limit = 50, status } = req.query;
+  const offset = (parseInt(page) - 1) * parseInt(limit);
+
+  const where = {};
+  if (status && status !== 'all') where.paymentStatus = status;
+
+  const { count, rows } = await req.tenantDb.CasePayment.findAndCountAll({
+    where,
+    include: [{
+      model:      req.tenantDb.Case,
+      attributes: ['caseId', 'status'],
+      required:   false,
+      include: [{
+        model:      req.tenantDb.User,
+        as:         'candidate',
+        attributes: ['id', 'first_name', 'last_name', 'email'],
+      }],
+    }],
+    order:  [['created_at', 'DESC']],
+    limit:  parseInt(limit),
+    offset,
+  });
+
+  const reconciliation = rows.map(r => ({
+    id:            `#PAY-${r.id}`,
+    transactionId: r.transactionId || r.invoiceNumber || 'N/A',
+    customerId:    r.Case?.candidate?.id || 'Unknown',
+    clientName:    r.Case?.candidate ? `${r.Case.candidate.first_name} ${r.Case.candidate.last_name}` : 'Unknown',
+    caseId:        r.Case?.caseId || 'N/A',
+    amount:        parseFloat(r.amount),
+    currency:      'gbp',
+    status:        r.paymentStatus,
+    failureReason: r.paymentStatus === 'failed' ? (r.description || 'Unknown failure') : null,
+    date:          localDateStr(new Date(r.created_at)),
+  }));
+
+  return ApiResponse.success(res, 'Payment reconciliation retrieved', {
+    reconciliation,
+    pagination: {
+      total: count,
+      page:  parseInt(page),
+      limit: parseInt(limit),
+      pages: Math.ceil(count / parseInt(limit)),
+    },
+  });
+});
+
 // ─── GET /admin/finance/transactions ─────────────────────────────────────────
 export const getTransactions = catchAsync(async (req, res) => {
   const { page = 1, limit = 20, status, paymentMethod, startDate, endDate } = req.query;

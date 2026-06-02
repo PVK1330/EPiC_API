@@ -438,8 +438,16 @@ export const exportEscalationsExcel = async (req, res) => {
     const rows = escalations.map((esc) => {
       const j = esc.toJSON();
       const adm = j.assignedAdmin;
-      const createdIso = j.created_at ? new Date(j.created_at).toISOString() : "";
-      const resolvedIso = j.resolvedAt ? new Date(j.resolvedAt).toISOString() : "";
+
+      // Prefer the joined User row; fall back to the denormalized name stored on the escalation
+      const adminName = (adm?.first_name != null)
+        ? `${adm.first_name} ${adm.last_name ?? ""}`.trim()
+        : (j.assignedAdminName ?? "");
+      const adminEmail = adm?.email ?? "";
+
+      const createdStr = j.created_at ? localDateStr(new Date(j.created_at)) : "";
+      const resolvedStr = j.resolvedAt ? localDateStr(new Date(j.resolvedAt)) : "";
+
       return {
         id: j.id,
         caseId: j.caseId ?? "",
@@ -448,13 +456,12 @@ export const exportEscalationsExcel = async (req, res) => {
         triggerType: j.triggerType ?? "",
         trigger: j.trigger ?? "",
         status: j.status ?? "",
-        assignedAdmin:
-          adm && adm.first_name != null ? `${adm.first_name} ${adm.last_name ?? ""}` : "",
-        assignedAdminEmail: adm?.email ?? "",
+        assignedAdmin: adminName,
+        assignedAdminEmail: adminEmail,
         daysOpen: calculateDaysOpen(j.created_at),
         relatedCaseRef: j.relatedCase?.caseId ?? "",
-        createdAtStr: createdIso,
-        resolvedAtStr: resolvedIso,
+        createdAtStr: createdStr,
+        resolvedAtStr: resolvedStr,
         notes: j.notes ?? "",
       };
     });

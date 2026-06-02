@@ -62,10 +62,14 @@ router.patch('/invoices/:id/status', invoiceController.updateInvoiceStatus);
 router.get('/invoices/export/pdf', invoiceController.exportInvoicesPdf);
 router.get('/financials/export', invoiceController.exportFinancials);
 
+import { validate } from '../../middlewares/validate.middleware.js';
+import { configureGatewaySchema } from '../../validations/superadminPayment.validation.js';
+
 router.get('/transactions', paymentController.getAllTransactions);
 router.get('/transactions/:id', paymentController.getTransactionById);
+router.get('/payments/reconciliation', paymentController.getPaymentReconciliation);
 router.get('/gateway/status', paymentController.getGatewayStatus);
-router.post('/gateway/configure', paymentController.configureGateway);
+router.post('/gateway/configure', validate(configureGatewaySchema), paymentController.configureGateway);
 router.get('/dashboard/stats', paymentController.getDashboardStats);
 
 router.get('/audit-log', platformAuditLogController.listPlatformAuditLogs);

@@ -1,3 +1,25 @@
+import { getIO } from './ioRegistry.js';
+
+export const EVENT_TYPES = Object.freeze({
+  NOTIFICATION_NEW: 'notification:new',
+  CASE_UPDATED: 'case:updated',
+  MESSAGE_NEW: 'message:new',
+  CONVERSATION_UPDATED: 'conversation:updated',
+  MESSAGES_READ: 'messages:read',
+});
+
+/**
+ * Emit an event to a single user's socket room.
+ * @param {number} userId
+ * @param {string} eventType - one of EVENT_TYPES
+ * @param {object} payload
+ */
+export function emitToUser(userId, eventType, payload = {}) {
+  const io = getIO();
+  if (!io || !userId) return;
+  io.to(userRoom(userId)).emit(eventType, payload);
+}
+
 export function userRoom(userId) {
   return `user:${Number(userId)}`;
 }

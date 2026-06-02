@@ -48,6 +48,20 @@ export default (sequelize, DataTypes) => {
                 type: DataTypes.STRING(10),
             },
 
+            last_login: {
+                type: DataTypes.DATE,
+                allowNull: true,
+            },
+            failed_login_attempts: {
+                type: DataTypes.INTEGER,
+                defaultValue: 0,
+                allowNull: false
+            },
+            locked_until: {
+                type: DataTypes.DATE,
+                allowNull: true
+            },
+
             otp_expiry: {
                 type: DataTypes.DATE,
                 allowNull: true,
@@ -131,6 +145,12 @@ export default (sequelize, DataTypes) => {
                     fields: ["country_code", "mobile", "organisation_id"],
                 },
             ],
+            hooks: {
+                afterUpdate: async (instance, options) => {
+                    const { trackFieldChanges } = await import('../../services/auditTracking.service.js');
+                    await trackFieldChanges(instance, options);
+                }
+            }
         }
     );
 

@@ -1,0 +1,16 @@
+-- NO-OP (superseded).
+--
+-- This migration originally RENAMED notifications columns to the old drifted
+-- model naming (userId -> recipient_id, createdAt -> created_at, entityId ->
+-- entity_id, entityType -> entity_type) and created an index on recipient_id.
+--
+-- The canonical schema was instead standardized the OTHER way: the model,
+-- service, controller, realtime handlers and associations all use the table's
+-- existing camelCase columns (userId / createdAt / entityId / entityType). Live
+-- tenant databases already have those columns, so renaming them here would break
+-- every notification query. The additive columns this file introduced
+-- (category, action_url, is_archived) are handled by
+-- 20260601130000-align-notifications-columns.sql.
+--
+-- This file is intentionally left as a no-op to preserve migration ordering.
+SELECT 1;

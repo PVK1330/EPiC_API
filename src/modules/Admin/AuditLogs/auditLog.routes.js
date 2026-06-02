@@ -6,6 +6,10 @@ import { checkRole, ROLES } from '../../../middlewares/role.middleware.js';
 const router = Router();
 
 router.use(verifyTokenAndTenant);
+
+// Allow any authenticated user to log their own client events (e.g., session timeout)
+router.post('/client-event', auditLogController.logClientEvent);
+
 router.use(checkRole([ROLES.ADMIN]));
 
 // Stats summary — must be before /:id style routes

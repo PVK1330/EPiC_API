@@ -6,14 +6,17 @@ import { handleProfilePicUpload } from '../../middlewares/upload.middleware.js';
 
 const router = Router();
 
+import { validate } from '../../middlewares/validate.middleware.js';
+import * as schema from '../../validations/user.validation.js';
+
 // Get user profile - accessible for all authenticated users
 router.get("/profile", verifyTokenAndTenant, userController.profile);
 
 // Change own password - all authenticated users
-router.post("/change-password", verifyTokenAndTenant, userController.changeOwnPassword);
+router.post("/change-password", verifyTokenAndTenant, validate(schema.changeOwnPasswordSchema), userController.changeOwnPassword);
 
 // Edit user profile - accessible for all authenticated users
-router.put("/profile", handleProfilePicUpload, verifyTokenAndTenant, userController.editProfile);
+router.put("/profile", handleProfilePicUpload, verifyTokenAndTenant, validate(schema.editProfileSchema), userController.editProfile);
 
 // Get all users with role-wise grouping - accessible for all authenticated users
 router.get("/all", verifyTokenAndTenant, userController.getAllUsers);

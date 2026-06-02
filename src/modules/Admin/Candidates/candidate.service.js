@@ -2,7 +2,7 @@ import bcrypt from 'bcryptjs';
 import { Op } from 'sequelize';
 import { CandidateRepository } from './candidate.repository.js';
 import { generateStrongPassword } from '../../../utils/passwordGenerator.js';
-import { notifyUserCreated } from '../../../services/notification.service.js';
+import { notifyUserCreated, notifyUser } from '../../../services/notification.service.js';
 import { ROLES } from '../../../middlewares/role.middleware.js';
 import {
   createUserOnPlatformAndTenant,
@@ -15,6 +15,8 @@ import { sanitizeApplicationPayload } from '../../../utils/applicationPayload.ut
 import { createWorkflowTask, getActiveAdminIds } from '../../../services/workflowTaskAutomation.service.js';
 import logger from '../../../utils/logger.js';
 import { recordTimelineEntry } from '../../../services/caseTimeline.service.js';
+import eventPublisher from '../../../core/events/eventPublisher.js';
+import { EVENTS } from '../../../core/events/eventRegistry.js';
 
 const APPLICATION_PAYLOAD_USER_KEYS = new Set([
   'first_name',
@@ -54,12 +56,77 @@ function splitApplicationUpdatePayload(data) {
   return { userPatch, applicationPatch: payload, caseworkerId };
 }
 
+// ── Candidate update field policy ──────────────────────────────────────────
+// Whitelist: only these profile fields may be updated via updateCandidate().
+// There is no `phone`/`address` column on users — contact is country_code+mobile.
+export const CANDIDATE_UPDATABLE_FIELDS = Object.freeze([
+  "first_name",
+  "last_name",
+  "email",
+  "country_code",
+  "mobile",
+  "gender",
+  "profile_pic",
+]);
+
+// Privilege-/security-sensitive columns. Any attempt to set one through a
+// profile update is treated as a mass-assignment attack: logged and rejected.
+// Credentials (password) must go through resetCandidatePassword() only.
+export const CANDIDATE_PROTECTED_FIELDS = Object.freeze([
+  "id",
+  "role_id",
+  "organisation_id",
+  "status",
+  "password",
+  "temp_password",
+  "is_email_verified",
+  "is_otp_verified",
+  "otp_code",
+  "otp_expiry",
+  "password_reset_otp",
+  "password_reset_otp_expiry",
+  "two_factor_secret",
+  "two_factor_enabled",
+  "two_factor_backup_codes",
+  "password_changed_at",
+  "failed_login_attempts",
+  "locked_until",
+  "last_login",
+]);
+
+/**
+ * Partition an incoming candidate-update payload into the fields that may be
+ * persisted vs. those that are rejected. `application` is handled separately
+ * by the application-sync logic and is ignored here.
+ *
+ * @param {object} data
+ * @returns {{ updateData: object, protectedAttempts: string[], unknownFields: string[] }}
+ */
+export function partitionCandidateUpdate(data = {}) {
+  const updateData = {};
+  const protectedAttempts = [];
+  const unknownFields = [];
+
+  for (const key of Object.keys(data || {})) {
+    if (key === "application") continue; // synced separately, not a user column
+    if (CANDIDATE_UPDATABLE_FIELDS.includes(key)) {
+      updateData[key] = data[key];
+    } else if (CANDIDATE_PROTECTED_FIELDS.includes(key)) {
+      protectedAttempts.push(key);
+    } else {
+      unknownFields.push(key);
+    }
+  }
+
+  return { updateData, protectedAttempts, unknownFields };
+}
+
 export class CandidateService {
   constructor(tenantDb) {
     this.repository = new CandidateRepository(tenantDb);
   }
 
-  async createCandidate(data) {
+  async createCandidate(data, context, performedByUser) {
     const {
       first_name, last_name, email, country_code, mobile,
       password, application, applicationData, role_id = ROLES.CANDIDATE,
@@ -155,14 +222,14 @@ export class CandidateService {
       organisationId: organisation_id,
     }).catch((err) => logger.error({ err }, "Candidate welcome email"));
 
-    // Background notification
-    notifyUserCreated(this.repository.tenantDb, ROLES.ADMIN, {
-      id: candidate.id,
+    // Background notification via Event Bus
+    eventPublisher.publish(EVENTS.USER_CREATED, {
+      candidateId: candidate.id,
       email: candidate.email,
-      role: "candidate",
       first_name: candidate.first_name,
       last_name: candidate.last_name,
-    }).catch(err => logger.error({ err }, "Notification Error"));
+      organisationId: organisation_id
+    }, context).catch(err => logger.error({ err }, "Event Publish Error"));
 
     // Assign Task to Admins
     if (caseRecord && (!caseRecord.assignedcaseworkerId || caseRecord.assignedcaseworkerId.length === 0)) {
@@ -232,13 +299,28 @@ export class CandidateService {
         model: this.repository.tenantDb.Case,
         as: "cases",
         required: false,
-        attributes: ["id", "caseId", "status", "nationality", "visaTypeId", "totalAmount", "paidAmount"],
+        attributes: ["id", "caseId", "status", "nationality", "visaTypeId", "totalAmount", "paidAmount", "sponsorId"],
         include: [
           {
             model: this.repository.tenantDb.VisaType,
             as: "visaType",
             required: false,
             attributes: ["id", "name"],
+          },
+          {
+            // Assigned business/sponsor (Case.sponsorId → User), with company name.
+            model: this.repository.tenantDb.User,
+            as: "sponsor",
+            required: false,
+            attributes: ["id", "first_name", "last_name", "email"],
+            include: [
+              {
+                model: this.repository.tenantDb.SponsorProfile,
+                as: "sponsorProfile",
+                required: false,
+                attributes: ["companyName"],
+              },
+            ],
           },
         ],
       },
@@ -274,7 +356,28 @@ export class CandidateService {
     const candidate = await this.repository.findById(id);
     if (!candidate) throw new Error("Candidate not found");
 
-    const { email, country_code, mobile, application, ...updateData } = data;
+    // Whitelist-based update: only CANDIDATE_UPDATABLE_FIELDS may be persisted.
+    // Protected fields (role_id, organisation_id, status, password, verification
+    // /2FA/OTP, etc.) are rejected; unknown fields are dropped.
+    const { updateData, protectedAttempts, unknownFields } = partitionCandidateUpdate(data);
+
+    if (protectedAttempts.length > 0) {
+      logger.warn(
+        { candidateId: id, fields: protectedAttempts },
+        "Blocked attempt to modify protected candidate fields (mass-assignment)",
+      );
+      const err = new Error(`Cannot modify protected field(s): ${protectedAttempts.join(", ")}`);
+      err.status = 400;
+      throw err;
+    }
+    if (unknownFields.length > 0) {
+      logger.warn(
+        { candidateId: id, fields: unknownFields },
+        "Rejected unknown field(s) on candidate update",
+      );
+    }
+
+    const { email, country_code, mobile, application } = data;
 
     if (email && email !== candidate.email) {
       const exists = await this.repository.findByEmail(email, id);
@@ -324,6 +427,41 @@ export class CandidateService {
     return await this.repository.findById(id);
   }
 
+  /**
+   * Reset a candidate's password securely.
+   *
+   * - Hashes with bcrypt (cost 12); a raw password is never persisted.
+   * - Runs inside a tenant DB transaction. The platform User row (the source of
+   *   truth for authentication) is updated *within* the transaction, so if the
+   *   platform sync fails the tenant password update is rolled back — the two
+   *   stores never diverge on a partial failure.
+   *
+   * @param {number|string} id - candidate (tenant user) id
+   * @param {string} newPassword - already-validated strong password
+   * @returns {Promise<boolean>}
+   */
+  async resetCandidatePassword(id, newPassword) {
+    if (!newPassword || typeof newPassword !== 'string') {
+      throw new Error('A new password is required');
+    }
+
+    const candidate = await this.repository.findById(id);
+    if (!candidate) throw new Error('Candidate not found');
+
+    const hashedPassword = await bcrypt.hash(newPassword, 12);
+
+    await this.repository.transaction(async (t) => {
+      // 1. Tenant user
+      await candidate.update({ password: hashedPassword }, { transaction: t });
+
+      // 2. Platform user (auth source of truth). If this throws, the tenant
+      //    transaction above rolls back. timeoutMs=0 -> await the update fully.
+      await syncUserToPlatformOnly(candidate.id, { password: hashedPassword }, 0);
+    });
+
+    return true;
+  }
+
   async deleteCandidate(id) {
     const candidate = await this.repository.findById(id);
     if (!candidate) throw new Error("Candidate not found");
@@ -338,7 +476,7 @@ export class CandidateService {
     const application = await this.repository.findApplicationByUserId(userId);
     return application || null;
   }
-  async updateCandidateApplication(userId, applicationData, performedBy = null) {
+  async updateCandidateApplication(userId, applicationData, performedByUser = null, context = null) {
     const candidate = await this.repository.findById(userId);
     if (!candidate) throw new Error("Candidate not found");
 
@@ -477,15 +615,24 @@ export class CandidateService {
       }
     }
 
+    // Attribute audit/timeline writes from the afterUpdate hook to the real actor
+    // (falls back to null inside the hook if the id isn't a user in this tenant DB).
+    const performedById = Number(performedByUser?.userId ?? performedByUser?.id) || null;
+    const hookOptions = {
+      performedBy: performedById,
+      role: performedByUser?.role?.name || performedByUser?.role || 'admin',
+      organisationId: candidate.organisation_id ?? null,
+    };
+
     await this.repository.transaction(async (t) => {
       if (Object.keys(userPatch).length > 0) {
-        await candidate.update(userPatch, { transaction: t });
+        await candidate.update(userPatch, { transaction: t, ...hookOptions });
       }
 
       let app = await this.repository.findApplicationByUserId(userId, t);
 
       if (app) {
-        await this.repository.updateApplication(app, sanitizedApplication, t);
+        await this.repository.updateApplication(app, sanitizedApplication, t, hookOptions);
       } else {
         app = await this.repository.createApplication(
           {
@@ -528,23 +675,39 @@ export class CandidateService {
       });
     }
 
-    // Write timeline audit log after successful transaction
+    // Publish event for timeline audit log and notifications after successful transaction
     if (changes.length > 0) {
       try {
         const existingCase = await this.repository.findCaseByCandidateId(userId);
         if (existingCase) {
           const description = `Application form updated. Changed fields:\n${changes.join('\n')}`;
-          await recordTimelineEntry({
-            tenantDb: this.repository.tenantDb,
-            caseId: existingCase.id,
-            actionType: 'case_updated',
-            description,
-            performedBy: performedBy || null,
-            visibility: 'public',
-          });
+          
+          if (context) {
+            // Using central event bus (Phase 8/13 Integration)
+            eventPublisher.publish(EVENTS.PROFILE_UPDATED, {
+              entityId: existingCase.id,
+              entityType: 'case',
+              candidateId: userId,
+              assignedCaseworkerId: existingCase.assignedcaseworkerId,
+              performedById: performedByUser?.id || null,
+              performedByRole: performedByUser?.role?.name || performedByUser?.role || 'candidate',
+              description,
+              actionType: 'case_updated'
+            }, context);
+          } else {
+            // Fallback if context is not provided
+            await recordTimelineEntry({
+              tenantDb: this.repository.tenantDb,
+              caseId: existingCase.id,
+              actionType: 'case_updated',
+              description,
+              performedBy: performedByUser?.id || null,
+              visibility: 'public',
+            });
+          }
         }
       } catch (err) {
-        logger.error({ err }, 'Failed to record application update timeline entry');
+        logger.error({ err }, 'Failed to record application update event');
       }
     }
 
@@ -570,5 +733,100 @@ export class CandidateService {
     });
 
     return candidate;
+  }
+
+  /**
+   * Assign (or unassign) a candidate to a business/sponsor.
+   *
+   * The business panel resolves its candidates via Case.sponsorId
+   * (see Sponsor/Workers getSponsoredWorkers), so assigning sets the
+   * candidate's case.sponsorId to the chosen sponsor user. Passing
+   * businessId = null clears the assignment.
+   *
+   * @param {number} candidateId
+   * @param {number|null} businessId - sponsor (role 4) user id, or null to unassign
+   * @param {object} [context] - { organisationId } for notifications
+   */
+  async assignBusiness(candidateId, businessId, context = {}) {
+    const tenantDb = this.repository.tenantDb;
+
+    const candidate = await tenantDb.User.findOne({
+      where: { id: candidateId, role_id: ROLES.CANDIDATE },
+      attributes: ['id', 'first_name', 'last_name', 'email', 'organisation_id'],
+    });
+    if (!candidate) {
+      const err = new Error('Candidate not found');
+      err.status = 404;
+      throw err;
+    }
+
+    let business = null;
+    if (businessId != null) {
+      business = await tenantDb.User.findOne({
+        where: { id: businessId, role_id: ROLES.BUSINESS },
+        attributes: ['id', 'first_name', 'last_name', 'email', 'status'],
+        include: [
+          {
+            model: tenantDb.SponsorProfile,
+            as: 'sponsorProfile',
+            required: false,
+            attributes: ['companyName'],
+          },
+        ],
+      });
+      if (!business) {
+        const err = new Error('Business (sponsor) not found');
+        err.status = 404;
+        throw err;
+      }
+      if (business.status !== 'active') {
+        const err = new Error('Cannot assign to an inactive business');
+        err.status = 400;
+        throw err;
+      }
+    }
+
+    // Ensure the candidate has a case to carry the assignment.
+    let caseRecord = await this.repository.findCaseByCandidateId(candidateId);
+    if (!caseRecord) {
+      if (businessId == null) {
+        // Nothing to unassign from — return a no-op result.
+        return { candidateId, businessId: null, caseId: null };
+      }
+      caseRecord = await ensureCandidateEnquiryCase(tenantDb, candidateId, {
+        organisationId: context.organisationId ?? candidate.organisation_id ?? null,
+      });
+    }
+
+    await caseRecord.update({ sponsorId: businessId });
+
+    // Notify the business that a candidate was assigned to them.
+    if (business) {
+      const companyName = business.sponsorProfile?.companyName || 'your business';
+      notifyUser(tenantDb, business.id, {
+        type: 'info',
+        priority: 'medium',
+        category: 'case',
+        title: 'Candidate Assigned',
+        message: `${candidate.first_name} ${candidate.last_name} has been assigned to ${companyName}.`,
+        actionType: 'candidate_assigned',
+        entityType: 'user',
+        entityId: candidate.id,
+        organisationId: context.organisationId ?? candidate.organisation_id ?? null,
+      }).catch((err) => logger.error({ err }, 'assignBusiness notify failed'));
+    }
+
+    return {
+      candidateId,
+      businessId,
+      caseId: caseRecord.id,
+      business: business
+        ? {
+            id: business.id,
+            name: `${business.first_name} ${business.last_name}`.trim(),
+            companyName: business.sponsorProfile?.companyName || null,
+          }
+        : null,
+    };
   }
 }

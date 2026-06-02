@@ -114,8 +114,15 @@ export function signImpersonationToken(payload, options = {}) {
  * @returns {object} Decoded payload.
  * @throws {JsonWebTokenError|TokenExpiredError|NotBeforeError} On failure.
  */
-export function verifyToken(token) {
-  return jwt.verify(token, getJwtSecret());
+export function verifyToken(token, ignoreExpiration = false) {
+  try {
+    return jwt.verify(token, getJwtSecret(), { ignoreExpiration });
+  } catch (err) {
+    if (ignoreExpiration && err.name === 'TokenExpiredError') {
+      return jwt.decode(token);
+    }
+    throw err;
+  }
 }
 
 /**

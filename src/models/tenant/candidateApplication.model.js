@@ -369,6 +369,13 @@ export default (sequelize, DataTypes) => {
                     fields: ["submittedAt"],
                 },
             ],
+            hooks: {
+                afterUpdate: async (instance, options) => {
+                    // Dynamically import to prevent circular dependency issues during model initialization
+                    const { trackFieldChanges } = await import('../../services/auditTracking.service.js');
+                    await trackFieldChanges(instance, options);
+                }
+            }
         }
     );
 

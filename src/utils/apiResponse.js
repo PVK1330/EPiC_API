@@ -44,6 +44,15 @@ class ApiResponse {
   static notFound(res, message = 'Resource not found', error = null) {
     return this.error(res, message, 404, error);
   }
+
+  static validationError(res, message = 'Validation failed', errors = []) {
+    return res.status(400).json({
+      status: 'error',
+      message,
+      errors, // Array of field validation errors [{ field, message }]
+      data: null,
+    });
+  }
 }
 
 export default ApiResponse;

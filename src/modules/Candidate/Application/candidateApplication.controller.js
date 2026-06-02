@@ -10,6 +10,8 @@ import { rowsToXlsxBuffer, xlsxBufferToRows } from '../../../utils/excelExport.u
 import catchAsync from '../../../utils/catchAsync.js';
 import ApiResponse from '../../../utils/apiResponse.js';
 import { generateStrongPassword } from '../../../utils/passwordGenerator.js';
+import { EVENTS } from '../../../core/events/eventRegistry.js';
+import eventPublisher from '../../../core/events/eventPublisher.js';
 import { generateCaseId } from '../../../utils/case.utils.js';
 import { getWorkflowState } from '../../../services/caseWorkflowProcess.service.js';
 import { resolveCaseStage, DEFAULT_CASE_STAGE } from '../../../constants/immigrationCaseProcess.js';
@@ -733,7 +735,7 @@ export const adminUpdateCandidateApplication = async (req, res) => {
       return res.status(400).json({ status: 'error', message: 'Invalid candidate id', data: null });
     }
 
-    const candidate = await req.tenantDb.User.findOne({ where: { id: candidateId, role_id: 3 } });
+    const candidate = await req.tenantDb.User.findOne({ where: { id: candidateId, role_id: 1 } });
     if (!candidate) {
       return res.status(404).json({ status: 'error', message: 'Candidate not found', data: null });
     }
@@ -855,6 +857,22 @@ export const adminUpdateCandidateApplication = async (req, res) => {
       ],
     });
 
+    // Fire PROFILE_UPDATED Event to trigger Timeline & Notifications (Phase 8/13 Integration)
+    const existingCase = await req.tenantDb.Case.findOne({ where: { candidateId } });
+    if (existingCase) {
+      const description = `Application form updated by Administrator/Caseworker.`;
+      eventPublisher.publish(EVENTS.PROFILE_UPDATED, {
+        entityId: existingCase.id,
+        entityType: 'case',
+        candidateId,
+        assignedCaseworkerId: existingCase.assignedcaseworkerId,
+        performedById: req.user?.id || null,
+        performedByRole: req.user?.role?.name || req.user?.role || 'admin',
+        description,
+        actionType: 'case_updated'
+      }, { tenantDb: req.tenantDb, io: req.app.get('io'), organisationId: req.user?.organisation_id }).catch(err => logger.error({ err }, 'Publish PROFILE_UPDATED error in admin update'));
+    }
+
     res.status(200).json({
       status: 'success',
       message: 'Candidate application updated successfully',
@@ -890,8 +908,9 @@ function exportCellValue(fieldKey, raw) {
 
 export const exportCandidateApplicationsExcel = async (req, res) => {
   try {
-    const { search, status } = req.query;
-    const whereClause = { role_id: 3 };
+    const { search, status, visaType, paymentStatus } = req.query;
+    // role_id 1 = CANDIDATE (not 3 which is ADMIN)
+    const whereClause = { role_id: 1 };
     if (search) {
       whereClause[Op.or] = [
         { first_name: { [Op.iLike]: `%${search}%` } },
@@ -933,14 +952,49 @@ export const exportCandidateApplicationsExcel = async (req, res) => {
 
     const columns = [...userCols, ...appCols];
 
+    // Build case include with optional visaType filter
+    const caseInclude = {
+      model: req.tenantDb.Case,
+      as: 'cases',
+      required: false,
+      attributes: ['id', 'status', 'totalAmount', 'paidAmount', 'nationality'],
+      include: [{ model: req.tenantDb.VisaType, as: 'visaType', attributes: ['id', 'name'] }],
+    };
+
+    // Filter by visaType via application field
+    const appIncludeWhere = {};
+    if (visaType) {
+      appIncludeWhere.visaType = visaType;
+    }
+
     const candidates = await req.tenantDb.User.findAll({
       where: whereClause,
       attributes: ['id', 'first_name', 'last_name', 'email', 'country_code', 'mobile', 'status'],
-      include: [{ model: req.tenantDb.CandidateApplication, as: 'application', required: false }],
+      include: [
+        {
+          model: req.tenantDb.CandidateApplication,
+          as: 'application',
+          required: visaType ? true : false,
+          where: Object.keys(appIncludeWhere).length ? appIncludeWhere : undefined,
+        },
+        caseInclude,
+      ],
       order: [['createdAt', 'DESC']],
     });
 
-    const rows = candidates.map((u) => {
+    // Filter by paymentStatus in JS (derived field)
+    const filteredCandidates = paymentStatus
+      ? candidates.filter((u) => {
+          const c = u.cases?.[0];
+          if (!c) return paymentStatus === 'Outstanding';
+          const total = parseFloat(c.totalAmount || 0);
+          const paid = parseFloat(c.paidAmount || 0);
+          const computed = total === 0 ? 'Outstanding' : paid >= total ? 'Paid' : paid > 0 ? 'Partial' : 'Outstanding';
+          return computed === paymentStatus;
+        })
+      : candidates;
+
+    const rows = filteredCandidates.map((u) => {
       const appJson = u.application ? u.application.toJSON() : {};
       const row = {
         user_id: u.id,
@@ -1096,13 +1150,13 @@ export const importCandidateApplicationsExcel = async (req, res) => {
           let userRow = null;
           if (Number.isFinite(metaUserId) && metaUserId > 0) {
             userRow = await req.tenantDb.User.findOne({
-              where: { id: metaUserId, role_id: 3 },
+              where: { id: metaUserId, role_id: 1 },
               transaction: t,
             });
           }
           if (!userRow) {
             userRow = await req.tenantDb.User.findOne({
-              where: { email: emailAddr, role_id: 3 },
+              where: { email: emailAddr, role_id: 1 },
               transaction: t,
             });
           }
@@ -1150,7 +1204,7 @@ export const importCandidateApplicationsExcel = async (req, res) => {
                 email: emailAddr,
                 country_code: userPatch.country_code || '+44',
                 mobile: userPatch.mobile || '',
-                role_id: 3,
+                role_id: 1,
                 password: hashedPassword,
                 is_email_verified: true,
                 is_otp_verified: true,

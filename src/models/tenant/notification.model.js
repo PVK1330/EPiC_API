@@ -1,4 +1,9 @@
 export default (sequelize, DataTypes) => {
+  // Canonical column names match the notifications table:
+  //   006_core_business_tables.sql + 20260516170000 (organisation_id)
+  //   + 20260601130000 (category, action_url, is_archived).
+  // Recipient is `userId` / `roleId` (NOT recipient_id / recipient_role).
+  // Timestamps are camelCase `createdAt` / `updatedAt` (NOT snake_case).
   const Notification = sequelize.define(
     "Notification",
     {
@@ -7,60 +12,20 @@ export default (sequelize, DataTypes) => {
         primaryKey: true,
         autoIncrement: true,
       },
+      // Recipient (FK to users.id). Column is "userId".
       userId: {
         type: DataTypes.INTEGER,
         allowNull: false,
-        references: {
-          model: "users",
-          key: "id",
-        },
+        field: "userId",
+        references: { model: "users", key: "id" },
         onUpdate: "CASCADE",
         onDelete: "CASCADE",
       },
+      // Optional role target (FK to roles.id). Column is "roleId".
       roleId: {
         type: DataTypes.INTEGER,
         allowNull: true,
-        references: {
-          model: "roles",
-          key: "id",
-        },
-        onUpdate: "CASCADE",
-        onDelete: "SET NULL",
-        comment: "Optional: If set, notification is for all users with this role",
-      },
-      type: {
-        type: DataTypes.ENUM(
-          "info",
-          "success",
-          "warning",
-          "error",
-          "case_created",
-          "case_updated",
-          "case_assigned",
-          "case_status_changed",
-          "payment_received",
-          "payment_overdue",
-          "document_uploaded",
-          "document_reviewed",
-          "message_received",
-          "escalation_created",
-          "escalation_resolved",
-          "user_created",
-          "user_status_changed",
-          "system_maintenance",
-          "sla_breach",
-          "task_assigned",
-          "licence_assigned",
-          "licence_status_changed",
-          "licence_info_requested"
-        ),
-        allowNull: false,
-        defaultValue: "info",
-      },
-      priority: {
-        type: DataTypes.ENUM("low", "medium", "high", "urgent"),
-        allowNull: false,
-        defaultValue: "medium",
+        field: "roleId",
       },
       title: {
         type: DataTypes.STRING(255),
@@ -70,29 +35,52 @@ export default (sequelize, DataTypes) => {
         type: DataTypes.TEXT,
         allowNull: false,
       },
+      // VARCHAR in the table — modelled as STRING (allowed values enforced in
+      // the service/controller, not via a DB ENUM type).
+      type: {
+        type: DataTypes.STRING(50),
+        allowNull: false,
+        defaultValue: "info",
+      },
+      priority: {
+        type: DataTypes.STRING(20),
+        allowNull: false,
+        defaultValue: "medium",
+      },
+      category: {
+        type: DataTypes.STRING(50),
+        allowNull: false,
+        defaultValue: "system",
+      },
+      // Machine-readable action discriminator (column "actionType").
       actionType: {
         type: DataTypes.STRING(50),
         allowNull: true,
-        comment: "Type of action that triggered this notification",
-      },
-      entityId: {
-        type: DataTypes.INTEGER,
-        allowNull: true,
-        comment: "ID of the related entity (case, user, document, etc.)",
+        field: "actionType",
       },
       entityType: {
         type: DataTypes.STRING(50),
         allowNull: true,
-        comment: "Type of the related entity (case, user, document, etc.)",
+        field: "entityType",
       },
-      metadata: {
-        type: DataTypes.JSON,
+      entityId: {
+        type: DataTypes.INTEGER,
         allowNull: true,
-        defaultValue: {},
-        comment: "Additional data for the notification",
+        field: "entityId",
+      },
+      actionUrl: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+        field: "action_url",
+      },
+      organisationId: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        field: "organisation_id",
       },
       isRead: {
         type: DataTypes.BOOLEAN,
+        allowNull: false,
         defaultValue: false,
         field: "is_read",
       },
@@ -101,14 +89,21 @@ export default (sequelize, DataTypes) => {
         allowNull: true,
         field: "read_at",
       },
+      isArchived: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+        field: "is_archived",
+      },
       sendEmail: {
         type: DataTypes.BOOLEAN,
+        allowNull: true,
         defaultValue: false,
         field: "send_email",
-        comment: "Whether to send this notification via email",
       },
       emailSent: {
         type: DataTypes.BOOLEAN,
+        allowNull: true,
         defaultValue: false,
         field: "email_sent",
       },
@@ -116,7 +111,6 @@ export default (sequelize, DataTypes) => {
         type: DataTypes.DATE,
         allowNull: true,
         field: "scheduled_for",
-        comment: "If set, notification will be sent at this time",
       },
       sentAt: {
         type: DataTypes.DATE,
@@ -127,34 +121,22 @@ export default (sequelize, DataTypes) => {
         type: DataTypes.DATE,
         allowNull: true,
         field: "expires_at",
-        comment: "Optional: Notification will be auto-deleted after this time",
+      },
+      metadata: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        defaultValue: {},
       },
     },
     {
       tableName: "notifications",
-      timestamps: true,
+      timestamps: true, // createdAt / updatedAt — matches the table column names
       indexes: [
-        {
-          fields: ["userId"],
-        },
-        {
-          fields: ["roleId"],
-        },
-        {
-          fields: ["type"],
-        },
-        {
-          fields: ["priority"],
-        },
-        {
-          fields: ["is_read"],
-        },
-        {
-          fields: ["scheduled_for"],
-        },
-        {
-          fields: ["entityId", "entityType"],
-        },
+        { fields: ["userId"] },
+        { fields: ["category"] },
+        { fields: ["is_read"] },
+        { fields: ["is_archived"] },
+        { fields: ["entityId", "entityType"] },
       ],
     }
   );

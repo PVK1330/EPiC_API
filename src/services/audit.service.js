@@ -1,22 +1,6 @@
 import logger from "../utils/logger.js";
 
-// Track which tenant DBs have had audit_logs columns ensured
-const _auditColsReady = new Set();
 
-async function ensureAuditLogColumns(sequelize) {
-  const key = sequelize.config?.database || 'default';
-  if (_auditColsReady.has(key)) return;
-  await sequelize.query(
-    "ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS resource VARCHAR(255)",
-  ).catch(() => {});
-  await sequelize.query(
-    "ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'Success'",
-  ).catch(() => {});
-  await sequelize.query(
-    "ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS details TEXT",
-  ).catch(() => {});
-  _auditColsReady.add(key);
-}
 
 /**
  * Records a new audit log entry in the tenant database.
@@ -33,9 +17,6 @@ export const recordAuditLog = async ({
 }) => {
   try {
     if (!tenantDb) return;
-
-    // Ensure columns exist before writing
-    await ensureAuditLogColumns(tenantDb.sequelize);
 
     let ipAddress = null;
     if (req) {

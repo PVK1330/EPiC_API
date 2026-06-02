@@ -169,28 +169,7 @@ export async function syncTenantDatabaseSchema(databaseName) {
   evictTenantDb(databaseName);
   await runTenantMigrations(databaseName);
   const tenantDb = getTenantDb(databaseName);
-  await tenantDb.sequelize.query(
-    'ALTER TABLE organisations ADD COLUMN IF NOT EXISTS smtp_settings JSONB DEFAULT NULL',
-  );
-  await tenantDb.sequelize.query(
-    "ALTER TABLE cases ADD COLUMN IF NOT EXISTS workflow_meta JSONB DEFAULT '{}'::jsonb",
-  );
-  await tenantDb.sequelize.query(
-    "ALTER TABLE visa_types ADD COLUMN IF NOT EXISTS ccl_template_path VARCHAR(255) DEFAULT NULL",
-  );
-  await tenantDb.sequelize.query(
-    "ALTER TABLE visa_types ADD COLUMN IF NOT EXISTS ccl_template_name VARCHAR(255) DEFAULT NULL",
-  );
-  // Ensure audit_logs has the columns the Sequelize model expects
-  await tenantDb.sequelize.query(
-    "ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS resource VARCHAR(255)",
-  );
-  await tenantDb.sequelize.query(
-    "ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'Success'",
-  );
-  await tenantDb.sequelize.query(
-    "ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS details TEXT",
-  );
+
   await seedTenantDefaults(tenantDb).catch((err) =>
     logger.warn({ err }, "seedTenantDefaults"),
   );

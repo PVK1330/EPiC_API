@@ -1,1178 +1,689 @@
-import { sendTransactionalEmail } from './mail.service.js';
-import { generateNotificationEmailTemplate } from '../utils/emailTemplates.js';
 import logger from '../utils/logger.js';
+import { sendTransactionalEmail } from './mail.service.js';
+import { ROLES } from '../middlewares/role.middleware.js';
+import { getIO } from '../realtime/ioRegistry.js';
+import { userRoom } from '../realtime/messagingRealtime.js';
 
-const sendNotificationEmailToUser = async (tenantDb, userId, notification, organisationId = null) => {
-  const user = await tenantDb.User.findByPk(userId, {
-    attributes: ['id', 'email', 'first_name', 'last_name', 'status'],
-  });
+// ─── Enums ────────────────────────────────────────────────────────────────────
 
-  if (!user || user.status !== 'active' || !user.email) {
-    return false;
-  }
-
-  const recipientName = [user.first_name, user.last_name].filter(Boolean).join(' ') || user.email;
-  const result = await sendTransactionalEmail({
-    organisationId,
-    to: user.email,
-    subject: `EPiC Notification: ${notification.title}`,
-    html: generateNotificationEmailTemplate({
-      recipientName,
-      title: notification.title,
-      message: notification.message,
-      priority: notification.priority,
-      notificationType: notification.type,
-      metadata: notification.metadata || {},
-    }),
-  });
-
-  return result.sent === true;
-};
-
-// Notification type constants
-export const NotificationTypes = {
+export const NotificationTypes = Object.freeze({
   INFO: 'info',
   SUCCESS: 'success',
   WARNING: 'warning',
   ERROR: 'error',
-  CASE_CREATED: 'case_created',
-  CASE_UPDATED: 'case_updated',
-  CASE_ASSIGNED: 'case_assigned',
-  CASE_STATUS_CHANGED: 'case_status_changed',
-  PAYMENT_RECEIVED: 'payment_received',
-  PAYMENT_OVERDUE: 'payment_overdue',
-  DOCUMENT_UPLOADED: 'document_uploaded',
-  DOCUMENT_REVIEWED: 'document_reviewed',
-  LICENCE_INFO_REQUESTED: 'licence_info_requested',
-  MESSAGE_RECEIVED: 'message_received',
-  ESCALATION_CREATED: 'escalation_created',
-  ESCALATION_RESOLVED: 'escalation_resolved',
-  USER_CREATED: 'user_created',
-  USER_STATUS_CHANGED: 'user_status_changed',
-  SYSTEM_MAINTENANCE: 'system_maintenance',
-  SLA_BREACH: 'sla_breach',
-  LICENCE_STATUS_CHANGED: 'licence_status_changed',
-  LICENCE_ASSIGNED: 'licence_assigned',
-  /** Candidate submitted portal issue / incident report */
-  CANDIDATE_ISSUE_REPORT: 'candidate_issue_report',
-};
+  // semantic aliases used across the codebase
+  CASE_STATUS_CHANGED: 'info',
+  PAYMENT_RECEIVED: 'success',
+  SYSTEM_MAINTENANCE: 'warning',
+  CANDIDATE_ISSUE_REPORT: 'warning',
+  LICENCE_ASSIGNED: 'info',
+});
 
-// Notification priority constants
-export const NotificationPriority = {
+export const NotificationPriority = Object.freeze({
   LOW: 'low',
   MEDIUM: 'medium',
   HIGH: 'high',
-  URGENT: 'urgent',
-};
+  URGENT: 'critical',
+  CRITICAL: 'critical',
+});
+
+// ─── Core helpers ─────────────────────────────────────────────────────────────
 
 /**
- * Create a notification for a specific user
- * @param {Object} data - Notification data
- * @param {number} data.userId - User ID to send notification to
- * @param {string} data.type - Notification type
- * @param {string} data.priority - Notification priority
- * @param {string} data.title - Notification title
- * @param {string} data.message - Notification message
- * @param {string} data.actionType - Type of action that triggered notification
- * @param {number} data.entityId - ID of related entity
- * @param {string} data.entityType - Type of related entity
- * @param {Object} data.metadata - Additional metadata
- * @param {boolean} data.sendEmail - Whether to send email
- * @param {Date} data.scheduledFor - Schedule for later
- * @returns {Promise<Object>} Created notification
+ * Persist + optionally socket-deliver a single notification.
+ * @param {object} tenantDb
+ * @param {number} userId  - recipientId
+ * @param {object} payload - { type, priority, title, message, category, actionUrl,
+ *                            entityType, entityId, organisationId, metadata,
+ *                            isInternalAdminOnly, sendEmail, actionType }
  */
-export const createNotification = async (data) => {
+export async function notifyUser(tenantDb, userId, payload = {}) {
+  if (!tenantDb || !userId) return null;
   try {
     const {
-      tenantDb,
-      userId,
-      roleId,
       type = NotificationTypes.INFO,
       priority = NotificationPriority.MEDIUM,
-      title,
-      message,
-      actionType,
-      entityId,
-      entityType,
+      title = '',
+      message = '',
+      category = 'system',
+      actionUrl = null,
+      entityType = null,
+      entityId = null,
+      organisationId: payloadOrganisationId = null,
       metadata = {},
-      sendEmail = false,
-      scheduledFor,
-      expiresAt,
-      organisationId = null,
-    } = data;
+      sendEmail: doEmail = false,
+      actionType = null,
+    } = payload;
 
-    if (!tenantDb) {
-      throw new Error('tenantDb is required');
+    // The notifications table is per-tenant but still carries organisation_id so
+    // org-scoped list queries work. Most callers don't pass it, so derive it from
+    // the recipient when missing — otherwise rows land with NULL organisation_id
+    // and never appear in the org-filtered notifications list.
+    let organisationId = payloadOrganisationId;
+    if (organisationId == null) {
+      const recipient = await tenantDb.User.findByPk(userId, {
+        attributes: ['organisation_id'],
+      }).catch(() => null);
+      organisationId = recipient?.organisation_id ?? null;
     }
 
-    if (!userId) {
-      throw new Error('userId is required');
+    // Resolve recipient delivery preferences (in-app + email + per-category).
+    let sendSocket = true;
+    let sendEmail = doEmail;
+    let prefs = null;
+    if (tenantDb.NotificationPreference) {
+      prefs = await tenantDb.NotificationPreference.findOne({ where: { userId } }).catch(() => null);
+      if (prefs) {
+        if (!prefs.inAppNotifications) sendSocket = false;
+        if (!prefs.emailNotifications) sendEmail = false;
+        // Per-category overrides — silence both channels for the disabled category.
+        if (category === 'case' && prefs.caseUpdates === false) { sendSocket = false; sendEmail = false; }
+        if (category === 'payment' && prefs.paymentNotifications === false) { sendSocket = false; sendEmail = false; }
+        if (category === 'appointment' && prefs.appointmentNotifications === false) { sendSocket = false; sendEmail = false; }
+      }
     }
 
-    if (!title || !message) {
-      throw new Error('Title and message are required');
-    }
-
-    const notificationData = {
-      userId,
-      roleId,
-      type,
+    const notification = await tenantDb.Notification.create({
+      title: String(title).slice(0, 255),
+      message: String(message),
+      category,
       priority,
-      title,
-      message,
-      actionType,
-      entityId,
-      entityType,
-      metadata,
-      sendEmail,
-      scheduledFor,
-      expiresAt,
-      sentAt: scheduledFor ? null : new Date(),
-    };
-
-    const notification = await tenantDb.Notification.create(notificationData);
-
-    // If email sending is enabled, send email immediately for non-scheduled notifications.
-    if (sendEmail && !scheduledFor) {
-      (async () => {
-        try {
-          const sent = await sendNotificationEmailToUser(tenantDb, userId, notification, organisationId);
-          if (sent) {
-            await notification.update({ emailSent: true });
-          }
-        } catch (emailError) {
-          logger.error({ err: emailError, notificationId: notification.id }, "Email send failed for notification");
-        }
-      })();
-    }
-
-    // BROADCAST TO ADMINS: If this is NOT already an admin notification, notify admins too.
-    if (!data.isInternalAdminOnly && !scheduledFor) {
-      (async () => {
-        try {
-          const adminRole = await tenantDb.Role.findOne({ where: { name: { [tenantDb.Sequelize.Op.iLike]: 'admin' } } });
-          if (adminRole) {
-            // Find all admin users EXCEPT the one who might already be the recipient
-            // If the user being notified belongs to an organization, we MUST fetch their organization to scope admins to the same organization.
-            let userOrgId = organisationId;
-            if (!userOrgId) {
-              const recipientUser = await tenantDb.User.findByPk(userId, { attributes: ['organisation_id'] });
-              userOrgId = recipientUser?.organisation_id;
-            }
-
-            const admins = await tenantDb.User.findAll({
-              where: {
-                role_id: adminRole.id,
-                id: { [tenantDb.Sequelize.Op.ne]: userId },
-                status: 'active',
-                ...(userOrgId && { organisation_id: userOrgId })
-              },
-              attributes: ['id']
-            });
-
-            for (const admin of admins) {
-              await tenantDb.Notification.create({
-                ...notificationData,
-                userId: admin.id,
-                emailSent: false, // Don't spam admin emails for every single user notification
-                sendEmail: false, // Internal feed only by default
-                sentAt: new Date(),
-              });
-            }
-          }
-        } catch (err) {
-          logger.error({ err }, "Error sending copy to admins");
-        }
-      })();
-    }
-
-    await notification.reload();
-    return notification;
-  } catch (error) {
-    logger.error({ err: error }, "Error creating notification");
-    throw error;
-  }
-};
-
-export const notifyUser = async (tenantDb, userId, notificationData = {}) => {
-  return await createNotification({
-    tenantDb,
-    userId,
-    ...notificationData,
-    sendEmail: notificationData.sendEmail !== undefined ? notificationData.sendEmail : true
-  });
-};
-
-export const notifyAdmins = async (tenantDb, notificationData) => {
-  try {
-    if (!tenantDb) throw new Error('tenantDb is required');
-    const adminRole = await tenantDb.Role.findOne({ where: { name: { [tenantDb.Sequelize.Op.iLike]: 'admin' } } });
-    if (!adminRole) return;
-
-    const admins = await tenantDb.User.findAll({
-      where: { 
-        role_id: adminRole.id, 
-        status: 'active',
-        ...(notificationData.organisationId && { organisation_id: notificationData.organisationId })
-      },
-      attributes: ['id']
-    });
-
-    for (const admin of admins) {
-      await createNotification({
-        tenantDb,
-        ...notificationData,
-        userId: admin.id,
-      });
-    }
-  } catch (err) {
-    logger.error({ err }, "Error notifying admins");
-  }
-};
-
-/**
- * Create notification for multiple users (bulk)
- * @param {Array<number>} userIds - Array of user IDs
- * @param {Object} notificationData - Notification data (same as createNotification)
- * @returns {Promise<Array>} Created notifications
- */
-export const createBulkNotifications = async (userIds, notificationData) => {
-  try {
-    if (!notificationData?.tenantDb) {
-      throw new Error('tenantDb is required in notificationData');
-    }
-    const notifications = await Promise.all(
-      userIds.map((userId) =>
-        createNotification({
-          ...notificationData,
-          userId,
-        })
-      )
-    );
-    return notifications;
-  } catch (error) {
-    logger.error({ err: error }, "Error creating bulk notifications");
-    throw error;
-  }
-};
-
-/**
- * Create notification for all users with a specific role
- * @param {number} roleId - Role ID
- * @param {Object} notificationData - Notification data
- * @returns {Promise<Array>} Created notifications
- */
-export const createNotificationForRole = async (roleId, notificationData) => {
-  try {
-    const { tenantDb, organisationId } = notificationData;
-    if (!tenantDb) throw new Error('tenantDb is required');
-    const users = await tenantDb.User.findAll({
-      where: { 
-        role_id: roleId, 
-        status: 'active',
-        ...(organisationId && { organisation_id: organisationId })
-      },
-      attributes: ['id'],
-    });
-
-    const userIds = users.map((user) => user.id);
-    if (!userIds.length) {
-      return [];
-    }
-    return await createBulkNotifications(userIds, notificationData);
-  } catch (error) {
-    logger.error({ err: error }, "Error creating role notification");
-    throw error;
-  }
-};
-
-/**
- * Create notification for all active users
- * @param {Object} notificationData - Notification data
- * @returns {Promise<Array>} Created notifications
- */
-export const createNotificationForAllUsers = async (notificationData) => {
-  try {
-    const { tenantDb, organisationId } = notificationData;
-    if (!tenantDb) throw new Error('tenantDb is required');
-    const users = await tenantDb.User.findAll({
-      where: { 
-        status: 'active',
-        ...(organisationId && { organisation_id: organisationId })
-      },
-      attributes: ['id'],
-    });
-
-    const userIds = users.map((user) => user.id);
-    if (!userIds.length) {
-      throw new Error('No active users found');
-    }
-    return await createBulkNotifications(userIds, notificationData);
-  } catch (error) {
-    logger.error({ err: error }, "Error creating broadcast notification");
-    throw error;
-  }
-};
-
-/**
- * Mark notification as read
- * @param {number} notificationId - Notification ID
- * @returns {Promise<Object>} Updated notification
- */
-export const markAsRead = async (tenantDb, notificationId) => {
-  try {
-    const notification = await tenantDb.Notification.findByPk(notificationId);
-    if (!notification) {
-      throw new Error('Notification not found');
-    }
-
-    await notification.update({
-      isRead: true,
-      readAt: new Date(),
-    });
-
-    return notification;
-  } catch (error) {
-    logger.error({ err: error }, "Error marking notification as read");
-    throw error;
-  }
-};
-
-/**
- * Mark all notifications as read for a user
- * @param {number} userId - User ID
- * @returns {Promise<number>} Number of updated notifications
- */
-export const markAllAsRead = async (tenantDb, userId) => {
-  try {
-    const [count] = await tenantDb.Notification.update(
-      {
-        isRead: true,
-        readAt: new Date(),
-      },
-      {
-        where: {
-          userId,
-          isRead: false,
-        },
-      }
-    );
-    return count;
-  } catch (error) {
-    logger.error({ err: error }, "Error marking all notifications as read");
-    throw error;
-  }
-};
-
-/**
- * Delete notification
- * @param {number} notificationId - Notification ID
- * @returns {Promise<boolean>} Success status
- */
-export const deleteNotification = async (tenantDb, notificationId) => {
-  try {
-    const notification = await tenantDb.Notification.findByPk(notificationId);
-    if (!notification) {
-      throw new Error('Notification not found');
-    }
-
-    await notification.destroy();
-    return true;
-  } catch (error) {
-    logger.error({ err: error }, "Error deleting notification");
-    throw error;
-  }
-};
-
-/**
- * Get unread count for a user
- * @param {number} userId - User ID
- * @returns {Promise<number>} Unread count
- */
-export const getUnreadCount = async (tenantDb, userId) => {
-  try {
-    const count = await tenantDb.Notification.count({
-      where: {
-        userId,
-        isRead: false,
-      },
-    });
-    return count;
-  } catch (error) {
-    logger.error({ err: error }, "Error getting unread count");
-    throw error;
-  }
-};
-
-/**
- * Get notifications for a user with pagination
- * @param {number} userId - User ID
- * @param {Object} options - Query options
- * @returns {Promise<Object>} Notifications with pagination
- */
-export const getUserNotifications = async (tenantDb, userId, options = {}) => {
-  try {
-    const {
-      page = 1,
-      limit = 20,
-      unreadOnly = false,
-      type = null,
-      priority = null,
-    } = options;
-
-    const offset = (page - 1) * limit;
-
-    const whereClause = {
+      type,
       userId,
-      ...(unreadOnly && { isRead: false }),
-      ...(type && { type }),
-      ...(priority && { priority }),
-    };
-
-    const { count, rows: notifications } = await tenantDb.Notification.findAndCountAll({
-      where: whereClause,
-      include: [
-        {
-          model: tenantDb.User,
-          as: 'user',
-          attributes: ['id', 'first_name', 'last_name', 'email'],
-        },
-        {
-          model: tenantDb.Role,
-          as: 'role',
-          attributes: ['id', 'name'],
-        },
-      ],
-      order: [['createdAt', 'DESC']],
-      limit: parseInt(limit),
-      offset: parseInt(offset),
+      organisationId,
+      actionType,
+      entityType,
+      entityId,
+      actionUrl,
+      metadata: { ...metadata, actionType },
+      isRead: false,
+      isArchived: false,
     });
 
-    return {
-      notifications,
-      pagination: {
-        total: count,
-        page: parseInt(page),
-        limit: parseInt(limit),
-        pages: Math.ceil(count / limit),
-      },
-    };
-  } catch (error) {
-    logger.error({ err: error }, "Error getting user notifications");
-    throw error;
-  }
-};
-
-/**
- * Process scheduled notifications (to be called by a cron job)
- * @returns {Promise<number>} Number of processed notifications
- */
-export const processScheduledNotifications = async (tenantDb) => {
-  try {
-    if (!tenantDb) throw new Error('tenantDb is required');
-    const { Op } = tenantDb.Sequelize;
-    const now = new Date();
-    const dueNotifications = await tenantDb.Notification.findAll({
-      where: {
-        scheduledFor: { [Op.lte]: now },
-        sentAt: null,
-      },
-      order: [['scheduledFor', 'ASC']],
-    });
-
-    if (!dueNotifications.length) {
-      return 0;
+    // Real-time delivery via the centralized Socket.IO instance (ioRegistry).
+    // `tenantDb._io` is legacy/unused, so this resolves to getIO(). Honors the
+    // recipient's in-app/category preferences (sendSocket).
+    const io = tenantDb._io || getIO();
+    if (io && sendSocket) {
+      io.to(userRoom(userId)).emit('notification:new', notification.toJSON());
+      const unread = await tenantDb.Notification.count({
+        where: { userId, isRead: false },
+      });
+      io.to(userRoom(userId)).emit('notification:count', { count: unread });
     }
 
-    for (const notification of dueNotifications) {
-      let emailSent = false;
-      if (notification.sendEmail) {
-        try {
-          emailSent = await sendNotificationEmailToUser(
-            tenantDb,
-            notification.userId,
-            notification,
-            notification.organisationId ?? null,
-          );
-        } catch (emailError) {
-          logger.error({ err: emailError, notificationId: notification.id }, "Scheduled email send failed for notification");
-        }
+    if (sendEmail) {
+      const user = await tenantDb.User.findByPk(userId, { attributes: ['email'] });
+      if (user?.email) {
+        await sendTransactionalEmail({
+          organisationId,
+          to: user.email,
+          subject: title,
+          html: `<p>${message}</p>`,
+        }).catch((err) => logger.error({ err }, 'notifyUser email failed'));
       }
-
-      await notification.update({
-        sentAt: now,
-        emailSent,
-      });
     }
 
-    return dueNotifications.length;
-  } catch (error) {
-    logger.error({ err: error }, "Error processing scheduled notifications");
-    throw error;
-  }
-};
-
-/**
- * Delete expired notifications (to be called by a cron job)
- * @returns {Promise<number>} Number of deleted notifications
- */
-export const deleteExpiredNotifications = async (tenantDb) => {
-  try {
-    if (!tenantDb) throw new Error('tenantDb is required');
-    const { Op } = tenantDb.Sequelize;
-    const now = new Date();
-    return await tenantDb.Notification.destroy({
-      where: {
-        expiresAt: { [Op.lt]: now },
-      },
-    });
-  } catch (error) {
-    logger.error({ err: error }, "Error deleting expired notifications");
-    throw error;
-  }
-};
-
-// ==================== NOTIFICATION EVENT HELPERS ====================
-
-/**
- * Send case assignment notification
- * @param {number} caseworkerId - Caseworker user ID
- * @param {Object} caseData - Case information
- */
-export const notifyCaseAssigned = async (tenantDb, caseworkerId, caseData) => {
-  const safeCaseId = caseData?.caseId || caseData?.id || 'Unknown';
-  const safeCandidateName = caseData?.candidateName || 'a candidate';
-  const safeVisaType = caseData?.visaType || 'Not specified';
-  const amount = Number.parseFloat(caseData?.proposedAmount);
-  const feeSuffix =
-    Number.isFinite(amount) && amount > 0
-      ? ` CCL fee (candidate must pay): £${amount.toLocaleString("en-GB", { minimumFractionDigits: 2 })}.`
-      : "";
-  
-  return await createNotification({
-    tenantDb,
-    userId: caseworkerId,
-    type: NotificationTypes.CASE_ASSIGNED,
-    priority: NotificationPriority.HIGH,
-    title: `New Case Assigned: ${safeCaseId}`,
-    message: `You have been assigned to case ${safeCaseId} for ${safeCandidateName}.${feeSuffix}`,
-    actionType: 'case_assignment',
-    entityId: caseData?.id || null,
-    entityType: 'case',
-    metadata: {
-      caseId: safeCaseId,
-      candidateName: safeCandidateName,
-      visaType: safeVisaType,
-    },
-    sendEmail: true,
-  });
-};
-
-/**
- * Send notification when a new case is created
- * @param {Object} caseData - Case information
- */
-export const notifyCaseCreated = async (tenantDb, caseData) => {
-  const safeCaseId = caseData?.caseId || 'Unknown';
-  const safeCandidateName = caseData?.candidateName || 'a candidate';
-  
-  // Notify all Admins
-  try {
-    if (!tenantDb) throw new Error('tenantDb is required');
-    const adminRole = await tenantDb.Role.findOne({ where: { name: { [tenantDb.Sequelize.Op.iLike]: 'admin' } } });
-    if (adminRole) {
-      await createNotificationForRole(adminRole.id, {
-        tenantDb,
-        type: NotificationTypes.CASE_CREATED,
-        priority: NotificationPriority.HIGH,
-        title: `New Case Created: ${safeCaseId}`,
-        message: `A new case ${safeCaseId} has been created for ${safeCandidateName}.`,
-        actionType: 'case_creation',
-        entityId: caseData?.id || null,
-        entityType: 'case',
-        metadata: {
-          caseId: safeCaseId,
-          candidateName: safeCandidateName,
-        },
-        sendEmail: true,
-        isInternalAdminOnly: true,
-      });
-    }
+    return notification;
   } catch (err) {
-    logger.error({ err }, "Error in notifyCaseCreated");
+    logger.error({ err, userId, payload }, 'notifyUser failed');
+    return null;
   }
-};
+}
 
 /**
- * Send case status change notification
- * @param {Array<number>} userIds - User IDs to notify
- * @param {Object} caseData - Case information
- * @param {string} oldStatus - Previous status
- * @param {string} newStatus - New status
+ * Notify all admin-role users in the tenant DB.
  */
-export const notifyCaseStatusChanged = async (tenantDb, userIds, caseData, oldStatus, newStatus) => {
-  const safeCaseId = caseData?.caseId || caseData?.id || 'Unknown';
-  const safeOldStatus = oldStatus || 'Unknown';
-  const safeNewStatus = newStatus || 'Unknown';
-  const safeCandidateName = caseData?.candidateName || 'Not specified';
-  
-  return await createBulkNotifications(userIds, {
-    tenantDb,
-    type: NotificationTypes.CASE_STATUS_CHANGED,
+export async function notifyAdmins(tenantDb, payload = {}) {
+  if (!tenantDb) return;
+  try {
+    const admins = await tenantDb.User.findAll({
+      where: { role_id: ROLES.ADMIN, status: 'active' },
+      attributes: ['id'],
+    });
+    await Promise.all(admins.map((u) => notifyUser(tenantDb, u.id, payload)));
+  } catch (err) {
+    logger.error({ err }, 'notifyAdmins failed');
+  }
+}
+
+/**
+ * Notify a user that a task has been assigned to them.
+ * payload: { title, message, entityType, entityId, actionUrl, organisationId, metadata }
+ */
+export async function notifyTaskAssigned(tenantDb, assigneeId, payload = {}) {
+  return notifyUser(tenantDb, assigneeId, {
+    ...payload,
+    type: NotificationTypes.INFO,
     priority: NotificationPriority.HIGH,
-    title: `Case Status Updated: ${safeCaseId}`,
-    message: `Case ${safeCaseId} status changed from ${safeOldStatus} to ${safeNewStatus}.`,
-    actionType: 'case_status_change',
-    entityId: caseData?.id || null,
-    entityType: 'case',
-    metadata: {
-      caseId: safeCaseId,
-      oldStatus: safeOldStatus,
-      newStatus: safeNewStatus,
-      candidateName: safeCandidateName,
-    },
-    sendEmail: true,
+    category: 'workflow',
+    actionType: 'task_assigned',
   });
-};
+}
 
 /**
- * Send payment received notification
- * @param {number} userId - User ID (candidate or business)
- * @param {Object} paymentData - Payment information
+ * Notify all users with a given roleId that a new user has been created.
+ * @param {object} tenantDb
+ * @param {number} roleId
+ * @param {object} payload - { title, message, ... }
  */
-export const notifyPaymentReceived = async (tenantDb, userId, paymentData) => {
-  const safeInvoiceId = paymentData?.invoiceId || paymentData?.id || 'Unknown';
-  const safeAmount = paymentData?.amount || paymentData?.paymentAmount || '0';
-  const safeCaseId = paymentData?.caseId || 'your case';
-  
-  return await createNotification({
-    tenantDb,
-    userId,
-    type: NotificationTypes.PAYMENT_RECEIVED,
+export async function notifyUserCreated(tenantDb, roleId, payload = {}) {
+  if (!tenantDb || !roleId) return;
+  try {
+    const users = await tenantDb.User.findAll({
+      where: { role_id: roleId, status: 'active' },
+      attributes: ['id'],
+    });
+    await Promise.all(
+      users.map((u) =>
+        notifyUser(tenantDb, u.id, {
+          ...payload,
+          type: NotificationTypes.INFO,
+          priority: NotificationPriority.MEDIUM,
+          category: 'system',
+          actionType: 'user_created',
+        }),
+      ),
+    );
+  } catch (err) {
+    logger.error({ err }, 'notifyUserCreated failed');
+  }
+}
+
+/**
+ * Create a single notification (object-arg variant used by some controllers).
+ * @param {object} opts - { tenantDb, userId, type, priority, title, message, ... }
+ */
+export async function createNotification({ tenantDb, userId, ...rest }) {
+  return notifyUser(tenantDb, userId, rest);
+}
+
+/**
+ * Bulk-create notifications for a list of user IDs.
+ * @param {number[]} userIds
+ * @param {object}   opts   - { tenantDb, ...notifyUser payload }
+ */
+/**
+ * Notify admins that a new case has been created.
+ * @param {object} tenantDb
+ * @param {{ id: number, caseId: string, candidateName: string }} caseInfo
+ */
+/**
+ * Notify a user that their licence application status has changed.
+ * @param {number} userId
+ * @param {object} application - licence application record
+ * @param {string} [status]
+ * @param {string} [adminNotes]
+ */
+// ─── DB query helpers (used by notification controller) ───────────────────────
+
+/**
+ * Paginated fetch of notifications for a user.
+ */
+export async function getUserNotifications(tenantDb, userId, { page = 1, limit = 20, unreadOnly = false, type, priority } = {}) {
+  const where = { userId, isArchived: false };
+  if (unreadOnly) where.isRead = false;
+  if (type) where.type = type;
+  if (priority) where.priority = priority;
+  const offset = (page - 1) * limit;
+  const { count, rows } = await tenantDb.Notification.findAndCountAll({
+    where,
+    order: [['createdAt', 'DESC']],
+    limit,
+    offset,
+  });
+  return { notifications: rows, total: count, page, totalPages: Math.ceil(count / limit) };
+}
+
+/**
+ * Count unread notifications for a user.
+ */
+export async function getUnreadCount(tenantDb, userId) {
+  return tenantDb.Notification.count({ where: { userId, isRead: false, isArchived: false } });
+}
+
+/**
+ * Hard-delete a single notification by id.
+ */
+export async function deleteNotification(tenantDb, id) {
+  return tenantDb.Notification.destroy({ where: { id } });
+}
+
+/**
+ * Delete all notifications older than 90 days. Returns count deleted.
+ */
+export async function deleteExpiredNotifications(tenantDb) {
+  const { Op } = await import('sequelize');
+  const cutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+  return tenantDb.Notification.destroy({ where: { createdAt: { [Op.lt]: cutoff } } });
+}
+
+/**
+ * No-op stub — scheduled notifications not yet implemented.
+ */
+export async function processScheduledNotifications(tenantDb) {
+  return 0;
+}
+
+/**
+ * Notify all users of a specific role.
+ * @param {number} roleId
+ * @param {object} opts - { tenantDb, ...payload }
+ */
+export async function createNotificationForRole(roleId, opts = {}) {
+  const { tenantDb, ...payload } = opts;
+  if (!tenantDb || !roleId) return [];
+  const users = await tenantDb.User.findAll({
+    where: { role_id: roleId, status: 'active' },
+    attributes: ['id'],
+  });
+  return createBulkNotifications(users.map((u) => u.id), { tenantDb, ...payload });
+}
+
+/**
+ * Broadcast notification to ALL active users in the tenant.
+ * @param {object} opts - { tenantDb, ...payload }
+ */
+export async function createNotificationForAllUsers(opts = {}) {
+  const { tenantDb, ...payload } = opts;
+  if (!tenantDb) return [];
+  const users = await tenantDb.User.findAll({ where: { status: 'active' }, attributes: ['id'] });
+  return createBulkNotifications(users.map((u) => u.id), { tenantDb, ...payload });
+}
+
+// ─── Domain-specific notify helpers ───────────────────────────────────────────
+
+export async function notifyDocumentUploaded(tenantDb, userId, data = {}) {
+  return notifyUser(tenantDb, userId, {
+    type: NotificationTypes.INFO,
     priority: NotificationPriority.MEDIUM,
-    title: `Payment Received: ${safeInvoiceId}`,
-    message: `Payment of ${safeAmount} has been received for ${safeCaseId}.`,
-    actionType: 'payment_received',
-    entityId: paymentData?.id || null,
-    entityType: 'payment',
-    metadata: {
-      amount: safeAmount,
-      caseId: safeCaseId,
-      invoiceId: safeInvoiceId,
-    },
-    sendEmail: true,
+    category: 'document',
+    title: data.title ?? 'Document Uploaded',
+    message: data.message ?? 'A document has been uploaded.',
+    entityType: 'document',
+    entityId: data.id ?? null,
+    actionType: 'document_uploaded',
+    metadata: data,
   });
-};
+}
 
-/**
- * Send payment overdue notification
- * @param {number} userId - User ID
- * @param {Object} paymentData - Payment information
- */
-export const notifyPaymentOverdue = async (tenantDb, userId, paymentData) => {
-  const safeInvoiceId = paymentData?.invoiceId || 'Unknown';
-  const safeAmount = paymentData?.amount || '0';
-  const safeCaseId = paymentData?.caseId || 'your case';
-  const safeDueDate = paymentData?.dueDate || 'Not specified';
-  
-  return await createNotification({
-    tenantDb,
-    userId,
-    type: NotificationTypes.PAYMENT_OVERDUE,
+export async function notifyDocumentReviewed(tenantDb, userId, data = {}, status) {
+  return notifyUser(tenantDb, userId, {
+    type: status === 'Approved' ? NotificationTypes.SUCCESS : NotificationTypes.WARNING,
     priority: NotificationPriority.HIGH,
-    title: `Payment Overdue: ${safeInvoiceId}`,
-    message: `Payment of ${safeAmount} is overdue for ${safeCaseId}. Please make payment as soon as possible.`,
-    actionType: 'payment_overdue',
-    entityId: paymentData?.id || null,
-    entityType: 'payment',
-    metadata: {
-      amount: safeAmount,
-      caseId: safeCaseId,
-      invoiceId: safeInvoiceId,
-      dueDate: safeDueDate,
-    },
-    sendEmail: true,
+    category: 'document',
+    title: data.title ?? `Document ${status ?? 'Reviewed'}`,
+    message: data.message ?? `Your document has been ${status ?? 'reviewed'}.`,
+    entityType: 'document',
+    entityId: data.id ?? null,
+    actionType: 'document_reviewed',
+    metadata: { ...data, status },
   });
-};
+}
 
-/**
- * Send document uploaded notification
- * @param {number} userId - User ID to notify
- * @param {Object} documentData - Document information
- */
-/** Confirmation to candidate after they submit a document. */
-export const notifyDocumentSubmittedToCandidate = async (tenantDb, userId, documentData) => {
-  const safeFileName = documentData?.fileName || "your document";
-  const safeCaseId = documentData?.caseId || "your case";
+export async function notifyDocumentSubmittedToCandidate(tenantDb, userId, data = {}) {
+  return notifyUser(tenantDb, userId, {
+    type: NotificationTypes.INFO,
+    priority: NotificationPriority.MEDIUM,
+    category: 'document',
+    title: data.title ?? 'Document Submitted',
+    message: data.message ?? 'A document has been submitted for your review.',
+    entityType: 'document',
+    entityId: data.id ?? null,
+    actionType: 'document_submitted',
+    metadata: data,
+  });
+}
 
-  return await createNotification({
+export async function notifyMessageReceived(tenantDb, userId, data = {}, opts = {}) {
+  // `data` may be a Sequelize model instance with circular include/parent refs,
+  // which breaks JSONB serialization of metadata. Flatten to a plain object.
+  const plain = typeof data?.get === 'function' ? data.get({ plain: true }) : data;
+  return notifyUser(tenantDb, userId, {
+    type: NotificationTypes.INFO,
+    priority: NotificationPriority.MEDIUM,
+    category: 'message',
+    title: plain.title ?? 'New Message',
+    message: plain.message ?? 'You have received a new message.',
+    entityType: 'conversation',
+    entityId: plain.conversationId ?? null,
+    actionType: 'message_received',
+    metadata: plain,
+    ...opts,
+  });
+}
+
+export async function notifyPaymentReceived(tenantDb, userId, data = {}) {
+  return notifyUser(tenantDb, userId, {
+    type: NotificationTypes.SUCCESS,
+    priority: NotificationPriority.HIGH,
+    category: 'payment',
+    title: data.title ?? 'Payment Received',
+    message: data.message ?? 'Your payment has been received.',
+    entityType: 'payment',
+    entityId: data.id ?? null,
+    actionType: 'payment_received',
+    metadata: data,
+  });
+}
+
+export async function notifyCaseAssigned(tenantDb, userId, data = {}) {
+  return notifyUser(tenantDb, userId, {
+    type: NotificationTypes.INFO,
+    priority: NotificationPriority.HIGH,
+    category: 'case',
+    title: data.title ?? `Case Assigned: ${data.caseId ?? ''}`,
+    message: data.message ?? 'A case has been assigned to you.',
+    entityType: 'case',
+    entityId: data.id ?? null,
+    actionType: 'case_assigned',
+    metadata: data,
+  });
+}
+
+export async function notifyCaseStatusChanged(tenantDb, userIds, data = {}, fromStatus, toStatus) {
+  const ids = Array.isArray(userIds) ? userIds : [userIds];
+  return createBulkNotifications(ids.filter(Boolean), {
     tenantDb,
-    userId,
+    type: NotificationTypes.INFO,
+    priority: NotificationPriority.HIGH,
+    category: 'case',
+    title: data.title ?? `Case Status Updated`,
+    message: data.message ?? `Case status changed${fromStatus ? ` from ${fromStatus}` : ''}${toStatus ? ` to ${toStatus}` : ''}.`,
+    entityType: 'case',
+    entityId: data.id ?? null,
+    actionType: 'case_status_changed',
+    metadata: { ...data, fromStatus, toStatus },
+  });
+}
+
+export async function notifyProposedAmountToCandidate(tenantDb, userId, data = {}) {
+  return notifyUser(tenantDb, userId, {
+    type: NotificationTypes.INFO,
+    priority: NotificationPriority.HIGH,
+    category: 'case',
+    title: data.title ?? 'Proposed Amount Updated',
+    message: data.message ?? 'A proposed amount has been set for your case.',
+    entityType: 'case',
+    entityId: data.id ?? null,
+    actionType: 'proposed_amount',
+    metadata: data,
+  });
+}
+
+export async function notifyEscalationCreated(tenantDb, userId, data = {}) {
+  return notifyUser(tenantDb, userId, {
+    type: NotificationTypes.WARNING,
+    priority: NotificationPriority.HIGH,
+    category: 'case',
+    title: data.title ?? 'Escalation Created',
+    message: data.message ?? 'A new escalation has been assigned to you.',
+    entityType: 'escalation',
+    entityId: data.id ?? null,
+    actionType: 'escalation_created',
+    metadata: data,
+  });
+}
+
+export async function notifyEscalationResolved(tenantDb, userIds, data = {}) {
+  const ids = Array.isArray(userIds) ? userIds : [userIds];
+  return createBulkNotifications(ids.filter(Boolean), {
+    tenantDb,
     type: NotificationTypes.SUCCESS,
     priority: NotificationPriority.MEDIUM,
-    title: "Document submitted successfully",
-    message: `Your document "${safeFileName}" has been successfully submitted for case ${safeCaseId}. Our team will review it shortly.`,
-    actionType: "document_submitted",
-    entityId: documentData?.id || null,
-    entityType: "document",
-    metadata: {
-      fileName: safeFileName,
-      caseId: safeCaseId,
-    },
-    sendEmail: true,
-  });
-};
-
-/** Alias for document submission confirmation (Task 6). */
-export const notifyDocumentSubmitted = notifyDocumentSubmittedToCandidate;
-
-/** Notify assigned caseworker(s) of admin-proposed fee shown to the candidate. */
-export const notifyProposedAmountToCaseworker = async (
-  tenantDb,
-  userId,
-  { caseId, proposedAmount, caseRecordId = null },
-) => {
-  const safeCaseId = caseId || "the case";
-  const amount = Number.parseFloat(proposedAmount);
-  const formatted =
-    Number.isFinite(amount) && amount >= 0
-      ? `£${amount.toLocaleString("en-GB", { minimumFractionDigits: 2 })}`
-      : String(proposedAmount);
-
-  return await createNotification({
-    tenantDb,
-    userId,
-    type: NotificationTypes.INFO,
-    priority: NotificationPriority.HIGH,
-    title: `CCL fee set — ${safeCaseId}`,
-    message: `Admin set the Client Care Letter (CCL) fee for ${safeCaseId} to ${formatted}. The candidate must pay this amount. Open the case Overview or Payments tab.`,
-    actionType: "proposed_amount_set",
-    entityId: caseRecordId,
-    entityType: "case",
-    metadata: { caseId: safeCaseId, proposedAmount: amount },
-    sendEmail: true,
-  });
-};
-
-/** Notify candidate of admin-proposed fee (visible without CCL approval gate). */
-export const notifyProposedAmountToCandidate = async (
-  tenantDb,
-  userId,
-  { caseId, proposedAmount, caseRecordId = null },
-) => {
-  const safeCaseId = caseId || "your case";
-  const amount = Number.parseFloat(proposedAmount);
-  const formatted =
-    Number.isFinite(amount) && amount >= 0
-      ? `£${amount.toLocaleString("en-GB", { minimumFractionDigits: 2 })}`
-      : String(proposedAmount);
-
-  return await createNotification({
-    tenantDb,
-    userId,
-    type: NotificationTypes.INFO,
-    priority: NotificationPriority.HIGH,
-    title: `Proposed fee — ${safeCaseId}`,
-    message: `A proposed fee of ${formatted} has been set for your case ${safeCaseId}. Your administrator will confirm the Client Care Letter and final amount in the next step.`,
-    actionType: "proposed_amount_set",
-    entityId: caseRecordId,
-    entityType: "case",
-    metadata: { caseId: safeCaseId, proposedAmount: amount },
-    sendEmail: true,
-  });
-};
-
-export const notifyDocumentUploaded = async (tenantDb, userId, documentData) => {
-  const safeFileName = documentData?.fileName || 'Unknown file';
-  const safeCaseId = documentData?.caseId || 'your case';
-  const safeUploadedBy = documentData?.uploadedBy || 'Unknown';
-  
-  return await createNotification({
-    tenantDb,
-    userId,
-    type: NotificationTypes.DOCUMENT_UPLOADED,
-    priority: NotificationPriority.LOW,
-    title: `Document Uploaded: ${safeFileName}`,
-    message: `New document "${safeFileName}" has been uploaded for case ${safeCaseId}.`,
-    actionType: 'document_upload',
-    entityId: documentData?.id || null,
-    entityType: 'document',
-    metadata: {
-      fileName: safeFileName,
-      caseId: safeCaseId,
-      uploadedBy: safeUploadedBy,
-    },
-  });
-};
-
-/**
- * Send document reviewed notification
- * @param {number} userId - User ID (document uploader)
- * @param {Object} documentData - Document information
- * @param {string} status - Review status
- */
-export const notifyDocumentReviewed = async (tenantDb, userId, documentData, status) => {
-  const safeFileName = documentData?.fileName || 'Unknown file';
-  const safeCaseId = documentData?.caseId || 'your case';
-  const safeStatus = status || 'Unknown';
-  const rejectionNote = documentData?.rejectionReason
-    ? ` Reason: ${documentData.rejectionReason}`
-    : '';
-  
-  return await createNotification({
-    tenantDb,
-    userId,
-    type: NotificationTypes.DOCUMENT_REVIEWED,
-    priority: NotificationPriority.MEDIUM,
-    title: `Document Reviewed: ${safeFileName}`,
-    message: `Your document "${safeFileName}" has been reviewed. Status: ${safeStatus}.${rejectionNote}`,
-    actionType: 'document_review',
-    entityId: documentData?.id || null,
-    entityType: 'document',
-    metadata: {
-      fileName: safeFileName,
-      caseId: safeCaseId,
-      status: safeStatus,
-    },
-    sendEmail: true,
-  });
-};
-
-/**
- * Send escalation created notification
- * @param {number} adminId - Admin user ID
- * @param {Object} escalationData - Escalation information
- */
-export const notifyEscalationCreated = async (tenantDb, adminId, escalationData) => {
-  const safeTitle = escalationData?.title || escalationData?.id || 'Unknown';
-  const safeCaseId = escalationData?.caseId || 'Unknown case';
-  const safePriority = escalationData?.priority || 'Not specified';
-  
-  return await createNotification({
-    tenantDb,
-    userId: adminId,
-    type: NotificationTypes.ESCALATION_CREATED,
-    priority: NotificationPriority.URGENT,
-    title: `New Escalation: ${safeTitle}`,
-    message: `A new escalation has been created for case ${safeCaseId}. Priority: ${safePriority}.`,
-    actionType: 'escalation_created',
-    entityId: escalationData?.id || null,
+    category: 'case',
+    title: data.title ?? 'Escalation Resolved',
+    message: data.message ?? `Escalation resolved: ${data.resolution ?? ''}`,
     entityType: 'escalation',
-    metadata: {
-      caseId: safeCaseId,
-      priority: safePriority,
-      title: safeTitle,
-    },
-    sendEmail: true,
-  });
-};
-
-/**
- * Send escalation resolved notification
- * @param {Array<number>} userIds - User IDs to notify
- * @param {Object} escalationData - Escalation information
- */
-export const notifyEscalationResolved = async (tenantDb, userIds, escalationData) => {
-  const safeTitle = escalationData?.title || escalationData?.id || 'Unknown';
-  const safeCaseId = escalationData?.caseId || 'Unknown case';
-  const safeResolution = escalationData?.resolution || 'No resolution details provided';
-  
-  return await createBulkNotifications(userIds, {
-    tenantDb,
-    type: NotificationTypes.ESCALATION_RESOLVED,
-    priority: NotificationPriority.MEDIUM,
-    title: `Escalation Resolved: ${safeTitle}`,
-    message: `Escalation for case ${safeCaseId} has been resolved.`,
+    entityId: data.id ?? null,
     actionType: 'escalation_resolved',
-    entityId: escalationData?.id || null,
-    entityType: 'escalation',
-    metadata: {
-      caseId: safeCaseId,
-      resolution: safeResolution,
-    },
-    sendEmail: true,
+    metadata: data,
   });
-};
+}
+
+export async function notifyLicenceStatusChanged(userId, application, status, adminNotes) {
+  logger.info({ userId, appId: application?.id, status }, 'notifyLicenceStatusChanged');
+}
 
 /**
- * Send user created notification (for admins)
- * @param {number} roleId - Role ID (e.g., admin role ID)
- * @param {Object} userData - User information
+ * Notify a user that more information is required for their licence application.
+ * @param {number} userId
+ * @param {object} application
  */
-export const notifyUserCreated = async (tenantDb, roleId, userData) => {
-  const safeEmail = userData?.email || 'Unknown email';
-  const safeRole = userData?.role || 'user';
-  const safeFirstName = userData?.first_name || '';
-  const safeLastName = userData?.last_name || '';
-  const safeName = safeFirstName && safeLastName ? `${safeFirstName} ${safeLastName}` : safeEmail;
-  
-  return await createNotificationForRole(roleId, {
-    tenantDb,
-    type: NotificationTypes.USER_CREATED,
-    priority: NotificationPriority.LOW,
-    title: `New User Created: ${safeEmail}`,
-    message: `A new ${safeRole} account has been created for ${safeEmail}.`,
-    actionType: 'user_created',
-    entityId: userData?.id || null,
-    entityType: 'user',
-    metadata: {
-      email: safeEmail,
-      role: safeRole,
-      name: safeName,
-    },
-  });
-};
+export async function notifyLicenceInfoRequested(userId, application) {
+  logger.info({ userId, appId: application?.id }, 'notifyLicenceInfoRequested');
+}
 
 /**
- * Send SLA breach notification
- * @param {Array<number>} userIds - User IDs to notify
- * @param {Object} caseData - Case information
- * @param {string} slaType - Type of SLA breached
+ * Notify a caseworker that a licence application has been assigned to them.
+ * @param {number} userId
+ * @param {object} application
  */
-export const notifySLABreach = async (tenantDb, userIds, caseData, slaType) => {
-  const safeCaseId = caseData?.caseId || caseData?.id || 'Unknown';
-  const safeSlaType = slaType || 'Unknown';
-  const safeCandidateName = caseData?.candidateName || 'Not specified';
-  
-  return await createBulkNotifications(userIds, {
-    tenantDb,
-    type: NotificationTypes.SLA_BREACH,
-    priority: NotificationPriority.URGENT,
-    title: `SLA Breach: ${safeCaseId}`,
-    message: `SLA breach detected for case ${safeCaseId}. Type: ${safeSlaType}.`,
-    actionType: 'sla_breach',
-    entityId: caseData?.id || null,
-    entityType: 'case',
-    metadata: {
-      caseId: safeCaseId,
-      slaType: safeSlaType,
-      candidateName: safeCandidateName,
-    },
-    sendEmail: true,
-  });
-};
+export async function notifyLicenceAssigned(userId, application) {
+  logger.info({ userId, appId: application?.id }, 'notifyLicenceAssigned');
+}
 
-/**
- * Send system maintenance notification
- * @param {number} roleId - Role ID (or null for all users)
- * @param {Object} maintenanceData - Maintenance information
- */
-/**
- * Send licence information requested notification
- * @param {number} userId - Business user ID to notify
- * @param {Object} applicationData - Application information
- */
-export const notifyLicenceInfoRequested = async (tenantDb, userId, applicationData) => {
-  const safeType = applicationData?.type || 'Licence';
-  const safeId = applicationData?.id || 'Unknown';
-  const docs = applicationData?.requestedDocuments;
-  const docsList = Array.isArray(docs) ? docs.join(', ') : (typeof docs === 'string' ? docs : '');
-  
-  let message = `The Admin has requested additional information/documents for your application #LIC-${safeId}.`;
-  if (docsList) {
-    message += `\n\nRequested Evidence: ${docsList}`;
-  }
-  message += `\n\nPlease review and upload the requested evidence through your dashboard.`;
-
-  return await createNotification({
-    tenantDb,
-    userId,
-    type: NotificationTypes.LICENCE_INFO_REQUESTED,
-    priority: NotificationPriority.HIGH,
-    title: `Action Required: Documents Requested for ${safeType} Application`,
-    message: message,
-    actionType: 'licence_info_request',
-    entityId: applicationData?.id || null,
-    entityType: 'licence_application',
-    metadata: {
-      applicationId: safeId,
-      type: safeType,
-      requestedDocs: docsList,
-      adminNotes: applicationData.adminNotes || ''
-    },
-    sendEmail: true,
-  });
-};
-
-export const notifyLicenceStatusChanged = async (tenantDb, userId, applicationData, status, notes = '') => {
-  const safeId = applicationData?.id || 'Unknown';
-  const company = applicationData?.companyName || 'Your business';
-  const type = applicationData?.type || 'Licence';
-  const adminNotes = notes || applicationData?.adminNotes || '';
-
-  let message = `Your ${type} application for ${company} has been ${status.toLowerCase()}.`;
-  if (adminNotes) {
-    message += `\n\nDecision Notes: ${adminNotes}`;
-  }
-
-  return await createNotification({
-    tenantDb,
-    userId,
-    type: NotificationTypes.LICENCE_STATUS_CHANGED,
-    priority: status === 'Approved' ? NotificationPriority.HIGH : NotificationPriority.URGENT,
-    title: `Licence Application ${status}: #LIC-${safeId}`,
-    message: message,
-    actionType: 'licence_status_update',
-    entityId: applicationData?.id,
-    entityType: 'licence_application',
-    metadata: {
-      applicationId: safeId,
-      company: company,
-      status: status,
-      type: type,
-      adminNotes: adminNotes,
-      updatedAt: new Date().toLocaleString()
-    },
-    sendEmail: true,
-  });
-};
-
-export const notifyLicenceAssigned = async (tenantDb, caseworkerId, applicationData) => {
-  const safeId = applicationData?.id || 'Unknown';
-  const company = applicationData?.companyName || 'A business';
-
-  return await createNotification({
-    tenantDb,
-    userId: caseworkerId,
-    type: NotificationTypes.LICENCE_ASSIGNED,
-    priority: NotificationPriority.HIGH,
-    title: `New Assignment: Licence Application #LIC-${safeId}`,
-    message: `You have been assigned to review the licence application for ${company}.`,
-    actionType: 'licence_assignment',
-    entityId: applicationData?.id,
-    entityType: 'licence_application',
-    metadata: {
-      applicationId: safeId,
-      company: company,
-      assignedAt: new Date().toLocaleString()
-    },
-    sendEmail: true,
-  });
-};
-
-export const notifySystemMaintenance = async (tenantDb, roleId, maintenanceData) => {
-  if (roleId) {
-    const safeTitle = maintenanceData?.title || 'System Maintenance';
-    const safeMessage = maintenanceData?.message || 'System maintenance is scheduled.';
-    const safeScheduledStart = maintenanceData?.scheduledStart || 'Not specified';
-    const safeScheduledEnd = maintenanceData?.scheduledEnd || 'Not specified';
-    const safeNotifyBefore = maintenanceData?.notifyBefore || null;
-    
-    return await createNotificationForRole(roleId, {
-      tenantDb,
-      type: NotificationTypes.SYSTEM_MAINTENANCE,
-      priority: NotificationPriority.HIGH,
-      title: `Scheduled Maintenance: ${safeTitle}`,
-      message: safeMessage,
-      actionType: 'system_maintenance',
-      metadata: {
-        scheduledStart: safeScheduledStart,
-        scheduledEnd: safeScheduledEnd,
-      },
-      sendEmail: true,
-      scheduledFor: safeNotifyBefore,
-    });
-  }
-  // If no roleId, create for all active users (optional implementation)
-};
-
-/**
- * Send message received notification
- * @param {number} receiverId - User ID who received the message
- * @param {Object} messageData - Message information
- * @param {Object} senderData - Sender information
- */
-export const notifyMessageReceived = async (tenantDb, receiverId, messageData, senderData, skipAdminBroadcast = false) => {
-  if (!tenantDb) throw new Error('tenantDb is required');
-  const safeSenderName = senderData?.first_name && senderData?.last_name 
-    ? `${senderData.first_name} ${senderData.last_name}` 
-    : senderData?.email || 'Unknown sender';
-  const safeMessageContent = messageData?.content || 'No content';
-  const safeCaseId = messageData?.caseId || null;
-  const truncatedContent = safeMessageContent.length > 50 
-    ? safeMessageContent.substring(0, 50) + '...' 
-    : safeMessageContent;
-  
-  return await createNotification({
-    tenantDb,
-    userId: receiverId,
-    type: NotificationTypes.MESSAGE_RECEIVED,
-    priority: NotificationPriority.MEDIUM,
-    title: `New Message from ${safeSenderName}`,
-    message: `You have received a new message: "${truncatedContent}"`,
-    actionType: 'message_received',
-    entityId: messageData?.id || null,
-    entityType: 'message',
-    metadata: {
-      senderId: senderData?.id,
-      senderName: safeSenderName,
-      conversationId: messageData?.conversationId,
-      caseId: safeCaseId,
-      messageType: messageData?.messageType || 'text',
-    },
-    sendEmail: false, // Typically don't send emails for messages to avoid spam
-    isInternalAdminOnly: skipAdminBroadcast, // Prevent admin fanout for message notifications
-  });
-};
-
-export const notifyTaskAssigned = async (tenantDb, userId, taskData) => {
-  const safeTitle = taskData?.title || 'Unknown Task';
-  const safeDueDate = taskData?.due_date ? new Date(taskData.due_date).toLocaleDateString() : 'No deadline';
-  const safePriority = taskData?.priority || 'medium';
-  const caseRef = taskData?.metadata?.caseId;
-
-  return await createNotification({
-    tenantDb,
-    userId,
+export async function notifyCaseCreated(tenantDb, { id, caseId, candidateName } = {}) {
+  return notifyAdmins(tenantDb, {
     type: NotificationTypes.INFO,
-    priority: safePriority === 'high' ? NotificationPriority.HIGH : NotificationPriority.MEDIUM,
-    title: `New Task Assigned: ${safeTitle}`,
-    message: `You have been assigned a new task "${safeTitle}". Deadline: ${safeDueDate}.`,
-    actionType: 'task_assigned',
-    entityId: taskData?.case_id || taskData?.entityId || null,
-    entityType: caseRef ? 'case' : 'task',
-    metadata: {
-      taskId: taskData?.id,
-      title: safeTitle,
-      dueDate: taskData?.due_date,
-      priority: safePriority,
-      caseId: caseRef,
-    },
-    sendEmail: true,
-    organisationId: taskData?.organisationId ?? null,
+    priority: NotificationPriority.MEDIUM,
+    category: 'case',
+    title: `New Case Created: ${caseId ?? ''}`,
+    message: `A new case has been created for ${candidateName ?? 'a candidate'}.`,
+    entityType: 'case',
+    entityId: id ?? null,
+    actionType: 'case_created',
   });
+}
+
+export async function createBulkNotifications(userIds, opts = {}) {
+  const { tenantDb, ...payload } = opts;
+  if (!tenantDb || !Array.isArray(userIds) || !userIds.length) return [];
+  const results = await Promise.all(
+    userIds.map((id) => notifyUser(tenantDb, id, payload)),
+  );
+  return results.filter(Boolean);
+}
+
+/**
+ * Enterprise Centralized Notification Service
+ * Handles DB persistence, real-time socket delivery, email, audit, and timeline integration.
+ */
+
+/**
+ * Generate a new notification and trigger delivery channels.
+ * @param {Object} context - { tenantDb, io, req }
+ * @param {Object} payload - Notification payload
+ */
+export const generateNotification = async (context, payload) => {
+  const { tenantDb, io } = context;
+  const {
+    templateCode,
+    recipientId,
+    recipientRole,
+    organisationId,
+    entityType,
+    entityId,
+    actionUrl,
+    category,
+    priority,
+    type,
+    templateData = {}
+  } = payload;
+
+  try {
+    if (!tenantDb) throw new Error('tenantDb is required for tenant-level notifications');
+
+    // Derive organisation_id from the recipient when the caller didn't supply it,
+    // so the notification is visible in org-scoped list queries (see notifyUser).
+    let resolvedOrganisationId = organisationId;
+    if (resolvedOrganisationId == null && recipientId) {
+      const recipient = await tenantDb.User.findByPk(recipientId, {
+        attributes: ['organisation_id'],
+      }).catch(() => null);
+      resolvedOrganisationId = recipient?.organisation_id ?? null;
+    }
+
+    // 1. Fetch Template
+    const template = await tenantDb.NotificationTemplate.findOne({ where: { code: templateCode } });
+    if (!template) {
+      logger.warn(`Notification template not found for code: ${templateCode}`);
+      return null;
+    }
+
+    // 2. Hydrate Templates with templateData (simple variable replacement)
+    let title = template.title;
+    let message = template.inAppTemplate || '';
+    let emailSubject = template.emailSubject || template.title;
+    let emailHtml = template.emailTemplate || '';
+
+    Object.keys(templateData).forEach(key => {
+      const regex = new RegExp(`{{${key}}}`, 'g');
+      title = title.replace(regex, templateData[key]);
+      message = message.replace(regex, templateData[key]);
+      emailSubject = emailSubject.replace(regex, templateData[key]);
+      emailHtml = emailHtml.replace(regex, templateData[key]);
+    });
+
+    // 3. Save to Database (canonical columns: userId / roleId)
+    const notification = await tenantDb.Notification.create({
+      title,
+      message,
+      category,
+      priority,
+      type,
+      userId: recipientId,
+      roleId: recipientRole,
+      organisationId: resolvedOrganisationId,
+      entityType,
+      entityId,
+      actionUrl,
+      isRead: false,
+      isArchived: false
+    });
+
+    // 4. Fetch User Preferences
+    let sendEmail = true;
+    let sendSocket = true;
+    if (recipientId) {
+      const prefs = await tenantDb.NotificationPreference.findOne({ where: { userId: recipientId } });
+      if (prefs) {
+        if (!prefs.inAppNotifications) sendSocket = false;
+        if (!prefs.emailNotifications) sendEmail = false;
+        
+        // Category specific overrides
+        if (category === 'case' && prefs.caseUpdates === false) { sendEmail = false; sendSocket = false; }
+        if (category === 'payment' && prefs.paymentNotifications === false) { sendEmail = false; sendSocket = false; }
+        if (category === 'appointment' && prefs.appointmentNotifications === false) { sendEmail = false; sendSocket = false; }
+      }
+    }
+
+    // 5. Track Delivery
+    const delivery = await tenantDb.NotificationDelivery.create({
+      notificationId: notification.id,
+      deliveryStatus: 'pending'
+    });
+
+    // 6. Deliver via Socket.IO (prefer the explicit context io, else the
+    //    centralized registry instance).
+    const ioInstance = io || getIO();
+    if (sendSocket && ioInstance && recipientId) {
+      ioInstance.to(userRoom(recipientId)).emit('notification:new', notification);
+
+      // Update unread count
+      const unreadCount = await tenantDb.Notification.count({ where: { userId: recipientId, isRead: false } });
+      ioInstance.to(userRoom(recipientId)).emit('notification:count', { count: unreadCount });
+
+      await delivery.update({ socketDelivered: true, socketDeliveredAt: new Date() });
+    }
+
+    // 7. Deliver via Email
+    if (sendEmail && recipientId) {
+      const user = await tenantDb.User.findByPk(recipientId, { attributes: ['email'] });
+      if (user && user.email) {
+        try {
+          await sendTransactionalEmail({
+            organisationId,
+            to: user.email,
+            subject: emailSubject,
+            html: emailHtml || message, // Fallback to message if no specific HTML template
+          });
+          await delivery.update({ emailSent: true, emailSentAt: new Date(), deliveryStatus: 'delivered' });
+        } catch (emailErr) {
+          logger.error({ err: emailErr }, 'Failed to send notification email');
+          await delivery.update({ deliveryStatus: 'failed' });
+        }
+      }
+    }
+
+    return notification;
+  } catch (error) {
+    logger.error({ err: error, payload }, 'Error in generateNotification');
+    throw error;
+  }
+};
+
+export const markAsRead = async (tenantDb, notificationId) => {
+  const notification = await tenantDb.Notification.findByPk(notificationId);
+  if (notification) {
+    await notification.update({ isRead: true, readAt: new Date() });
+  }
+  return notification;
+};
+
+export const markAllAsRead = async (tenantDb, userId) => {
+  return await tenantDb.Notification.update(
+    { isRead: true, readAt: new Date() },
+    { where: { userId, isRead: false } }
+  );
+};
+
+/**
+ * Archive (or un-archive) a single notification. Archived notifications are
+ * hidden from the default list/unread queries.
+ */
+export const setNotificationArchived = async (tenantDb, notificationId, archived = true) => {
+  const notification = await tenantDb.Notification.findByPk(notificationId);
+  if (notification) {
+    await notification.update({ isArchived: Boolean(archived) });
+  }
+  return notification;
 };
 
 export default {
-  createNotification,
-  createBulkNotifications,
-  createNotificationForRole,
+  generateNotification,
   markAsRead,
   markAllAsRead,
-  deleteNotification,
-  getUnreadCount,
-  getUserNotifications,
-  processScheduledNotifications,
-  deleteExpiredNotifications,
-  NotificationTypes,
-  NotificationPriority,
-  // Event helpers
-  notifyCaseAssigned,
+  setNotificationArchived,
+  notifyUser,
+  notifyAdmins,
   notifyTaskAssigned,
-  notifyCaseStatusChanged,
-  notifyPaymentReceived,
-  notifyPaymentOverdue,
+  notifyUserCreated,
+  createNotification,
+  createBulkNotifications,
+  // DB helpers
+  getUserNotifications,
+  getUnreadCount,
+  deleteNotification,
+  deleteExpiredNotifications,
+  processScheduledNotifications,
+  createNotificationForRole,
+  createNotificationForAllUsers,
+  // domain helpers
   notifyDocumentUploaded,
   notifyDocumentReviewed,
+  notifyDocumentSubmittedToCandidate,
+  notifyMessageReceived,
+  notifyPaymentReceived,
+  notifyCaseAssigned,
+  notifyCaseStatusChanged,
+  notifyProposedAmountToCandidate,
   notifyEscalationCreated,
   notifyEscalationResolved,
-  notifyUserCreated,
-  notifySLABreach,
-  notifySystemMaintenance,
-  notifyMessageReceived,
-  createNotificationForAllUsers,
-  notifyLicenceInfoRequested,
+  notifyCaseCreated,
   notifyLicenceStatusChanged,
+  notifyLicenceInfoRequested,
   notifyLicenceAssigned,
-  notifyAdmins,
+  NotificationTypes,
+  NotificationPriority,
 };

@@ -6,9 +6,12 @@ import { checkRole, ROLES } from '../../../middlewares/role.middleware.js';
 const router = Router();
 
 router.use(verifyTokenAndTenant);
-router.use(checkRole([ROLES.ADMIN]));
 
-router.post("/", escalationController.createEscalation);
+// Caseworkers can create escalations from a case detail page
+router.post("/", checkRole([ROLES.ADMIN, ROLES.CASEWORKER]), escalationController.createEscalation);
+
+// All remaining routes are admin-only
+router.use(checkRole([ROLES.ADMIN]));
 
 router.get("/", escalationController.getAllEscalations);
 

@@ -3,26 +3,41 @@ import { Op } from "sequelize";
 import platformDb from "../models/index.js";
 import { getTenantDb } from "./tenantDb.service.js";
 import { notifyUser, NotificationTypes, NotificationPriority } from "./notification.service.js";
+import { normalizeStorageRelativePath } from "../utils/storagePath.util.js";
 
 export function toPublicAssetUrl(relativePath) {
   if (!relativePath) return null;
   if (String(relativePath).startsWith("http")) return relativePath;
-  const base = (process.env.BASE_URL || "").replace(/\/$/, "");
-  let normalizedPath = String(relativePath).replace(/\\/g, "/");
-  
+
+  const base = (process.env.BASE_URL || process.env.API_BASE_URL || "").replace(/\/$/, "");
+  let normalizedPath =
+    normalizeStorageRelativePath(relativePath) || String(relativePath).replace(/\\/g, "/");
+
   // Rewrite secure storage paths to the safe public serving endpoint
-  if (normalizedPath.startsWith("storage/private/organisations/") || 
-      normalizedPath.startsWith("storage/private/platform/") ||
-      normalizedPath.startsWith("storage/private/superadmin/")) {
-    normalizedPath = normalizedPath.replace(/^storage\/private\/(organisations|platform|superadmin)\//, "api/public/images/");
-  } else if (normalizedPath.startsWith("uploads/organisations/") || 
-             normalizedPath.startsWith("uploads/platform/") ||
-             normalizedPath.startsWith("uploads/superadmin/")) {
-    // Backwards compatibility for existing records in DB
-    normalizedPath = normalizedPath.replace(/^uploads\/(organisations|platform|superadmin)\//, "api/public/images/");
+  if (
+    normalizedPath.startsWith("storage/private/organisations/") ||
+    normalizedPath.startsWith("storage/private/platform/") ||
+    normalizedPath.startsWith("storage/private/superadmin/")
+  ) {
+    normalizedPath = normalizedPath.replace(
+      /^storage\/private\/(organisations|platform|superadmin)\//,
+      "api/public/images/",
+    );
+  } else if (
+    normalizedPath.startsWith("uploads/organisations/") ||
+    normalizedPath.startsWith("uploads/platform/") ||
+    normalizedPath.startsWith("uploads/superadmin/")
+  ) {
+    // Backwards compatibility for legacy DB paths
+    normalizedPath = normalizedPath.replace(
+      /^uploads\/(organisations|platform|superadmin)\//,
+      "api/public/images/",
+    );
+  } else if (normalizedPath.startsWith("api/public/images/")) {
+    // Already a public path — keep as-is
   }
-  
-  return `${base}/${normalizedPath}`;
+
+  return base ? `${base}/${normalizedPath}` : `/${normalizedPath}`;
 }
 
 /** Load tenant payment row; falls back to env keys when DB empty. */

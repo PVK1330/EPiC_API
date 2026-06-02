@@ -1,3 +1,4 @@
+import logger from '../../../utils/logger.js';
 import {
   getUserNotifications,
   markAsRead,
@@ -51,7 +52,6 @@ export const getAllNotifications = async (req, res) => {
       type = null,
       priority = null,
       userId: specificUserId = null,
-      roleId = null,
     } = req.query;
     const parsedPage = Math.max(1, Number.parseInt(page, 10) || 1);
     const parsedLimit = Math.min(100, Math.max(1, Number.parseInt(limit, 10) || 50));
@@ -73,11 +73,11 @@ export const getAllNotifications = async (req, res) => {
     }
 
     const whereClause = {
+      organisationId: req.user.organisation_id,
       ...(unreadOnly === 'true' && { isRead: false }),
       ...(type && { type }),
       ...(priority && { priority }),
       ...(specificUserId && { userId: specificUserId }),
-      ...(roleId && { roleId }),
     };
 
     const { count, rows: notifications } = await req.tenantDb.Notification.findAndCountAll({
@@ -87,14 +87,16 @@ export const getAllNotifications = async (req, res) => {
           model: req.tenantDb.User,
           as: 'user',
           where: { organisation_id: req.user.organisation_id },
-          attributes: ['id', 'first_name', 'last_name', 'email'],
+          attributes: ['id', 'first_name', 'last_name', 'email', 'role_id'],
           required: true,
-        },
-        {
-          model: req.tenantDb.Role,
-          as: 'role',
-          attributes: ['id', 'name'],
-          required: false,
+          include: [
+            {
+              model: req.tenantDb.Role,
+              as: 'role',
+              attributes: ['id', 'name'],
+              required: false,
+            },
+          ],
         },
       ],
       order: [['createdAt', 'DESC']],
@@ -390,78 +392,57 @@ export const createManualNotification = async (req, res) => {
       });
     }
 
+    // Derive a notification category from the related entity so per-category
+    // delivery preferences (caseUpdates / paymentNotifications / …) apply.
+    const categoryFromEntity = (() => {
+      const e = (entityType || actionType || '').toLowerCase();
+      if (e.includes('case')) return 'case';
+      if (e.includes('payment')) return 'payment';
+      if (e.includes('appointment')) return 'appointment';
+      if (e.includes('business')) return 'system';
+      return 'system';
+    })();
+
+    const basePayload = {
+      tenantDb: req.tenantDb,
+      organisationId,
+      category: categoryFromEntity,
+      type,
+      priority,
+      title,
+      message,
+      actionType,
+      entityId,
+      entityType,
+      metadata,
+      sendEmail: sendEmailFlag,
+      scheduledFor,
+    };
+
     let notification;
+    let recipientsCount = 0;
     if (recipientRoleId) {
-      const notifications = await createNotificationForRole(recipientRoleId, {
-        tenantDb: req.tenantDb,
-        organisationId,
-        type,
-        priority,
-        title,
-        message,
-        actionType,
-        entityId,
-        entityType,
-        metadata,
-        sendEmail: sendEmailFlag,
-        scheduledFor,
-      });
+      const notifications = await createNotificationForRole(recipientRoleId, basePayload);
       notification = notifications[0]; // Return first created notification
+      recipientsCount = notifications.length;
     } else if (recipientUserIds && Array.isArray(recipientUserIds) && recipientUserIds.length > 0) {
-      const notifications = await createBulkNotifications(recipientUserIds, {
-        tenantDb: req.tenantDb,
-        organisationId,
-        type,
-        priority,
-        title,
-        message,
-        actionType,
-        entityId,
-        entityType,
-        metadata,
-        sendEmail: sendEmailFlag,
-        scheduledFor,
-      });
+      const notifications = await createBulkNotifications(recipientUserIds, basePayload);
       notification = notifications[0];
+      recipientsCount = notifications.length;
     } else if (finalRecipientUserId) {
-      notification = await createNotification({ 
-        tenantDb: req.tenantDb,
-        userId: finalRecipientUserId,
-        organisationId,
-        type,
-        priority,
-        title,
-        message,
-        actionType,
-        entityId,
-        entityType,
-        metadata,
-        sendEmail: sendEmailFlag,
-        scheduledFor,
-      });
+      notification = await createNotification({ ...basePayload, userId: finalRecipientUserId });
+      recipientsCount = notification ? 1 : 0;
     } else {
       // Broadcast to all
-      const notifications = await createNotificationForAllUsers({
-        tenantDb: req.tenantDb,
-        organisationId,
-        type,
-        priority,
-        title,
-        message,
-        actionType,
-        entityId,
-        entityType,
-        metadata,
-        sendEmail: sendEmailFlag,
-        scheduledFor,
-      });
+      const notifications = await createNotificationForAllUsers(basePayload);
       notification = notifications[0];
+      recipientsCount = notifications.length;
     }
 
     res.status(201).json({
       status: 'success',
       message: 'Notification created successfully',
-      data: { notification },
+      data: { notification: notification || null, recipientsCount },
     });
   } catch (error) {
     logger.error({ err: error }, 'Create notification error');
@@ -481,8 +462,9 @@ export const getNotificationStats = async (req, res) => {
       });
     }
 
-    const unreadCount = await getUnreadCount(req.tenantDb, userId);
-    const totalCount = await req.tenantDb.Notification.count({ where: { userId } });
+    const numericUserId = Number(userId);
+    const unreadCount = await getUnreadCount(req.tenantDb, numericUserId);
+    const totalCount = await req.tenantDb.Notification.count({ where: { userId: numericUserId } });
     const readCount = totalCount - unreadCount;
 
     // Count by type
@@ -491,7 +473,7 @@ export const getNotificationStats = async (req, res) => {
         'type',
         [req.tenantDb.sequelize.fn('COUNT', req.tenantDb.sequelize.col('id')), 'count'],
       ],
-      where: { userId },
+      where: { userId: numericUserId },
       group: ['type'],
       raw: true,
     });
@@ -502,7 +484,7 @@ export const getNotificationStats = async (req, res) => {
         'priority',
         [req.tenantDb.sequelize.fn('COUNT', req.tenantDb.sequelize.col('id')), 'count'],
       ],
-      where: { userId },
+      where: { userId: numericUserId },
       group: ['priority'],
       raw: true,
     });
@@ -520,6 +502,97 @@ export const getNotificationStats = async (req, res) => {
     });
   } catch (error) {
     logger.error({ err: error }, 'Get notification stats error');
+    return internalServerError(res);
+  }
+};
+
+// ─── Notification preferences ─────────────────────────────────────────────────
+
+const PREFERENCE_FIELDS = [
+  'emailNotifications',
+  'inAppNotifications',
+  'caseUpdates',
+  'paymentNotifications',
+  'appointmentNotifications',
+  'marketingNotifications',
+];
+
+const getOrCreatePreferences = async (tenantDb, userId) => {
+  const [prefs] = await tenantDb.NotificationPreference.findOrCreate({
+    where: { userId },
+    defaults: { userId },
+  });
+  return prefs;
+};
+
+// Get the authenticated user's notification preferences
+export const getNotificationPreferences = async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ status: 'error', message: 'Authentication required', data: null });
+    }
+
+    const prefs = await getOrCreatePreferences(req.tenantDb, Number(userId));
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Notification preferences retrieved successfully',
+      data: {
+        preferences: {
+          emailNotifications: prefs.emailNotifications,
+          inAppNotifications: prefs.inAppNotifications,
+          caseUpdates: prefs.caseUpdates,
+          paymentNotifications: prefs.paymentNotifications,
+          appointmentNotifications: prefs.appointmentNotifications,
+          marketingNotifications: prefs.marketingNotifications,
+        },
+      },
+    });
+  } catch (error) {
+    logger.error({ err: error }, 'Get notification preferences error');
+    return internalServerError(res);
+  }
+};
+
+// Update the authenticated user's notification preferences
+export const updateNotificationPreferences = async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ status: 'error', message: 'Authentication required', data: null });
+    }
+
+    const updates = {};
+    for (const field of PREFERENCE_FIELDS) {
+      if (typeof req.body[field] === 'boolean') {
+        updates[field] = req.body[field];
+      }
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ status: 'error', message: 'No valid preference fields to update', data: null });
+    }
+
+    const prefs = await getOrCreatePreferences(req.tenantDb, Number(userId));
+    await prefs.update(updates);
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Notification preferences updated successfully',
+      data: {
+        preferences: {
+          emailNotifications: prefs.emailNotifications,
+          inAppNotifications: prefs.inAppNotifications,
+          caseUpdates: prefs.caseUpdates,
+          paymentNotifications: prefs.paymentNotifications,
+          appointmentNotifications: prefs.appointmentNotifications,
+          marketingNotifications: prefs.marketingNotifications,
+        },
+      },
+    });
+  } catch (error) {
+    logger.error({ err: error }, 'Update notification preferences error');
     return internalServerError(res);
   }
 };

@@ -17,6 +17,22 @@ const REQUIRED_VARS = [
     hint: "Generate a strong random secret (e.g. `node -e \"console.log(require('crypto').randomBytes(64).toString('hex'))\"`)",
     minLength: 32,
   },
+  {
+    key: "SETTINGS_ENCRYPTION_KEY",
+    label: "SETTINGS_ENCRYPTION_KEY",
+    hint: "Dedicated AES-256 key for secrets at rest — must be 64 hex chars (32 bytes), and MUST be different from JWT_SECRET. Generate: `node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"`",
+    // Must be exactly 32 bytes, hex-encoded, and must not equal JWT_SECRET.
+    validate: (value) => {
+      const v = value.trim();
+      if (!/^[0-9a-fA-F]{64}$/.test(v)) {
+        return "must be a 64-character hex string (32 bytes)";
+      }
+      if (process.env.JWT_SECRET && v === process.env.JWT_SECRET.trim()) {
+        return "must NOT be the same value as JWT_SECRET";
+      }
+      return null;
+    },
+  },
 ];
 
 /**
@@ -29,7 +45,7 @@ const REQUIRED_VARS = [
 export function validateRequiredEnv(vars = REQUIRED_VARS) {
   const missing = [];
 
-  for (const { key, label, hint, minLength } of vars) {
+  for (const { key, label, hint, minLength, validate } of vars) {
     const value = process.env[key];
 
     if (!value || (typeof value === "string" && value.trim().length === 0)) {
@@ -42,6 +58,14 @@ export function validateRequiredEnv(vars = REQUIRED_VARS) {
         label,
         hint: `${hint} Current value is only ${value.trim().length} character(s) — minimum is ${minLength}.`,
       });
+      continue;
+    }
+
+    if (typeof validate === "function") {
+      const error = validate(value);
+      if (error) {
+        missing.push({ label, hint: `${label} ${error}. ${hint}` });
+      }
     }
   }
 

@@ -54,6 +54,42 @@ export const getTransactionById = catchAsync(async (req, res) => {
   return ApiResponse.success(res, "Transaction retrieved successfully", { transaction });
 });
 
+export const getPaymentReconciliation = catchAsync(async (req, res) => {
+  const { page = 1, limit = 50, status } = req.query;
+  const offset = (parseInt(page) - 1) * parseInt(limit);
+
+  const where = {};
+  if (status && status !== 'all') where.processing_status = status;
+
+  const { count, rows } = await platformDb.StripeWebhookEvent.findAndCountAll({
+    where,
+    order:  [['created_at', 'DESC']],
+    limit:  parseInt(limit),
+    offset,
+  });
+
+  const reconciliation = rows.map(r => ({
+    id:            `#EVT-${r.id}`,
+    eventId:       r.event_id,
+    eventType:     r.event_type,
+    tenantId:      r.tenant_id || 'Platform',
+    accountId:     r.stripe_account_id || 'N/A',
+    status:        r.processing_status,
+    failureReason: r.processing_status === 'failed' ? r.error_message : null,
+    date:          r.created_at ? new Date(r.created_at).toISOString() : null,
+  }));
+
+  return ApiResponse.success(res, 'Global payment reconciliation retrieved', {
+    reconciliation,
+    pagination: {
+      total: count,
+      page:  parseInt(page),
+      limit: parseInt(limit),
+      pages: Math.ceil(count / parseInt(limit)),
+    },
+  });
+});
+
 export const getGatewayStatus = catchAsync(async (req, res) => {
   const rows = await platformDb.PlatformSetting.findAll({
     where: { key: ['stripe_publishable_key', 'stripe_secret_key', 'stripe_webhook_secret', 'stripe_currency', 'platform_fee'] },
@@ -84,11 +120,7 @@ export const getGatewayStatus = catchAsync(async (req, res) => {
 });
 
 export const configureGateway = catchAsync(async (req, res) => {
-  const { publishable_key, secret_key, webhook_secret, currency, platform_fee } = req.body;
-
-  if (!publishable_key || !secret_key) {
-    return ApiResponse.badRequest(res, "Publishable key and secret key are required");
-  }
+  const { publishable_key, secret_key, webhook_secret, currency, platform_fee } = req.validated.body;
 
   const upserts = [
     { key: 'stripe_publishable_key', value: String(publishable_key).trim() },

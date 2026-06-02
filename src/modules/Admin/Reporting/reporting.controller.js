@@ -674,13 +674,19 @@ export const getPerformanceReport = async (req, res) => {
 /** Multi-sheet workbook; reuses compute* payloads (same filters as JSON report APIs). */
 export const exportReportingExcel = async (req, res) => {
   try {
-    const { startDate, endDate } = req.query;
+    const { startDate, endDate, sheet } = req.query;
+
+    // sheet = 'cases' | 'workload' | 'financial' | 'performance' | undefined (all)
+    const wantCases      = !sheet || sheet === 'cases';
+    const wantWorkload   = !sheet || sheet === 'workload';
+    const wantFinancial  = !sheet || sheet === 'financial';
+    const wantPerformance= !sheet || sheet === 'performance';
 
     const [cases, workload, financial, performance] = await Promise.all([
-      computeCaseAnalyticsData(req).catch(() => null),
-      computeWorkloadReportData(req).catch(() => null),
-      computeFinancialReportData(req).catch(() => null),
-      computePerformanceReportData(req).catch(() => null),
+      wantCases       ? computeCaseAnalyticsData(req).catch(() => null)      : null,
+      wantWorkload    ? computeWorkloadReportData(req).catch(() => null)      : null,
+      wantFinancial   ? computeFinancialReportData(req).catch(() => null)     : null,
+      wantPerformance ? computePerformanceReportData(req).catch(() => null)   : null,
     ]);
 
     /** @type {{ name: string, columns: { key: string, header: string }[], rows: Record<string, unknown>[] }[]} */
@@ -848,49 +854,72 @@ export const exportReportingExcel = async (req, res) => {
       sheets.push({
         name: 'Performance_Team',
         columns: [
-          { key: 'id', header: 'CW ID' },
-          { key: 'name', header: 'Name' },
-          { key: 'email', header: 'Email' },
-          { key: 'department', header: 'Department' },
-          { key: 'totalCases', header: 'Total Cases' },
-          { key: 'activeCases', header: 'Active' },
-          { key: 'completedCases', header: 'Completed' },
-          { key: 'slaMetPct', header: 'SLA Met Pct' },
-          { key: 'avgCompletionDays', header: 'Avg Days' },
-          { key: 'clientSatisfaction', header: 'Satisfaction' },
-          { key: 'escalations', header: 'Escalations' },
-          { key: 'visaBreakdown', header: 'Visa Breakdown JSON' },
-          { key: 'monthlyTrend', header: 'Monthly Trend JSON' },
+          { key: 'id',                header: 'CW ID' },
+          { key: 'name',              header: 'Name' },
+          { key: 'email',             header: 'Email' },
+          { key: 'department',        header: 'Department' },
+          { key: 'joinDate',          header: 'Join Date' },
+          { key: 'totalCases',        header: 'Total Cases' },
+          { key: 'activeCases',       header: 'Active Cases' },
+          { key: 'completedCases',    header: 'Completed Cases' },
+          { key: 'slaMetPct',         header: 'SLA Met %' },
+          { key: 'avgCompletionDays', header: 'Avg Completion Days' },
+          { key: 'clientSatisfaction',header: 'Client Satisfaction' },
+          { key: 'escalations',       header: 'Escalations' },
         ],
         rows: performance.map((p) => ({
-          id: p.id,
-          name: p.name,
-          email: p.email,
-          department: p.department,
-          totalCases: p.totalCases,
-          activeCases: p.activeCases,
-          completedCases: p.completedCases,
-          slaMetPct: p.slaMetPct,
-          avgCompletionDays: p.avgCompletionDays,
+          id:                 p.id,
+          name:               p.name,
+          email:              p.email,
+          department:         p.department,
+          joinDate:           p.joinDate || '',
+          totalCases:         p.totalCases,
+          activeCases:        p.activeCases,
+          completedCases:     p.completedCases,
+          slaMetPct:          p.slaMetPct,
+          avgCompletionDays:  p.avgCompletionDays,
           clientSatisfaction: p.clientSatisfaction,
-          escalations: p.escalations,
-          visaBreakdown: JSON.stringify(p.visaBreakdown || []),
-          monthlyTrend: JSON.stringify(p.monthlyTrend || []),
+          escalations:        p.escalations,
         })),
       });
+
+      // Visa breakdown — one row per caseworker × visa type
+      const visaBreakdownFlat = [];
+      for (const p of performance) {
+        for (const v of p.visaBreakdown || []) {
+          visaBreakdownFlat.push({
+            caseworkerId:   p.id,
+            caseworkerName: p.name,
+            visaType:       v.type || 'Unknown',
+            count:          v.count || 0,
+          });
+        }
+      }
+      if (visaBreakdownFlat.length) {
+        sheets.push({
+          name: 'Perf_VisaBreakdown',
+          columns: [
+            { key: 'caseworkerId',   header: 'CW ID' },
+            { key: 'caseworkerName', header: 'Caseworker' },
+            { key: 'visaType',       header: 'Visa Type' },
+            { key: 'count',          header: 'Cases' },
+          ],
+          rows: visaBreakdownFlat,
+        });
+      }
 
       const recentFlat = [];
       for (const p of performance) {
         for (const c of p.recentCases || []) {
           recentFlat.push({
-            caseworkerId: p.id,
+            caseworkerId:   p.id,
             caseworkerName: p.name,
-            caseId: c.id,
-            client: c.client,
-            visaType: c.type,
-            status: c.status,
-            date: c.date,
-            sla: c.sla,
+            caseId:         c.id,
+            client:         c.client,
+            visaType:       c.type,
+            status:         c.status,
+            date:           c.date,
+            sla:            c.sla,
           });
         }
       }
@@ -898,14 +927,14 @@ export const exportReportingExcel = async (req, res) => {
         sheets.push({
           name: 'Perf_RecentCases',
           columns: [
-            { key: 'caseworkerId', header: 'CW ID' },
+            { key: 'caseworkerId',   header: 'CW ID' },
             { key: 'caseworkerName', header: 'Caseworker' },
-            { key: 'caseId', header: 'Case ID' },
-            { key: 'client', header: 'Client' },
-            { key: 'visaType', header: 'Visa' },
-            { key: 'status', header: 'Status' },
-            { key: 'date', header: 'Date' },
-            { key: 'sla', header: 'SLA' },
+            { key: 'caseId',         header: 'Case ID' },
+            { key: 'client',         header: 'Client' },
+            { key: 'visaType',       header: 'Visa' },
+            { key: 'status',         header: 'Status' },
+            { key: 'date',           header: 'Date' },
+            { key: 'sla',            header: 'SLA' },
           ],
           rows: recentFlat,
         });
@@ -914,7 +943,8 @@ export const exportReportingExcel = async (req, res) => {
 
     const buffer = multiSheetXlsxBuffer(sheets);
     const day = localDateStr();
-    sendXlsxDownload(res, buffer, `reports_${day}`);
+    const label = sheet ? `report_${sheet}` : 'reports_all';
+    sendXlsxDownload(res, buffer, `${label}_${day}`);
   } catch (error) {
     logger.error({ err: error }, 'exportReportingExcel Error');
     res.status(500).json({
