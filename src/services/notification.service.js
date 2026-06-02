@@ -49,11 +49,23 @@ export async function notifyUser(tenantDb, userId, payload = {}) {
       actionUrl = null,
       entityType = null,
       entityId = null,
-      organisationId = null,
+      organisationId: payloadOrganisationId = null,
       metadata = {},
       sendEmail: doEmail = false,
       actionType = null,
     } = payload;
+
+    // The notifications table is per-tenant but still carries organisation_id so
+    // org-scoped list queries work. Most callers don't pass it, so derive it from
+    // the recipient when missing — otherwise rows land with NULL organisation_id
+    // and never appear in the org-filtered notifications list.
+    let organisationId = payloadOrganisationId;
+    if (organisationId == null) {
+      const recipient = await tenantDb.User.findByPk(userId, {
+        attributes: ['organisation_id'],
+      }).catch(() => null);
+      organisationId = recipient?.organisation_id ?? null;
+    }
 
     // Resolve recipient delivery preferences (in-app + email + per-category).
     let sendSocket = true;
@@ -502,6 +514,16 @@ export const generateNotification = async (context, payload) => {
   try {
     if (!tenantDb) throw new Error('tenantDb is required for tenant-level notifications');
 
+    // Derive organisation_id from the recipient when the caller didn't supply it,
+    // so the notification is visible in org-scoped list queries (see notifyUser).
+    let resolvedOrganisationId = organisationId;
+    if (resolvedOrganisationId == null && recipientId) {
+      const recipient = await tenantDb.User.findByPk(recipientId, {
+        attributes: ['organisation_id'],
+      }).catch(() => null);
+      resolvedOrganisationId = recipient?.organisation_id ?? null;
+    }
+
     // 1. Fetch Template
     const template = await tenantDb.NotificationTemplate.findOne({ where: { code: templateCode } });
     if (!template) {
@@ -532,7 +554,7 @@ export const generateNotification = async (context, payload) => {
       type,
       userId: recipientId,
       roleId: recipientRole,
-      organisationId,
+      organisationId: resolvedOrganisationId,
       entityType,
       entityId,
       actionUrl,

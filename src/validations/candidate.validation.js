@@ -30,6 +30,19 @@ export const getCandidateSchema = z.object({
   }),
 });
 
+export const assignCandidateBusinessSchema = z.object({
+  params: z.object({
+    id: z.coerce.number().int().positive(),
+  }),
+  body: z
+    .object({
+      // The sponsor (business) user id to assign this candidate to.
+      // null clears the assignment (unassign from any business).
+      businessId: z.coerce.number().int().positive().nullable(),
+    })
+    .strict(),
+});
+
 export const resetCandidatePasswordSchema = z.object({
   params: z.object({
     id: z.coerce.number().int().positive(),
