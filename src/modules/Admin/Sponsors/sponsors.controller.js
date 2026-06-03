@@ -238,8 +238,14 @@ export const getAllSponsors = async (req, res) => {
       ];
     }
 
+    // "Delete" is a soft delete (sets status: "inactive"). By default the list
+    // hides inactive sponsors so a deleted record drops out of view and does
+    // not reappear on refresh. They remain in the DB and are still reachable by
+    // explicitly selecting the "inactive" status filter.
     if (status) {
       whereClause.status = status;
+    } else {
+      whereClause.status = { [Op.ne]: "inactive" };
     }
 
     // Build include clause

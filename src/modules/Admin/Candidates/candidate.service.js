@@ -281,7 +281,15 @@ export class CandidateService {
         { mobile: { [Op.iLike]: `%${search}%` } },
       ];
     }
-    if (status) whereClause.status = status;
+    // "Delete" is a soft delete (sets status: "inactive"). By default the list
+    // hides inactive candidates so a deleted record drops out of view and does
+    // not reappear on refresh. They remain in the DB and are still reachable by
+    // explicitly selecting the "inactive" status filter.
+    if (status) {
+      whereClause.status = status;
+    } else {
+      whereClause.status = { [Op.ne]: "inactive" };
+    }
 
     const includeClause = [
       { model: this.repository.tenantDb.Role, as: "role", attributes: ["id", "name"] },
