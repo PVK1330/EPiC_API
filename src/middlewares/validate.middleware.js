@@ -26,6 +26,12 @@ const replaceInPlace = (target, source) => {
  * @param {z.ZodSchema} schema
  */
 export const validate = (schema, schemaName = null) => async (req, res, next) => {
+  console.log({
+    url: req.originalUrl,
+    method: req.method,
+    schema: schemaName || schema?.description || schema?.name || 'unknown',
+    bodyKeys: Object.keys(req.body || {}),
+  });
   try {
     const parsed = await schema.parseAsync({
       body: req.body,
