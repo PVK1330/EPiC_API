@@ -143,7 +143,12 @@ export const getAllAdmins = catchAsync(async (req, res) => {
     ];
   }
 
+  // "Delete" is a soft delete (sets status: "inactive"). By default the list
+  // hides inactive admins so a deleted record drops out of view and does not
+  // reappear on refresh. They remain in the DB and are still reachable by
+  // explicitly selecting the "inactive" status filter. (Suspended stays visible.)
   if (status) whereClause.status = status;
+  else whereClause.status = { [Op.ne]: "inactive" };
   if (role) whereClause.role_id = parseInt(role, 10) || ADMIN_ROLE_ID;
 
   const { count, rows: admins } = await req.tenantDb.User.findAndCountAll({

@@ -659,7 +659,12 @@ export const getAllCaseworkers = async (req, res) => {
     const offset = (pageNum - 1) * limitNum;
 
     let userFilters = { role_id: CASEWORKER_ROLE };
+    // "Delete" is a soft delete (sets status: "inactive"). By default the list
+    // hides inactive caseworkers so a deleted record drops out of view and does
+    // not reappear on refresh. They remain in the DB and are still reachable by
+    // explicitly selecting the "inactive" status filter.
     if (status) userFilters.status = status;
+    else userFilters.status = { [Op.ne]: "inactive" };
     if (search) {
       userFilters = {
         [Op.and]: [
