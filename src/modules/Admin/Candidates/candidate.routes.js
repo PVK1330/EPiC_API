@@ -32,10 +32,10 @@ router.post(
 // via these admin endpoints) — that is broken access control / IDOR.
 const STAFF = [ROLES.ADMIN, ROLES.CASEWORKER];
 
-router.post("/", checkRole(STAFF), validate(schema.createCandidateSchema), controller.createCandidate);
+router.post("/", checkRole(STAFF), validate(schema.createCandidateSchema, 'createCandidateSchema'), controller.createCandidate);
 router.get("/", checkRole(STAFF), controller.getAllCandidates);
 router.get("/:id", checkRole(STAFF), validate(schema.getCandidateSchema), controller.getCandidateById);
-router.patch("/:id", checkRole(STAFF), validate(schema.updateCandidateSchema), controller.updateCandidate);
+router.patch("/:id", checkRole(STAFF), validate(schema.updateCandidateSchema, 'updateCandidateSchema'), controller.updateCandidate);
 router.patch("/:id/toggle-status", checkRole(STAFF), validate(schema.getCandidateSchema), controller.toggleCandidateStatus);
 router.patch("/:id/assign-business", checkRole(STAFF), validate(schema.assignCandidateBusinessSchema), controller.assignCandidateBusiness);
 router.delete("/:id", checkRole(STAFF), controller.deleteCandidate);

@@ -25,7 +25,7 @@ const replaceInPlace = (target, source) => {
  *
  * @param {z.ZodSchema} schema
  */
-export const validate = (schema) => async (req, res, next) => {
+export const validate = (schema, schemaName = null) => async (req, res, next) => {
   try {
     const parsed = await schema.parseAsync({
       body: req.body,
@@ -64,6 +64,14 @@ export const validate = (schema) => async (req, res, next) => {
         field: e.path.join("."),
         message: e.message,
       }));
+      const schemaLabel = schemaName || schema?.constructor?.name || 'unknown';
+      req.log?.warn({
+        route: req.originalUrl,
+        method: req.method,
+        bodyKeys: Array.isArray(req.body) ? [] : Object.keys(req.body || {}),
+        schema: schemaLabel,
+        validationErrors: errors,
+      }, 'request validation failed');
       return ApiResponse.validationError(res, "Validation failed", errors);
     }
     return ApiResponse.error(res, "Internal validation error", 500, error);
