@@ -9,6 +9,14 @@ import catchAsync from '../../../utils/catchAsync.js';
 
 // Create Candidate
 export const createCandidate = catchAsync(async (req, res) => {
+  console.log({
+    route: req.originalUrl,
+    method: req.method,
+    stage: 'candidate.controller.createCandidate',
+    bodyKeys: Object.keys(req.body || {}),
+    validatedBodyKeys: Object.keys(req.validated?.body || {}),
+    schema: 'createCandidateSchema',
+  });
   const service = new CandidateService(req.tenantDb);
   const result = await service.createCandidate({
     ...req.validated.body,
