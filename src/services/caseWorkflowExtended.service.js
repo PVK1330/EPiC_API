@@ -217,6 +217,7 @@ export async function submitBiometricAvailability({
     preferredTime: payload.preferredTime || null,
     location: payload.location || null,
     notes: payload.notes || null,
+    timezone: payload.timezone || null,
     submittedAt: new Date().toISOString(),
   };
   await saveWorkflowMeta(tenantDb, caseRecord, { biometricAvailability: availability });
