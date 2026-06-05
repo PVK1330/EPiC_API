@@ -16,6 +16,10 @@ import * as schema from '../../../validations/payment.validation.js';
 // Case fee checkout (after admin approves CCL)
 router.post("/create-checkout-session", stripeController.createCaseCheckoutSession);
 router.get("/verify-session/:session_id", stripeController.verifyCheckoutSession);
+
+// Bank transfer (alternative to card/Stripe)
+router.get("/bank-transfer", stripeController.getBankTransferDetails);
+router.post("/bank-transfer/notify", stripeController.recordBankTransferIntent);
 router.post("/export-invoice-receipt-pdf", validate(schema.exportInvoiceReceiptSchema), stripeController.exportInvoiceReceiptPdf);
 
 // Payment Intent Routes

@@ -23,6 +23,10 @@ export default (sequelize, DataTypes) => {
         type: DataTypes.BOOLEAN,
         defaultValue: false,
       },
+      bank_details: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
       invoice_prefix: {
         type: DataTypes.STRING,
         defaultValue: "INV-",

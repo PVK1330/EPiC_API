@@ -201,6 +201,104 @@ const resolveTenantDbForUser = async (userId) => {
   return getTenantDb(org.database_name);
 };
 
+async function notifyAdminsOfBankTransferReported({ tenantDb, caseRecord, organisationId }) {
+  const adminIds = await getActiveAdminIds(tenantDb);
+  const caseLabel = caseRecord.caseId || `#${caseRecord.id}`;
+  for (const adminId of adminIds) {
+    await createWorkflowTask({
+      tenantDb,
+      caseRecord,
+      assigneeId: adminId,
+      title: `Confirm bank transfer — ${caseLabel}`,
+      priority: 'high',
+      dueInDays: 2,
+      organisationId: organisationId ?? null,
+    }).catch(() => {});
+  }
+}
+
+// ── Bank transfer (candidate-facing) ──────────────────────────────────────────
+/** Candidate: fetch the org's bank-transfer payee details + reference + amount due. */
+export const getBankTransferDetails = async (req, res) => {
+  try {
+    const tenantDb = req.tenantDb;
+    const userId = req.user?.userId;
+    const resolved = await resolveCandidateCaseForPayment(tenantDb, userId);
+    if (!resolved.ok) {
+      return res.status(resolved.status).json({ status: 'error', message: resolved.message, data: null });
+    }
+    const setting = tenantDb.PaymentSetting ? await tenantDb.PaymentSetting.findOne() : null;
+    const enabled = setting ? setting.pay_bank !== false : true;
+    return res.status(200).json({
+      status: 'success',
+      data: {
+        enabled,
+        bankDetails: setting?.bank_details || '',
+        currency: setting?.currency || 'GBP',
+        reference: resolved.caseRecord.caseId || String(resolved.caseRecord.id),
+        amountDue: resolved.balanceDue,
+        totalFee: resolved.totalFee,
+        paidAmount: resolved.paidAmount,
+      },
+    });
+  } catch (err) {
+    logger.error({ err }, 'getBankTransferDetails');
+    res.status(500).json({ status: 'error', message: err.message, data: null });
+  }
+};
+
+/** Candidate: notify the firm that a bank transfer has been made (admin confirms receipt). */
+export const recordBankTransferIntent = async (req, res) => {
+  try {
+    const tenantDb = req.tenantDb;
+    const userId = req.user?.userId;
+    const resolved = await resolveCandidateCaseForPayment(tenantDb, userId);
+    if (!resolved.ok) {
+      return res.status(resolved.status).json({ status: 'error', message: resolved.message, data: null });
+    }
+    const { caseRecord, balanceDue } = resolved;
+    const reqAmount = Number(req.body?.amount);
+    const amount = Number.isFinite(reqAmount) && reqAmount > 0 ? reqAmount : balanceDue;
+    const reference = caseRecord.caseId || String(caseRecord.id);
+
+    // Re-use an existing pending bank-transfer record rather than stacking duplicates.
+    let payment = await tenantDb.CasePayment.findOne({
+      where: { caseId: caseRecord.id, paymentMethod: 'bank_transfer', paymentStatus: 'pending' },
+    });
+    if (!payment) {
+      const note = req.body?.note ? `: ${String(req.body.note).slice(0, 200)}` : '';
+      payment = await tenantDb.CasePayment.create({
+        caseId: caseRecord.id,
+        paymentType: 'fee',
+        amount,
+        paymentMethod: 'bank_transfer',
+        paymentDate: localDateStr(),
+        paymentStatus: 'pending',
+        transactionId: `BT-${reference}-${Date.now()}`,
+        invoiceNumber: `BT-${reference}`,
+        description: `Bank transfer reported by candidate (awaiting confirmation)${note}`,
+        receivedBy: null,
+      });
+    }
+
+    const user = await platformDb.User.findByPk(userId, { attributes: ['organisation_id'] });
+    await notifyAdminsOfBankTransferReported({
+      tenantDb,
+      caseRecord,
+      organisationId: user?.organisation_id ?? null,
+    }).catch(() => {});
+
+    return res.status(200).json({
+      status: 'success',
+      message: 'Thank you. We will confirm your bank transfer once it has been received.',
+      data: { paymentId: payment.id, reference, amount },
+    });
+  } catch (err) {
+    logger.error({ err }, 'recordBankTransferIntent');
+    res.status(500).json({ status: 'error', message: err.message, data: null });
+  }
+};
+
 // Create Payment Intent (optional amount — defaults to case balance due)
 export const createPaymentIntent = async (req, res) => {
   try {

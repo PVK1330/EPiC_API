@@ -165,8 +165,19 @@ export const previewTemplate = async (req, res) => {
   try {
     const { bodyHtml = "", headerHtml = null, footerHtml = null } = req.body || {};
     const parts = [headerHtml, bodyHtml, footerHtml].filter((p) => p && String(p).trim()).join("\n");
-    const html = interpolateCclHtml(parts, sampleValues());
     const organisation = req.tenantDb.Organisation ? await req.tenantDb.Organisation.findOne() : null;
+
+    // Preview uses sample candidate/fee data, but the REAL company details + logo
+    // so the firm sees their own branding.
+    const values = sampleValues();
+    if (organisation?.name) values.org_name = organisation.name;
+    const orgAddress = organisation?.address || organisation?.company_address;
+    if (orgAddress) values.org_address = orgAddress;
+    const orgEmail = organisation?.email || organisation?.primaryEmail;
+    if (orgEmail) values.org_email = orgEmail;
+    if (organisation?.phone) values.org_phone = organisation.phone;
+
+    const html = interpolateCclHtml(parts, values);
     const buffer = await renderCclPdfBuffer({ html, organisation });
     return streamPdf(res, buffer, "ccl-template-preview.pdf");
   } catch (err) {

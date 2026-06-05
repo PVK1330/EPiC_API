@@ -59,14 +59,30 @@ async function resolveOrganisation(tenantDb, organisation) {
  */
 async function resolveLogoDataUri(logoUrl) {
   const candidates = [];
-  if (logoUrl && !/^https?:/i.test(String(logoUrl))) {
-    candidates.push(path.resolve(process.cwd(), String(logoUrl)));
+  const raw = String(logoUrl || "").trim();
+
+  if (raw && !/^https?:/i.test(raw)) {
+    const norm = raw.replace(/\\/g, "/");
+    // A public asset URL (e.g. /api/public/images/<rest>) → map back to the
+    // storage directory it is served from so we can read it from disk.
+    const marker = "/api/public/images/";
+    const idx = norm.indexOf(marker);
+    if (idx !== -1) {
+      const rest = norm.slice(idx + marker.length);
+      for (const base of ["organisations", "platform", "superadmin"]) {
+        candidates.push(path.join(process.cwd(), "storage", "private", base, rest));
+      }
+    }
+    // A direct storage/relative path (logoUrl is usually `storage/private/...`).
+    candidates.push(path.resolve(process.cwd(), norm.replace(/^\//, "")));
   }
+
+  // Fallback brand asset.
   candidates.push(path.join(process.cwd(), "assets", "elitepic_logo.png"));
 
   for (const p of candidates) {
     try {
-      if (fs.existsSync(p)) {
+      if (p && fs.existsSync(p)) {
         const png = await sharp(p).png().toBuffer();
         return `data:image/png;base64,${png.toString("base64")}`;
       }
@@ -98,11 +114,88 @@ export async function generateCclHtmlForCase({ tenantDb, caseRecord, ccl = null,
 }
 
 /**
+ * Recursively repair pdfmake nodes so malformed tables can't crash pdfmake
+ * (the "_calcWidth on undefined" error). Empty tables are dropped; every table
+ * gets a `widths` array matching its widest row, and every row is padded to that
+ * column count. Handles tables produced by html-to-pdfmake from rich-text editors
+ * (e.g. Quill) that don't fully support tables.
+ */
+// Printable width: A4 portrait (595.28pt) minus the 56pt left/right page margins.
+const PAGE_CONTENT_WIDTH = 595.28 - 56 - 56; // ≈ 483pt
+
+// Compact table layout (small, fixed padding) so column widths are predictable.
+const COMPACT_TABLE_LAYOUT = {
+  paddingLeft: () => 4,
+  paddingRight: () => 4,
+  paddingTop: () => 3,
+  paddingBottom: () => 3,
+  hLineWidth: () => 0.5,
+  vLineWidth: () => 0.5,
+  hLineColor: () => "#cbd5e1",
+  vLineColor: () => "#cbd5e1",
+};
+
+function stripWidth(cell) {
+  if (cell && typeof cell === "object" && "width" in cell) {
+    const { width, ...rest } = cell; // drop fixed cell width
+    void width;
+    return rest;
+  }
+  return cell;
+}
+
+function repairPdfmakeTables(node) {
+  if (Array.isArray(node)) {
+    node.forEach(repairPdfmakeTables);
+    return;
+  }
+  if (!node || typeof node !== "object") return;
+
+  if (node.table) {
+    const body = Array.isArray(node.table.body) ? node.table.body : [];
+    const cols = body.reduce((max, row) => Math.max(max, Array.isArray(row) ? row.length : 0), 0);
+
+    if (cols === 0 || body.length === 0) {
+      // Neutralise an empty/invalid table so it renders as nothing.
+      delete node.table;
+      delete node.layout;
+      node.text = "";
+      return;
+    }
+
+    // Pad short rows and strip any per-cell fixed widths (Word/HTML widths often
+    // exceed the page → overflow). Every cell wraps within its column instead.
+    node.table.body = body.map((row) => {
+      const r = Array.isArray(row) ? row.slice() : [];
+      while (r.length < cols) r.push("");
+      return r.map(stripWidth);
+    });
+
+    // Deterministic fit: explicit equal numeric column widths sized to the
+    // printable area (accounting for cell padding + borders), so the table can
+    // never run off the page regardless of the original .docx/HTML widths.
+    const HPAD = 8; // ~4pt each side
+    const usable = Math.max(40, PAGE_CONTENT_WIDTH - cols * HPAD - (cols + 1));
+    const colWidth = Math.floor(usable / cols);
+    node.table.widths = Array.from({ length: cols }, () => colWidth);
+    node.table.dontBreakRows = false;
+    if (!node.layout) node.layout = COMPACT_TABLE_LAYOUT;
+
+    node.table.body.forEach(repairPdfmakeTables);
+  }
+
+  for (const key of ["stack", "columns", "ul", "ol"]) {
+    if (Array.isArray(node[key])) node[key].forEach(repairPdfmakeTables);
+  }
+}
+
+/**
  * Render CCL HTML to a branded PDF buffer (org logo letterhead + footer).
  * @returns {Promise<Buffer>}
  */
 export async function renderCclPdfBuffer({ html, organisation = null }) {
   const content = htmlToPdfmake(html || "<p></p>", { window: sharedWindow });
+  repairPdfmakeTables(content);
 
   const images = {};
   const logo = await resolveLogoDataUri(organisation?.logoUrl || organisation?.logo_url);
