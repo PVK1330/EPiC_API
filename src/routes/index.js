@@ -45,13 +45,18 @@ import escalationRoutes from '../modules/Shared/Cases/escalation.routes.js';
 
 import candidatePanelRoutes from '../modules/Candidate/index.js';
 import workflowRoutes from '../modules/Shared/Workflow/workflow.routes.js';
+import cclRoutes from '../modules/Shared/Ccl/ccl.routes.js';
 import sponsorPanelRoutes from '../modules/Sponsor/index.js';
 import superadminRoutes from '../modules/Superadmin/superadmin.routes.js';
+
+import { globalAuthLimiter } from '../middlewares/authRateLimiter.js';
 
 const router = Router();
 
 // Auth & User
-router.use('/auth', authRoutes);
+// globalAuthLimiter is a catch-all (50 req / 15 min per IP) for the entire
+// /api/auth/* surface; stricter per-route limiters live in auth.routes.js.
+router.use('/auth', globalAuthLimiter, authRoutes);
 router.use('/user', userRoutes);
 
 // Admin
@@ -85,6 +90,7 @@ router.use('/sponsors', sponsorsRoutes);
 router.use('/business', sponsorPanelRoutes);
 router.use('/candidate', candidatePanelRoutes);
 router.use('/workflow', workflowRoutes);
+router.use('/ccl', cclRoutes);
 router.use('/appointments', appointmentRoutes);
 router.use('/calendar', calendarRoutes);
 router.use('/microsoft', microsoftRoutes);

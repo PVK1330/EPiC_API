@@ -1,6 +1,9 @@
 import seedPermissionsForDb from "../seeders/permission.seeder.js";
 import { seedApplicationFieldSettingsForDb } from "../seeders/applicationFieldSettings.seeder.js";
 import { seedWorkflowEmailTemplatesForDb } from "../seeders/workflowEmailTemplates.seeder.js";
+import { seedDocumentChecklistsForDb } from "../seeders/documentChecklist.seeder.js";
+import { seedCclTemplatesForDb } from "../seeders/cclTemplate.seeder.js";
+import logger from "../utils/logger.js";
 
 const TENANT_ROLES = [
   { id: 1, name: "candidate" },
@@ -72,6 +75,12 @@ export async function seedTenantDefaults(tenantDb) {
   await ensureApplicationFieldTables(tenantDb);
   await seedApplicationFieldSettingsForDb(tenantDb);
   await seedWorkflowEmailTemplatesForDb(tenantDb);
+  await seedDocumentChecklistsForDb(tenantDb).catch((err) =>
+    logger.warn({ err }, "seedDocumentChecklistsForDb"),
+  );
+  await seedCclTemplatesForDb(tenantDb).catch((err) =>
+    logger.warn({ err }, "seedCclTemplatesForDb"),
+  );
 }
 
 /** Ensure application field tables exist (migration + Sequelize sync safety net). */

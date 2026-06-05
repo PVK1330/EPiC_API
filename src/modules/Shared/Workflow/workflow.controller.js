@@ -6,7 +6,11 @@ import {
 } from "../../../constants/immigrationCaseProcess.js";
 import { applyCaseStageChange } from "../../../services/caseStageAutomation.service.js";
 import { sendWorkflowStageEmail } from "../../../services/workflowEmail.service.js";
-import { buildDataCaptureSheetAttachment } from "../../../services/dataCaptureSheet.service.js";
+import {
+  buildDataCaptureSheetPdfAttachment,
+  resolveRequiredDocuments,
+  formatRequiredDocumentsText,
+} from "../../../services/dataCaptureSheet.service.js";
 import { recordTimelineEntry } from "../../../services/caseTimeline.service.js";
 import { ROLES } from "../../../middlewares/role.middleware.js";
 import {
@@ -349,16 +353,24 @@ export const sendDataCaptureRequest = async (req, res) => {
         })
       : null;
 
-    const sheetAttachment = template
-      ? buildDataCaptureSheetAttachment({
-          template,
-          caseRecord,
-          candidate,
-          visaTypeName: visaType?.name || "",
-        })
-      : null;
+    const requiredDocuments = await resolveRequiredDocuments(
+      req.tenantDb,
+      caseRecord,
+    );
+
+    const sheetAttachment = await buildDataCaptureSheetPdfAttachment({
+      template,
+      caseRecord,
+      candidate,
+      visaTypeName: visaType?.name || "",
+      requiredDocuments,
+    }).catch((err) => {
+      logger.error({ err }, "buildDataCaptureSheetPdfAttachment");
+      return null;
+    });
 
     const emailAttachments = sheetAttachment ? [sheetAttachment] : null;
+    const requiredDocsText = formatRequiredDocumentsText(requiredDocuments);
 
     const emailResult = await sendWorkflowStageEmail({
       tenantDb: req.tenantDb,
@@ -366,6 +378,7 @@ export const sendDataCaptureRequest = async (req, res) => {
       stageId: "data_capture_initial_docs",
       organisationId: organisationIdFromReq(req),
       attachments: emailAttachments,
+      extraVars: requiredDocsText ? { required_documents: requiredDocsText } : null,
     });
 
     await recordTimelineEntry({

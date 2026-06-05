@@ -50,6 +50,7 @@ import DocumentChecklistModel from "./tenant/documentChecklist.model.js";
 import DataCaptureTemplateModel from "./tenant/dataCaptureTemplate.model.js";
 import DataCaptureSubmissionModel from "./tenant/dataCaptureSubmission.model.js";
 import CaseCclRecordModel from "./tenant/caseCclRecord.model.js";
+import CclTemplateModel from "./tenant/cclTemplate.model.js";
 import SponsorChangeRequestModel from "./tenant/sponsorChangeRequest.model.js";
 import RightToWorkRecordModel from "./tenant/rightToWorkRecord.model.js";
 import AbsenceRecordModel from "./tenant/absenceRecord.model.js";
@@ -84,6 +85,7 @@ export function buildDb(sequelize) {
   db.DataCaptureTemplate = DataCaptureTemplateModel(sequelize, Sequelize.DataTypes);
   db.DataCaptureSubmission = DataCaptureSubmissionModel(sequelize, Sequelize.DataTypes);
   db.CaseCclRecord = CaseCclRecordModel(sequelize, Sequelize.DataTypes);
+  db.CclTemplate = CclTemplateModel(sequelize, Sequelize.DataTypes);
   db.VisaType = VisaTypeModel(sequelize, Sequelize.DataTypes);
   db.PetitionType = PetitionTypeModel(sequelize, Sequelize.DataTypes);
   db.CaseCategory = CaseCategoryModel(sequelize, Sequelize.DataTypes);
@@ -253,6 +255,8 @@ export function buildDb(sequelize) {
   db.DocumentChecklist.belongsTo(db.Case, { foreignKey: "caseId", as: "case" });
   db.DataCaptureTemplate.belongsTo(db.VisaType, { foreignKey: "visaTypeId", as: "visaType" });
   db.VisaType.hasMany(db.DataCaptureTemplate, { foreignKey: "visaTypeId", as: "dataCaptureTemplates" });
+  db.CclTemplate.belongsTo(db.VisaType, { foreignKey: "visaTypeId", as: "visaType" });
+  db.VisaType.hasMany(db.CclTemplate, { foreignKey: "visaTypeId", as: "cclTemplates" });
   db.DataCaptureSubmission.belongsTo(db.Case, { foreignKey: "caseId", as: "case" });
   db.DataCaptureSubmission.belongsTo(db.User, { foreignKey: "userId", as: "user" });
   db.DataCaptureSubmission.belongsTo(db.DataCaptureTemplate, { foreignKey: "templateId", as: "template" });

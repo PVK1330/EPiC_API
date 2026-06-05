@@ -47,6 +47,7 @@ export default (sequelize, DataTypes) => {
         allowNull: true,
         field: "admin_review_notes",
       },
+      draftHtml: { type: DataTypes.TEXT, allowNull: true, field: "draft_html" },
       issuedAt: { type: DataTypes.DATE, allowNull: true, field: "issued_at" },
       signedAt: { type: DataTypes.DATE, allowNull: true, field: "signed_at" },
       issuedBy: { type: DataTypes.INTEGER, allowNull: true, field: "issued_by" },

@@ -1,7 +1,9 @@
 import { sendTransactionalEmail } from "./mail.service.js";
 import {
-  buildDataCaptureSheetAttachment,
+  buildDataCaptureSheetPdfAttachment,
   resolveDataCaptureTemplate,
+  resolveRequiredDocuments,
+  formatRequiredDocumentsText,
 } from "./dataCaptureSheet.service.js";
 import { wrapEpicEmail } from "../utils/epicEmailLayout.js";
 import logger from "../utils/logger.js";
@@ -122,20 +124,28 @@ export async function sendWorkflowStageEmail({
     if (!candidate?.email) return { sent: false, reason: "no_email" };
 
     let mailAttachments = Array.isArray(attachments) ? [...attachments] : [];
+    let fallbackRequiredDocsText = "";
     if (templateKey === "data_capture_request" && mailAttachments.length === 0) {
       const dcsTemplate = await resolveDataCaptureTemplate(
         tenantDb,
         caseRecord.visaTypeId,
       );
-      if (dcsTemplate) {
-        const sheet = buildDataCaptureSheetAttachment({
-          template: dcsTemplate,
-          caseRecord,
-          candidate,
-          visaTypeName: visaType?.name || "",
-        });
-        if (sheet) mailAttachments = [sheet];
-      }
+      const requiredDocuments = await resolveRequiredDocuments(
+        tenantDb,
+        caseRecord,
+      );
+      fallbackRequiredDocsText = formatRequiredDocumentsText(requiredDocuments);
+      const sheet = await buildDataCaptureSheetPdfAttachment({
+        template: dcsTemplate,
+        caseRecord,
+        candidate,
+        visaTypeName: visaType?.name || "",
+        requiredDocuments,
+      }).catch((err) => {
+        logger.error({ err }, "buildDataCaptureSheetPdfAttachment (fallback)");
+        return null;
+      });
+      if (sheet) mailAttachments = [sheet];
     }
 
     const portalBase =
@@ -156,18 +166,17 @@ export async function sendWorkflowStageEmail({
       employer_name: fullName(sponsor, "Employer"),
       portal_link: `${portalRoot}/candidate/dashboard`,
       data_capture_link: `${portalRoot}/candidate/data-capture-sheet`,
+      required_documents: fallbackRequiredDocsText,
       ...(extraVars && typeof extraVars === "object" ? extraVars : {}),
     };
 
     const subject = interpolate(row.subject, vars);
     let body = interpolate(row.body || "", vars);
 
-    if (templateKey === "data_capture_request") {
-      const link = vars.data_capture_link;
-      if (link && !body.includes(link)) {
-        body += `\n\nAlternatively, you can complete the Data Capture Sheet online: ${link}`;
-      }
-    }
+    // The email body is the (admin-editable) template verbatim with tags filled.
+    // Optional dynamic blocks are opt-in via tags: {{required_documents}} for the
+    // checklist and {{data_capture_link}} for the online form — both are already
+    // interpolated above, so nothing is auto-appended here (no duplication).
 
     let bodyHtml = "";
 
@@ -208,12 +217,11 @@ export async function sendWorkflowStageEmail({
            </div>`
         : "";
 
-      bodyHtml = `
-        <p style="font-size: 15px; color: #475569; line-height: 1.6; margin: 0 0 24px 0;">
-          Dear ${vars.client_name},<br><br>
-          Your biometrics appointment has been confirmed for case <strong>${vars.case_ref}</strong>. Please find your appointment details below.
-        </p>
+      // The org's editable template body (Settings → Email Templates) is shown
+      // alongside the structured appointment card below.
+      const templateBodyHtml = body.replace(/\n/g, "<br>");
 
+      bodyHtml = `
         <div style="border: 2px solid #dbeafe; border-radius: 12px; overflow: hidden; margin-bottom: 24px;">
           <div style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); padding: 14px 16px;">
             <p style="margin: 0; color: #ffffff; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;">
@@ -227,19 +235,9 @@ export async function sendWorkflowStageEmail({
 
         ${instructionsHtml}
 
-        <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 16px; margin-top: 20px;">
-          <p style="margin: 0 0 8px 0; font-size: 13px; font-weight: 700; color: #166534;">✅ &nbsp;What you need to do</p>
-          <ul style="margin: 0; padding-left: 20px; color: #15803d; font-size: 13px; line-height: 1.8;">
-            <li>Attend your appointment at the location above on time</li>
-            <li>Bring your valid passport and any relevant travel documents</li>
-            <li>Bring a printed copy of this confirmation email or have it ready on your phone</li>
-            <li>Arrive at least 15 minutes before your scheduled appointment</li>
-          </ul>
+        <div style="font-size: 14px; color: #475569; line-height: 1.6; margin-top: 24px;">
+          ${templateBodyHtml}
         </div>
-
-        <p style="font-size: 14px; color: #64748b; margin-top: 24px; line-height: 1.6;">
-          If you have any questions or need to reschedule, please contact your caseworker <strong>${vars.caseworker_name}</strong> immediately.
-        </p>
       `;
 
       // Ensure plain text fallback also contains full details

@@ -556,6 +556,96 @@ function buildSuperadminFolder() {
   };
 }
 
+/** Build the CCL folder (dynamic Client Care Letter templates + per-case drafting). */
+function buildCclFolder() {
+  return {
+    name: "CCL (Client Care Letters)",
+    description:
+      "Dynamic, per-organisation Client Care Letters. Templates use {{tags}} filled " +
+      "per candidate and render to a branded PDF (org logo). Gated to Admin + Caseworker; " +
+      "tenant-scoped, so send X-Organisation-Slug. PDF endpoints return a binary blob.",
+    item: [
+      moduleFolder("Templates", [
+        makeRequest(
+          "Get CCL Tags",
+          "GET",
+          "api/ccl/templates/tags",
+          null,
+          "Tag registry (grouped) used by the editor palette.",
+        ),
+        makeRequest("List CCL Templates", "GET", "api/ccl/templates"),
+        makeRequest(
+          "Create CCL Template",
+          "POST",
+          "api/ccl/templates",
+          {
+            name: "Skilled Worker CCL",
+            visaTypeId: null,
+            bodyHtml:
+              "<p>{{date_today}}</p><p>Dear {{candidate_name}},</p><p>Re: {{visa_type}} (Case {{case_ref}}). Our fee is {{fee_amount}} ({{amount_in_words}}).</p>{{installment_plan}}<p>Kind regards,<br/>{{caseworker_name}}</p>",
+            isActive: true,
+          },
+          "visaTypeId null = organisation default; a visa-specific template overrides it.",
+        ),
+        makeRequest("Get CCL Template by ID", "GET", "api/ccl/templates/{{cclTemplateId}}"),
+        makeRequest(
+          "Update CCL Template",
+          "PUT",
+          "api/ccl/templates/{{cclTemplateId}}",
+          { name: "Skilled Worker CCL (Updated)", isActive: true },
+        ),
+        makeRequest("Delete CCL Template", "DELETE", "api/ccl/templates/{{cclTemplateId}}"),
+        makeRequest(
+          "Preview CCL Template (PDF)",
+          "POST",
+          "api/ccl/templates/preview",
+          {
+            bodyHtml:
+              "<p>Dear {{candidate_name}}, our fee is {{fee_amount}}.</p>{{installment_plan}}",
+          },
+          "Renders the (unsaved) HTML with sample data + org logo → PDF blob.",
+        ),
+      ]),
+      moduleFolder("Per-case", [
+        makeRequest(
+          "Get Case CCL",
+          "GET",
+          "api/ccl/cases/{{caseId}}",
+          null,
+          "Returns the editable letter (per-case draft, else template-filled) + source/hasTemplate.",
+        ),
+        makeRequest(
+          "Save Case CCL Draft",
+          "PUT",
+          "api/ccl/cases/{{caseId}}/draft",
+          { draftHtml: "<p>Edited Client Care Letter for this candidate…</p>" },
+        ),
+        makeMultipartRequest(
+          "Import CCL .docx",
+          "POST",
+          "api/ccl/cases/{{caseId}}/draft/import",
+          "file",
+          "Upload a .docx letter → converted to an editable HTML draft (select file in Postman).",
+        ),
+        makeRequest(
+          "Preview Case CCL (PDF)",
+          "POST",
+          "api/ccl/cases/{{caseId}}/preview",
+          {},
+          "Renders the case CCL (draft/template) → PDF blob.",
+        ),
+        makeRequest(
+          "Issue Case CCL",
+          "POST",
+          "api/ccl/cases/{{caseId}}/issue",
+          {},
+          "(Re)generates the issued branded PDF from the draft/template and sets status=issued (releases to candidate).",
+        ),
+      ]),
+    ],
+  };
+}
+
 function findFolder(items, name) {
   for (const item of items || []) {
     if (item.name === name && Array.isArray(item.item)) return item;
@@ -634,6 +724,7 @@ const defaults = {
   moduleId: "1",
   roleId: "7",
   userId: "1",
+  cclTemplateId: "1",
 };
 collection.variable = Object.entries(defaults).map(([key, value]) => {
   const existing = (collection.variable || []).find((v) => v.key === key);
@@ -882,6 +973,12 @@ if (myTasks && (myTasks.request.url?.raw || "").includes(":taskId")) {
   myTasks.request.url.path = ["api", "workflow", "my-tasks", "{{taskId}}", "complete"];
 }
 
+// Replace/insert the CCL folder
+const cclFolder = buildCclFolder();
+collection.item = collection.item.filter((it) => it.name !== "CCL (Client Care Letters)");
+collection.item.push(cclFolder);
+const cclCount = cclFolder.item.reduce((n, mod) => n + mod.item.length, 0);
+
 // Replace Superadmin folder with module-aligned requests
 const superadminFolder = buildSuperadminFolder();
 collection.item = collection.item.filter((it) => it.name !== "Superadmin");
@@ -894,4 +991,5 @@ const superadminCount = superadminFolder.item.reduce(
 fs.writeFileSync(COLLECTION_PATH, JSON.stringify(collection, null, 2), "utf8");
 console.log(`Updated ${COLLECTION_PATH}`);
 console.log(`Workflow requests: ${stats.added} added, ${stats.updated} updated`);
+console.log(`CCL folder rebuilt: ${cclCount} requests`);
 console.log(`Superadmin folder rebuilt: ${superadminCount} requests in 10 modules`);

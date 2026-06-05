@@ -7,6 +7,7 @@ import compression from 'compression';
 import routes from './routes/index.js';
 import { getCorsOptions } from './config/frontendOrigins.js';
 import { getHelmetMiddleware } from './config/helmet.config.js';
+import { doubleCsrfProtection, generateCsrfToken } from './config/csrf.config.js';
 import { handleWebhook } from './modules/Candidate/Payments/stripepayment.controller.js';
 import {
   requestContextMiddleware,
@@ -54,6 +55,20 @@ app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 app.use(cookieParser());       // must be BEFORE any route that reads req.cookies
 
+// ── CSRF (double-submit cookie) ───────────────────────────────────────────────
+// Must run AFTER cookieParser. The Stripe webhook above is registered earlier and
+// is also excluded via skipCsrfProtection, so it never reaches this guard.
+//
+// Token bootstrap: the frontend calls GET /api/csrf-token to receive the cookie,
+// then echoes its value in the `x-csrf-token` header on every mutating request.
+app.get('/api/csrf-token', (req, res) => {
+  const csrfToken = generateCsrfToken(req, res);
+  res.json({ csrfToken });
+});
+
+// Enforce CSRF on all mutating /api requests (GET/HEAD/OPTIONS are ignored).
+app.use('/api', doubleCsrfProtection);
+
 const STATIC_CACHE = { maxAge: '7d', etag: true, lastModified: true };
 // WARNING: The /uploads directory is no longer served statically for security reasons.
 // All document requests MUST go through the authenticated /api/documents/:id/download endpoint.
@@ -86,16 +101,21 @@ app.use((err, req, res, _next) => {
   // otherwise fall back to the root logger.
   const log = req.log || logger;
 
+  const statusCode = err?.status || err?.statusCode || 500;
+  const isClientError = statusCode >= 400 && statusCode < 500;
+
   log.error({
     err,
-    statusCode: err?.status || 500,
+    statusCode,
     method: req.method,
     url: req.originalUrl,
   }, 'Unhandled server error');
 
-  res.status(err?.status || 500).json({
+  // Surface client-error (4xx) messages even in production — they are safe and
+  // actionable (e.g. "invalid csrf token"). Only 5xx messages are masked.
+  res.status(statusCode).json({
     status: 'error',
-    message: process.env.NODE_ENV === 'production'
+    message: (process.env.NODE_ENV === 'production' && !isClientError)
       ? 'Internal server error'
       : err?.message || 'Internal server error',
     errors: err?.errors,
