@@ -98,11 +98,58 @@ export async function generateCclHtmlForCase({ tenantDb, caseRecord, ccl = null,
 }
 
 /**
+ * pdfmake can only embed images that are data-URIs or readable local files. Any
+ * other <img> (http/https URL, or a path that doesn't resolve) makes
+ * createPdfKitDocument throw "Invalid image", which surfaced as a 500 on
+ * preview/issue. Normalise every <img> in the letter HTML:
+ *   - data: URIs            → kept as-is
+ *   - local readable files  → converted to a PNG data-URI via sharp
+ *   - everything else       → the <img> tag is removed
+ */
+async function sanitizeHtmlImagesForPdf(html) {
+  if (!html || !/<img/i.test(html)) return html || "";
+
+  const imgTagRe = /<img\b[^>]*>/gi;
+  const srcRe = /\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i;
+
+  const tags = html.match(imgTagRe) || [];
+  let out = html;
+
+  for (const tag of tags) {
+    const m = tag.match(srcRe);
+    const src = m ? (m[1] ?? m[2] ?? m[3] ?? "") : "";
+
+    if (src.startsWith("data:image/")) continue; // pdfmake handles data URIs
+
+    let dataUri = null;
+    if (src && !/^https?:/i.test(src) && !src.startsWith("data:")) {
+      try {
+        const abs = path.resolve(process.cwd(), src.replace(/^\/+/, ""));
+        if (fs.existsSync(abs)) {
+          const png = await sharp(abs).png().toBuffer();
+          dataUri = `data:image/png;base64,${png.toString("base64")}`;
+        }
+      } catch (err) {
+        logger.warn({ err, src }, "sanitizeHtmlImagesForPdf: failed to inline image");
+      }
+    }
+
+    if (dataUri) {
+      out = out.replace(tag, tag.replace(srcRe, `src="${dataUri}"`));
+    } else {
+      out = out.replace(tag, ""); // drop images pdfmake can't embed
+    }
+  }
+  return out;
+}
+
+/**
  * Render CCL HTML to a branded PDF buffer (org logo letterhead + footer).
  * @returns {Promise<Buffer>}
  */
 export async function renderCclPdfBuffer({ html, organisation = null }) {
-  const content = htmlToPdfmake(html || "<p></p>", { window: sharedWindow });
+  const safeHtml = await sanitizeHtmlImagesForPdf(html);
+  const content = htmlToPdfmake(safeHtml || "<p></p>", { window: sharedWindow });
 
   const images = {};
   const logo = await resolveLogoDataUri(organisation?.logoUrl || organisation?.logo_url);

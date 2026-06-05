@@ -125,6 +125,7 @@ export function getCorsOptions() {
       "Authorization",
       "X-Organisation-Slug",
       "X-Requested-With",
+      "x-csrf-token",
     ],
     exposedHeaders: ["Content-Disposition"],
     optionsSuccessStatus: 204,

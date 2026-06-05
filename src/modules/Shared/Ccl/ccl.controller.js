@@ -261,7 +261,18 @@ export const importCaseDraft = async (req, res) => {
       return bad(res, "Only .docx files can be imported and edited. (PDFs cannot be edited.)");
     }
 
-    const { value: html } = await mammoth.convertToHtml({ buffer: req.file.buffer });
+    // Inline embedded images as base64 data URIs so the letterhead/logo in the
+    // uploaded .docx survives the conversion. Mammoth drops images by default,
+    // which is why the logo went missing on import.
+    const { value: html } = await mammoth.convertToHtml(
+      { buffer: req.file.buffer },
+      {
+        convertImage: mammoth.images.imgElement(async (image) => {
+          const base64 = await image.read("base64");
+          return { src: `data:${image.contentType};base64,${base64}` };
+        }),
+      },
+    );
     if (!html || !html.trim()) {
       return bad(res, "Could not extract any content from the document");
     }

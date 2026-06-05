@@ -605,27 +605,54 @@ export const listCclFeePendingApprovals = async (req, res) => {
       });
     }
 
-    const cases = await req.tenantDb.Case.findAll({
-      include: [
-        {
-          model: req.tenantDb.User,
-          as: "candidate",
-          attributes: ["id", "first_name", "last_name", "email"],
-        },
-        {
-          model: req.tenantDb.VisaType,
-          as: "visaType",
-          attributes: ["id", "name"],
-        },
-        {
-          model: req.tenantDb.CaseCclRecord,
-          as: "cclRecord",
-          required: true,
-          where: { status: "fee_proposed" },
-        },
-      ],
-      order: [["updated_at", "DESC"]],
-    });
+    // Surface a case for admin review when EITHER signal says a proposal is
+    // awaiting approval:
+    //   • the CaseCclRecord is in `fee_proposed`, OR
+    //   • the case's legacy amountStatus is "Pending Approval".
+    // Relying on the CCL record alone hid cases whose proposal half-completed
+    // (e.g. an earlier stage-transition error left amountStatus set but the CCL
+    // status unset, or vice-versa) — admin then saw "No pending approvals"
+    // while the caseworker still showed "Pending Approval".
+    const include = [
+      {
+        model: req.tenantDb.User,
+        as: "candidate",
+        attributes: ["id", "first_name", "last_name", "email"],
+      },
+      {
+        model: req.tenantDb.VisaType,
+        as: "visaType",
+        attributes: ["id", "name"],
+      },
+      {
+        model: req.tenantDb.CaseCclRecord,
+        as: "cclRecord",
+        required: false,
+      },
+    ];
+
+    const [proposedCases, pendingStatusCases] = await Promise.all([
+      req.tenantDb.Case.findAll({
+        include: include.map((inc) =>
+          inc.as === "cclRecord"
+            ? { ...inc, required: true, where: { status: "fee_proposed" } }
+            : inc,
+        ),
+        order: [["updated_at", "DESC"]],
+      }),
+      req.tenantDb.Case.findAll({
+        where: { amountStatus: "Pending Approval" },
+        include,
+        order: [["updated_at", "DESC"]],
+      }),
+    ]);
+
+    // Merge, de-duplicating by case id (a case may match both queries).
+    const byId = new Map();
+    for (const c of [...proposedCases, ...pendingStatusCases]) {
+      if (!byId.has(c.id)) byId.set(c.id, c);
+    }
+    const cases = [...byId.values()];
 
     res.status(200).json({ status: "success", data: { cases } });
   } catch (err) {
