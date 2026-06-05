@@ -71,7 +71,12 @@ function csrfCookieOptions() {
 function shouldSkipCsrf(req) {
   const url = req.originalUrl || req.url || "";
   // Stripe webhook authenticates via signature on a raw body — not a browser.
-  return url.startsWith("/api/stripe/webhook");
+  if (url.startsWith("/api/stripe/webhook")) return true;
+  // Cross-subdomain impersonation handoff: this POST lands on a tenant subdomain
+  // that has no CSRF cookie yet. Security here is the single-use, opaque,
+  // server-validated ticket (see impersonationTicket.service.js), not CSRF.
+  if (url.startsWith("/api/auth/handoff")) return true;
+  return false;
 }
 
 const { doubleCsrfProtection, generateCsrfToken, invalidCsrfTokenError } =

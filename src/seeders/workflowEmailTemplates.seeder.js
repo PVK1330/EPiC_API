@@ -46,6 +46,21 @@ Kind regards,
     ],
   },
   {
+    template_key: "further_information_request",
+    subject: "[{{firm_name}}] Further information required",
+    body: `Dear {{client_name}},
+
+To continue preparing your {{visa_type}} application (case {{case_ref}}), we require some further information / documents from you:
+
+{{requested_items}}
+
+Please provide the above at your earliest convenience so we can proceed without delay. If you have any questions, contact your caseworker, {{caseworker_name}}.
+
+Kind regards,
+{{caseworker_name}}`,
+    legacyBodies: [],
+  },
+  {
     template_key: "draft_application_review",
     subject: "[{{firm_name}}] Draft Application Review",
     body: `Dear {{client_name}},

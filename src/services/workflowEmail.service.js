@@ -11,6 +11,7 @@ import logger from "../utils/logger.js";
 /** Workflow stage → email_templates.template_key */
 export const STAGE_EMAIL_TEMPLATE = {
   data_capture_initial_docs: "data_capture_request",
+  further_information_request: "further_information_request",
   draft_application_review: "draft_application_review",
   client_care_letter: "ccl_issued",
   ccl_issued: "ccl_issued",

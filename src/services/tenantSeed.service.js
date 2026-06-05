@@ -3,6 +3,7 @@ import { seedApplicationFieldSettingsForDb } from "../seeders/applicationFieldSe
 import { seedWorkflowEmailTemplatesForDb } from "../seeders/workflowEmailTemplates.seeder.js";
 import { seedDocumentChecklistsForDb } from "../seeders/documentChecklist.seeder.js";
 import { seedCclTemplatesForDb } from "../seeders/cclTemplate.seeder.js";
+import { seedCclTemplatesFromDocxForDb } from "../seeders/cclTemplateDocx.seeder.js";
 import logger from "../utils/logger.js";
 
 const TENANT_ROLES = [
@@ -80,6 +81,9 @@ export async function seedTenantDefaults(tenantDb) {
   );
   await seedCclTemplatesForDb(tenantDb).catch((err) =>
     logger.warn({ err }, "seedCclTemplatesForDb"),
+  );
+  await seedCclTemplatesFromDocxForDb(tenantDb).catch((err) =>
+    logger.warn({ err }, "seedCclTemplatesFromDocxForDb"),
   );
 }
 

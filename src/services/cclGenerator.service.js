@@ -59,14 +59,32 @@ async function resolveOrganisation(tenantDb, organisation) {
  */
 async function resolveLogoDataUri(logoUrl) {
   const candidates = [];
-  if (logoUrl && !/^https?:/i.test(String(logoUrl))) {
-    candidates.push(path.resolve(process.cwd(), String(logoUrl)));
+  const raw = String(logoUrl || "").trim();
+
+  if (raw && !/^https?:/i.test(raw)) {
+    const norm = raw.replace(/\\/g, "/");
+    // A public asset URL (e.g. /api/public/images/<rest>) → map back to the
+    // storage directory it is served from so we can read it from disk.
+    const marker = "/api/public/images/";
+    const idx = norm.indexOf(marker);
+    if (idx !== -1) {
+      const rest = norm.slice(idx + marker.length);
+      for (const base of ["organisations", "platform", "superadmin"]) {
+        candidates.push(
+          path.join(process.cwd(), "storage", "private", base, rest),
+        );
+      }
+    }
+    // A direct storage/relative path (logoUrl is usually `storage/private/...`).
+    candidates.push(path.resolve(process.cwd(), norm.replace(/^\//, "")));
   }
+
+  // Fallback brand asset.
   candidates.push(path.join(process.cwd(), "assets", "elitepic_logo.png"));
 
   for (const p of candidates) {
     try {
-      if (fs.existsSync(p)) {
+      if (p && fs.existsSync(p)) {
         const png = await sharp(p).png().toBuffer();
         return `data:image/png;base64,${png.toString("base64")}`;
       }
@@ -81,7 +99,12 @@ async function resolveLogoDataUri(logoUrl) {
  * Build the interpolated CCL HTML for a case (no PDF yet).
  * @returns {Promise<{ html: string|null, source: 'draft'|'template'|'none', template: object|null }>}
  */
-export async function generateCclHtmlForCase({ tenantDb, caseRecord, ccl = null, organisation = null }) {
+export async function generateCclHtmlForCase({
+  tenantDb,
+  caseRecord,
+  ccl = null,
+  organisation = null,
+}) {
   if (ccl?.draftHtml && String(ccl.draftHtml).trim()) {
     return { html: ccl.draftHtml, source: "draft", template: null };
   }
@@ -90,11 +113,20 @@ export async function generateCclHtmlForCase({ tenantDb, caseRecord, ccl = null,
   if (!template) return { html: null, source: "none", template: null };
 
   const org = await resolveOrganisation(tenantDb, organisation);
-  const { values } = await buildCclContext({ tenantDb, caseRecord, ccl, organisation: org });
+  const { values } = await buildCclContext({
+    tenantDb,
+    caseRecord,
+    ccl,
+    organisation: org,
+  });
   const parts = [template.headerHtml, template.bodyHtml, template.footerHtml]
     .filter((p) => p && String(p).trim())
     .join("\n");
-  return { html: interpolateCclHtml(parts, values), source: "template", template };
+  return {
+    html: interpolateCclHtml(parts, values),
+    source: "template",
+    template,
+  };
 }
 
 /**
@@ -130,7 +162,10 @@ async function sanitizeHtmlImagesForPdf(html) {
           dataUri = `data:image/png;base64,${png.toString("base64")}`;
         }
       } catch (err) {
-        logger.warn({ err, src }, "sanitizeHtmlImagesForPdf: failed to inline image");
+        logger.warn(
+          { err, src },
+          "sanitizeHtmlImagesForPdf: failed to inline image",
+        );
       }
     }
 
@@ -149,14 +184,20 @@ async function sanitizeHtmlImagesForPdf(html) {
  */
 export async function renderCclPdfBuffer({ html, organisation = null }) {
   const safeHtml = await sanitizeHtmlImagesForPdf(html);
-  const content = htmlToPdfmake(safeHtml || "<p></p>", { window: sharedWindow });
+  const content = htmlToPdfmake(safeHtml || "<p></p>", {
+    window: sharedWindow,
+  });
 
   const images = {};
-  const logo = await resolveLogoDataUri(organisation?.logoUrl || organisation?.logo_url);
+  const logo = await resolveLogoDataUri(
+    organisation?.logoUrl || organisation?.logo_url,
+  );
   if (logo) images.logo = logo;
 
   const website =
-    process.env.PORTAL_WEBSITE_NAME || organisation?.name || "https://www.elitepic.co.uk/";
+    process.env.PORTAL_WEBSITE_NAME ||
+    organisation?.name ||
+    "https://www.elitepic.co.uk/";
 
   const docDefinition = {
     pageMargins: [56, logo ? 96 : 56, 56, 56],
@@ -189,7 +230,12 @@ export async function renderCclPdfBuffer({ html, organisation = null }) {
  * Returns null when no dynamic template/draft exists (caller uses .docx fallback).
  * @returns {Promise<{ buffer: Buffer, source: string, template: object|null } | null>}
  */
-export async function generateCclPdfForCase({ tenantDb, caseRecord, ccl = null, organisation = null }) {
+export async function generateCclPdfForCase({
+  tenantDb,
+  caseRecord,
+  ccl = null,
+  organisation = null,
+}) {
   const { html, source, template } = await generateCclHtmlForCase({
     tenantDb,
     caseRecord,
