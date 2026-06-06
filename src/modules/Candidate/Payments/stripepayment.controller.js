@@ -97,6 +97,29 @@ async function resolveCandidateCaseForPayment(tenantDb, userId) {
   return { ok: true, caseRecord, ccl, totalFee, paidAmount, balanceDue };
 }
 
+/**
+ * After a payment, make sure the case's CCL record isn't stuck in a pre-approval
+ * state. A candidate cannot reach payment without the fee being released, so a
+ * record still reading fee_proposed/fee_rejected/pending is the symptom of an
+ * admin-approve step that never completed — promote it to "issued". Never
+ * downgrades an already-signed/accepted record.
+ */
+async function reconcileCclRecordForPayment({ tenantDb, caseRecord, performedBy = null }) {
+  if (!tenantDb?.CaseCclRecord || !caseRecord) return;
+  const ccl = await tenantDb.CaseCclRecord.findOne({ where: { caseId: caseRecord.id } });
+  if (!ccl) return;
+  const status = String(ccl.status || '').toLowerCase();
+  if (['fee_proposed', 'fee_rejected', 'pending'].includes(status)) {
+    await ccl.update({
+      status: 'issued',
+      issuedAt: ccl.issuedAt || new Date(),
+      issuedBy: ccl.issuedBy || performedBy,
+      adminReviewedAt: ccl.adminReviewedAt || new Date(),
+      adminReviewedBy: ccl.adminReviewedBy || performedBy,
+    });
+  }
+}
+
 async function recordStripeCasePayment({ tenantDb, caseRecord, paymentIntent, userId, organisationId }) {
   const txnId = paymentIntent?.id;
   if (!txnId) return null;
@@ -127,12 +150,27 @@ async function recordStripeCasePayment({ tenantDb, caseRecord, paymentIntent, us
     const prevPaid = Number(caseRecord.paidAmount) || 0;
     const newPaid = prevPaid + amount;
     const total = Number(caseRecord.totalAmount) || 0;
+    const fullyPaid = total > 0 && newPaid >= total - 0.02;
     const updates = { paidAmount: newPaid };
-    if (total > 0 && newPaid >= total - 0.02) {
+    if (fullyPaid) {
       updates.amountStatus = 'Paid';
+    } else if (caseRecord.amountStatus === 'Pending Approval') {
+      // A payment can only happen after the fee was effectively approved/released
+      // to the client. If the case was still showing the caseworker's
+      // "Pending Approval" (admin-approve never formally completed), reconcile it
+      // to Approved so caseworker/admin/candidate views stop disagreeing.
+      updates.amountStatus = 'Approved';
     }
     await caseRecord.update(updates);
     await caseRecord.reload();
+
+    // Keep the CCL record consistent: a paid case must not still read as an
+    // un-reviewed proposal. Promote a lingering fee_proposed/fee_rejected/pending
+    // record to "issued" (released) so admin's pending-approvals list and the
+    // candidate CCL view agree with the payment that just happened.
+    await reconcileCclRecordForPayment({ tenantDb, caseRecord, performedBy: userId }).catch(
+      (err) => logger.error({ err }, 'reconcileCclRecordForPayment'),
+    );
 
     await evaluateCaseStageAfterEvent({
       tenantDb,
