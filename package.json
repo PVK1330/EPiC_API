@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
-    "test": "node --test tests/*.test.js",
+    "test": "node --test --test-concurrency=1 --experimental-test-module-mocks tests/*.test.js",
     "migrate": "node src/migrations/run.js all",
     "migrate:platform": "node src/migrations/run.js platform",
     "migrate:tenants": "node src/migrations/run.js tenants",
@@ -55,6 +55,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@jest/globals": "^30.4.1",
     "nodemon": "^3.1.14",
     "socket.io-client": "^4.8.3",
     "supertest": "^7.2.2"

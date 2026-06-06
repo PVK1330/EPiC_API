@@ -153,20 +153,12 @@ async function sanitizeHtmlImagesForPdf(html) {
 
     if (src.startsWith("data:image/")) continue; // pdfmake handles data URIs
 
-    let dataUri = null;
-    if (src && !/^https?:/i.test(src) && !src.startsWith("data:")) {
-      try {
-        const abs = path.resolve(process.cwd(), src.replace(/^\/+/, ""));
-        if (fs.existsSync(abs)) {
-          const png = await sharp(abs).png().toBuffer();
-          dataUri = `data:image/png;base64,${png.toString("base64")}`;
-        }
-      } catch (err) {
-        logger.warn(
-          { err, src },
-          "sanitizeHtmlImagesForPdf: failed to inline image",
-        );
-      }
+    if (cols === 0 || body.length === 0) {
+      // Neutralise an empty/invalid table so it renders as nothing.
+      delete node.table;
+      delete node.layout;
+      node.text = "";  
+      return;
     }
 
     if (dataUri) {
