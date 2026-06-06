@@ -98,6 +98,38 @@ export function validateTransition(workflowType, currentState, nextState) {
 }
 
 /**
+ * Find the shortest sequence of valid intermediate states from `currentState`
+ * to `targetState` using the transition matrix (BFS). Returns the list of
+ * states to step *through*, EXCLUDING the current state and INCLUDING the
+ * target — e.g. ['application_preparation', 'client_care_letter']. Returns:
+ *   - []    when already at the target,
+ *   - null  when no legal path exists.
+ *
+ * Used when a business action (e.g. proposing CCL fees) must land the case on a
+ * specific stage that isn't always a direct neighbour of the current stage.
+ */
+export function findTransitionPath(workflowType, currentState, targetState) {
+  const matrix = MATRICES[workflowType];
+  if (!matrix) return [targetState];
+  if (!currentState || currentState === targetState) return [];
+
+  const queue = [[currentState, []]];
+  const visited = new Set([currentState]);
+
+  while (queue.length) {
+    const [state, path] = queue.shift();
+    for (const next of matrix[state] || []) {
+      if (visited.has(next)) continue;
+      const nextPath = [...path, next];
+      if (next === targetState) return nextPath;
+      visited.add(next);
+      queue.push([next, nextPath]);
+    }
+  }
+  return null;
+}
+
+/**
  * The core WorkflowEngine transition method.
  * Executes in strict sequence: Validate -> Persist -> Audit -> Timeline -> Notification -> Email -> Socket.
  */

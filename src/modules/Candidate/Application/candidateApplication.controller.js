@@ -1604,7 +1604,9 @@ export const downloadCaseSummaryPdf = catchAsync(async (req, res) => {
 });
 
 export const downloadCandidateApplicationPdf = catchAsync(async (req, res) => {
-  const { candidateId } = req.params;
+  // Route param is `:id` (see Admin/Candidates/candidate.routes.js); fall back to
+  // `candidateId` for any caller that mounts this under a differently-named param.
+  const candidateId = req.params.id ?? req.params.candidateId;
   const numId = Number(candidateId);
   if (!Number.isFinite(numId) || numId <= 0) {
     return ApiResponse.badRequest(res, "Invalid candidateId");
