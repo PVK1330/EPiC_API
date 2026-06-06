@@ -159,7 +159,7 @@ function repairPdfmakeTables(node) {
       // Neutralise an empty/invalid table so it renders as nothing.
       delete node.table;
       delete node.layout;
-      node.text = "";
+      node.text = "";  
       return;
     }
 
