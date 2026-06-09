@@ -16,6 +16,7 @@ import {
 } from '../../../services/cclCandidateRelease.service.js';
 import platformDb from '../../../models/index.js';
 import { getTenantDb } from '../../../services/tenantDb.service.js';
+import { activateOrgSubscriptionAfterPayment } from '../../../services/orgBilling.service.js';
 import {
   getStripeForRequest,
   getStripeForTenant,
@@ -802,6 +803,32 @@ const processStripeWebhookEvent = async (event, tenantDb, req) => {
 
     case "checkout.session.completed": {
       const session = event.data.object;
+
+      // Org-admin subscription renewal (platform account). Backup path —
+      // verify-session is authoritative; activation is idempotent on session id.
+      if (
+        session.metadata?.type === "org_subscription" &&
+        session.payment_status === "paid"
+      ) {
+        const orgId = Number(session.metadata.subOrganisationId);
+        if (orgId) {
+          await activateOrgSubscriptionAfterPayment({
+            organisationId: orgId,
+            paymentRef: session.id,
+            amount:
+              session.amount_total != null ? session.amount_total / 100 : undefined,
+            currency: session.currency,
+            paymentIntentId:
+              typeof session.payment_intent === "string"
+                ? session.payment_intent
+                : session.payment_intent?.id || null,
+          }).catch((e) =>
+            logger.error({ err: e }, "Org subscription webhook activation failed"),
+          );
+        }
+        break;
+      }
+
       if (session.payment_status === "paid" && session.metadata?.userId) {
         const userId = Number(session.metadata.userId);
         const ctx = tenantDb

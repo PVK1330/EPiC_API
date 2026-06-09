@@ -908,7 +908,22 @@ export const downloadCandidateCcl = async (req, res) => {
       });
     }
 
-    if (ccl && !ccl.issuedDocumentId) {
+    // Resolve the issued document, and regenerate on demand when it is missing
+    // OR its file has gone from disk (e.g. cleaned up, moved, never written).
+    // The candidate download is self-healing: it always rebuilds the dynamic,
+    // caseworker-issued letter — never the legacy per-visa-type .docx upload.
+    const loadIssuedDoc = async () =>
+      ccl?.issuedDocumentId
+        ? await req.tenantDb.Document.findByPk(ccl.issuedDocumentId)
+        : null;
+    const fileOnDisk = (doc) =>
+      !!doc?.documentPath && fs.existsSync(path.resolve(doc.documentPath));
+
+    let document = await loadIssuedDoc();
+
+    if (!fileOnDisk(document)) {
+      // Force a fresh generation from the draft/template.
+      if (ccl?.issuedDocumentId) await ccl.update({ issuedDocumentId: null });
       await attachCclTemplateToCase({
         tenantDb: req.tenantDb,
         caseRecord,
@@ -917,43 +932,20 @@ export const downloadCandidateCcl = async (req, res) => {
         visaTypeName: caseRecord.visaType?.name,
       });
       await ccl.reload();
+      document = await loadIssuedDoc();
     }
 
-    if (!ccl?.issuedDocumentId) {
-      const template = resolveCclTemplate(caseRecord.visaType?.name || "");
-      if (!template.exists) {
-        return res.status(404).json({
-          status: "error",
-          message: "Client Care Letter file not found",
-          data: null,
-        });
-      }
-      return res.download(template.absolutePath, template.file);
-    }
-
-    const document = await req.tenantDb.Document.findByPk(ccl.issuedDocumentId);
-    if (!document?.documentPath) {
+    if (!fileOnDisk(document)) {
       return res.status(404).json({
         status: "error",
-        message: "Client Care Letter file not found",
-        data: null,
-      });
-    }
-
-    const absolutePath = path.resolve(document.documentPath);
-    if (!fs.existsSync(absolutePath)) {
-      return res.status(404).json({
-        status: "error",
-        message: "Client Care Letter file not found on server",
+        message: "Your Client Care Letter is being prepared. Please try again shortly.",
         data: null,
       });
     }
 
     return res.download(
-      absolutePath,
-      document.userFileName ||
-        document.documentName ||
-        "client-care-letter.docx",
+      path.resolve(document.documentPath),
+      document.userFileName || document.documentName || "client-care-letter.pdf",
     );
   } catch (err) {
     logger.error({ err }, "downloadCandidateCcl");

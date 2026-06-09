@@ -63,10 +63,22 @@ export async function attachTenantDb(req, res, next) {
       setCachedOrg(orgId, orgData);
     }
 
-    if (!orgData || orgData.status === "suspended") {
+    if (!orgData) {
       return res.status(403).json({
         status: "error",
-        message: orgData ? "Organisation suspended." : "Organisation not found.",
+        message: "Organisation not found.",
+        data: null,
+      });
+    }
+
+    // A suspended org normally can't reach tenant-scoped routes. The exception is
+    // an org admin whom verifyToken has cleared for self-serve renewal
+    // (req.subscriptionExpired) on an exempt endpoint (e.g. /api/auth/me): the
+    // tenant DB still exists, so attach it and let the request through.
+    if (orgData.status === "suspended" && !req.subscriptionExpired) {
+      return res.status(403).json({
+        status: "error",
+        message: "Organisation suspended.",
         data: null,
       });
     }

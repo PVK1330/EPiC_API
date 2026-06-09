@@ -106,7 +106,21 @@ export async function generateCclHtmlForCase({
   organisation = null,
 }) {
   if (ccl?.draftHtml && String(ccl.draftHtml).trim()) {
-    return { html: ccl.draftHtml, source: "draft", template: null };
+    // Interpolate the draft too: if it still contains {{tags}} (e.g. a saved
+    // template or a tagged letter), fill them with the candidate's real data.
+    // For an already-filled draft this is a harmless no-op.
+    const org = await resolveOrganisation(tenantDb, organisation);
+    const { values } = await buildCclContext({
+      tenantDb,
+      caseRecord,
+      ccl,
+      organisation: org,
+    });
+    return {
+      html: interpolateCclHtml(ccl.draftHtml, values),
+      source: "draft",
+      template: null,
+    };
   }
 
   const template = await resolveDbCclTemplate(tenantDb, caseRecord?.visaTypeId);
@@ -151,14 +165,35 @@ async function sanitizeHtmlImagesForPdf(html) {
     const m = tag.match(srcRe);
     const src = m ? (m[1] ?? m[2] ?? m[3] ?? "") : "";
 
+    if (!src) {
+      out = out.replace(tag, "");
+      continue;
+    }
+
     if (src.startsWith("data:image/")) continue; // pdfmake handles data URIs
 
-    if (cols === 0 || body.length === 0) {
-      // Neutralise an empty/invalid table so it renders as nothing.
-      delete node.table;
-      delete node.layout;
-      node.text = "";  
-      return;
+    let dataUri = null;
+    const candidates = [];
+    const normalized = src.replace(/\\/g, "/");
+
+    if (!/^https?:/i.test(src)) {
+      if (normalized.startsWith("/")) {
+        candidates.push(path.resolve(process.cwd(), normalized.slice(1)));
+      } else {
+        candidates.push(path.resolve(process.cwd(), normalized));
+      }
+    }
+
+    for (const candidate of candidates) {
+      try {
+        if (candidate && fs.existsSync(candidate)) {
+          const png = await sharp(candidate).png().toBuffer();
+          dataUri = `data:image/png;base64,${png.toString("base64")}`;
+          break;
+        }
+      } catch (err) {
+        logger.warn({ err, path: candidate }, "sanitizeHtmlImagesForPdf: failed to read image");
+      }
     }
 
     if (dataUri) {
@@ -167,7 +202,56 @@ async function sanitizeHtmlImagesForPdf(html) {
       out = out.replace(tag, ""); // drop images pdfmake can't embed
     }
   }
+
   return out;
+}
+
+/**
+ * html-to-pdfmake frequently emits tables with no `widths` array and ragged rows
+ * (different cell counts per row) — especially from .docx-imported letters with
+ * merged cells. pdfmake then crashes with "Cannot read properties of undefined
+ * (reading '_calcWidth')". Normalise every table node so it is renderable:
+ *   - strip colSpan/rowSpan (html-to-pdfmake sets them without the placeholder
+ *     cells pdfmake requires, which is the usual cause of the crash),
+ *   - pad every row to the widest row's cell count,
+ *   - guarantee a `widths` array of matching length (equal star columns).
+ */
+function normalizeTablesForPdfmake(node) {
+  if (Array.isArray(node)) {
+    node.forEach(normalizeTablesForPdfmake);
+    return;
+  }
+  if (!node || typeof node !== "object") return;
+
+  if (node.table && Array.isArray(node.table.body)) {
+    const body = node.table.body;
+    let maxCols = 1;
+    for (const row of body) {
+      if (!Array.isArray(row)) continue;
+      for (const cell of row) {
+        if (cell && typeof cell === "object") {
+          delete cell.colSpan;
+          delete cell.rowSpan;
+        }
+      }
+      maxCols = Math.max(maxCols, row.length);
+    }
+    for (const row of body) {
+      if (!Array.isArray(row)) continue;
+      while (row.length < maxCols) row.push({ text: "" });
+    }
+    const w = node.table.widths;
+    if (!Array.isArray(w) || w.length !== maxCols) {
+      node.table.widths = new Array(maxCols).fill("*");
+    }
+    for (const row of body) {
+      if (Array.isArray(row)) row.forEach(normalizeTablesForPdfmake);
+    }
+  }
+
+  for (const key of ["stack", "columns", "ul", "ol", "content"]) {
+    if (Array.isArray(node[key])) node[key].forEach(normalizeTablesForPdfmake);
+  }
 }
 
 /**
@@ -179,6 +263,7 @@ export async function renderCclPdfBuffer({ html, organisation = null }) {
   const content = htmlToPdfmake(safeHtml || "<p></p>", {
     window: sharedWindow,
   });
+  normalizeTablesForPdfmake(content);
 
   const images = {};
   const logo = await resolveLogoDataUri(
@@ -186,16 +271,74 @@ export async function renderCclPdfBuffer({ html, organisation = null }) {
   );
   if (logo) images.logo = logo;
 
+  // Letterhead details (resolved from the tenant Organisation row).
+  const orgName = organisation?.name || process.env.PORTAL_WEBSITE_NAME || "";
+  const orgEmail =
+    organisation?.primaryEmail ||
+    organisation?.email ||
+    organisation?.contact_email ||
+    "";
+  const orgPhone = organisation?.phone || organisation?.contact_phone || "";
+  const orgLocation =
+    organisation?.address ||
+    organisation?.company_address ||
+    organisation?.country ||
+    "";
+  const contactBits = [orgLocation, orgEmail, orgPhone].filter(Boolean);
+
   const website =
     process.env.PORTAL_WEBSITE_NAME ||
-    organisation?.name ||
+    orgName ||
     "https://www.elitepic.co.uk/";
 
+  const hasHeader = !!(logo || orgName || contactBits.length);
+  // Reserve enough top margin to clear the letterhead so it never overlaps body
+  // text. The logo height is bounded via `fit` (the old `width`-only sizing let
+  // a tall/square logo render past the margin and cover the first lines).
+  const HEADER_TOP_MARGIN = 104;
+
+  const buildLetterhead = () => {
+    const details = [];
+    if (orgName) {
+      details.push({ text: orgName, fontSize: 14, bold: true, color: "#1e3a5f" });
+    }
+    if (contactBits.length) {
+      details.push({
+        text: contactBits.join("   ·   "),
+        fontSize: 8,
+        color: "#64748b",
+        margin: [0, 3, 0, 0],
+      });
+    }
+
+    const columns = [];
+    if (logo) columns.push({ image: "logo", fit: [150, 48], width: 160 });
+    if (details.length) {
+      columns.push({
+        width: "*",
+        alignment: logo ? "right" : "left",
+        margin: [0, logo ? 6 : 0, 0, 0],
+        stack: details,
+      });
+    }
+    if (!columns.length) return undefined;
+
+    return {
+      margin: [56, 28, 56, 0],
+      stack: [
+        { columns, columnGap: 14 },
+        {
+          canvas: [
+            { type: "line", x1: 0, y1: 8, x2: 483, y2: 8, lineWidth: 1, lineColor: "#1d71b8" },
+          ],
+        },
+      ],
+    };
+  };
+
   const docDefinition = {
-    pageMargins: [56, logo ? 96 : 56, 56, 56],
-    header: logo
-      ? { image: "logo", width: 150, margin: [56, 24, 0, 0] }
-      : undefined,
+    pageMargins: [56, hasHeader ? HEADER_TOP_MARGIN : 56, 56, 56],
+    header: hasHeader ? buildLetterhead : undefined,
     footer: (currentPage, pageCount) => ({
       margin: [56, 8, 56, 0],
       columns: [
