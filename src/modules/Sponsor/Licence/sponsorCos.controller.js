@@ -74,7 +74,7 @@ export const requestCosAllocation = async (req, res) => {
       userId, type: 'Renewal', status: 'Pending',
       cosAllocation: parseInt(requestedAmount),
       licenceType: visaType,
-      reason: `CoS Allocation Request: ${reason}`,
+      reason: `CoS Request: ${reason}`,
       companyName: profile?.companyName || `${user.first_name} ${user.last_name}`,
       contactName: profile?.keyContactName || `${user.first_name} ${user.last_name}`,
       contactEmail: profile?.keyContactEmail || user.email,

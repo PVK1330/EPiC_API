@@ -1,3 +1,4 @@
+import { Op } from 'sequelize';
 import logger from '../../../utils/logger.js';
 import { sendTransactionalEmail } from '../../../services/mail.service.js';
 import { generateNotificationEmailTemplate } from '../../../utils/emailTemplates.js';
@@ -9,6 +10,22 @@ import { validateTransition, WORKFLOW_TYPES } from '../../../services/workflowEn
  * - document_uploaded: Admins (+ sponsor email confirmation)
  * - document_deleted: Admins, assigned Caseworker(s)
  */
+/**
+ * CoS allocation requests are stored as LicenceApplication rows whose `reason`
+ * is prefixed. Two writers exist in the codebase: the licence flow
+ * (`requestMoreCos`) writes "CoS Request: ..." while the CoS page
+ * (`sponsorCos.controller.createCosRequest`) writes "CoS Allocation Request: ...".
+ * The read/update/delete handlers below must match BOTH prefixes, otherwise
+ * requests created from the CoS allocation page are invisible (empty history)
+ * and cannot be edited or deleted. Matching only "CoS Request:%" was the bug.
+ */
+const COS_REQUEST_REASON_FILTER = {
+    [Op.or]: [
+        { [Op.iLike]: 'CoS Request:%' },
+        { [Op.iLike]: 'CoS Allocation Request:%' }
+    ]
+};
+
 const extractCaseworkerIds = (assignedcaseworkerId) => {
     if (!Array.isArray(assignedcaseworkerId)) return [];
     return assignedcaseworkerId
@@ -35,6 +52,11 @@ export const submitLicenceApplication = async (req, res) => {
         // Sanitize date fields
         if (applicationData.proposedStartDate === '' || applicationData.proposedStartDate === 'Invalid date') {
             applicationData.proposedStartDate = null;
+        }
+
+        // Sanitize numeric fields: empty strings are invalid for numeric/decimal columns
+        if (applicationData.estimatedAnnualCost === '' || applicationData.estimatedAnnualCost === undefined) {
+            applicationData.estimatedAnnualCost = null;
         }
 
         const application = await req.tenantDb.LicenceApplication.create(applicationData);
@@ -381,7 +403,14 @@ export const getLicenceDocuments = async (req, res) => {
 
 export const getLicenceSummary = async (req, res) => {
     try {
-        const userId = req.user.userId;
+        const userId = req.user?.userId;
+        if (!userId) {
+            return res.status(401).json({
+                status: 'error',
+                message: 'Authentication required',
+                data: null
+            });
+        }
 
         const latestApproved = await req.tenantDb.LicenceApplication.findOne({
             where: { userId, status: 'Approved' },
@@ -741,7 +770,14 @@ export const requestCosAllocation = async (req, res) => {
 
 export const getCosRequests = async (req, res) => {
     try {
-        const userId = req.user.userId;
+        const userId = req.user?.userId;
+        if (!userId) {
+            return res.status(401).json({
+                status: 'error',
+                message: 'Authentication required',
+                data: null
+            });
+        }
         const { status } = req.query;
 
         const whereClause = {

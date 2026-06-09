@@ -196,6 +196,13 @@ export const assignCaseworker = async (req, res) => {
     const { id } = req.params;
     const { caseworkerIds } = req.body; // Array of IDs
 
+    if (!Array.isArray(caseworkerIds) || caseworkerIds.length === 0) {
+      return res.status(400).json({
+        status: "error",
+        message: "caseworkerIds must be a non-empty array",
+      });
+    }
+
     const application = await req.tenantDb.LicenceApplication.findByPk(id);
 
     if (!application) {
