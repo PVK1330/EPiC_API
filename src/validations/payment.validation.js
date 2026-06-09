@@ -62,8 +62,18 @@ export const updateSubscriptionSchema = z.object({
   }).strict(),
 });
 
+// Matches the fields the receipt/invoice download actually sends (see
+// stripepayment.controller.exportInvoiceReceiptPdf). The previous schema
+// required `payment_intent_id` and was `.strict()`, so every receipt download
+// was rejected with 400 and silently failed in the UI.
 export const exportInvoiceReceiptSchema = z.object({
   body: z.object({
-    payment_intent_id: z.string().trim().min(1, 'Payment intent ID is required'),
-  }).strict(),
+    caseId: z.union([z.string(), z.number()]).transform((v) => String(v)),
+    amount: z.union([z.string(), z.number()]),
+    date: z.string().trim().min(1, 'Date is required'),
+    description: z.string().optional(),
+    candidateName: z.string().optional(),
+    isReceipt: z.boolean().optional(),
+    platformName: z.string().optional(),
+  }),
 });
