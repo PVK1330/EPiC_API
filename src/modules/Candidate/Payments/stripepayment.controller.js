@@ -97,6 +97,29 @@ async function resolveCandidateCaseForPayment(tenantDb, userId) {
   return { ok: true, caseRecord, ccl, totalFee, paidAmount, balanceDue };
 }
 
+/**
+ * After a payment, make sure the case's CCL record isn't stuck in a pre-approval
+ * state. A candidate cannot reach payment without the fee being released, so a
+ * record still reading fee_proposed/fee_rejected/pending is the symptom of an
+ * admin-approve step that never completed — promote it to "issued". Never
+ * downgrades an already-signed/accepted record.
+ */
+async function reconcileCclRecordForPayment({ tenantDb, caseRecord, performedBy = null }) {
+  if (!tenantDb?.CaseCclRecord || !caseRecord) return;
+  const ccl = await tenantDb.CaseCclRecord.findOne({ where: { caseId: caseRecord.id } });
+  if (!ccl) return;
+  const status = String(ccl.status || '').toLowerCase();
+  if (['fee_proposed', 'fee_rejected', 'pending'].includes(status)) {
+    await ccl.update({
+      status: 'issued',
+      issuedAt: ccl.issuedAt || new Date(),
+      issuedBy: ccl.issuedBy || performedBy,
+      adminReviewedAt: ccl.adminReviewedAt || new Date(),
+      adminReviewedBy: ccl.adminReviewedBy || performedBy,
+    });
+  }
+}
+
 async function recordStripeCasePayment({ tenantDb, caseRecord, paymentIntent, userId, organisationId }) {
   const txnId = paymentIntent?.id;
   if (!txnId) return null;
@@ -127,12 +150,27 @@ async function recordStripeCasePayment({ tenantDb, caseRecord, paymentIntent, us
     const prevPaid = Number(caseRecord.paidAmount) || 0;
     const newPaid = prevPaid + amount;
     const total = Number(caseRecord.totalAmount) || 0;
+    const fullyPaid = total > 0 && newPaid >= total - 0.02;
     const updates = { paidAmount: newPaid };
-    if (total > 0 && newPaid >= total - 0.02) {
+    if (fullyPaid) {
       updates.amountStatus = 'Paid';
+    } else if (caseRecord.amountStatus === 'Pending Approval') {
+      // A payment can only happen after the fee was effectively approved/released
+      // to the client. If the case was still showing the caseworker's
+      // "Pending Approval" (admin-approve never formally completed), reconcile it
+      // to Approved so caseworker/admin/candidate views stop disagreeing.
+      updates.amountStatus = 'Approved';
     }
     await caseRecord.update(updates);
     await caseRecord.reload();
+
+    // Keep the CCL record consistent: a paid case must not still read as an
+    // un-reviewed proposal. Promote a lingering fee_proposed/fee_rejected/pending
+    // record to "issued" (released) so admin's pending-approvals list and the
+    // candidate CCL view agree with the payment that just happened.
+    await reconcileCclRecordForPayment({ tenantDb, caseRecord, performedBy: userId }).catch(
+      (err) => logger.error({ err }, 'reconcileCclRecordForPayment'),
+    );
 
     await evaluateCaseStageAfterEvent({
       tenantDb,
@@ -199,6 +237,104 @@ const resolveTenantDbForUser = async (userId) => {
   const org = await platformDb.Organisation.findByPk(user.organisation_id, { attributes: ['database_name'] });
   if (!org?.database_name) return null;
   return getTenantDb(org.database_name);
+};
+
+async function notifyAdminsOfBankTransferReported({ tenantDb, caseRecord, organisationId }) {
+  const adminIds = await getActiveAdminIds(tenantDb);
+  const caseLabel = caseRecord.caseId || `#${caseRecord.id}`;
+  for (const adminId of adminIds) {
+    await createWorkflowTask({
+      tenantDb,
+      caseRecord,
+      assigneeId: adminId,
+      title: `Confirm bank transfer — ${caseLabel}`,
+      priority: 'high',
+      dueInDays: 2,
+      organisationId: organisationId ?? null,
+    }).catch(() => {});
+  }
+}
+
+// ── Bank transfer (candidate-facing) ──────────────────────────────────────────
+/** Candidate: fetch the org's bank-transfer payee details + reference + amount due. */
+export const getBankTransferDetails = async (req, res) => {
+  try {
+    const tenantDb = req.tenantDb;
+    const userId = req.user?.userId;
+    const resolved = await resolveCandidateCaseForPayment(tenantDb, userId);
+    if (!resolved.ok) {
+      return res.status(resolved.status).json({ status: 'error', message: resolved.message, data: null });
+    }
+    const setting = tenantDb.PaymentSetting ? await tenantDb.PaymentSetting.findOne() : null;
+    const enabled = setting ? setting.pay_bank !== false : true;
+    return res.status(200).json({
+      status: 'success',
+      data: {
+        enabled,
+        bankDetails: setting?.bank_details || '',
+        currency: setting?.currency || 'GBP',
+        reference: resolved.caseRecord.caseId || String(resolved.caseRecord.id),
+        amountDue: resolved.balanceDue,
+        totalFee: resolved.totalFee,
+        paidAmount: resolved.paidAmount,
+      },
+    });
+  } catch (err) {
+    logger.error({ err }, 'getBankTransferDetails');
+    res.status(500).json({ status: 'error', message: err.message, data: null });
+  }
+};
+
+/** Candidate: notify the firm that a bank transfer has been made (admin confirms receipt). */
+export const recordBankTransferIntent = async (req, res) => {
+  try {
+    const tenantDb = req.tenantDb;
+    const userId = req.user?.userId;
+    const resolved = await resolveCandidateCaseForPayment(tenantDb, userId);
+    if (!resolved.ok) {
+      return res.status(resolved.status).json({ status: 'error', message: resolved.message, data: null });
+    }
+    const { caseRecord, balanceDue } = resolved;
+    const reqAmount = Number(req.body?.amount);
+    const amount = Number.isFinite(reqAmount) && reqAmount > 0 ? reqAmount : balanceDue;
+    const reference = caseRecord.caseId || String(caseRecord.id);
+
+    // Re-use an existing pending bank-transfer record rather than stacking duplicates.
+    let payment = await tenantDb.CasePayment.findOne({
+      where: { caseId: caseRecord.id, paymentMethod: 'bank_transfer', paymentStatus: 'pending' },
+    });
+    if (!payment) {
+      const note = req.body?.note ? `: ${String(req.body.note).slice(0, 200)}` : '';
+      payment = await tenantDb.CasePayment.create({
+        caseId: caseRecord.id,
+        paymentType: 'fee',
+        amount,
+        paymentMethod: 'bank_transfer',
+        paymentDate: localDateStr(),
+        paymentStatus: 'pending',
+        transactionId: `BT-${reference}-${Date.now()}`,
+        invoiceNumber: `BT-${reference}`,
+        description: `Bank transfer reported by candidate (awaiting confirmation)${note}`,
+        receivedBy: null,
+      });
+    }
+
+    const user = await platformDb.User.findByPk(userId, { attributes: ['organisation_id'] });
+    await notifyAdminsOfBankTransferReported({
+      tenantDb,
+      caseRecord,
+      organisationId: user?.organisation_id ?? null,
+    }).catch(() => {});
+
+    return res.status(200).json({
+      status: 'success',
+      message: 'Thank you. We will confirm your bank transfer once it has been received.',
+      data: { paymentId: payment.id, reference, amount },
+    });
+  } catch (err) {
+    logger.error({ err }, 'recordBankTransferIntent');
+    res.status(500).json({ status: 'error', message: err.message, data: null });
+  }
 };
 
 // Create Payment Intent (optional amount — defaults to case balance due)

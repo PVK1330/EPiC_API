@@ -125,7 +125,8 @@ function makeFakeTenantDb() {
     },
   };
 
-  return { Notification: model };
+  // notifyUser derives organisation_id from the recipient when not supplied.
+  return { Notification: model, User: { findByPk: async () => null } };
 }
 
 test('create → fetch → unread → mark read → mark all → archive', async () => {

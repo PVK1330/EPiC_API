@@ -490,6 +490,32 @@ export const submitApplication = async (req, res) => {
 
     const payload = pickFields(req.body || {});
 
+    // ── Uniqueness: BRP, National Insurance and passport numbers must each be
+    // unique across applicants (a duplicate usually means a typo or reused doc).
+    const uniqueChecks = [
+      { field: 'brpNumber', label: 'BRP permit number' },
+      { field: 'niNumber', label: 'National Insurance number' },
+      { field: 'passportNumber', label: 'Passport number' },
+    ];
+    const Op = req.tenantDb.Sequelize.Op;
+    for (const { field, label } of uniqueChecks) {
+      const value = payload[field]?.toString().trim();
+      if (!value) continue;
+      const duplicate = await req.tenantDb.CandidateApplication.findOne({
+        where: { [field]: { [Op.iLike]: value }, userId: { [Op.ne]: userId } },
+        attributes: ['id'],
+      });
+      if (duplicate) {
+        return res.status(409).json({
+          status: 'error',
+          success: false,
+          message: `This ${label} is already registered to another applicant. Please check and correct it.`,
+          field,
+          data: null,
+        });
+      }
+    }
+
     const application = await req.tenantDb.sequelize.transaction(async (t) => {
       const existing = await req.tenantDb.CandidateApplication.findOne({
         where: { userId },
@@ -1578,7 +1604,9 @@ export const downloadCaseSummaryPdf = catchAsync(async (req, res) => {
 });
 
 export const downloadCandidateApplicationPdf = catchAsync(async (req, res) => {
-  const { candidateId } = req.params;
+  // Route param is `:id` (see Admin/Candidates/candidate.routes.js); fall back to
+  // `candidateId` for any caller that mounts this under a differently-named param.
+  const candidateId = req.params.id ?? req.params.candidateId;
   const numId = Number(candidateId);
   if (!Number.isFinite(numId) || numId <= 0) {
     return ApiResponse.badRequest(res, "Invalid candidateId");

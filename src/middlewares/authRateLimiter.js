@@ -24,14 +24,15 @@
  *
  * ── RATE LIMITS ────────────────────────────────────────────────────────────
  *
- * | Endpoint          | Window  | Max  | Key                     |
- * |-------------------|---------|------|-------------------------|
- * | POST /login       | 1 min   | 5    | tenant:ip:email         |
- * | POST /register    | 1 hour  | 3    | tenant:ip               |
- * | POST /forgot-pw   | 1 hour  | 5    | tenant:ip:email         |
- * | POST /resend-otp  | 1 hour  | 3    | tenant:email            |
- * | POST /verify-otp  | 1 min   | 5    | tenant:ip:email         |
- * | POST /2fa/verify  | 1 min   | 5    | tenant:ip:email         |
+ * | Endpoint          | Window  | Max  | Key       |
+ * |-------------------|---------|------|-----------|
+ * | POST /login       | 15 min  | 10   | tenant:ip |
+ * | POST /register    | 1 hour  | 5    | tenant:ip |
+ * | POST /forgot-pw   | 1 hour  | 5    | tenant:ip |
+ * | POST /resend-otp  | 15 min  | 10   | tenant:ip |
+ * | POST /verify-otp  | 15 min  | 10   | tenant:ip |
+ * | POST /2fa/verify  | 15 min  | 10   | tenant:ip |
+ * | * /api/auth/*     | 15 min  | 50   | tenant:ip | (global catch-all, in routes/index.js)
  *
  * ── REDIS UPGRADE PATH ─────────────────────────────────────────────────────
  *
@@ -147,8 +148,8 @@ function buildKey(mode) {
  */
 const rateLimitHandler = (req, res) => {
   res.status(429).json({
-    status: false,
-    message: 'Too many attempts',
+    status: 'error',
+    message: 'Too many attempts. Please try again later.',
   });
 };
 
@@ -178,7 +179,7 @@ const skipIfInternal = (req) => {
  */
 function createLimiter({ windowMs, max, keyMode, message }) {
   const handler = message
-    ? (req, res) => res.status(429).json({ status: false, message })
+    ? (req, res) => res.status(429).json({ status: 'error', message })
     : rateLimitHandler;
 
   return rateLimit({
@@ -198,55 +199,58 @@ function createLimiter({ windowMs, max, keyMode, message }) {
 // Exported limiters
 // ────────────────────────────────────────────────────────────────────────────
 
-/** POST /api/auth/login — 5 attempts per minute per IP+email+tenant */
-export const loginLimiter = createLimiter({
-  windowMs: 60_000,       // 1 minute
-  max: 5,
-  keyMode: 'ip+email',
-});
+const FIFTEEN_MINUTES = 15 * 60_000;
+const ONE_HOUR = 60 * 60_000;
 
-/** POST /api/auth/register — 3 registrations per hour per IP+tenant */
-export const registerLimiter = createLimiter({
-  windowMs: 60 * 60_000,  // 1 hour
-  max: 3,
+/** POST /api/auth/login — 10 attempts per 15 minutes per IP (tenant-scoped) */
+export const loginLimiter = createLimiter({
+  windowMs: FIFTEEN_MINUTES,
+  max: 10,
   keyMode: 'ip',
 });
 
-/** POST /api/auth/forgot-password — 5 requests per hour per IP+email+tenant */
+/** POST /api/auth/register — 5 registrations per hour per IP (tenant-scoped) */
+export const registerLimiter = createLimiter({
+  windowMs: ONE_HOUR,
+  max: 5,
+  keyMode: 'ip',
+});
+
+/** POST /api/auth/forgot-password — 5 requests per hour per IP (tenant-scoped) */
 export const forgotPasswordLimiter = createLimiter({
-  windowMs: 60 * 60_000,  // 1 hour
+  windowMs: ONE_HOUR,
   max: 5,
-  keyMode: 'ip+email',
+  keyMode: 'ip',
 });
 
-/** POST /api/auth/resend-otp — 3 resends per hour per email+tenant */
+/** POST /api/auth/resend-otp — 10 attempts per 15 minutes per IP (tenant-scoped) */
 export const resendOtpLimiter = createLimiter({
-  windowMs: 60 * 60_000,  // 1 hour
-  max: 3,
-  keyMode: 'email',
+  windowMs: FIFTEEN_MINUTES,
+  max: 10,
+  keyMode: 'ip',
 });
 
-/** POST /api/auth/verify-otp — 5 attempts per minute per IP+email+tenant */
+/** POST /api/auth/verify-otp — 10 attempts per 15 minutes per IP (tenant-scoped) */
 export const verifyOtpLimiter = createLimiter({
-  windowMs: 60_000,       // 1 minute
-  max: 5,
-  keyMode: 'ip+email',
+  windowMs: FIFTEEN_MINUTES,
+  max: 10,
+  keyMode: 'ip',
 });
 
-/** POST /api/auth/2fa/verify — 5 attempts per minute per IP+email+tenant */
+/** POST /api/auth/2fa/verify — 10 attempts per 15 minutes per IP (tenant-scoped) */
 export const verify2FALimiter = createLimiter({
-  windowMs: 60_000,       // 1 minute
-  max: 5,
-  keyMode: 'ip+email',
+  windowMs: FIFTEEN_MINUTES,
+  max: 10,
+  keyMode: 'ip',
 });
 
 /**
- * Global auth limiter — stricter catch-all for any auth route not
- * explicitly covered above. 20 requests per minute per IP.
+ * Global auth limiter — catch-all for the entire /api/auth/* prefix.
+ * 50 requests per 15 minutes per IP. Applied in routes/index.js.
  */
 export const globalAuthLimiter = createLimiter({
-  windowMs: 60_000,
-  max: 20,
+  windowMs: FIFTEEN_MINUTES,
+  max: 50,
   keyMode: 'ip',
 });
 

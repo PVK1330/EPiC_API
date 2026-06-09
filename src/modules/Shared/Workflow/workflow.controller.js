@@ -6,7 +6,11 @@ import {
 } from "../../../constants/immigrationCaseProcess.js";
 import { applyCaseStageChange } from "../../../services/caseStageAutomation.service.js";
 import { sendWorkflowStageEmail } from "../../../services/workflowEmail.service.js";
-import { buildDataCaptureSheetAttachment } from "../../../services/dataCaptureSheet.service.js";
+import {
+  buildDataCaptureSheetPdfAttachment,
+  resolveRequiredDocuments,
+  formatRequiredDocumentsText,
+} from "../../../services/dataCaptureSheet.service.js";
 import { recordTimelineEntry } from "../../../services/caseTimeline.service.js";
 import { ROLES } from "../../../middlewares/role.middleware.js";
 import {
@@ -349,16 +353,24 @@ export const sendDataCaptureRequest = async (req, res) => {
         })
       : null;
 
-    const sheetAttachment = template
-      ? buildDataCaptureSheetAttachment({
-          template,
-          caseRecord,
-          candidate,
-          visaTypeName: visaType?.name || "",
-        })
-      : null;
+    const requiredDocuments = await resolveRequiredDocuments(
+      req.tenantDb,
+      caseRecord,
+    );
+
+    const sheetAttachment = await buildDataCaptureSheetPdfAttachment({
+      template,
+      caseRecord,
+      candidate,
+      visaTypeName: visaType?.name || "",
+      requiredDocuments,
+    }).catch((err) => {
+      logger.error({ err }, "buildDataCaptureSheetPdfAttachment");
+      return null;
+    });
 
     const emailAttachments = sheetAttachment ? [sheetAttachment] : null;
+    const requiredDocsText = formatRequiredDocumentsText(requiredDocuments);
 
     const emailResult = await sendWorkflowStageEmail({
       tenantDb: req.tenantDb,
@@ -366,6 +378,7 @@ export const sendDataCaptureRequest = async (req, res) => {
       stageId: "data_capture_initial_docs",
       organisationId: organisationIdFromReq(req),
       attachments: emailAttachments,
+      extraVars: requiredDocsText ? { required_documents: requiredDocsText } : null,
     });
 
     await recordTimelineEntry({
@@ -396,6 +409,106 @@ export const sendDataCaptureRequest = async (req, res) => {
     });
   } catch (err) {
     logger.error({ err }, "sendDataCaptureRequest");
+    res.status(500).json({ status: "error", message: err.message, data: null });
+  }
+};
+
+/** Caseworker/Admin: request further information/documents from the client. */
+export const sendFurtherInformationRequest = async (req, res) => {
+  try {
+    const { caseId } = req.params;
+    const caseRecord = await findCaseByRef(req.tenantDb, caseId);
+    if (!caseRecord) {
+      return res.status(404).json({ status: "error", message: "Case not found", data: null });
+    }
+
+    const items = Array.isArray(req.body?.items)
+      ? req.body.items.map((i) => String(i).trim()).filter(Boolean)
+      : [];
+    const message = typeof req.body?.message === "string" ? req.body.message.trim() : "";
+    let requestedItems;
+    if (items.length) requestedItems = items.map((i) => `- ${i}`).join("\n");
+    else if (message) requestedItems = message;
+    else requestedItems = "- Please contact us / see the portal for details.";
+
+    // Move to further_information_request (this also creates the candidate task).
+    await applyCaseStageChange({
+      tenantDb: req.tenantDb,
+      caseRecord,
+      nextStageId: "further_information_request",
+      performedBy: req.user?.userId,
+      reason: "Further information requested from client",
+      sendEmail: false, // a richer email with the requested items is sent below
+      organisationId: organisationIdFromReq(req),
+    }).catch((err) => logger.error({ err }, "applyCaseStageChange (further info)"));
+
+    const emailResult = await sendWorkflowStageEmail({
+      tenantDb: req.tenantDb,
+      caseRecord,
+      stageId: "further_information_request",
+      organisationId: organisationIdFromReq(req),
+      extraVars: { requested_items: requestedItems },
+    });
+
+    await recordTimelineEntry({
+      tenantDb: req.tenantDb,
+      caseId: caseRecord.id,
+      actionType: "communication_sent",
+      description: "Further information requested from client",
+      performedBy: req.user?.userId,
+      metadata: { items, message, emailSent: emailResult.sent },
+      visibility: "public",
+    });
+
+    res.status(200).json({
+      status: "success",
+      message: "Further information request sent",
+      data: { email: emailResult },
+    });
+  } catch (err) {
+    logger.error({ err }, "sendFurtherInformationRequest");
+    res.status(500).json({ status: "error", message: err.message, data: null });
+  }
+};
+
+/** Caseworker/Admin: send the draft application to the client for review. */
+export const sendDraftApplicationForReview = async (req, res) => {
+  try {
+    const { caseId } = req.params;
+    const caseRecord = await findCaseByRef(req.tenantDb, caseId);
+    if (!caseRecord) {
+      return res.status(404).json({ status: "error", message: "Case not found", data: null });
+    }
+
+    // Moving to draft_application_review locks the candidate's form to read-only,
+    // creates the candidate review task, and emails them (draft_application_review
+    // template). The candidate reviews the draft in the portal and confirms.
+    await applyCaseStageChange({
+      tenantDb: req.tenantDb,
+      caseRecord,
+      nextStageId: "draft_application_review",
+      performedBy: req.user?.userId,
+      reason: "Draft application sent to client for review",
+      sendEmail: true,
+      organisationId: organisationIdFromReq(req),
+    });
+
+    await recordTimelineEntry({
+      tenantDb: req.tenantDb,
+      caseId: caseRecord.id,
+      actionType: "communication_sent",
+      description: "Draft application sent to client for review",
+      performedBy: req.user?.userId,
+      visibility: "public",
+    });
+
+    res.status(200).json({
+      status: "success",
+      message: "Draft application sent to the client for review",
+      data: null,
+    });
+  } catch (err) {
+    logger.error({ err }, "sendDraftApplicationForReview");
     res.status(500).json({ status: "error", message: err.message, data: null });
   }
 };
@@ -592,27 +705,54 @@ export const listCclFeePendingApprovals = async (req, res) => {
       });
     }
 
-    const cases = await req.tenantDb.Case.findAll({
-      include: [
-        {
-          model: req.tenantDb.User,
-          as: "candidate",
-          attributes: ["id", "first_name", "last_name", "email"],
-        },
-        {
-          model: req.tenantDb.VisaType,
-          as: "visaType",
-          attributes: ["id", "name"],
-        },
-        {
-          model: req.tenantDb.CaseCclRecord,
-          as: "cclRecord",
-          required: true,
-          where: { status: "fee_proposed" },
-        },
-      ],
-      order: [["updated_at", "DESC"]],
-    });
+    // Surface a case for admin review when EITHER signal says a proposal is
+    // awaiting approval:
+    //   • the CaseCclRecord is in `fee_proposed`, OR
+    //   • the case's legacy amountStatus is "Pending Approval".
+    // Relying on the CCL record alone hid cases whose proposal half-completed
+    // (e.g. an earlier stage-transition error left amountStatus set but the CCL
+    // status unset, or vice-versa) — admin then saw "No pending approvals"
+    // while the caseworker still showed "Pending Approval".
+    const include = [
+      {
+        model: req.tenantDb.User,
+        as: "candidate",
+        attributes: ["id", "first_name", "last_name", "email"],
+      },
+      {
+        model: req.tenantDb.VisaType,
+        as: "visaType",
+        attributes: ["id", "name"],
+      },
+      {
+        model: req.tenantDb.CaseCclRecord,
+        as: "cclRecord",
+        required: false,
+      },
+    ];
+
+    const [proposedCases, pendingStatusCases] = await Promise.all([
+      req.tenantDb.Case.findAll({
+        include: include.map((inc) =>
+          inc.as === "cclRecord"
+            ? { ...inc, required: true, where: { status: "fee_proposed" } }
+            : inc,
+        ),
+        order: [["updated_at", "DESC"]],
+      }),
+      req.tenantDb.Case.findAll({
+        where: { amountStatus: "Pending Approval" },
+        include,
+        order: [["updated_at", "DESC"]],
+      }),
+    ]);
+
+    // Merge, de-duplicating by case id (a case may match both queries).
+    const byId = new Map();
+    for (const c of [...proposedCases, ...pendingStatusCases]) {
+      if (!byId.has(c.id)) byId.set(c.id, c);
+    }
+    const cases = [...byId.values()];
 
     res.status(200).json({ status: "success", data: { cases } });
   } catch (err) {

@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { getStepById, resolveCaseStage } from "../constants/immigrationCaseProcess.js";
+import { generateCclPdfForCase } from "./cclGenerator.service.js";
 import logger from "../utils/logger.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -144,6 +145,50 @@ export async function attachCclTemplateToCase({
     const existing = await tenantDb.Document.findByPk(ccl.issuedDocumentId);
     if (existing) {
       return { document: existing, template: null, reused: true };
+    }
+  }
+
+  // Preferred path: dynamic, per-org CCL — a per-case draft or the org's
+  // CclTemplate rendered to a branded PDF (with org logo + filled {{tags}}).
+  // Falls through to the legacy .docx copy below when no DB template/draft exists.
+  if (caseRecord.candidateId) {
+    try {
+      const gen = await generateCclPdfForCase({ tenantDb, caseRecord, ccl });
+      if (gen?.buffer) {
+        const caseFolder = path.join("uploads", "caseimages", String(caseRecord.id), "ccl");
+        fs.mkdirSync(caseFolder, { recursive: true });
+        const ref = String(caseRecord.caseId || caseRecord.id)
+          .replace(/[^\w-]+/g, "-")
+          .slice(0, 40);
+        const filename = `Client-Care-Letter-${ref}.pdf`;
+        const destPath = path.join(caseFolder, filename);
+        fs.writeFileSync(destPath, gen.buffer);
+
+        const document = await tenantDb.Document.create({
+          userId: caseRecord.candidateId,
+          caseId: caseRecord.id,
+          documentType: "Client Care Letter",
+          documentName: filename,
+          userFileName: filename,
+          documentPath: destPath.replace(/\\/g, "/"),
+          documentCategory: "legal",
+          mimeType: "application/pdf",
+          fileSize: gen.buffer.length,
+          status: "approved",
+          uploadedBy: performedBy,
+          uploadedAt: new Date(),
+          reviewedBy: performedBy,
+          reviewedAt: new Date(),
+          reviewNotes: `Generated Client Care Letter (${gen.source})`,
+          isRequired: false,
+        });
+
+        await ccl.update({ issuedDocumentId: document.id });
+        await ccl.reload();
+        return { document, template: gen.template, created: true, dynamic: true };
+      }
+    } catch (err) {
+      logger.error({ err }, "dynamic CCL generation failed; falling back to .docx");
     }
   }
 

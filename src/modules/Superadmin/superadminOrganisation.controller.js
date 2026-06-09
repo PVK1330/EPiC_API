@@ -1,7 +1,7 @@
 import { Op } from "sequelize";
 import bcrypt from "bcryptjs";
 import platformDb from "../../models/index.js";
-import { signImpersonationToken } from "../../config/jwt.config.js";
+import { createImpersonationTicket } from "../../services/impersonationTicket.service.js";
 import {
   isPhysicalTenantDatabaseEnabled,
   provisionOrganisationTenantDatabase,
@@ -910,7 +910,10 @@ export const impersonateOrganisationAdmin = async (req, res) => {
       });
     }
 
-    const token = signImpersonationToken({
+    // Issue a single-use ticket instead of the raw JWT. The JWT is minted
+    // server-side only when the ticket is redeemed at /api/auth/handoff, so it
+    // never travels in the handoff URL or through the browser.
+    const ticket = createImpersonationTicket({
       id: admin.id,
       email: admin.email,
       role_id: admin.role_id,
@@ -919,9 +922,9 @@ export const impersonateOrganisationAdmin = async (req, res) => {
 
     return res.status(200).json({
       status: "success",
-      message: "Impersonation token generated",
+      message: "Impersonation ticket generated",
       data: {
-        token,
+        ticket,
         user: {
           id: admin.id,
           email: admin.email,

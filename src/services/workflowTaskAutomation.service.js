@@ -127,15 +127,10 @@ const STAGE_TASK_MATRIX = {
   },
   draft_application_review: {
     caseworkers: [{ title: "Send draft application to client for review", priority: "high", dueInDays: 3 }],
-    candidates: [
-      {
-        title: "Review draft application",
-        priority: "medium",
-        dueInDays: 5,
-        notify: true,
-        message: "Your draft application is ready for review in the portal.",
-      },
-    ],
+    // The candidate's draft-review task ("Review your draft application — confirm
+    // or request changes") is created by onEnterDraftApplicationReview, so we do
+    // NOT create a second one here (it produced a duplicate on the candidate's list).
+    candidates: [],
   },
   client_care_letter: {
     caseworkers: [{ title: "Propose CCL fees or monitor acceptance and payment", priority: "high", dueInDays: 3 }],

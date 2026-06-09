@@ -26,7 +26,8 @@ import {
   syncUserToPlatformAndTenant,
 } from '../../services/userSync.service.js';
 import { permissionNamesToModuleIds } from '../../constants/platformModules.js';
-import { signToken, signShortToken, verifyToken, getCookieConfig } from '../../config/jwt.config.js';
+import { signToken, signShortToken, signImpersonationToken, verifyToken, getCookieConfig } from '../../config/jwt.config.js';
+import { redeemImpersonationTicket } from '../../services/impersonationTicket.service.js';
 import logger from '../../utils/logger.js';
 
 const RESET_TOKEN_EXPIRY = '10m';
@@ -1318,27 +1319,29 @@ export const me = catchAsync(async (req, res) => {
 
 /**
  * POST /api/auth/handoff
- * Receives an impersonation token (from cross-domain superadmin handoff),
- * verifies it, sets it as an httpOnly cookie, and returns the user profile.
- * This replaces the old flow where the token was passed in the URL query param
- * and stored in localStorage/Redux.
+ * Redeems a single-use impersonation TICKET (from the cross-domain superadmin
+ * "Login as" handoff), mints the impersonation JWT server-side, and delivers it
+ * exclusively as an httpOnly cookie. The JWT is never present in the URL or in
+ * any browser-accessible storage.
+ *
+ * The ticket is issued by POST /api/superadmin/organisations/:id/impersonate
+ * and is valid for a single redemption within a short TTL.
  */
 export const handoff = catchAsync(async (req, res) => {
-  const { token } = req.validated.body || {};
+  const { ticket } = req.validated.body || {};
 
-  if (!token) {
-    return ApiResponse.badRequest(res, 'Missing handoff token');
+  if (!ticket) {
+    return ApiResponse.badRequest(res, 'Missing handoff ticket');
   }
 
-  // Verify the impersonation token
-  let decoded;
-  try {
-    decoded = verifyToken(token);
-  } catch {
-    return ApiResponse.unauthorized(res, 'Invalid or expired handoff token');
+  // Consume the ticket (single-use). Returns the stored claims or null when the
+  // ticket is unknown, already used, or expired.
+  const claims = redeemImpersonationTicket(ticket);
+  if (!claims?.id) {
+    return ApiResponse.unauthorized(res, 'Invalid or expired handoff ticket');
   }
 
-  const user = await platformDb.User.findByPk(decoded.id, {
+  const user = await platformDb.User.findByPk(claims.id, {
     attributes: [
       'id', 'email', 'first_name', 'last_name', 'role_id',
       'organisation_id', 'status', 'gender', 'profile_pic',
@@ -1350,18 +1353,23 @@ export const handoff = catchAsync(async (req, res) => {
     return ApiResponse.notFound(res, 'User not found');
   }
 
+  if (user.status !== 'active') {
+    return ApiResponse.unauthorized(res, 'User account is not active');
+  }
+
   const roleMeta = await resolveAuthRole(user);
   const allowedModules = await resolveAllowedModules(user);
 
-  // Set the impersonation token as the httpOnly cookie so subsequent
-  // tenant-panel requests authenticate as the impersonated admin (not the
-  // superadmin whose cookie may still be present on a shared parent domain).
-  // maxAge tracks the impersonation token's own expiry; if the JWT carries an
-  // exp claim, align the cookie lifetime to it, otherwise fall back to 1h.
-  const cookieMaxAge = decoded?.exp
-    ? Math.max(decoded.exp * 1000 - Date.now(), 0)
-    : 60 * 60 * 1000;
-  res.cookie('token', token, getCookieConfig({ maxAge: cookieMaxAge }));
+  // Mint the impersonation JWT now, server-side, from the freshly loaded user —
+  // then set it as the httpOnly cookie so subsequent tenant-panel requests
+  // authenticate as the impersonated admin.
+  const token = signImpersonationToken({
+    id: user.id,
+    email: user.email,
+    role_id: user.role_id,
+    organisation_id: user.organisation_id,
+  });
+  res.cookie('token', token, getCookieConfig({ maxAge: 60 * 60 * 1000 }));
 
   return ApiResponse.success(res, 'Handoff successful', {
     user: buildLoginUserResponse(user, roleMeta),

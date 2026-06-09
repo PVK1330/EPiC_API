@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
-    "test": "node --test tests/*.test.js",
+    "test": "node --test --test-concurrency=1 --experimental-test-module-mocks tests/*.test.js",
     "migrate": "node src/migrations/run.js all",
     "migrate:platform": "node src/migrations/run.js platform",
     "migrate:tenants": "node src/migrations/run.js tenants",
@@ -22,6 +22,7 @@
     "compression": "^1.8.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
+    "csrf-csrf": "^4.0.3",
     "dotenv": "^17.4.1",
     "express": "^5.2.1",
     "express-rate-limit": "^8.5.2",
@@ -29,9 +30,12 @@
     "google-auth-library": "^10.6.2",
     "googleapis": "^173.0.0",
     "helmet": "^8.2.0",
+    "html-to-pdfmake": "^2.5.33",
+    "jsdom": "^29.1.1",
     "json2csv": "^6.0.0-alpha.2",
     "jsonwebtoken": "^9.0.3",
     "lru-cache": "^11.3.6",
+    "mammoth": "^1.12.0",
     "multer": "^2.1.1",
     "nodemailer": "^8.0.5",
     "pdfmake": "^0.2.15",
@@ -51,6 +55,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@jest/globals": "^30.4.1",
     "nodemon": "^3.1.14",
     "socket.io-client": "^4.8.3",
     "supertest": "^7.2.2"

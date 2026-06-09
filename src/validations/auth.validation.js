@@ -89,7 +89,7 @@ export const disable2faSchema = z.object({
 
 export const handoffSchema = z.object({
   body: z.object({
-    token: z.string().min(1, 'Handoff token is required'),
+    ticket: z.string().min(1, 'Handoff ticket is required'),
   }).strict(),
 });
 

@@ -1,5 +1,6 @@
 import { resolveCaseStage } from "../constants/immigrationCaseProcess.js";
 import { applyCaseStageChange } from "./caseStageAutomation.service.js";
+import { findTransitionPath, WORKFLOW_TYPES } from "./workflowEngine.service.js";
 import { recordTimelineEntry } from "./caseTimeline.service.js";
 import {
   notifyCclFeeProposed,
@@ -8,6 +9,7 @@ import {
   createAdminWorkflowTask,
 } from "./workflowNotifications.service.js";
 import { attachCclTemplateToCase } from "./cclTemplate.service.js";
+import logger from "../utils/logger.js";
 
 export function normalizeInstallments(installments = []) {
   if (!Array.isArray(installments)) return [];
@@ -34,6 +36,46 @@ export function validateInstallmentPlan(total, installments) {
     };
   }
   return { ok: true };
+}
+
+/**
+ * Move a case to the `client_care_letter` stage along the shortest VALID path.
+ *
+ * CCL fees can be proposed/reviewed from several earlier stages (and, via the
+ * allowFromAnyStage flag, from any stage at all). A direct jump to
+ * `client_care_letter` is rejected by the state machine when the case is not a
+ * direct neighbour (e.g. `data_capture_initial_docs`), surfacing as the
+ * "Invalid transition … Allowed: …" error. Walking the BFS path keeps every hop
+ * legal. Intermediate hops are silent; only the final landing may email.
+ */
+async function advanceToClientCareLetter({
+  tenantDb,
+  caseRecord,
+  performedBy,
+  reason,
+  emailOnArrival = false,
+  organisationId = null,
+}) {
+  const currentStage = resolveCaseStage(caseRecord);
+  const path =
+    findTransitionPath(WORKFLOW_TYPES.CASE, currentStage, "client_care_letter") || [
+      "client_care_letter",
+    ];
+
+  for (let i = 0; i < path.length; i += 1) {
+    const stageId = path[i];
+    const isFinal = i === path.length - 1;
+    await applyCaseStageChange({
+      tenantDb,
+      caseRecord,
+      nextStageId: stageId,
+      performedBy,
+      reason,
+      sendEmail: emailOnArrival && isFinal,
+      organisationId,
+    });
+    await caseRecord.reload();
+  }
 }
 
 /**
@@ -108,15 +150,13 @@ export async function submitCclFeeProposal({
     amountNotes: notes ?? caseRecord.amountNotes,
   });
 
-  const currentStage = resolveCaseStage(caseRecord);
-  if (currentStage !== "client_care_letter") {
-    await applyCaseStageChange({
+  if (resolveCaseStage(caseRecord) !== "client_care_letter") {
+    await advanceToClientCareLetter({
       tenantDb,
       caseRecord,
-      nextStageId: "client_care_letter",
       performedBy: proposedBy,
       reason: "CCL fees and instalments submitted for admin approval",
-      sendEmail: false,
+      emailOnArrival: false,
       organisationId,
     });
   }
@@ -173,7 +213,17 @@ export async function reviewCclFeeProposal({
   }
 
   const ccl = await tenantDb.CaseCclRecord.findOne({ where: { caseId: caseRecord.id } });
-  if (!ccl || ccl.status !== "fee_proposed") {
+  // Normally the CCL record is `fee_proposed`. Also accept a case that is
+  // `Pending Approval` with a priced CCL record whose status drifted (e.g. a
+  // half-completed earlier proposal) so admins aren't blocked from actioning a
+  // proposal the caseworker clearly submitted.
+  const reviewable =
+    ccl &&
+    (ccl.status === "fee_proposed" ||
+      (caseRecord.amountStatus === "Pending Approval" &&
+        Number(ccl.feeAmount) > 0 &&
+        !["issued", "signed"].includes(ccl.status)));
+  if (!reviewable) {
     return {
       ok: false,
       status: 400,
@@ -192,14 +242,13 @@ export async function reviewCclFeeProposal({
     await caseRecord.update({ amountStatus: "Rejected" });
 
     if (resolveCaseStage(caseRecord) !== "client_care_letter") {
-      await applyCaseStageChange({
+      await advanceToClientCareLetter({
         tenantDb,
         caseRecord,
-        nextStageId: "client_care_letter",
         performedBy: reviewedBy,
         organisationId,
         reason: reviewNotes || "CCL fee proposal returned to caseworker",
-        sendEmail: false,
+        emailOnArrival: false,
       });
     }
 
@@ -239,13 +288,12 @@ export async function reviewCclFeeProposal({
   });
 
   if (resolveCaseStage(caseRecord) !== "client_care_letter") {
-    await applyCaseStageChange({
+    await advanceToClientCareLetter({
       tenantDb,
       caseRecord,
-      nextStageId: "client_care_letter",
       performedBy: reviewedBy,
       reason: "CCL fees approved — Client Care Letter released to client",
-      sendEmail: true,
+      emailOnArrival: true,
       organisationId,
     });
   } else {

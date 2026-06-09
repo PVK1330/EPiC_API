@@ -403,9 +403,11 @@ export const getTaskByCaseId = async (req, res) => {
     }
 
     if (roleId === ROLES.CASEWORKER) {
-      const filtered = rows.filter(
-        (t) => t.assigned_to === userId || t.created_by === userId
-      );
+      // Match the Tasks page (getTasksByUserId) exactly: a caseworker sees the
+      // tasks ASSIGNED TO THEM. (Previously this also included tasks they
+      // created — e.g. candidate tasks — which made the case modal and the
+      // Tasks page show different lists.)
+      const filtered = rows.filter((t) => t.assigned_to === userId);
       return res.status(200).json({
         status: "success",
         message: "Tasks retrieved successfully",

@@ -22,6 +22,8 @@ import { notifyUser } from '../src/services/notification.service.js';
 /** Fake tenant DB: notifyUser only needs Notification.create + count here. */
 function fakeTenantDb(unread = 3) {
   return {
+    // notifyUser derives organisation_id from the recipient when not supplied.
+    User: { findByPk: async () => null },
     Notification: {
       async create(values) {
         const row = { id: 1, ...values };
@@ -71,8 +73,15 @@ test('notifyUser delivers notification:new + notification:count to the user sock
       client.on('connect', resolve);
       client.on('connect_error', reject);
     });
-    // Small tick so the server-side room join is in place before we emit.
-    await new Promise((r) => setTimeout(r, 50));
+    // Deterministically wait until the server has joined this socket to the
+    // user:7 room (avoids a fixed-tick race that flakes under full-suite load).
+    const joinDeadline = Date.now() + 4000;
+    while (
+      !ioServer.sockets.adapter.rooms.get("user:7")?.size &&
+      Date.now() < joinDeadline
+    ) {
+      await new Promise((r) => setTimeout(r, 20));
+    }
 
     const created = await notifyUser(fakeTenantDb(3), 7, {
       title: 'Realtime',

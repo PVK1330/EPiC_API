@@ -32,6 +32,8 @@ const staff = checkRole([ROLES.ADMIN, ROLES.CASEWORKER]);
 router.get("/cases/:caseId/bundle", staff, workflowController.getCaseWorkflowBundle);
 router.get("/cases/:caseId/data-capture", staff, workflowController.getStaffDataCapture);
 router.post("/cases/:caseId/data-capture/send", staff, workflowController.sendDataCaptureRequest);
+router.post("/cases/:caseId/request-information", staff, workflowController.sendFurtherInformationRequest);
+router.post("/cases/:caseId/send-draft-review", staff, workflowController.sendDraftApplicationForReview);
 router.patch("/cases/:caseId/data-capture/review", staff, workflowController.reviewDataCaptureSubmission);
 router.get("/cases/:caseId/ccl", staff, workflowController.getCclStatus);
 router.post("/cases/:caseId/ccl/propose", staff, workflowController.proposeCclFees);
