@@ -47,6 +47,7 @@ import candidatePanelRoutes from '../modules/Candidate/index.js';
 import workflowRoutes from '../modules/Shared/Workflow/workflow.routes.js';
 import cclRoutes from '../modules/Shared/Ccl/ccl.routes.js';
 import sponsorPanelRoutes from '../modules/Sponsor/index.js';
+import orgBillingRoutes from '../modules/Billing/orgBilling.routes.js';
 import superadminRoutes from '../modules/Superadmin/superadmin.routes.js';
 
 import { globalAuthLimiter } from '../middlewares/authRateLimiter.js';
@@ -109,6 +110,9 @@ router.use('/case-notes', caseNoteRoutes);
 router.use('/dashboard', dashboardRoutes);
 router.use('/workload', workloadRoutes);
 router.use('/reports', reportingRoutes);
+
+// Org-admin self-service subscription billing
+router.use('/billing', orgBillingRoutes);
 
 // Superadmin
 router.use('/superadmin', superadminRoutes);

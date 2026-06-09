@@ -93,3 +93,22 @@ test("renderCclPdfBuffer produces a valid PDF", async () => {
   assert.ok(Buffer.isBuffer(buf) && buf.length > 1000);
   assert.equal(buf.slice(0, 5).toString("latin1"), "%PDF-");
 });
+
+test("renderCclPdfBuffer survives ragged .docx tables (no _calcWidth crash)", async () => {
+  // Tables with inconsistent cell counts and no explicit widths — exactly what
+  // html-to-pdfmake emits from imported .docx letters — used to crash pdfmake.
+  const html = `
+    <p>Dear Jane,</p>
+    <table>
+      <tr><td>A</td><td>B</td><td>C</td></tr>
+      <tr><td colspan="2">Merged</td></tr>
+      <tr><td>X</td><td>Y</td><td>Z</td><td>extra</td></tr>
+    </table>
+    <p>Regards.</p>`;
+  const buf = await renderCclPdfBuffer({
+    html,
+    organisation: { name: "Elite Immigration Ltd", logoUrl: null },
+  });
+  assert.ok(Buffer.isBuffer(buf) && buf.length > 1000);
+  assert.equal(buf.slice(0, 5).toString("latin1"), "%PDF-");
+});

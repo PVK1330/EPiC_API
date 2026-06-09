@@ -622,6 +622,7 @@ export const login = catchAsync(async (req, res) => {
     return ApiResponse.unauthorized(res, 'Invalid credentials.');
   }
 
+  let subscriptionExpired = false;
   if (user.organisation_id && user.role_id !== 5) {
     const org = await platformDb.Organisation.findByPk(user.organisation_id, {
       attributes: ['status'],
@@ -635,17 +636,20 @@ export const login = catchAsync(async (req, res) => {
       ],
     });
 
+    const hasActiveSub = !!org?.subscriptions && org.subscriptions.length > 0;
     if (org?.status === 'suspended') {
-      return ApiResponse.forbidden(res, 'Your organisation subscription has expired. Please contact your administrator.');
-    }
-
-    if (!org?.subscriptions || org.subscriptions.length === 0) {
+      subscriptionExpired = true;
+    } else if (!hasActiveSub) {
       const expiredSub = await platformDb.Subscription.findOne({
         where: { organisation_id: user.organisation_id, status: 'expired' },
       });
-      if (expiredSub) {
-        return ApiResponse.forbidden(res, 'Your organisation subscription has expired. Please contact your administrator.');
-      }
+      if (expiredSub) subscriptionExpired = true;
+    }
+
+    // Only the org admin (role 3) may sign in while expired, to self-serve
+    // renewal and pay. Every other role stays blocked until reactivation.
+    if (subscriptionExpired && user.role_id !== 3) {
+      return ApiResponse.forbidden(res, 'Your organisation subscription has expired. Please contact your administrator.');
     }
   }
 
@@ -725,9 +729,13 @@ export const login = catchAsync(async (req, res) => {
     details: 'User logged in successfully', ip_address: req.ip || req.connection?.remoteAddress, status: 'Success'
   }).catch(() => { });
 
-  // Set httpOnly cookie for secure token storage — XSS-resistant
+  // Set httpOnly cookie for secure token storage — XSS-resistant.
+  // maxAge matches the JWT (7d) + refresh token so the cookie isn't deleted
+  // before the token expires (the /refresh endpoint reads the user id from this
+  // cookie). Active-session logout is governed by the 60-min idle timer
+  // (SessionTimeout), not by this cookie expiring early.
   res.cookie('token', token, getCookieConfig({
-    maxAge: 15 * 60 * 1000, // 15 mins
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   }));
   res.cookie('refreshToken', refreshTokenString, getCookieConfig({
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
@@ -760,6 +768,7 @@ export const login = catchAsync(async (req, res) => {
     token,
     allowedModules,
     force_password_reset: !!user.temp_password,
+    subscription_expired: subscriptionExpired,
   });
 });
 
@@ -851,7 +860,7 @@ export const refreshToken = catchAsync(async (req, res) => {
     details: 'Token rotated', ip_address: req.ip || req.connection?.remoteAddress, status: 'Success'
   }).catch(() => { });
 
-  res.cookie('token', newToken, getCookieConfig({ maxAge: 15 * 60 * 1000 }));
+  res.cookie('token', newToken, getCookieConfig({ maxAge: 7 * 24 * 60 * 60 * 1000 }));
   res.cookie('refreshToken', newRefreshString, getCookieConfig({ maxAge: 7 * 24 * 60 * 60 * 1000 }));
 
   return ApiResponse.success(res, 'Token refreshed');

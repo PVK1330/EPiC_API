@@ -12,6 +12,8 @@ import { mirrorUserToTenant } from "../../services/userSync.service.js";
 import { seedTenantOrganisation } from "../../services/tenantSeed.service.js";
 import { getTenantDb } from "../../services/tenantDb.service.js";
 import { recordPlatformAuditLog, createPlatformNotification } from "../../services/platformActivity.service.js";
+import { reactivateOrgManually } from "../../services/orgBilling.service.js";
+import { invalidateOrgCache } from "../../services/orgCache.service.js";
 import logger from "../../utils/logger.js";
 
 const Organisation = platformDb.Organisation;
@@ -553,6 +555,16 @@ export const updateOrganisation = async (req, res) => {
     }
     await org.update(updates);
 
+    // Status changes must clear the cached org status so the auth middleware
+    // sees them immediately (otherwise stale for up to the cache TTL). Setting a
+    // status of "active" also reactivates/extends the subscription, so an expired
+    // sub doesn't keep the org blocked.
+    if (updates.status === "active") {
+      await reactivateOrgManually(id);
+    } else if (updates.status !== undefined) {
+      invalidateOrgCache(id);
+    }
+
     if (updates.name !== undefined && org.slug) {
       try {
         const tenantDb = await getTenantDb(org.slug);
@@ -647,6 +659,7 @@ export const suspendOrganisation = async (req, res) => {
     }
 
     await org.update({ status: "suspended" });
+    invalidateOrgCache(id);
 
     await recordPlatformAuditLog({
       category: "Organisation",
@@ -689,14 +702,19 @@ export const activateOrganisation = async (req, res) => {
       return res.status(404).json({ status: "error", message: "Organisation not found", data: null });
     }
 
-    await org.update({ status: "active" });
+    // Full reactivation: flip the org active AND reactivate/extend the latest
+    // subscription, then clear the org cache so it takes effect immediately.
+    // (Activating the org alone leaves an expired subscription that the auth
+    // middleware would still block on, and the cache would mask it for ~5 min.)
+    await reactivateOrgManually(id);
+    await org.reload();
 
     await recordPlatformAuditLog({
       category: "Organisation",
       action: "Organisation Activated",
       user: req.user?.email || "superadmin@epic.com",
       org: org.name,
-      description: `Manually activated organisation ${org.name} (${org.slug}).`,
+      description: `Manually activated organisation ${org.name} (${org.slug}) and reactivated its subscription.`,
       status: "Success"
     });
 

@@ -5,6 +5,7 @@ import {
   CCL_VISIBLE_MIN_ORDER,
   isCclStageVisibleToCandidate,
 } from "./cclTemplate.service.js";
+import logger from "../utils/logger.js";
 
 const RELEASED_CCL_STATUSES = new Set(["issued", "signed", "accepted"]);
 

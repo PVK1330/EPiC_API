@@ -113,8 +113,14 @@ function threeDigitsToWords(n) {
 export function amountToWords(amount) {
   const n = Number.parseFloat(amount);
   if (!Number.isFinite(n) || n < 0) return "";
-  const pounds = Math.floor(n);
-  const pence = Math.round((n - pounds) * 100);
+  let pounds = Math.floor(n);
+  let pence = Math.round((n - pounds) * 100);
+  // Rounding can push pence to 100 (e.g. 10.999) — roll it into the pounds so
+  // the words stay consistent with the formatted figure (£11.00).
+  if (pence >= 100) {
+    pounds += Math.floor(pence / 100);
+    pence %= 100;
+  }
 
   let words;
   if (pounds === 0) {
@@ -245,20 +251,33 @@ export async function buildCclContext({ tenantDb, caseRecord, ccl = null, organi
   set("date_today", formatDate(new Date()));
   set("date_issued", formatDate(ccl?.issuedAt || new Date()));
 
-  // Fees
-  const proposed = caseRecord?.proposedAmount ?? ccl?.feeAmount ?? 0;
-  const total = caseRecord?.totalAmount ?? ccl?.feeAmount ?? proposed;
-  const fee = ccl?.feeAmount ?? proposed;
+  // Fees — pick the first POSITIVE value. A stored 0 must not win (using `??`
+  // here meant a 0 totalAmount/feeAmount showed as "£0.00" on the letter even
+  // when a real fee existed elsewhere).
+  const installmentSum = Array.isArray(ccl?.installmentPlan)
+    ? ccl.installmentPlan.reduce((s, r) => s + (Number.parseFloat(r.amount) || 0), 0)
+    : 0;
+  const pickAmount = (...vals) => {
+    for (const v of vals) {
+      const n = Number.parseFloat(v);
+      if (Number.isFinite(n) && n > 0) return n;
+    }
+    return 0;
+  };
+  const fee = pickAmount(ccl?.feeAmount, caseRecord?.proposedAmount, caseRecord?.totalAmount, installmentSum);
+  const total = pickAmount(caseRecord?.totalAmount, ccl?.feeAmount, caseRecord?.proposedAmount, installmentSum, fee);
+  const proposed = pickAmount(caseRecord?.proposedAmount, ccl?.feeAmount, caseRecord?.totalAmount, fee);
   set("proposed_amount", formatGbp(proposed));
   set("total_amount", formatGbp(total));
   set("fee_amount", formatGbp(fee));
   set("amount_in_words", amountToWords(fee));
   set("installment_plan", renderInstallmentPlanHtml(ccl?.installmentPlan));
 
-  // Organisation
+  // Organisation — the tenant Organisation row exposes name / primaryEmail /
+  // country / logoUrl (not address/email/phone), so map those correctly.
   set("org_name", organisation?.name || "");
-  set("org_address", organisation?.address || organisation?.company_address || "");
-  set("org_email", organisation?.email || organisation?.contact_email || "");
+  set("org_address", organisation?.address || organisation?.company_address || organisation?.country || "");
+  set("org_email", organisation?.primaryEmail || organisation?.email || organisation?.contact_email || "");
   set("org_phone", organisation?.phone || organisation?.contact_phone || "");
   // org_logo is rendered as the letterhead image by the generator (Phase 2),
   // not inline text — leave the inline value empty here.

@@ -1,6 +1,7 @@
 import platformDb from "../../models/index.js";
 import catchAsync from "../../utils/catchAsync.js";
 import ApiResponse from "../../utils/apiResponse.js";
+import { invalidateOrgCache } from "../../services/orgCache.service.js";
 
 export const getAllSubscriptions = catchAsync(async (req, res) => {
   const subscriptions = await platformDb.Subscription.findAll({
@@ -145,7 +146,15 @@ export const renewSubscription = catchAsync(async (req, res) => {
       due_at: dueDate,
     }, { transaction });
 
+    // Renewing the subscription must also lift the org suspension so users can
+    // log back in (the expiry cron suspends the org when the sub expires).
+    await platformDb.Organisation.update(
+      { status: 'active' },
+      { where: { id: subscription.organisation_id }, transaction },
+    );
+
     await transaction.commit();
+    invalidateOrgCache(subscription.organisation_id);
 
     return ApiResponse.success(res, "Subscription renewed successfully", { subscription });
   } catch (error) {

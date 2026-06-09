@@ -1,10 +1,28 @@
 import platformDb from "../models/index.js";
 import ApiResponse from "../utils/apiResponse.js";
 import { verifyToken as verifyJwt } from "../config/jwt.config.js";
+import { ROLES } from "./role.middleware.js";
 import {
   getCachedOrg,
   setCachedOrg,
 } from "../services/orgCache.service.js";
+
+/**
+ * Endpoints an org admin may still reach while their subscription is expired,
+ * so they can view the renewal page and pay to reactivate. Everything else is
+ * gated behind an active subscription. Matched as a prefix on the path.
+ */
+const SUBSCRIPTION_EXEMPT_PREFIXES = [
+  "/api/billing",
+  "/api/auth/me",
+  "/api/auth/logout",
+  "/api/auth/refresh",
+];
+
+function isSubscriptionExemptPath(req) {
+  const url = (req.originalUrl || req.url || "").split("?")[0];
+  return SUBSCRIPTION_EXEMPT_PREFIXES.some((p) => url.startsWith(p));
+}
 
 /**
  * Global token verification against Platform DB users registry.
@@ -85,18 +103,32 @@ export const verifyToken = async (req, res, next) => {
         setCachedOrg(orgId, orgData);
       }
 
-      if (orgData.status === "suspended") {
-        return ApiResponse.forbidden(
-          res,
-          "Your organisation subscription has expired. Please contact your administrator.",
-        );
-      }
+      const subscriptionExpired =
+        orgData.status === "suspended" ||
+        (!orgData.hasActiveSub && orgData.hasExpiredSub);
 
-      if (!orgData.hasActiveSub && orgData.hasExpiredSub) {
-        return ApiResponse.forbidden(
-          res,
-          "Your organisation subscription has expired. Please contact your administrator.",
-        );
+      if (subscriptionExpired) {
+        // Org admins may still sign in to self-serve renewal: let them reach the
+        // billing/session endpoints, but block every other feature endpoint with
+        // a machine-readable code so the frontend can redirect them to pay.
+        // All other roles stay hard-blocked until the org is reactivated.
+        if (user.role_id === ROLES.ADMIN) {
+          req.subscriptionExpired = true;
+          if (!isSubscriptionExemptPath(req)) {
+            return res.status(403).json({
+              status: "error",
+              code: "SUBSCRIPTION_EXPIRED",
+              message:
+                "Your organisation subscription has expired. Please renew to continue.",
+              data: null,
+            });
+          }
+        } else {
+          return ApiResponse.forbidden(
+            res,
+            "Your organisation subscription has expired. Please contact your administrator.",
+          );
+        }
       }
 
       req._orgData = orgData;

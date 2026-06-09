@@ -4,6 +4,8 @@
  * All routes are gated to Admin + Caseworker (see ccl.routes.js).
  */
 import { Op } from "sequelize";
+import fs from "fs";
+import path from "path";
 import mammoth from "mammoth";
 import {
   getCclTagRegistry,
@@ -17,6 +19,11 @@ import {
   renderCclPdfBuffer,
 } from "../../../services/cclGenerator.service.js";
 import { attachCclTemplateToCase } from "../../../services/cclTemplate.service.js";
+import {
+  notifyUser,
+  NotificationTypes,
+  NotificationPriority,
+} from "../../../services/notification.service.js";
 import logger from "../../../utils/logger.js";
 
 const ok = (res, data, message = "OK") =>
@@ -32,6 +39,56 @@ async function findCase(tenantDb, caseRef) {
     if (byPk) return byPk;
   }
   return tenantDb.Case.findOne({ where: { caseId: ref } });
+}
+
+/**
+ * Remove a superseded issued CCL document row so a re-issue doesn't leave the
+ * candidate looking at two "Client Care Letter" documents. The generated PDF
+ * uses a deterministic per-case filename, so a re-issue overwrites the same file
+ * in place — never unlink a path the freshly issued document still points to
+ * (doing so deletes the current letter). Best-effort.
+ */
+async function cleanupSupersededCclDocument(tenantDb, documentId, keepPath = null) {
+  if (!documentId || !tenantDb?.Document) return;
+  try {
+    const doc = await tenantDb.Document.findByPk(documentId);
+    if (!doc) return;
+    const filePath = doc.documentPath ? path.resolve(doc.documentPath) : null;
+    const keep = keepPath ? path.resolve(keepPath) : null;
+    await doc.destroy();
+    if (filePath && filePath !== keep && fs.existsSync(filePath)) {
+      try {
+        fs.unlinkSync(filePath);
+      } catch (err) {
+        logger.warn({ err, filePath }, "cleanupSupersededCclDocument: unlink failed");
+      }
+    }
+  } catch (err) {
+    logger.warn({ err, documentId }, "cleanupSupersededCclDocument failed");
+  }
+}
+
+/**
+ * Release the issued letter to the candidate: in-app notification + email so
+ * they know the Client Care Letter is ready to review, download and accept.
+ */
+async function notifyCandidateCclIssued(tenantDb, caseRecord) {
+  if (!caseRecord?.candidateId) return;
+  const caseLabel = caseRecord.caseId || `#${caseRecord.id}`;
+  await notifyUser(tenantDb, caseRecord.candidateId, {
+    tenantDb,
+    type: NotificationTypes.INFO,
+    priority: NotificationPriority.HIGH,
+    category: "case",
+    title: `Your Client Care Letter is ready — ${caseLabel}`,
+    message:
+      "Your Client Care Letter has been issued. Open the Client Care Letter section to review, download and accept it.",
+    actionType: "ccl_issued",
+    entityType: "case",
+    entityId: caseRecord.id,
+    metadata: { caseId: caseLabel },
+    sendEmail: true,
+  });
 }
 
 /** Deactivate any other active template for the same visa slot (DB enforces one active). */
@@ -312,8 +369,10 @@ export const issueCaseCcl = async (req, res) => {
       defaults: { caseId: caseRecord.id, status: "issued" },
     });
 
-    // Force regeneration from the latest draft/template.
-    if (ccl.issuedDocumentId) await ccl.update({ issuedDocumentId: null });
+    // Force regeneration from the latest draft/template. Remember the previous
+    // document so it can be removed once the new one is generated.
+    const previousDocumentId = ccl.issuedDocumentId || null;
+    if (previousDocumentId) await ccl.update({ issuedDocumentId: null });
 
     const result = await attachCclTemplateToCase({
       tenantDb: req.tenantDb,
@@ -321,11 +380,35 @@ export const issueCaseCcl = async (req, res) => {
       ccl,
       performedBy: req.user?.userId ?? null,
     });
-    if (!result?.document) return bad(res, "Could not generate the Client Care Letter", 500);
+    if (!result?.document) {
+      // Restore the prior document link so a failed re-issue doesn't lose the
+      // already-issued letter.
+      if (previousDocumentId) {
+        await ccl.update({ issuedDocumentId: previousDocumentId }).catch(() => {});
+      }
+      return bad(res, "Could not generate the Client Care Letter", 500);
+    }
 
     if (ccl.status !== "signed") {
       await ccl.update({ status: "issued", issuedAt: new Date(), issuedBy: req.user?.userId ?? null });
     }
+
+    // Drop the superseded document row so the candidate sees a single current
+    // Client Care Letter, not duplicates from earlier re-issues. Keep the new
+    // file on disk (the deterministic filename means it shares the path).
+    if (previousDocumentId && previousDocumentId !== result.document.id) {
+      await cleanupSupersededCclDocument(
+        req.tenantDb,
+        previousDocumentId,
+        result.document.documentPath,
+      );
+    }
+
+    // Release to the candidate so they can view, download and accept it.
+    await notifyCandidateCclIssued(req.tenantDb, caseRecord).catch((err) =>
+      logger.warn({ err }, "issueCaseCcl: candidate notification failed"),
+    );
+
     return ok(res, { documentId: result.document.id, dynamic: !!result.dynamic }, "Client Care Letter issued");
   } catch (err) {
     logger.error({ err }, "issueCaseCcl");
