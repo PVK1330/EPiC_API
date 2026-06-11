@@ -1,9 +1,14 @@
+import path from "path";
+import fs from "fs";
 import logger from "../../../utils/logger.js";
 import { ROLES } from "../../../middlewares/role.middleware.js";
 import {
   getStagesForApplication,
   completeStageTask,
 } from "../../../services/licenceStageTask.service.js";
+
+const PRIVATE_STORAGE_DIR = path.resolve(process.cwd(), "storage/private");
+const INLINE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".webp", ".gif", ".pdf"];
 
 /**
  * Shared controller for the Sponsor Licence "stages" panel, mounted under the
@@ -56,6 +61,54 @@ export const getLicenceStages = async (req, res) => {
     const code = error?.statusCode || 500;
     if (code >= 500) logger.error({ err: error }, "getLicenceStages failed");
     return res.status(code).json({ status: "error", message: error.message || "Failed to load stages" });
+  }
+};
+
+/**
+ * GET .../:id/documents/:index/download — stream one of an application's uploaded
+ * documents (the `documents` JSON array of disk paths) through this authenticated
+ * route. Shared by caseworker (assignment-guarded) and sponsor (ownership-guarded);
+ * confined to storage/private to block traversal. Mirrors the admin handler.
+ */
+export const downloadLicenceDocument = async (req, res) => {
+  try {
+    const { index } = req.params;
+    const application = await loadAccessibleApplication(req);
+    if (!application) {
+      return res.status(404).json({ status: "error", message: "Licence application not found" });
+    }
+    assertScopeAccess(req, application);
+
+    const docs = Array.isArray(application.documents) ? application.documents : [];
+    const i = Number.parseInt(index, 10);
+    if (Number.isNaN(i) || i < 0 || i >= docs.length || !docs[i]) {
+      return res.status(404).json({ status: "error", message: "Document not found" });
+    }
+
+    const absolute = path.resolve(String(docs[i]));
+    if (absolute !== PRIVATE_STORAGE_DIR && !absolute.startsWith(PRIVATE_STORAGE_DIR + path.sep)) {
+      return res.status(400).json({ status: "error", message: "Invalid document path" });
+    }
+    if (!fs.existsSync(absolute)) {
+      return res.status(404).json({ status: "error", message: "File no longer exists on the server" });
+    }
+
+    const filename = path.basename(absolute);
+    const ext = path.extname(filename).toLowerCase();
+    const forceDownload = req.query.download === "1";
+    const disposition = forceDownload || !INLINE_EXTENSIONS.includes(ext) ? "attachment" : "inline";
+
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Content-Disposition", `${disposition}; filename="${filename}"`);
+    return res.sendFile(absolute, (err) => {
+      if (err && !res.headersSent) {
+        res.status(500).json({ status: "error", message: "Error streaming document" });
+      }
+    });
+  } catch (error) {
+    const code = error?.statusCode || 500;
+    if (code >= 500) logger.error({ err: error }, "downloadLicenceDocument (shared) failed");
+    return res.status(code).json({ status: "error", message: error.message || "Failed to download document" });
   }
 };
 

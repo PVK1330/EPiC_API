@@ -23,10 +23,14 @@ import {
 import { verifyTokenAndTenant } from '../../../middlewares/authStack.middleware.js';
 import { upload } from '../../../middlewares/upload.middleware.js';
 import { requireActiveSponsorLicence } from '../../../middlewares/requireActiveSponsorLicence.middleware.js';
+import { downloadLicenceDocument } from '../../Shared/Licence/licenceStage.controller.js';
 
 const router = express.Router();
 
 router.use(verifyTokenAndTenant);
+
+// Stream one of the sponsor's own uploaded documents (ownership-guarded).
+router.get("/:id/documents/:index/download", downloadLicenceDocument);
 
 router.post("/apply", upload.array("documents", 10), submitLicenceApplication);
 router.get("/my-applications", getMyLicenceApplications);

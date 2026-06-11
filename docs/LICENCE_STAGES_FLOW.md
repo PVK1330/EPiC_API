@@ -193,7 +193,12 @@ Shared controller: `Server/src/modules/Shared/Licence/licenceStage.controller.js
 | `EPiC_Frontend/src/components/licence/LicenceStages.jsx` | the interactive panel |
 | `EPiC_Frontend/src/services/licenceStageApi.js` | role‑aware `getLicenceStages` / `completeLicenceStageTask` |
 | `EPiC_Frontend/src/components/licence/LicenceApplicationV2Detail.jsx` | **Admin + Caseworker** host (`/admin/licence/v2/:id`, `/caseworker/licence/v2/:id`) |
-| `EPiC_Frontend/src/pages/business/LicenceProcess.jsx` | **Sponsor** host (fetches their latest V2 app) |
+| `EPiC_Frontend/src/pages/business/LicenceStatus.jsx` | **Sponsor** host — the navigated "Licence Management" page (`/business/licence`); shows the panel when a V2 application exists |
+| `EPiC_Frontend/src/pages/business/LicenceProcess.jsx` | Secondary sponsor host (`/business/licence-process`, routed but not in the sidebar) |
+
+> **Sponsor reachability:** the sponsor sees the stages on **Licence Management**
+> (`/business/licence`, in the sidebar). `LicenceProcess` also embeds it but is not
+> linked in the nav.
 
 Panel behaviour:
 - Fetches live stages when an `applicationId` is present; renders a vertical

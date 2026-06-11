@@ -9,7 +9,7 @@ import {
 import { verifyTokenAndTenant } from '../../../middlewares/authStack.middleware.js';
 import { checkRole, ROLES } from '../../../middlewares/role.middleware.js';
 import { ensureAssignedCaseworker } from '../../../middlewares/ensureAssignedCaseworker.middleware.js';
-import { getLicenceStages, completeLicenceStageTask } from '../../Shared/Licence/licenceStage.controller.js';
+import { getLicenceStages, completeLicenceStageTask, downloadLicenceDocument } from '../../Shared/Licence/licenceStage.controller.js';
 
 const router = Router();
 
@@ -33,5 +33,8 @@ router.get("/:id/audit", ensureAssignedCaseworker(), getLicenceApplicationAudit)
 // Stages panel — assigned caseworker (or admin override) may view + complete tasks.
 router.get("/:id/stages", ensureAssignedCaseworker(), getLicenceStages);
 router.post("/:id/stages/:stageKey/complete", ensureAssignedCaseworker(), completeLicenceStageTask);
+
+// Stream an uploaded evidence document (assignment-guarded).
+router.get("/:id/documents/:index/download", ensureAssignedCaseworker(), downloadLicenceDocument);
 
 export default router;
