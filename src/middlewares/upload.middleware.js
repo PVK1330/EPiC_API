@@ -183,9 +183,17 @@ const withSecurityProcessing = (uploadMiddleware) => {
       try {
         if (req.file) {
           await processFileSecurity(req, req.file);
-        } else if (req.files && Array.isArray(req.files)) {
+        } else if (Array.isArray(req.files)) {
+          // .single()/.array() -> req.files is an array of files
           for (const file of req.files) {
             await processFileSecurity(req, file);
+          }
+        } else if (req.files && typeof req.files === 'object') {
+          // .fields() -> req.files is an object keyed by field name (each an array)
+          for (const fileList of Object.values(req.files)) {
+            for (const file of fileList) {
+              await processFileSecurity(req, file);
+            }
           }
         }
         next();
@@ -200,7 +208,20 @@ const withSecurityProcessing = (uploadMiddleware) => {
 export const handleProfilePicUpload = withSecurityProcessing(upload.single('profile_pic'));
 export const handleMessageFileUpload = withSecurityProcessing(upload.single('file'));
 export const handleCandidateIssueReportUpload = withSecurityProcessing(upload.single('evidence'));
-export const handleSponsorRegistrationUpload = withSecurityProcessing(upload.array('documents', 5));
+// The sponsor registration form uploads each document under its own field name
+// (profile_pic + the five business documents), so multer must accept those named
+// fields. Using .array('documents') here caused a multer "Unexpected field" error
+// for every other field name. The controller reads req.files[<fieldName>][0].
+export const handleSponsorRegistrationUpload = withSecurityProcessing(
+  upload.fields([
+    { name: 'profile_pic', maxCount: 1 },
+    { name: 'sponsorLetter', maxCount: 1 },
+    { name: 'insuranceCertificate', maxCount: 1 },
+    { name: 'hrPolicies', maxCount: 1 },
+    { name: 'organisationalChart', maxCount: 1 },
+    { name: 'recruitmentDocs', maxCount: 1 },
+  ])
+);
 export const handleDocumentUpload = withSecurityProcessing(upload.array("files", 10));
 
 export const handleOrganisationLogoUpload = withSecurityProcessing(orgLogoUpload.single('logo'));
