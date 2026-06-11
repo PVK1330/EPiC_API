@@ -31,6 +31,17 @@ export default (sequelize, DataTypes) => {
           key: "id",
         },
       },
+      // Tenant/organisation scope. Nullable + ON DELETE SET NULL at the DB level
+      // so removing an organisation never cascades into worker-event history.
+      organisationId: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        field: "organisation_id",
+        references: {
+          model: "organisations",
+          key: "id",
+        },
+      },
       eventType: {
         type: DataTypes.STRING(100),
         allowNull: false,
@@ -67,6 +78,29 @@ export default (sequelize, DataTypes) => {
       description: {
         type: DataTypes.TEXT,
         allowNull: true,
+      },
+      // ── Compliance review workflow (separate from operational `status`) ──
+      reviewStatus: {
+        type: DataTypes.STRING(30),
+        allowNull: false,
+        defaultValue: "Submitted",
+        field: "review_status",
+      },
+      reviewedBy: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        field: "reviewed_by",
+        references: { model: "users", key: "id" },
+      },
+      reviewedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: "reviewed_at",
+      },
+      reviewNotes: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        field: "review_notes",
       },
     },
     {

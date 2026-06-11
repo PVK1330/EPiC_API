@@ -60,10 +60,37 @@ export default (sequelize, DataTypes) => {
           key: "id",
         },
       },
+      // Timestamp of the most recent reviewer decision (approve/reject/request-info).
+      reviewedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: "reviewed_at",
+      },
+      // Reviewer-supplied decision notes / rejection reason. Distinct from the
+      // sponsor-editable `notes` field above.
+      reviewNotes: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        field: "review_notes",
+      },
+      // Review workflow: draft -> submitted -> under_review ->
+      // approved | rejected | information_requested (which loops back to submitted).
+      // Legacy values (valid/expired/missing) are retained so historical rows
+      // remain valid; they are not produced by the new workflow.
       status: {
-        type: DataTypes.ENUM("valid", "expired", "missing", "under_review"),
+        type: DataTypes.ENUM(
+          "draft",
+          "submitted",
+          "under_review",
+          "approved",
+          "rejected",
+          "information_requested",
+          "valid",
+          "expired",
+          "missing"
+        ),
         allowNull: false,
-        defaultValue: "under_review",
+        defaultValue: "submitted",
       },
       notes: {
         type: DataTypes.TEXT,

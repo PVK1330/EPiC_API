@@ -153,7 +153,11 @@ export const createWorkerEvent = async (req, res) => {
     }
 
     const deadlineDate = toISODate(addDays(eventDate, 10));
-    const organisationId = req.user?.organisation_id != null ? Number(req.user.organisation_id) : null;
+    // Organisation scope is derived from the authenticated session only — never
+    // from the request body — so a sponsor cannot assign an event to another
+    // tenant. A non-numeric/absent value falls back to null (column is nullable).
+    const orgRaw = Number(req.user?.organisation_id);
+    const organisationId = Number.isInteger(orgRaw) ? orgRaw : null;
     const evidenceFile = req.file ? req.file.path.replace(/\\/g, '/') : null;
 
     const newEvent = await req.tenantDb.WorkerEvent.create({
@@ -169,7 +173,7 @@ export const createWorkerEvent = async (req, res) => {
       reportedBy: reportedBy || null,
       evidenceFile: evidenceFile,
       dateReportedToSms: dateReportedToSms ? new Date(dateReportedToSms) : null,
-      organisation_id: organisationId,
+      organisationId,
     });
 
     await notifyInvolvedParties({
@@ -233,6 +237,11 @@ export const updateWorkerEvent = async (req, res) => {
     }
     if (dateReportedToSms !== undefined) {
       event.dateReportedToSms = dateReportedToSms ? new Date(dateReportedToSms) : null;
+    }
+    // Backfill organisation scope for legacy rows created before it was mapped.
+    if (event.organisationId == null) {
+      const orgRaw = Number(req.user?.organisation_id);
+      if (Number.isInteger(orgRaw)) event.organisationId = orgRaw;
     }
 
     await event.save();

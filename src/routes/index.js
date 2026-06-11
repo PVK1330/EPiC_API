@@ -25,6 +25,7 @@ import caseworkerCaseNoteRoutes from '../modules/Caseworker/Cases/caseworkerCase
 import caseworkerSponsorRoutes from '../modules/Caseworker/Sponsors/caseworkerSponsor.routes.js';
 import caseworkerAuditRoutes from '../modules/Caseworker/Audit/caseworkerAudit.routes.js';
 import caseworkerLicenceRoutes from '../modules/Caseworker/Cases/caseworker.licence.routes.js';
+import caseworkerCosRoutes from '../modules/Caseworker/Cos/caseworkerCos.routes.js';
 import caseworkerTimelineRoutes from '../modules/Caseworker/Cases/caseTimeline.routes.js';
 import caseworkerPerformanceRoutes from '../modules/Caseworker/Performance/caseworkerPerformance.routes.js';
 import rescheduleRoutes from '../modules/Caseworker/Cases/reschedule.routes.js';
@@ -42,6 +43,8 @@ import microsoftRoutes from '../modules/Shared/Integrations/microsoft/microsoft.
 import teamsMeetingRoutes from '../modules/Shared/Integrations/teamsMeeting.routes.js';
 import googleRoutes from '../modules/Shared/Integrations/google/google.routes.js';
 import escalationRoutes from '../modules/Shared/Cases/escalation.routes.js';
+import complianceReviewRoutes from '../modules/Shared/Compliance/complianceReview.routes.js';
+import sponsorComplianceReviewRoutes from '../modules/Shared/Compliance/sponsorComplianceReview.routes.js';
 
 import candidatePanelRoutes from '../modules/Candidate/index.js';
 import workflowRoutes from '../modules/Shared/Workflow/workflow.routes.js';
@@ -82,6 +85,7 @@ router.use('/caseworker/case-notes', caseworkerCaseNoteRoutes);
 router.use('/caseworker/sponsors', caseworkerSponsorRoutes);
 router.use('/caseworker/audit', caseworkerAuditRoutes);
 router.use('/caseworker/licence', caseworkerLicenceRoutes);
+router.use('/caseworker/cos', caseworkerCosRoutes);
 router.use('/caseworker', caseworkerTimelineRoutes);
 router.use('/caseworker', caseworkerPerformanceRoutes);
 router.use('/caseworker', caseworkerRoutes);
@@ -100,6 +104,11 @@ router.use('/google', googleRoutes);
 router.use('/cases/reschedule', rescheduleRoutes);
 router.use('/cases', caseRoutes);
 router.use('/escalations', escalationRoutes);
+// Compliance document review queue (Admin + Caseworker only). Sponsor self-service
+// lives under /business/compliance-documents.
+router.use('/compliance-documents', complianceReviewRoutes);
+// Sponsor-compliance review surface (right-to-work, worker-events, change-requests)
+router.use('/compliance-review', sponsorComplianceReviewRoutes);
 router.use('/tasks', taskRoutes);
 router.use('/documents', documentRoutes);
 router.use('/notifications', notificationRoutes);

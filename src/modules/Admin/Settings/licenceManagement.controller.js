@@ -1,21 +1,35 @@
 import { Op } from "sequelize";
 import { sendTransactionalEmail } from "../../../services/mail.service.js";
 import { generateNotificationEmailTemplate } from "../../../utils/emailTemplates.js";
-import {
-  notifyLicenceInfoRequested,
-  notifyLicenceStatusChanged,
-  notifyLicenceAssigned,
-  createNotification,
-  NotificationTypes,
-  NotificationPriority,
-} from "../../../services/notification.service.js";
 import logger from "../../../utils/logger.js";
+import {
+  activateSponsorLicence,
+  isCosRequestApplication,
+} from "../../../services/licenceActivation.service.js";
+import {
+  loadFullApplication as loadFullApplicationV2,
+  serializeApplication as serializeApplicationV2,
+} from "../../../services/licenceApplicationV2.service.js";
+import {
+  recordLicenceAudit,
+  statusToAuditAction,
+  extractCaseworkerIds,
+  LICENCE_AUDIT_ACTIONS,
+} from "../../../services/licenceAssignment.service.js";
+import {
+  listCosRequests,
+  assignCosRequest,
+  reviewCosRequest,
+} from "../../../services/cosRequest.service.js";
+import * as sponsorshipNotify from "../../../services/sponsorshipNotification.service.js";
 
 export const getAllLicenceApplications = async (req, res) => {
   try {
     const { status, type } = req.query;
     const whereClause = {};
+    // Unsubmitted V2 drafts are private to the sponsor — never surface them to reviewers.
     if (status) whereClause.status = status;
+    else whereClause.status = { [Op.ne]: "Draft" };
     if (type) whereClause.type = type;
 
     const applications = await req.tenantDb.LicenceApplication.findAll({
@@ -45,6 +59,20 @@ export const getAllLicenceApplications = async (req, res) => {
   }
 };
 
+/** GET /api/admin/licence/v2/:id — full normalized V2 application (read-only reviewer view). */
+export const getLicenceApplicationV2 = async (req, res) => {
+  try {
+    const app = await loadFullApplicationV2(req.tenantDb, req.params.id, {});
+    if (!app) {
+      return res.status(404).json({ status: "error", message: "Licence application not found" });
+    }
+    return res.status(200).json({ status: "success", data: serializeApplicationV2(app) });
+  } catch (error) {
+    logger.error({ err: error }, "getLicenceApplicationV2 (admin) failed");
+    return res.status(500).json({ status: "error", message: "Failed to fetch application" });
+  }
+};
+
 export const updateLicenceApplicationStatus = async (req, res) => {
   try {
     const { id } = req.params;
@@ -59,42 +87,55 @@ export const updateLicenceApplicationStatus = async (req, res) => {
       });
     }
 
+    const previousStatus = application.status;
+
     application.status = status;
     if (adminNotes) application.adminNotes = adminNotes;
     await application.save();
 
-    // If approved and it's a CoS request, update the sponsor's allocation
-    if (
-      status === "Approved" &&
-      String(application.reason || "").startsWith("CoS Request:")
-    ) {
+    // On approval, activate the sponsor licence (Phase 4 — Licence Activation:
+    // status Active, licence number, issue/expiry dates, audit, notification).
+    // CoS top-ups are owned by the dedicated CoS request workflow
+    // (cosRequest.service); the isCosRequestApplication guard keeps any
+    // pre-migration "CoS Request:" licence row from activating a licence.
+    if (status === "Approved" && !isCosRequestApplication(application)) {
       try {
-        const SponsorProfile = req.tenantDb.SponsorProfile;
-        const profile = await req.tenantDb.SponsorProfile.findOne({
-          where: { userId: application.userId },
+        await activateSponsorLicence({
+          tenantDb: req.tenantDb,
+          application,
+          approvedByUserId: req.user?.userId ?? null,
+          req,
         });
-        if (profile) {
-          const currentAlloc = parseInt(profile.cosAllocation) || 0;
-          const requestedAlloc = parseInt(application.cosAllocation) || 0;
-          profile.cosAllocation = currentAlloc + requestedAlloc;
-          await profile.save();
-        }
       } catch (err) {
-        logger.error({ err }, "Failed to update sponsor CoS allocation");
+        logger.error({ err }, "Failed to activate sponsor licence");
       }
     }
 
-    // Trigger Notification & Email
+    // Events 4/6 — Information Requested / Licence Rejected / status change.
+    // Approved is skipped here (handled by licence activation, event 5).
     try {
-      await notifyLicenceStatusChanged(
-        application.userId,
+      await sponsorshipNotify.licenceStatusChanged({
+        tenantDb: req.tenantDb,
         application,
         status,
         adminNotes,
-      );
+        req,
+      });
     } catch (notifyErr) {
       logger.error({ err: notifyErr }, "Failed to send status notification");
     }
+
+    // Reviewer action audit (admin override path).
+    await recordLicenceAudit({
+      tenantDb: req.tenantDb,
+      application,
+      actorId: req.user?.userId ?? null,
+      action: statusToAuditAction(status),
+      previousStatus,
+      newStatus: status,
+      notes: adminNotes || null,
+      req,
+    });
 
     res.status(200).json({
       status: "success",
@@ -164,17 +205,36 @@ export const requestAdditionalInformation = async (req, res) => {
       });
     }
 
+    const previousStatus = application.status;
+
     application.status = "Information Requested";
     application.requestedDocuments = requestedDocuments; // Array of doc titles or instructions
     if (adminNotes) application.adminNotes = adminNotes;
     await application.save();
 
-    // Trigger Notification & Email
+    // Event 4 — Information Requested (in-app + email).
     try {
-      await notifyLicenceInfoRequested(application.userId, application);
+      await sponsorshipNotify.informationRequested({
+        tenantDb: req.tenantDb,
+        application,
+        adminNotes,
+        req,
+      });
     } catch (notifyErr) {
       logger.error({ err: notifyErr }, "Failed to send info request notification");
     }
+
+    // Reviewer action audit (Request Information).
+    await recordLicenceAudit({
+      tenantDb: req.tenantDb,
+      application,
+      actorId: req.user?.userId ?? null,
+      action: LICENCE_AUDIT_ACTIONS.REQUEST_INFO,
+      previousStatus,
+      newStatus: "Information Requested",
+      notes: adminNotes || null,
+      req,
+    });
 
     res.status(200).json({
       status: "success",
@@ -212,21 +272,36 @@ export const assignCaseworker = async (req, res) => {
       });
     }
 
+    const previousAssignment = extractCaseworkerIds(application.assignedcaseworkerId);
+    const previousStatus = application.status;
+
     application.assignedcaseworkerId = caseworkerIds;
     application.status = "Under Review";
     await application.save();
 
-    // Notify assigned caseworkers & Sponsor
+    // Assignment history audit (assign vs reassign).
+    await recordLicenceAudit({
+      tenantDb: req.tenantDb,
+      application,
+      actorId: req.user?.userId ?? null,
+      action:
+        previousAssignment.length > 0
+          ? LICENCE_AUDIT_ACTIONS.REASSIGN
+          : LICENCE_AUDIT_ACTIONS.ASSIGN,
+      previousStatus,
+      newStatus: "Under Review",
+      assignedCaseworkerIds: caseworkerIds,
+      req,
+    });
+
+    // Event 3 — Licence Assigned: notify caseworker(s) + sponsor (in-app + email).
     try {
-      for (const cwId of caseworkerIds) {
-        await notifyLicenceAssigned(cwId, application);
-      }
-      // Also notify the sponsor
-      await notifyLicenceStatusChanged(
-        application.userId,
+      await sponsorshipNotify.licenceAssigned({
+        tenantDb: req.tenantDb,
         application,
-        "Assigned to Review",
-      );
+        caseworkers: caseworkerIds,
+        req,
+      });
     } catch (notifyErr) {
       logger.error({ err: notifyErr }, "Failed to send assignment notifications");
     }
@@ -312,180 +387,80 @@ export const updateLicenceApplicationByAdmin = async (req, res) => {
   }
 };
 
+// ─── CoS request review (admin) — backed by the dedicated CosRequest entity ───
+
 export const getCosRequests = async (req, res) => {
   try {
-    const whereClause = {
-      reason: { [Op.iLike]: "CoS Request:%" },
-    };
-
-    if (req.query.status) {
-      whereClause.status = req.query.status;
-    }
-
-    const cosRequests = await req.tenantDb.LicenceApplication.findAll({
-      where: whereClause,
-      include: [
-        {
-          model: req.tenantDb.User,
-          as: "user",
-          attributes: ["id", "first_name", "last_name", "email"],
-        },
-      ],
-      order: [["createdAt", "DESC"]],
-    });
-
+    const requests = await listCosRequests(req.tenantDb, { status: req.query.status });
     res.status(200).json({
       status: "success",
       message: "CoS requests fetched successfully",
-      data: cosRequests,
+      data: requests,
     });
   } catch (error) {
     logger.error({ err: error }, "Error fetching CoS requests");
-    res.status(500).json({
-      status: "error",
-      message: "Failed to fetch CoS requests",
-      data: null,
-    });
+    res.status(500).json({ status: "error", message: "Failed to fetch CoS requests", data: null });
   }
 };
 
 export const assignCosRequestToCaseworker = async (req, res) => {
   try {
-    const { id } = req.params;
     const { caseworkerIds, adminNotes } = req.body;
-
-    if (!Array.isArray(caseworkerIds) || !caseworkerIds.length) {
-      return res.status(400).json({
-        status: "error",
-        message: "caseworkerIds must be a non-empty array",
-        data: null,
-      });
-    }
-
-    const cosRequest = await req.tenantDb.LicenceApplication.findByPk(id, {
-      include: [
-        {
-          model: req.tenantDb.User,
-          as: "user",
-          attributes: ["id", "first_name", "last_name", "email"],
-        },
-      ],
+    const request = await assignCosRequest({
+      tenantDb: req.tenantDb,
+      id: req.params.id,
+      caseworkerIds,
+      adminNotes,
+      actorId: req.user?.userId ?? null,
+      req,
     });
-
-    if (!cosRequest) {
-      return res.status(404).json({
-        status: "error",
-        message: "CoS request not found",
-        data: null,
-      });
-    }
-
-    if (!String(cosRequest.reason || "").startsWith("CoS Request:")) {
-      return res.status(400).json({
-        status: "error",
-        message: "This licence application is not a CoS request",
-        data: null,
-      });
-    }
-
-    const caseworkers = await req.tenantDb.User.findAll({
-      where: {
-        id: { [Op.in]: caseworkerIds },
-        role_id: 2,
-        status: "active",
-      },
-      attributes: ["id", "first_name", "last_name", "email"],
-    });
-
-    if (!caseworkers.length) {
-      return res.status(404).json({
-        status: "error",
-        message: "No valid active caseworkers found for provided IDs",
-        data: null,
-      });
-    }
-
-    cosRequest.assignedcaseworkerId = caseworkers.map((cw) => cw.id);
-    cosRequest.status = "Under Review";
-    if (adminNotes) {
-      cosRequest.adminNotes = adminNotes;
-    }
-    await cosRequest.save();
-
-    try {
-      for (const cw of caseworkers) {
-        await notifyLicenceAssigned(cw.id, cosRequest);
-        if (cw.email) {
-          await sendTransactionalEmail({
-            organisationId: req.user?.organisation_id ?? null,
-            to: cw.email,
-            subject: `New CoS Request Assignment #LIC-${cosRequest.id}`,
-            html: generateNotificationEmailTemplate({
-              recipientName:
-                `${cw.first_name || ""} ${cw.last_name || ""}`.trim() ||
-                cw.email,
-              title: "New CoS Request Assigned",
-              message: `You have been assigned CoS request #LIC-${cosRequest.id} for ${cosRequest.companyName}.`,
-              priority: NotificationPriority.HIGH,
-              notificationType: NotificationTypes.LICENCE_ASSIGNED,
-              metadata: {
-                requestId: cosRequest.id,
-                company: cosRequest.companyName,
-                requestedAllocation: cosRequest.cosAllocation,
-                visaType: cosRequest.licenceType,
-              },
-            }),
-          });
-        }
-      }
-    } catch (err) {
-      logger.error({ err }, "Failed notifying assigned caseworker(s)");
-    }
-
-    try {
-      await notifyLicenceStatusChanged(
-        cosRequest.userId,
-        cosRequest,
-        "Under Review",
-        adminNotes ||
-          "Your CoS request has been assigned to a caseworker for review.",
-      );
-
-      if (cosRequest.user?.email) {
-        await sendTransactionalEmail({
-          organisationId: req.user?.organisation_id ?? null,
-          to: cosRequest.user.email,
-          subject: `Your CoS Request #LIC-${cosRequest.id} is Under Review`,
-          html: generateNotificationEmailTemplate({
-            recipientName:
-              `${cosRequest.user.first_name || ""} ${cosRequest.user.last_name || ""}`.trim() ||
-              cosRequest.user.email,
-            title: "CoS Request Assigned",
-            message: `Your CoS request #LIC-${cosRequest.id} has been assigned to a caseworker and moved to Under Review.`,
-            priority: NotificationPriority.MEDIUM,
-            notificationType: NotificationTypes.INFO,
-            metadata: {
-              requestId: cosRequest.id,
-              company: cosRequest.companyName,
-            },
-          }),
-        });
-      }
-    } catch (err) {
-      logger.error({ err }, "Failed notifying sponsor for CoS assignment");
-    }
-
     res.status(200).json({
       status: "success",
       message: "CoS request assigned to caseworker(s) successfully",
-      data: cosRequest,
+      data: request,
     });
   } catch (error) {
-    logger.error({ err: error }, "Error assigning CoS request to caseworker");
-    res.status(500).json({
-      status: "error",
-      message: "Failed to assign CoS request",
-      data: null,
+    const code = error?.statusCode || 500;
+    if (code >= 500) logger.error({ err: error }, "Error assigning CoS request to caseworker");
+    res.status(code).json({ status: "error", message: error.message || "Failed to assign CoS request", data: null });
+  }
+};
+
+export const approveCosRequest = async (req, res) => {
+  try {
+    const { approvedAmount, reviewNotes } = req.body;
+    const request = await reviewCosRequest({
+      tenantDb: req.tenantDb,
+      id: req.params.id,
+      action: "approve",
+      approvedAmount,
+      reviewNotes,
+      reviewerId: req.user?.userId ?? null,
+      req,
     });
+    res.status(200).json({ status: "success", message: "CoS request approved", data: request });
+  } catch (error) {
+    const code = error?.statusCode || 500;
+    if (code >= 500) logger.error({ err: error }, "Error approving CoS request");
+    res.status(code).json({ status: "error", message: error.message || "Failed to approve CoS request" });
+  }
+};
+
+export const rejectCosRequest = async (req, res) => {
+  try {
+    const { reviewNotes } = req.body;
+    const request = await reviewCosRequest({
+      tenantDb: req.tenantDb,
+      id: req.params.id,
+      action: "reject",
+      reviewNotes,
+      reviewerId: req.user?.userId ?? null,
+      req,
+    });
+    res.status(200).json({ status: "success", message: "CoS request rejected", data: request });
+  } catch (error) {
+    const code = error?.statusCode || 500;
+    if (code >= 500) logger.error({ err: error }, "Error rejecting CoS request");
+    res.status(code).json({ status: "error", message: error.message || "Failed to reject CoS request" });
   }
 };

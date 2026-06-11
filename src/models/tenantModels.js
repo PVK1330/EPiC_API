@@ -44,6 +44,18 @@ import AppointmentModel from "./tenant/appointment.model.js";
 import CalendarMeetingModel from "./tenant/calendarMeeting.model.js";
 import AuditLogModel from "./tenant/auditLog.model.js";
 import LicenceApplicationModel from "./tenant/licenceApplication.model.js";
+import LicenceApplicationAuditModel from "./tenant/licenceApplicationAudit.model.js";
+// Sponsor Licence Application V2 — normalized section/child tables.
+import LicenceApplicationRouteModel from "./tenant/licenceApplicationRoute.model.js";
+import LicenceOrganisationInfoModel from "./tenant/licenceOrganisationInfo.model.js";
+import LicenceCosRequirementModel from "./tenant/licenceCosRequirement.model.js";
+import LicenceAppendixDocumentModel from "./tenant/licenceAppendixDocument.model.js";
+import LicenceAuthorisingOfficerModel from "./tenant/licenceAuthorisingOfficer.model.js";
+import LicenceKeyContactModel from "./tenant/licenceKeyContact.model.js";
+import LicenceLevel1UserModel from "./tenant/licenceLevel1User.model.js";
+import LicenceDeclarationModel from "./tenant/licenceDeclaration.model.js";
+import CosRequestModel from "./tenant/cosRequest.model.js";
+import ComplianceReviewHistoryModel from "./tenant/complianceReviewHistory.model.js";
 import SponsorUserPreferenceModel from "./tenant/sponsorUserPreference.model.js";
 import WorkerEventModel from "./tenant/workerEvent.model.js";
 import DocumentChecklistModel from "./tenant/documentChecklist.model.js";
@@ -56,6 +68,7 @@ import RightToWorkRecordModel from "./tenant/rightToWorkRecord.model.js";
 import AbsenceRecordModel from "./tenant/absenceRecord.model.js";
 import SmsActivityLogModel from "./tenant/smsActivityLog.model.js";
 import ComplianceDocumentModel from "./tenant/complianceDocument.model.js";
+import ComplianceDocumentAuditModel from "./tenant/complianceDocumentAudit.model.js";
 import CalendarConnectionModel from "./tenant/calendarConnection.model.js";
 import ChangeRequestModel from "./tenant/changeRequest.model.js";
 import ChangeRequestHistoryModel from "./tenant/changeRequestHistory.model.js";
@@ -118,6 +131,17 @@ export function buildDb(sequelize) {
   db.SponsorProfile = SponsorProfileModel(sequelize, Sequelize.DataTypes);
   db.Appointment = AppointmentModel(sequelize, Sequelize.DataTypes);
   db.LicenceApplication = LicenceApplicationModel(sequelize, Sequelize.DataTypes);
+  db.LicenceApplicationAudit = LicenceApplicationAuditModel(sequelize, Sequelize.DataTypes);
+  db.LicenceApplicationRoute = LicenceApplicationRouteModel(sequelize, Sequelize.DataTypes);
+  db.LicenceOrganisationInfo = LicenceOrganisationInfoModel(sequelize, Sequelize.DataTypes);
+  db.LicenceCosRequirement = LicenceCosRequirementModel(sequelize, Sequelize.DataTypes);
+  db.LicenceAppendixDocument = LicenceAppendixDocumentModel(sequelize, Sequelize.DataTypes);
+  db.LicenceAuthorisingOfficer = LicenceAuthorisingOfficerModel(sequelize, Sequelize.DataTypes);
+  db.LicenceKeyContact = LicenceKeyContactModel(sequelize, Sequelize.DataTypes);
+  db.LicenceLevel1User = LicenceLevel1UserModel(sequelize, Sequelize.DataTypes);
+  db.LicenceDeclaration = LicenceDeclarationModel(sequelize, Sequelize.DataTypes);
+  db.CosRequest = CosRequestModel(sequelize, Sequelize.DataTypes);
+  db.ComplianceReviewHistory = ComplianceReviewHistoryModel(sequelize, Sequelize.DataTypes);
   db.CalendarMeeting = CalendarMeetingModel(sequelize, Sequelize.DataTypes);
   db.SponsorUserPreference = SponsorUserPreferenceModel(sequelize, Sequelize.DataTypes);
   db.WorkerEvent = WorkerEventModel(sequelize, Sequelize.DataTypes);
@@ -126,6 +150,7 @@ export function buildDb(sequelize) {
   db.AbsenceRecord = AbsenceRecordModel(sequelize, Sequelize.DataTypes);
   db.SmsActivityLog = SmsActivityLogModel(sequelize, Sequelize.DataTypes);
   db.ComplianceDocument = ComplianceDocumentModel(sequelize, Sequelize.DataTypes);
+  db.ComplianceDocumentAudit = ComplianceDocumentAuditModel(sequelize, Sequelize.DataTypes);
   db.CalendarConnection = CalendarConnectionModel(sequelize, Sequelize.DataTypes);
   db.ChangeRequest = ChangeRequestModel(sequelize, Sequelize.DataTypes);
   db.ChangeRequestHistory = ChangeRequestHistoryModel(sequelize, Sequelize.DataTypes);
@@ -221,10 +246,13 @@ export function buildDb(sequelize) {
   db.SponsorUserPreference.belongsTo(db.User, { foreignKey: "userId", as: "user" });
   db.WorkerEvent.belongsTo(db.User, { foreignKey: "workerId", as: "worker" });
   db.WorkerEvent.belongsTo(db.User, { foreignKey: "sponsorId", as: "sponsor" });
+  db.WorkerEvent.belongsTo(db.User, { foreignKey: "reviewedBy", as: "reviewer" });
   db.WorkerEvent.belongsTo(db.Case, { foreignKey: "caseId", as: "case" });
+  db.WorkerEvent.belongsTo(db.Organisation, { foreignKey: "organisationId", as: "organisation" });
   db.User.hasMany(db.WorkerEvent, { foreignKey: "workerId", as: "workerEvents" });
   db.User.hasMany(db.WorkerEvent, { foreignKey: "sponsorId", as: "sponsorWorkerEvents" });
   db.Case.hasMany(db.WorkerEvent, { foreignKey: "caseId", as: "workerEvents" });
+  db.Organisation.hasMany(db.WorkerEvent, { foreignKey: "organisationId", as: "workerEvents" });
   db.Appointment.belongsTo(db.User, { foreignKey: "candidate_id", as: "candidate" });
   db.Appointment.belongsTo(db.User, { foreignKey: "caseworker_id", as: "caseworker" });
   db.Appointment.belongsTo(db.Case, { foreignKey: "case_id", as: "case" });
@@ -233,6 +261,43 @@ export function buildDb(sequelize) {
   db.Case.hasMany(db.Appointment, { foreignKey: "case_id", as: "appointments" });
   db.User.hasMany(db.LicenceApplication, { foreignKey: "userId", as: "licenceApplications" });
   db.LicenceApplication.belongsTo(db.User, { foreignKey: "userId", as: "user" });
+
+  db.LicenceApplication.hasMany(db.LicenceApplicationAudit, { foreignKey: "licenceApplicationId", as: "auditTrail" });
+  db.LicenceApplicationAudit.belongsTo(db.LicenceApplication, { foreignKey: "licenceApplicationId", as: "application" });
+  db.LicenceApplicationAudit.belongsTo(db.User, { foreignKey: "actorId", as: "actor" });
+  db.LicenceApplicationAudit.belongsTo(db.Organisation, { foreignKey: "organisationId", as: "organisation" });
+
+  // Sponsor Licence Application V2 — section + child associations (one parent row).
+  db.LicenceApplication.hasMany(db.LicenceApplicationRoute, { foreignKey: "licenceApplicationId", as: "routes" });
+  db.LicenceApplicationRoute.belongsTo(db.LicenceApplication, { foreignKey: "licenceApplicationId", as: "application" });
+  db.LicenceApplication.hasOne(db.LicenceOrganisationInfo, { foreignKey: "licenceApplicationId", as: "organisationInfo" });
+  db.LicenceOrganisationInfo.belongsTo(db.LicenceApplication, { foreignKey: "licenceApplicationId", as: "application" });
+  db.LicenceApplication.hasMany(db.LicenceCosRequirement, { foreignKey: "licenceApplicationId", as: "cosRequirements" });
+  db.LicenceCosRequirement.belongsTo(db.LicenceApplication, { foreignKey: "licenceApplicationId", as: "application" });
+  db.LicenceApplication.hasMany(db.LicenceAppendixDocument, { foreignKey: "licenceApplicationId", as: "appendixDocuments" });
+  db.LicenceAppendixDocument.belongsTo(db.LicenceApplication, { foreignKey: "licenceApplicationId", as: "application" });
+  db.LicenceAppendixDocument.belongsTo(db.User, { foreignKey: "verifiedBy", as: "verifier" });
+  db.LicenceApplication.hasOne(db.LicenceAuthorisingOfficer, { foreignKey: "licenceApplicationId", as: "authorisingOfficer" });
+  db.LicenceAuthorisingOfficer.belongsTo(db.LicenceApplication, { foreignKey: "licenceApplicationId", as: "application" });
+  db.LicenceApplication.hasOne(db.LicenceKeyContact, { foreignKey: "licenceApplicationId", as: "keyContact" });
+  db.LicenceKeyContact.belongsTo(db.LicenceApplication, { foreignKey: "licenceApplicationId", as: "application" });
+  db.LicenceApplication.hasMany(db.LicenceLevel1User, { foreignKey: "licenceApplicationId", as: "level1Users" });
+  db.LicenceLevel1User.belongsTo(db.LicenceApplication, { foreignKey: "licenceApplicationId", as: "application" });
+  db.LicenceApplication.hasOne(db.LicenceDeclaration, { foreignKey: "licenceApplicationId", as: "declaration" });
+  db.LicenceDeclaration.belongsTo(db.LicenceApplication, { foreignKey: "licenceApplicationId", as: "application" });
+  db.LicenceApplicationRoute.belongsTo(db.Organisation, { foreignKey: "organisationId", as: "organisation" });
+  db.LicenceOrganisationInfo.belongsTo(db.Organisation, { foreignKey: "organisationId", as: "organisation" });
+  db.LicenceCosRequirement.belongsTo(db.Organisation, { foreignKey: "organisationId", as: "organisation" });
+  db.LicenceAppendixDocument.belongsTo(db.Organisation, { foreignKey: "organisationId", as: "organisation" });
+  db.LicenceAuthorisingOfficer.belongsTo(db.Organisation, { foreignKey: "organisationId", as: "organisation" });
+  db.LicenceKeyContact.belongsTo(db.Organisation, { foreignKey: "organisationId", as: "organisation" });
+  db.LicenceLevel1User.belongsTo(db.Organisation, { foreignKey: "organisationId", as: "organisation" });
+  db.LicenceDeclaration.belongsTo(db.Organisation, { foreignKey: "organisationId", as: "organisation" });
+
+  db.CosRequest.belongsTo(db.User, { foreignKey: "sponsorId", as: "sponsor" });
+  db.CosRequest.belongsTo(db.User, { foreignKey: "reviewedBy", as: "reviewer" });
+  db.CosRequest.belongsTo(db.Organisation, { foreignKey: "organisationId", as: "organisation" });
+  db.User.hasMany(db.CosRequest, { foreignKey: "sponsorId", as: "cosRequests" });
   db.CalendarMeeting.belongsTo(db.User, { foreignKey: "user_id", as: "user" });
   db.User.hasMany(db.CalendarMeeting, { foreignKey: "user_id", as: "calendarMeetings" });
   db.CalendarConnection.belongsTo(db.User, { foreignKey: "user_id", as: "user" });
@@ -267,11 +332,16 @@ export function buildDb(sequelize) {
   db.SponsorChangeRequest.belongsTo(db.User, { foreignKey: "sponsorId", as: "sponsor" });
   db.SponsorChangeRequest.belongsTo(db.User, { foreignKey: "requestedBy", as: "requester" });
   db.SponsorChangeRequest.belongsTo(db.User, { foreignKey: "reportedBy", as: "reporter" });
+  db.SponsorChangeRequest.belongsTo(db.User, { foreignKey: "reviewedBy", as: "reviewer" });
   db.SponsorChangeRequest.belongsTo(db.Organisation, { foreignKey: "organisationId", as: "organisation" });
+
+  db.ComplianceReviewHistory.belongsTo(db.User, { foreignKey: "actorId", as: "actor" });
+  db.ComplianceReviewHistory.belongsTo(db.Organisation, { foreignKey: "organisationId", as: "organisation" });
 
   db.RightToWorkRecord.belongsTo(db.User, { foreignKey: "workerId", as: "worker" });
   db.RightToWorkRecord.belongsTo(db.User, { foreignKey: "sponsorId", as: "sponsor" });
   db.RightToWorkRecord.belongsTo(db.User, { foreignKey: "checkedBy", as: "checker" });
+  db.RightToWorkRecord.belongsTo(db.User, { foreignKey: "reviewedBy", as: "reviewer" });
   db.RightToWorkRecord.belongsTo(db.Organisation, { foreignKey: "organisationId", as: "organisation" });
 
   db.AbsenceRecord.belongsTo(db.User, { foreignKey: "workerId", as: "worker" });
@@ -285,6 +355,11 @@ export function buildDb(sequelize) {
   db.ComplianceDocument.belongsTo(db.User, { foreignKey: "sponsorId", as: "sponsor" });
   db.ComplianceDocument.belongsTo(db.User, { foreignKey: "reviewedBy", as: "reviewer" });
   db.ComplianceDocument.belongsTo(db.Organisation, { foreignKey: "organisationId", as: "organisation" });
+
+  db.ComplianceDocument.hasMany(db.ComplianceDocumentAudit, { foreignKey: "complianceDocumentId", as: "auditTrail" });
+  db.ComplianceDocumentAudit.belongsTo(db.ComplianceDocument, { foreignKey: "complianceDocumentId", as: "document" });
+  db.ComplianceDocumentAudit.belongsTo(db.User, { foreignKey: "reviewerId", as: "reviewer" });
+  db.ComplianceDocumentAudit.belongsTo(db.Organisation, { foreignKey: "organisationId", as: "organisation" });
 
   db.ChangeRequest.belongsTo(db.User, { foreignKey: "submitted_by", as: "submitter" });
   db.ChangeRequest.belongsTo(db.User, { foreignKey: "reviewed_by", as: "reviewer" });

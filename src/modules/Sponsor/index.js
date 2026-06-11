@@ -4,10 +4,12 @@ import { checkRole, ROLES } from '../../middlewares/role.middleware.js';
 import sponsorAccountRoutes from './Account/sponsorAccount.routes.js';
 import sponsorWorkerRoutes from './Workers/sponsorWorker.routes.js';
 import sponsorLicenceRoutes from './Licence/sponsorLicence.routes.js';
+import sponsorLicenceV2Routes from './Licence/sponsorLicenceV2.routes.js';
 import sponsorCosRoutes from './Licence/sponsorCos.routes.js';
 import sponsorDashboardRoutes from './Dashboard/sponsorDashboard.routes.js';
 import workerEventRoutes from './Workers/workerEvent.routes.js';
 import complianceDocumentRoutes from './Compliance/complianceDocument.routes.js';
+import sponsorComplianceRespondRoutes from './Compliance/sponsorComplianceRespond.routes.js';
 import sponsorChangeRequestRoutes from './ChangeRequests/sponsorChangeRequest.routes.js';
 import rightToWorkRoutes from './RightToWork/rightToWork.routes.js';
 import {
@@ -15,9 +17,6 @@ import {
   getBusinessPayments,
   getComplianceSummary,
   getBusinessDocuments,
-  getReportingObligations,
-  createReportingObligation,
-  updateReportingObligation,
 } from './Dashboard/sponsorDashboard.controller.js';
 
 const router = Router();
@@ -28,6 +27,8 @@ router.use(checkRole([ROLES.BUSINESS]));
 
 router.use('/account', sponsorAccountRoutes);
 router.use('/workers', sponsorWorkerRoutes);
+// V2 must mount before '/licence' so its paths aren't shadowed by the V1 router.
+router.use('/licence/v2', sponsorLicenceV2Routes);
 router.use('/licence', sponsorLicenceRoutes);
 router.use('/cos', sponsorCosRoutes);
 router.use('/dashboard', sponsorDashboardRoutes);
@@ -36,12 +37,10 @@ router.get('/cases', getBusinessCases);
 router.get('/payments', getBusinessPayments);
 router.get('/compliance/summary', getComplianceSummary);
 router.get('/documents', getBusinessDocuments);
-router.get('/reporting-obligations', getReportingObligations);
-router.post('/reporting-obligations', createReportingObligation);
-router.patch('/reporting-obligations/:id', updateReportingObligation);
 
 router.use('/worker-events', workerEventRoutes);
 router.use('/compliance-documents', complianceDocumentRoutes);
+router.use('/compliance-review', sponsorComplianceRespondRoutes);
 router.use('/change-requests', sponsorChangeRequestRoutes);
 router.use('/right-to-work', rightToWorkRoutes);
 

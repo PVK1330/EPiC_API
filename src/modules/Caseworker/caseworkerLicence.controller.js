@@ -1,12 +1,14 @@
 import { Op } from 'sequelize';
 import logger from '../../utils/logger.js';
-import { 
-    notifyLicenceStatusChanged, 
-    notifyLicenceInfoRequested, 
-    notifyAdmins, 
-    NotificationTypes, 
-    NotificationPriority 
+import {
+    notifyAdmins,
+    NotificationTypes,
+    NotificationPriority
 } from '../../services/notification.service.js';
+import { activateSponsorLicence, isCosRequestApplication } from '../../services/licenceActivation.service.js';
+import { recordLicenceAudit, statusToAuditAction, getLicenceAuditTrail } from '../../services/licenceAssignment.service.js';
+import * as sponsorshipNotify from '../../services/sponsorshipNotification.service.js';
+import { loadFullApplication as loadFullApplicationV2, serializeApplication as serializeApplicationV2 } from '../../services/licenceApplicationV2.service.js';
 
 export const getAssignedLicenceApplications = async (req, res) => {
     try {
@@ -42,21 +44,20 @@ export const updateLicenceReviewStatus = async (req, res) => {
         const { id } = req.params;
         const { status, adminNotes } = req.body;
 
-        const application = await req.tenantDb.LicenceApplication.findOne({
-            where: {
-                id,
-                assignedcaseworkerId: {
-                    [Op.contains]: [caseworkerId]
-                }
-            }
-        });
+        // Authorisation (assigned caseworker OR admin override) is enforced by the
+        // ensureAssignedCaseworker middleware, which also loads the application.
+        const application =
+            req.licenceApplication ||
+            (await req.tenantDb.LicenceApplication.findByPk(id));
 
         if (!application) {
             return res.status(404).json({
                 status: 'error',
-                message: 'Licence application not found or not assigned to you'
+                message: 'Licence application not found'
             });
         }
+
+        const previousStatus = application.status;
 
         application.status = status;
         if (adminNotes) {
@@ -64,29 +65,32 @@ export const updateLicenceReviewStatus = async (req, res) => {
         }
         await application.save();
 
-        // If approved and it's a CoS request, update the sponsor's allocation
-        if (status === 'Approved' && String(application.reason || '').startsWith('CoS Request:')) {
+        // On approval, activate the sponsor licence (Phase 4 — Licence
+        // Activation). CoS top-ups are owned by the dedicated CoS request
+        // workflow (cosRequest.service); the isCosRequestApplication guard keeps
+        // any pre-migration "CoS Request:" licence row from activating a licence.
+        if (status === 'Approved' && !isCosRequestApplication(application)) {
             try {
-                const profile = await req.tenantDb.SponsorProfile.findOne({ where: { userId: application.userId } });
-                if (profile) {
-                    const currentAlloc = parseInt(profile.cosAllocation || 0);
-                    const requestedAlloc = parseInt(application.cosAllocation || 0);
-                    profile.cosAllocation = currentAlloc + requestedAlloc;
-                    await profile.save();
-                    logger.info({ userId: application.userId, previousAlloc: currentAlloc, newAlloc: profile.cosAllocation }, 'Updated CoS Allocation');
-                }
+                await activateSponsorLicence({
+                    tenantDb: req.tenantDb,
+                    application,
+                    approvedByUserId: caseworkerId,
+                    req,
+                });
             } catch (err) {
-                logger.error({ err }, 'Failed to update SponsorProfile CoS allocation');
+                logger.error({ err }, 'Failed to activate sponsor licence');
             }
         }
 
-        // Notify Sponsor
+        // Notify Sponsor (centralized: Information Requested / Rejected / status change).
         try {
-            if (status === 'Information Requested') {
-                await notifyLicenceInfoRequested(application.userId, application);
-            } else {
-                await notifyLicenceStatusChanged(application.userId, application, status);
-            }
+            await sponsorshipNotify.licenceStatusChanged({
+                tenantDb: req.tenantDb,
+                application,
+                status,
+                adminNotes,
+                req,
+            });
 
             // Notify Admins about caseworker decision
             await notifyAdmins(req.tenantDb, {
@@ -108,6 +112,18 @@ export const updateLicenceReviewStatus = async (req, res) => {
             logger.error({ err: notifyErr }, 'Failed to send caseworker decision notifications');
         }
 
+        // Audit the reviewer action (approve / reject / request_info / ...).
+        await recordLicenceAudit({
+            tenantDb: req.tenantDb,
+            application,
+            actorId: caseworkerId,
+            action: statusToAuditAction(status),
+            previousStatus,
+            newStatus: status,
+            notes: adminNotes || null,
+            req,
+        });
+
         res.status(200).json({
             status: 'success',
             message: `Licence application status updated to ${status}`,
@@ -118,6 +134,82 @@ export const updateLicenceReviewStatus = async (req, res) => {
         res.status(500).json({
             status: 'error',
             message: 'Failed to update status',
+            error: error.message
+        });
+    }
+};
+
+/**
+ * "My Assigned Applications" dashboard for the logged-in caseworker:
+ * the list of licence applications assigned to them, plus status counts.
+ */
+export const getMyAssignedDashboard = async (req, res) => {
+    try {
+        const caseworkerId = req.user.userId;
+
+        const applications = await req.tenantDb.LicenceApplication.findAll({
+            where: { assignedcaseworkerId: { [Op.contains]: [caseworkerId] } },
+            include: [{
+                model: req.tenantDb.User,
+                as: 'user',
+                attributes: ['id', 'first_name', 'last_name', 'email'],
+                required: false
+            }],
+            order: [['updatedAt', 'DESC']]
+        });
+
+        const stats = applications.reduce((acc, a) => {
+            acc.total += 1;
+            const key = String(a.status || 'unknown').toLowerCase().replace(/\s+/g, '_');
+            acc.byStatus[key] = (acc.byStatus[key] || 0) + 1;
+            return acc;
+        }, { total: 0, byStatus: {} });
+
+        res.status(200).json({
+            status: 'success',
+            data: { stats, applications }
+        });
+    } catch (error) {
+        logger.error({ err: error }, 'Error fetching assigned applications dashboard');
+        res.status(500).json({
+            status: 'error',
+            message: 'Failed to fetch assigned applications',
+            error: error.message
+        });
+    }
+};
+
+/**
+ * GET /api/caseworker/licence/v2/:id — full normalized V2 application (read-only).
+ * Assignment is enforced by the ensureAssignedCaseworker middleware on the route.
+ */
+export const getLicenceApplicationV2Full = async (req, res) => {
+    try {
+        const app = await loadFullApplicationV2(req.tenantDb, req.params.id, {});
+        if (!app) {
+            return res.status(404).json({ status: 'error', message: 'Licence application not found' });
+        }
+        return res.status(200).json({ status: 'success', data: serializeApplicationV2(app) });
+    } catch (error) {
+        logger.error({ err: error }, 'getLicenceApplicationV2Full failed');
+        return res.status(500).json({ status: 'error', message: 'Failed to fetch application' });
+    }
+};
+
+/**
+ * Audit trail (assignment history + reviewer actions) for one application.
+ * Authorisation (assigned caseworker or admin) is enforced by middleware.
+ */
+export const getLicenceApplicationAudit = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const trail = await getLicenceAuditTrail(req.tenantDb, id);
+        res.status(200).json({ status: 'success', data: trail });
+    } catch (error) {
+        logger.error({ err: error }, 'Error fetching licence application audit trail');
+        res.status(500).json({
+            status: 'error',
+            message: 'Failed to fetch audit trail',
             error: error.message
         });
     }

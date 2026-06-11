@@ -1,7 +1,6 @@
 import logger from '../../../utils/logger.js';
 import { Op } from 'sequelize';
 import { mergeCaseWhere } from '../../../utils/tenantScope.js';
-import { localDateStr } from '../../../utils/dateHelpers.js';
 
 const INACTIVE = ['Cancelled', 'Closed', 'Rejected'];
 
@@ -10,12 +9,32 @@ const uid = (req) => {
   return Number.isFinite(n) && n > 0 ? Math.trunc(n) : null;
 };
 
+/** Resolve a count query to a number, tolerating a missing model or a query error. */
+const safeCount = (p) => (p && typeof p.then === 'function' ? p.then((n) => n || 0).catch(() => 0) : Promise.resolve(0));
+
+/**
+ * Count compliance submissions where the reviewer has asked this sponsor to act
+ * (status "Information Requested"). Spans Right To Work, Worker Events and
+ * Change Requests (title-case `reviewStatus`) plus Compliance Documents
+ * (lowercase `status`). These are the sponsor's outstanding compliance alerts.
+ */
+async function countSponsorComplianceAlerts(tenantDb, userId) {
+  const needsAction = ['Information Requested'];
+  const counts = await Promise.all([
+    safeCount(tenantDb.RightToWorkRecord?.count({ where: { sponsorId: userId, reviewStatus: { [Op.in]: needsAction } } })),
+    safeCount(tenantDb.WorkerEvent?.count({ where: { sponsorId: userId, reviewStatus: { [Op.in]: needsAction } } })),
+    safeCount(tenantDb.SponsorChangeRequest?.count({ where: { sponsorId: userId, reviewStatus: { [Op.in]: needsAction } } })),
+    safeCount(tenantDb.ComplianceDocument?.count({ where: { sponsorId: userId, status: 'information_requested' } })),
+  ]);
+  return counts.reduce((sum, n) => sum + (n || 0), 0);
+}
+
 export const getDashboard = async (req, res) => {
   try {
     const userId = uid(req);
     if (!userId) return res.status(401).json({ status: 'error', message: 'Invalid session' });
 
-    const [profile, activeCases, totalCases, pendingLicences, overdueCount, recentCases, approvedLicence] =
+    const [profile, activeCases, totalCases, pendingLicences, overdueCount, recentCases, approvedLicence, pendingCosRequests, complianceAlerts] =
       await Promise.all([
         req.tenantDb.SponsorProfile.findOne({ where: { userId } }),
         req.tenantDb.Case.count({ where: mergeCaseWhere(req, { sponsorId: userId, status: { [Op.notIn]: INACTIVE } }) }),
@@ -28,7 +47,11 @@ export const getDashboard = async (req, res) => {
           order: [['created_at', 'DESC']],
           limit: 5
         }),
-        req.tenantDb.LicenceApplication.findOne({ where: { userId, status: 'Approved' }, order: [['createdAt', 'DESC']] })
+        req.tenantDb.LicenceApplication.findOne({ where: { userId, status: 'Approved' }, order: [['createdAt', 'DESC']] }),
+        // Sponsor's own CoS requests still awaiting a reviewer decision.
+        safeCount(req.tenantDb.CosRequest?.count({ where: { sponsorId: userId, status: { [Op.in]: ['Pending', 'Under Review'] } } })),
+        // Compliance submissions where the reviewer requested more info / action.
+        countSponsorComplianceAlerts(req.tenantDb, userId)
       ]);
 
     const cosTotal = parseInt(profile?.cosAllocation || approvedLicence?.cosAllocation || 0);
@@ -37,15 +60,27 @@ export const getDashboard = async (req, res) => {
       ? Math.ceil((new Date(licenceExpiry) - new Date()) / 86400000)
       : null;
 
+    // Phase 4 — Licence Activation: a sponsor can only request CoS / sponsor
+    // workers once their licence is Active. Surface this so the portal can
+    // enable/disable those actions.
+    const licenceActive = profile?.licenceStatus === 'Active';
+
     res.status(200).json({
       status: 'success',
       data: {
         companyName: profile?.companyName,
         licenceStatus: profile?.licenceStatus || 'Pending',
+        licenceActive,
+        licenceNumber: profile?.sponsorLicenceNumber || null,
+        licenceIssueDate: profile?.licenceIssueDate || null,
+        canRequestCos: licenceActive,
+        canSponsorWorkers: licenceActive,
         licenceRating: profile?.licenceRating,
         riskLevel: profile?.riskLevel || 'Low',
         stats: { activeCases, totalWorkers: totalCases, pendingLicenceApplications: pendingLicences, overdueCount },
-        cos: { total: cosTotal, used: activeCases, available: cosTotal - activeCases },
+        pendingCosRequests,
+        complianceAlerts,
+        cos: { total: cosTotal, used: activeCases, available: Math.max(cosTotal - activeCases, 0) },
         licenceExpiry: { date: licenceExpiry, daysRemaining, renewalDue: daysRemaining !== null && daysRemaining < 90 },
         recentCases: recentCases.map(c => ({
           id: c.id, caseId: c.caseId,
@@ -185,111 +220,6 @@ export const getBusinessDocuments = async (req, res) => {
     res.status(200).json({ status: 'success', data: docs });
   } catch (err) {
     res.status(500).json({ status: 'error', message: 'Internal server error', error: err.message });
-  }
-};
-
-export const getReportingObligations = async (req, res) => {
-  try {
-    const userId = uid(req);
-    if (!userId) return res.status(401).json({ status: 'error', message: 'Invalid session' });
-
-    const events = await req.tenantDb.WorkerEvent.findAll({
-      where: { sponsorId: userId },
-      include: [
-        {
-          model: req.tenantDb.User,
-          as: 'worker',
-          attributes: ['first_name', 'last_name', 'email']
-        }
-      ],
-      order: [['deadlineDate', 'ASC']]
-    });
-
-    const transformed = events.map(e => {
-      const today = new Date();
-      const deadline = new Date(e.deadlineDate);
-      const daysRemaining = Math.ceil((deadline - today) / (1000 * 60 * 60 * 24));
-      
-      return {
-        id: e.id,
-        worker: `${e.worker?.first_name || ''} ${e.worker?.last_name || ''}`.trim(),
-        eventType: e.eventType,
-        eventDate: e.eventDate,
-        reportedDate: e.reportedDate || '-',
-        deadline: e.deadlineDate,
-        status: e.status.charAt(0).toUpperCase() + e.status.slice(1),
-        daysRemaining: daysRemaining,
-        risk: daysRemaining < 0 ? 'high' : daysRemaining <= 3 ? 'medium' : 'low'
-      };
-    });
-
-    res.status(200).json({
-      status: 'success',
-      data: transformed
-    });
-  } catch (err) {
-    logger.error({ err }, 'getReportingObligations error');
-    res.status(500).json({ status: 'error', message: 'Internal server error' });
-  }
-};
-
-export const createReportingObligation = async (req, res) => {
-  try {
-    const sponsorId = uid(req);
-    const { workerId, eventType, eventDate, description } = req.body;
-
-    if (!workerId || !eventType || !eventDate) {
-      return res.status(400).json({ status: 'error', message: 'Missing required fields' });
-    }
-
-    // Calculate deadline: 10 days after event date
-    const eventD = new Date(eventDate);
-    const deadlineD = new Date(eventD);
-    deadlineD.setDate(deadlineD.getDate() + 10);
-
-    const newEvent = await req.tenantDb.WorkerEvent.create({
-      sponsorId,
-      workerId,
-      eventType,
-      eventDate,
-      deadlineDate: localDateStr(deadlineD),
-      description,
-      status: 'pending'
-    });
-
-    res.status(201).json({
-      status: 'success',
-      message: 'Event reported successfully',
-      data: newEvent
-    });
-  } catch (err) {
-    logger.error({ err }, 'createReportingObligation error');
-    res.status(500).json({ status: 'error', message: 'Internal server error' });
-  }
-};
-
-export const updateReportingObligation = async (req, res) => {
-  try {
-    const sponsorId = uid(req);
-    const { id } = req.params;
-    const { status, reportedDate } = req.body;
-
-    const event = await req.tenantDb.WorkerEvent.findOne({ where: { id, sponsorId } });
-    if (!event) return res.status(404).json({ status: 'error', message: 'Event not found' });
-
-    await event.update({
-      status: status || event.status,
-      reportedDate: reportedDate || event.reportedDate || localDateStr()
-    });
-
-    res.status(200).json({
-      status: 'success',
-      message: 'Reporting obligation updated',
-      data: event
-    });
-  } catch (err) {
-    logger.error({ err }, 'updateReportingObligation error');
-    res.status(500).json({ status: 'error', message: 'Internal server error' });
   }
 };
 

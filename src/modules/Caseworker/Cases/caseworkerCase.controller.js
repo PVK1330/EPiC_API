@@ -339,6 +339,14 @@ export const getMyDashboardStats = async (req, res) => {
     const slaCompliance = totalCompleted > 0 ? (completedOnTime / totalCompleted) * 100 : 0;
     const performanceScore = Math.round((taskCompletionRate * 0.4) + (slaCompliance * 0.6));
 
+    // CoS requests assigned to this caseworker that still need a review decision.
+    const assignedCos = await req.tenantDb.CosRequest.count({
+      where: {
+        assignedCaseworkerIds: { [Op.contains]: [userId] },
+        status: { [Op.in]: ['Pending', 'Under Review'] },
+      },
+    }).catch(() => 0);
+
     res.status(200).json({
       status: "success",
       message: "Dashboard statistics retrieved successfully",
@@ -351,7 +359,8 @@ export const getMyDashboardStats = async (req, res) => {
           completedMonth: myCompletedMonth,
           performanceScore: performanceScore,
           licences: myLicences,
-          pendingLicences: myPendingLicences
+          pendingLicences: myPendingLicences,
+          assignedCos
         },
         recentCases,
         tasksToday: tasksTodayDetails,

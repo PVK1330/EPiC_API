@@ -5,6 +5,8 @@ import crypto from 'crypto';
 import { generateCaseId } from '../../../utils/case.utils.js';
 import { notifyAdmins, createNotification, NotificationTypes, NotificationPriority } from '../../../services/notification.service.js';
 import { ROLES } from '../../../middlewares/role.middleware.js';
+import { pickLeastLoadedCaseworker, recordCaseAssignmentOutcome } from '../../../services/caseAssignment.service.js';
+import * as sponsorshipNotify from '../../../services/sponsorshipNotification.service.js';
 import logger from '../../../utils/logger.js';
 
 const REQUIRED_DOCUMENT_KEYS = ['passport', 'visaCopy', 'cosCopy', 'contract', 'payslips'];
@@ -99,9 +101,11 @@ export const addSponsoredWorker = async (req, res) => {
       organisation_id: organisationId,
     }, { transaction });
 
-    // 5. Create Case
+    // 5. Create Case — auto-assign to the least-loaded caseworker (Option A);
+    //    fall back to the unassigned queue when none are available (Option B).
     const caseId = await generateCaseId(req.tenantDb);
-    await req.tenantDb.Case.create({
+    const assignedCaseworker = await pickLeastLoadedCaseworker(req.tenantDb, { transaction });
+    const newCase = await req.tenantDb.Case.create({
       caseId,
       candidateId: newUser.id,
       sponsorId: sponsorId,
@@ -109,6 +113,7 @@ export const addSponsoredWorker = async (req, res) => {
       salaryOffered: salary,
       status: 'In Progress',
       caseStage: 'data_capture_initial_docs',
+      assignedcaseworkerId: assignedCaseworker ? [assignedCaseworker.id] : null,
       targetSubmissionDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
       notes: notes,
       organisation_id: organisationId,
@@ -130,6 +135,10 @@ export const addSponsoredWorker = async (req, res) => {
       data: {
         workerId: newUser.id,
         email: newUser.email,
+        caseId: newCase.caseId,
+        caseRowId: newCase.id,
+        assignedCaseworkerId: assignedCaseworker ? assignedCaseworker.id : null,
+        assignmentStatus: assignedCaseworker ? 'assigned' : 'unassigned_queue',
         tempPassword // Usually we don't return this, but for testing we can
       }
     });
@@ -161,6 +170,32 @@ export const addSponsoredWorker = async (req, res) => {
       });
     } catch (err) {
       logger.error({ err }, 'Failed to notify admins for sponsored worker add');
+    }
+
+    // Route the new immigration case: notify the assigned caseworker so review
+    // can begin (or alert admins if it landed in the unassigned queue), and
+    // write the assignment audit log.
+    await recordCaseAssignmentOutcome({
+      tenantDb: req.tenantDb,
+      caseRecord: newCase,
+      caseworker: assignedCaseworker,
+      sponsorId,
+      actorId: sponsorId,
+      candidateName: `${firstName} ${lastName}`.trim(),
+      req,
+    });
+
+    // Event 9 — Worker Added: sponsor confirmation (in-app + email) + audit.
+    try {
+      await sponsorshipNotify.workerAdded({
+        tenantDb: req.tenantDb,
+        sponsorId,
+        workerName: `${firstName} ${lastName}`.trim(),
+        caseId: newCase.caseId,
+        req,
+      });
+    } catch (e) {
+      logger.error({ err: e }, 'workerAdded notification failed');
     }
 
   } catch (err) {
