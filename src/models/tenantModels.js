@@ -45,6 +45,7 @@ import CalendarMeetingModel from "./tenant/calendarMeeting.model.js";
 import AuditLogModel from "./tenant/auditLog.model.js";
 import LicenceApplicationModel from "./tenant/licenceApplication.model.js";
 import LicenceApplicationAuditModel from "./tenant/licenceApplicationAudit.model.js";
+import LicenceStageTaskModel from "./tenant/licenceStageTask.model.js";
 // Sponsor Licence Application V2 — normalized section/child tables.
 import LicenceApplicationRouteModel from "./tenant/licenceApplicationRoute.model.js";
 import LicenceOrganisationInfoModel from "./tenant/licenceOrganisationInfo.model.js";
@@ -132,6 +133,7 @@ export function buildDb(sequelize) {
   db.Appointment = AppointmentModel(sequelize, Sequelize.DataTypes);
   db.LicenceApplication = LicenceApplicationModel(sequelize, Sequelize.DataTypes);
   db.LicenceApplicationAudit = LicenceApplicationAuditModel(sequelize, Sequelize.DataTypes);
+  db.LicenceStageTask = LicenceStageTaskModel(sequelize, Sequelize.DataTypes);
   db.LicenceApplicationRoute = LicenceApplicationRouteModel(sequelize, Sequelize.DataTypes);
   db.LicenceOrganisationInfo = LicenceOrganisationInfoModel(sequelize, Sequelize.DataTypes);
   db.LicenceCosRequirement = LicenceCosRequirementModel(sequelize, Sequelize.DataTypes);
@@ -266,6 +268,13 @@ export function buildDb(sequelize) {
   db.LicenceApplicationAudit.belongsTo(db.LicenceApplication, { foreignKey: "licenceApplicationId", as: "application" });
   db.LicenceApplicationAudit.belongsTo(db.User, { foreignKey: "actorId", as: "actor" });
   db.LicenceApplicationAudit.belongsTo(db.Organisation, { foreignKey: "organisationId", as: "organisation" });
+
+  // Per-stage, per-role tasks (the interactive stages panel engine).
+  db.LicenceApplication.hasMany(db.LicenceStageTask, { foreignKey: "licenceApplicationId", as: "stageTasks" });
+  db.LicenceStageTask.belongsTo(db.LicenceApplication, { foreignKey: "licenceApplicationId", as: "application" });
+  db.LicenceStageTask.belongsTo(db.User, { foreignKey: "assignedToUserId", as: "assignee" });
+  db.LicenceStageTask.belongsTo(db.User, { foreignKey: "completedByUserId", as: "completedBy" });
+  db.User.hasMany(db.LicenceStageTask, { foreignKey: "assignedToUserId", as: "licenceStageTasks" });
 
   // Sponsor Licence Application V2 — section + child associations (one parent row).
   db.LicenceApplication.hasMany(db.LicenceApplicationRoute, { foreignKey: "licenceApplicationId", as: "routes" });

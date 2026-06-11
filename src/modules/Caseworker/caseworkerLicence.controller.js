@@ -9,6 +9,7 @@ import { activateSponsorLicence, isCosRequestApplication } from '../../services/
 import { recordLicenceAudit, statusToAuditAction, getLicenceAuditTrail } from '../../services/licenceAssignment.service.js';
 import * as sponsorshipNotify from '../../services/sponsorshipNotification.service.js';
 import { loadFullApplication as loadFullApplicationV2, serializeApplication as serializeApplicationV2 } from '../../services/licenceApplicationV2.service.js';
+import { ensureStageTasks } from '../../services/licenceStageTask.service.js';
 
 export const getAssignedLicenceApplications = async (req, res) => {
     try {
@@ -123,6 +124,13 @@ export const updateLicenceReviewStatus = async (req, res) => {
             notes: adminNotes || null,
             req,
         });
+
+        // Re-sync the stage tasks after the caseworker's decision.
+        try {
+            await ensureStageTasks(req.tenantDb, application, { req });
+        } catch (err) {
+            logger.error({ err }, 'ensureStageTasks failed on caseworker review');
+        }
 
         res.status(200).json({
             status: 'success',

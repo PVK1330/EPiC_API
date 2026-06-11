@@ -9,6 +9,7 @@ import {
 import { verifyTokenAndTenant } from '../../../middlewares/authStack.middleware.js';
 import { checkRole, ROLES } from '../../../middlewares/role.middleware.js';
 import { ensureAssignedCaseworker } from '../../../middlewares/ensureAssignedCaseworker.middleware.js';
+import { getLicenceStages, completeLicenceStageTask } from '../../Shared/Licence/licenceStage.controller.js';
 
 const router = Router();
 
@@ -28,5 +29,9 @@ router.get("/v2/:id", ensureAssignedCaseworker(), getLicenceApplicationV2Full);
 
 // Assignment history + reviewer actions for an application (same access guard).
 router.get("/:id/audit", ensureAssignedCaseworker(), getLicenceApplicationAudit);
+
+// Stages panel — assigned caseworker (or admin override) may view + complete tasks.
+router.get("/:id/stages", ensureAssignedCaseworker(), getLicenceStages);
+router.post("/:id/stages/:stageKey/complete", ensureAssignedCaseworker(), completeLicenceStageTask);
 
 export default router;

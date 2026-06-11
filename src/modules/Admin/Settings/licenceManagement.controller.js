@@ -1,3 +1,5 @@
+import path from "path";
+import fs from "fs";
 import { Op } from "sequelize";
 import { sendTransactionalEmail } from "../../../services/mail.service.js";
 import { generateNotificationEmailTemplate } from "../../../utils/emailTemplates.js";
@@ -22,6 +24,62 @@ import {
   reviewCosRequest,
 } from "../../../services/cosRequest.service.js";
 import * as sponsorshipNotify from "../../../services/sponsorshipNotification.service.js";
+import { ensureStageTasks } from "../../../services/licenceStageTask.service.js";
+
+// Licence documents are stored as raw disk paths in LicenceApplication.documents
+// (e.g. storage/private/temp/<uuid>.pdf). The /uploads dir is no longer served
+// statically, so reviewers must stream each file through this authenticated route.
+const PRIVATE_STORAGE_DIR = path.resolve(process.cwd(), "storage/private");
+const INLINE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".webp", ".gif", ".pdf"];
+
+/** GET /api/admin/licence/:id/documents/:index/download — stream one licence doc. */
+export const downloadLicenceDocument = async (req, res) => {
+  try {
+    const { id, index } = req.params;
+
+    const application = await req.tenantDb.LicenceApplication.findByPk(id);
+    if (!application) {
+      return res.status(404).json({ status: "error", message: "Licence application not found" });
+    }
+
+    const docs = Array.isArray(application.documents) ? application.documents : [];
+    const i = Number.parseInt(index, 10);
+    if (Number.isNaN(i) || i < 0 || i >= docs.length || !docs[i]) {
+      return res.status(404).json({ status: "error", message: "Document not found" });
+    }
+
+    // Resolve to an absolute path and confine it strictly to storage/private to
+    // block directory-traversal. Stored paths may be absolute (newer uploads) or
+    // relative to cwd (legacy); path.resolve handles both.
+    const absolute = path.resolve(String(docs[i]));
+    if (absolute !== PRIVATE_STORAGE_DIR && !absolute.startsWith(PRIVATE_STORAGE_DIR + path.sep)) {
+      return res.status(400).json({ status: "error", message: "Invalid document path" });
+    }
+    if (!fs.existsSync(absolute)) {
+      return res.status(404).json({ status: "error", message: "File no longer exists on the server" });
+    }
+
+    const filename = path.basename(absolute);
+    const ext = path.extname(filename).toLowerCase();
+    // Inline-preview safe types unless the caller explicitly wants a download.
+    const forceDownload = req.query.download === "1";
+    const disposition = forceDownload || !INLINE_EXTENSIONS.includes(ext) ? "attachment" : "inline";
+
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Content-Disposition", `${disposition}; filename="${filename}"`);
+
+    return res.sendFile(absolute, (err) => {
+      if (err && !res.headersSent) {
+        res.status(500).json({ status: "error", message: "Error streaming document" });
+      }
+    });
+  } catch (error) {
+    logger.error({ err: error }, "Error downloading licence document");
+    if (!res.headersSent) {
+      res.status(500).json({ status: "error", message: "Failed to download document" });
+    }
+  }
+};
 
 export const getAllLicenceApplications = async (req, res) => {
   try {
@@ -136,6 +194,14 @@ export const updateLicenceApplicationStatus = async (req, res) => {
       notes: adminNotes || null,
       req,
     });
+
+    // Re-sync the stage tasks (e.g. Approved → all stages complete; status drives
+    // which stage is current). Best-effort — never blocks the response.
+    try {
+      await ensureStageTasks(req.tenantDb, application, { req });
+    } catch (err) {
+      logger.error({ err }, "ensureStageTasks failed on status update");
+    }
 
     res.status(200).json({
       status: "success",
@@ -304,6 +370,13 @@ export const assignCaseworker = async (req, res) => {
       });
     } catch (notifyErr) {
       logger.error({ err: notifyErr }, "Failed to send assignment notifications");
+    }
+
+    // Sync the caseworker's stage-task assignments to the newly assigned reviewer(s).
+    try {
+      await ensureStageTasks(req.tenantDb, application, { req });
+    } catch (err) {
+      logger.error({ err }, "ensureStageTasks failed on caseworker assignment");
     }
 
     res.status(200).json({

@@ -11,6 +11,7 @@ import { validateForSubmission } from "../../../validations/licenceApplicationV2
 import { computeFee } from "../../../services/licenceFee.service.js";
 import { recordLicenceAudit } from "../../../services/licenceAssignment.service.js";
 import * as sponsorshipNotify from "../../../services/sponsorshipNotification.service.js";
+import { ensureStageTasks } from "../../../services/licenceStageTask.service.js";
 
 const uid = (req) => {
   const n = Number(req.user?.userId);
@@ -125,6 +126,13 @@ export const submitApplication = async (req, res) => {
       notes: null,
       req,
     });
+
+    // Seed the per-stage, per-role task assignments behind the stages panel.
+    try {
+      await ensureStageTasks(req.tenantDb, submitted, { req });
+    } catch (err) {
+      logger.error({ err }, "ensureStageTasks failed on submit (v2)");
+    }
 
     return res.status(200).json({ status: "success", message: "Application submitted", data: serializeApplication(submitted) });
   } catch (error) {
