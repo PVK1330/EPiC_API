@@ -5,6 +5,7 @@ import { generateNotificationEmailTemplate } from '../../../utils/emailTemplates
 import { notifyAdmins, notifyUser, NotificationTypes, NotificationPriority } from '../../../services/notification.service.js';
 import { validateTransition, WORKFLOW_TYPES } from '../../../services/workflowEngine.service.js';
 import * as sponsorshipNotify from '../../../services/sponsorshipNotification.service.js';
+import { resolveLicenceDocumentPaths } from '../../../utils/licenceDocuments.util.js';
 
 /**
  * Notification matrix for Licence Documents (Sponsor side)
@@ -77,9 +78,20 @@ export const getMyLicenceApplications = async (req, res) => {
             order: [['createdAt', 'DESC']]
         });
 
+        // V2-aware: surface the real uploaded evidence. V2 applications keep their
+        // documents in licence_appendix_documents (file_path), not the legacy JSON
+        // array — merge both so the documents section is never empty for V2 apps.
+        const data = await Promise.all(
+            applications.map(async (app) => {
+                const plain = app.toJSON();
+                plain.documents = await resolveLicenceDocumentPaths(req.tenantDb, app);
+                return plain;
+            })
+        );
+
         res.status(200).json({
             status: 'success',
-            data: applications
+            data
         });
     } catch (error) {
         logger.error({ err: error }, 'Error fetching my licence applications');

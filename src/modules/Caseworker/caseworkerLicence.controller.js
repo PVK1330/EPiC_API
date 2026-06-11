@@ -10,6 +10,7 @@ import { recordLicenceAudit, statusToAuditAction, getLicenceAuditTrail } from '.
 import * as sponsorshipNotify from '../../services/sponsorshipNotification.service.js';
 import { loadFullApplication as loadFullApplicationV2, serializeApplication as serializeApplicationV2 } from '../../services/licenceApplicationV2.service.js';
 import { ensureStageTasks } from '../../services/licenceStageTask.service.js';
+import { resolveLicenceDocumentPaths } from '../../utils/licenceDocuments.util.js';
 
 export const getAssignedLicenceApplications = async (req, res) => {
     try {
@@ -25,9 +26,19 @@ export const getAssignedLicenceApplications = async (req, res) => {
             order: [['createdAt', 'DESC']]
         });
 
+        // V2-aware: merge V2 appendix evidence (file_path) into each app's
+        // documents array so the caseworker sees uploaded V2 documents, not just V1.
+        const data = await Promise.all(
+            applications.map(async (app) => {
+                const plain = app.toJSON();
+                plain.documents = await resolveLicenceDocumentPaths(req.tenantDb, app);
+                return plain;
+            })
+        );
+
         res.status(200).json({
             status: 'success',
-            data: applications
+            data
         });
     } catch (error) {
         logger.error({ err: error }, 'Error fetching assigned licence applications');

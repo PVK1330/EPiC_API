@@ -6,6 +6,7 @@ import {
   getStagesForApplication,
   completeStageTask,
 } from "../../../services/licenceStageTask.service.js";
+import { resolveLicenceDocumentPaths } from "../../../utils/licenceDocuments.util.js";
 
 const PRIVATE_STORAGE_DIR = path.resolve(process.cwd(), "storage/private");
 const INLINE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".webp", ".gif", ".pdf"];
@@ -79,7 +80,9 @@ export const downloadLicenceDocument = async (req, res) => {
     }
     assertScopeAccess(req, application);
 
-    const docs = Array.isArray(application.documents) ? application.documents : [];
+    // V2-aware: merge V1 JSON `documents` with V2 `licence_appendix_documents`
+    // file paths so the index-based download works for both application versions.
+    const docs = await resolveLicenceDocumentPaths(req.tenantDb, application);
     const i = Number.parseInt(index, 10);
     if (Number.isNaN(i) || i < 0 || i >= docs.length || !docs[i]) {
       return res.status(404).json({ status: "error", message: "Document not found" });

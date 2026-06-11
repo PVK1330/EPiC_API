@@ -25,6 +25,7 @@ import {
 } from "../../../services/cosRequest.service.js";
 import * as sponsorshipNotify from "../../../services/sponsorshipNotification.service.js";
 import { ensureStageTasks } from "../../../services/licenceStageTask.service.js";
+import { resolveLicenceDocumentPaths } from "../../../utils/licenceDocuments.util.js";
 
 // Licence documents are stored as raw disk paths in LicenceApplication.documents
 // (e.g. storage/private/temp/<uuid>.pdf). The /uploads dir is no longer served
@@ -42,7 +43,9 @@ export const downloadLicenceDocument = async (req, res) => {
       return res.status(404).json({ status: "error", message: "Licence application not found" });
     }
 
-    const docs = Array.isArray(application.documents) ? application.documents : [];
+    // V2-aware: merge V1 JSON `documents` with V2 `licence_appendix_documents`
+    // file paths so reviewers can view/download evidence from both versions.
+    const docs = await resolveLicenceDocumentPaths(req.tenantDb, application);
     const i = Number.parseInt(index, 10);
     if (Number.isNaN(i) || i < 0 || i >= docs.length || !docs[i]) {
       return res.status(404).json({ status: "error", message: "Document not found" });
@@ -103,9 +106,19 @@ export const getAllLicenceApplications = async (req, res) => {
       order: [["createdAt", "DESC"]],
     });
 
+    // V2-aware: merge V2 appendix evidence into each app's documents array so the
+    // reviewer document list is populated for V2 applications too (not just V1).
+    const data = await Promise.all(
+      applications.map(async (app) => {
+        const plain = app.toJSON();
+        plain.documents = await resolveLicenceDocumentPaths(req.tenantDb, app);
+        return plain;
+      })
+    );
+
     res.status(200).json({
       status: "success",
-      data: applications,
+      data,
     });
   } catch (error) {
     logger.error({ err: error }, "Error fetching all licence applications");
