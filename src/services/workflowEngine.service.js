@@ -27,13 +27,16 @@ const CASE_TRANSITIONS = {
   case_closure: []
 };
 
-// Based on user requirements but mapping to our existing legacy states that we cannot rename
 const LICENCE_TRANSITIONS = {
-  'Pending': ['Information Requested', 'Approved', 'Rejected'], // DRAFT -> SUBMITTED
-  'Information Requested': ['Pending', 'Rejected'], // ADDITIONAL_INFO -> UNDER_REVIEW
-  'Approved': ['Expired'], // LICENCE_GRANTED
-  'Rejected': [],
-  'Expired': []
+  'Draft':                  ['Pending'],
+  'Pending':                ['Under Review', 'Information Requested', 'Approved', 'Rejected'],
+  'Under Review':           ['Information Requested', 'Government Processing', 'Approved', 'Rejected'],
+  'Information Requested':  ['Under Review', 'Rejected'],
+  'Government Processing':  ['Decision Pending', 'Information Requested', 'Rejected'],
+  'Decision Pending':       ['Approved', 'Rejected'],
+  'Approved':               ['Expired'],
+  'Rejected':               [],
+  'Expired':                []
 };
 
 const COS_REQUEST_TRANSITIONS = {

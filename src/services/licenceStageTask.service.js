@@ -97,8 +97,83 @@ export const LICENCE_STAGE_DEFINITIONS = [
       candidate: null,
     },
   },
+  // ── Intake: dedicated information & document collection (orders 9-10) ──────
   {
-    key: "submission", order: 9, title: "Submission", govSection: "Section 8",
+    key: "intake_information_form", order: 9, title: "Sponsor Information Form", govSection: "Intake",
+    tasks: {
+      sponsor: "Complete the 12-field Sponsor Information Form: trading name, premises address, named person on licence, NI number, employee counts, CoS required, and more.",
+      caseworker: "Review the completed information form for accuracy and completeness before progressing to document verification.",
+      admin: "Confirm the information form has been reviewed and approved by the caseworker.",
+      candidate: null,
+    },
+  },
+  {
+    key: "intake_document_checklist", order: 10, title: "Document Collection & Verification", govSection: "Intake",
+    tasks: {
+      sponsor: "Upload all mandatory documents (Employer's Liability Insurance, Certificate of Incorporation, PAYE registration, bank statements, premises evidence, and identity documents). Toggle additional document requirements if applicable (food/alcohol/care business, TUPE, candidate).",
+      caseworker: "Verify each uploaded document meets the Home Office requirements. Reject or request further information where needed. All mandatory documents must reach 'Verified' status before Government Registration can proceed.",
+      admin: "Confirm all mandatory documents have been verified and the intake stage is complete.",
+      candidate: null,
+    },
+  },
+  // ── Phase 2: Government processing pipeline stages (orders 11-16) ─────────
+  {
+    key: "sponsor_information_provision", order: 11, title: "Sponsor Information Provision", govSection: "Government Prep",
+    tasks: {
+      sponsor: "Confirm all organisational details, personnel, and documents are accurate and up-to-date before portal submission.",
+      caseworker: "Validate completeness of the sponsor's information pack and confirm readiness for government portal entry.",
+      admin: "Authorise the information pack for government portal submission.",
+      candidate: null,
+    },
+  },
+  {
+    key: "government_sms_registration", order: 12, title: "Government SMS Registration", govSection: "Government Prep",
+    tasks: {
+      sponsor: "Await confirmation that your organisation has been registered on the UKVI Sponsorship Management System (SMS).",
+      caseworker: "Register the sponsor organisation on the SMS portal and obtain the SMS portal username and registration reference.",
+      admin: "Verify the SMS registration details and record the reference number.",
+      candidate: null,
+    },
+  },
+  {
+    key: "sponsor_portal_onboarding", order: 13, title: "Sponsor Portal Onboarding", govSection: "Government Prep",
+    tasks: {
+      sponsor: "Log in to the UKVI Sponsor Management System using the credentials provided and confirm access.",
+      caseworker: "Guide the sponsor through the SMS portal login and confirm the sponsor can access their account.",
+      admin: "Record that the sponsor has been successfully onboarded to the SMS portal.",
+      candidate: null,
+    },
+  },
+  {
+    key: "government_portal_credentials", order: 14, title: "Government Portal Credentials", govSection: "Government Application",
+    tasks: {
+      sponsor: "Receive and confirm receipt of the UKVI online application portal credentials.",
+      caseworker: "Generate the UKVI online application portal user ID and password; share securely with the sponsor.",
+      admin: "Confirm credentials have been generated and securely transmitted.",
+      candidate: null,
+    },
+  },
+  {
+    key: "government_application_forms", order: 15, title: "Government Application Forms", govSection: "Government Application",
+    tasks: {
+      sponsor: "Log in to the UKVI portal and complete the online sponsor licence application forms.",
+      caseworker: "Review and verify all form entries with the sponsor; ensure declarations and supporting data are correctly entered.",
+      admin: "Carry out a final QA check of the completed government application forms before submission.",
+      candidate: null,
+    },
+  },
+  {
+    key: "government_submission", order: 16, title: "Government Submission", govSection: "Government Application",
+    tasks: {
+      sponsor: "Confirm submission of the online application to UKVI and note the government submission reference number.",
+      caseworker: "Submit the completed online application form to UKVI and record the submission reference and date.",
+      admin: "Record the government submission reference, date, and fee payment confirmation.",
+      candidate: null,
+    },
+  },
+  // ── Post-submission outcome stages (orders 17-18) ─────────────────────────
+  {
+    key: "submission", order: 17, title: "Submission", govSection: "Section 8",
     tasks: {
       sponsor: "Acknowledge that the application has been submitted.",
       caseworker: "Generate the submission sheet and submit to UKVI.",
@@ -107,7 +182,7 @@ export const LICENCE_STAGE_DEFINITIONS = [
     },
   },
   {
-    key: "decision_activation", order: 10, title: "UKVI Decision & Activation", govSection: "Outcome",
+    key: "decision_activation", order: 18, title: "UKVI Decision & Activation", govSection: "Outcome",
     tasks: {
       sponsor: "Receive the licence and begin assigning Certificates of Sponsorship.",
       caseworker: "Coordinate any UKVI requests for further information.",
@@ -135,17 +210,36 @@ function deriveStageCompletion(app) {
   const docs = app.appendixDocuments || [];
   const docsComplete = docs.length > 0 && docs.every((d) => d.verificationStatus === "Verified");
 
+  // Status-based sentinels for government pipeline stages.
+  // These use the application status as the primary completion signal until
+  // government tracking data (governmentRegistrationRef etc.) is available in
+  // the app shape. Refined signals can be added when the V2 serializer includes
+  // the licence_government_tracking columns.
+  const govActive = ["Government Processing", "Decision Pending", "Approved"].includes(status);
+  const decisionActive = ["Decision Pending", "Approved"].includes(status);
+  // Sponsor information provision is done once the application left Pending —
+  // either assigned for review or sent back for info.
+  const infoProvided = submitted && !["Draft", "Pending"].includes(status);
+
   const signal = {
-    enquiry_onboarding: true,
-    licence_routes: (app.routes || []).length > 0,
-    organisation_details: !!(app.organisationInfo && (app.organisationInfo.companiesHouseNumber || app.organisationInfo.organisationType)),
-    cos_requirements: (app.cosRequirements || []).length > 0,
-    supporting_documents: docsComplete,
-    key_personnel: !!app.authorisingOfficer,
-    declarations: !!(app.declaration && app.declaration.accuracyConfirmed),
-    payment: submitted || app.fee?.total != null,
-    submission: submitted,
-    decision_activation: status === "Approved",
+    enquiry_onboarding:             true,
+    licence_routes:                 (app.routes || []).length > 0,
+    organisation_details:           !!(app.organisationInfo && (app.organisationInfo.companiesHouseNumber || app.organisationInfo.organisationType)),
+    cos_requirements:               (app.cosRequirements || []).length > 0,
+    supporting_documents:           docsComplete,
+    key_personnel:                  !!app.authorisingOfficer,
+    declarations:                   !!(app.declaration && app.declaration.accuracyConfirmed),
+    payment:                        submitted || app.fee?.total != null,
+    // Phase 2 — government pipeline (status-inferred until tracking data is in shape)
+    sponsor_information_provision:  infoProvided,
+    government_sms_registration:    govActive,
+    sponsor_portal_onboarding:      govActive,
+    government_portal_credentials:  govActive,
+    government_application_forms:   decisionActive,
+    government_submission:          decisionActive,
+    // Outcome stages
+    submission:                     submitted,
+    decision_activation:            status === "Approved",
   };
 
   if (status === "Approved") {

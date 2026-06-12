@@ -135,15 +135,16 @@ export async function notifyUser(tenantDb, userId, payload = {}) {
  * Notify all admin-role users in the tenant DB.
  */
 export async function notifyAdmins(tenantDb, payload = {}) {
-  if (!tenantDb) return;
+  if (!tenantDb) return [];
   try {
     const admins = await tenantDb.User.findAll({
       where: { role_id: ROLES.ADMIN, status: 'active' },
       attributes: ['id'],
     });
-    await Promise.all(admins.map((u) => notifyUser(tenantDb, u.id, payload)));
+    return await Promise.all(admins.map((u) => notifyUser(tenantDb, u.id, payload)));
   } catch (err) {
     logger.error({ err }, 'notifyAdmins failed');
+    return [];
   }
 }
 

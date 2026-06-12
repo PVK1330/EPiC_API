@@ -13,14 +13,15 @@ import {
  *
  *   Sponsor requests CoS  ->  Pending
  *                              -> (admin assigns caseworker) Under Review
- *                              -> Approved | Rejected
- *                              -> on Approved: sponsor allocation incremented
+ *                              -> Approved (decision) -> Allocated (allocation applied)
+ *                              -> Rejected
  */
 export const COS_STATUS = Object.freeze({
   PENDING: "Pending",
   UNDER_REVIEW: "Under Review",
   APPROVED: "Approved",
   REJECTED: "Rejected",
+  ALLOCATED: "Allocated",
 });
 
 /** Statuses a sponsor may still edit/withdraw. */
@@ -68,7 +69,7 @@ export function isCaseworkerAssignedToCos(request, caseworkerId) {
 }
 
 async function auditCos({ tenantDb, request, actorId, action, details = {}, req = null }) {
-  recordAuditLog({
+  await recordAuditLog({
     tenantDb,
     userId: actorId ?? null,
     action: `COS_REQUEST_${String(action).toUpperCase()}`,
@@ -77,7 +78,7 @@ async function auditCos({ tenantDb, request, actorId, action, details = {}, req 
     details: JSON.stringify({ cosRequestId: request.id, sponsorId: request.sponsorId, ...details }),
     req,
     organisationId: request.organisationId ?? null,
-  }).catch((err) => logger.error({ err }, "Failed to record CoS audit log"));
+  }).catch((err) => logger.error({ err, cosRequestId: request.id }, "Failed to record CoS audit log"));
 }
 
 const sponsorInclude = (tenantDb) => [
@@ -272,49 +273,103 @@ export async function reviewCosRequest({ tenantDb, id, action, approvedAmount, r
   if (action === "approve") {
     request.approvedAmount =
       approvedAmount != null ? toInt(approvedAmount, request.requestedAmount) : request.requestedAmount;
-  }
-  await request.save();
 
-  // Allocation update on approval.
-  if (action === "approve") {
-    try {
-      const profile = await tenantDb.SponsorProfile.findOne({ where: { userId: request.sponsorId } });
+    await tenantDb.sequelize.transaction(async (transaction) => {
+      await request.save({ transaction });
+
+      const profile = await tenantDb.SponsorProfile.findOne({
+        where: { userId: request.sponsorId },
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      });
       if (profile) {
         profile.cosAllocation = toInt(profile.cosAllocation) + toInt(request.approvedAmount);
-        await profile.save();
+        await profile.save({ transaction });
+        request.status = COS_STATUS.ALLOCATED;
+        await request.save({ transaction });
       }
-    } catch (err) {
-      logger.error({ err }, "Failed to update sponsor CoS allocation");
-    }
+    }).catch((err) => {
+      logger.error({ err, cosRequestId: request.id }, "Failed to update sponsor CoS allocation transactionally");
+      throw err;
+    });
+  } else {
+    await request.save();
   }
+
+  const finalStatus = request.status;
+  await auditCos({
+    tenantDb,
+    request,
+    actorId: reviewerId,
+    action: finalStatus === COS_STATUS.ALLOCATED ? "allocated" : "rejected",
+    details: { previousStatus, newStatus: finalStatus, approvedAmount: request.approvedAmount ?? null, reviewNotes: reviewNotes ?? null },
+    req,
+  });
+
+  // Notify sponsor with allocation confirmation or rejection.
+  try {
+    const isAllocated = finalStatus === COS_STATUS.ALLOCATED;
+    await notifyUser(tenantDb, request.sponsorId, {
+      type: isAllocated ? NotificationTypes.SUCCESS : NotificationTypes.ERROR,
+      priority: isAllocated ? NotificationPriority.MEDIUM : NotificationPriority.HIGH,
+      title: isAllocated ? "CoS Request Allocated" : "CoS Request Rejected",
+      message: isAllocated
+        ? `Your CoS request #${request.id} has been approved and ${request.approvedAmount} CoS allocation(s) have been added to your account.`
+        : `Your CoS request #${request.id} was rejected.${reviewNotes ? ` Reason: ${reviewNotes}` : ""}`,
+      category: "cos",
+      entityType: "cos_request",
+      entityId: request.id,
+      actionType: isAllocated ? "cos_allocated" : "cos_rejected",
+      sendEmail: true,
+    });
+  } catch (err) {
+    logger.error({ err }, "Failed to notify sponsor of CoS decision");
+  }
+
+  return request;
+}
+
+/**
+ * Request additional information from the sponsor without changing status.
+ * Promotes Pending → Under Review so it can be tracked by caseworkers.
+ */
+export async function requestInfoCosRequest({ tenantDb, id, reviewNotes, reviewerId, req = null }) {
+  const request = await tenantDb.CosRequest.findByPk(id);
+  if (!request) throw httpError("CoS request not found", 404);
+  if (!REVIEWABLE.includes(request.status)) {
+    throw httpError(`Cannot request information on a '${request.status}' request`, 409, "INVALID_TRANSITION");
+  }
+  if (!reviewNotes?.trim()) throw httpError("Notes are required when requesting information", 400);
+
+  if (request.status === COS_STATUS.PENDING) {
+    request.status = COS_STATUS.UNDER_REVIEW;
+  }
+  request.reviewNotes = reviewNotes.trim();
+  await request.save();
 
   await auditCos({
     tenantDb,
     request,
     actorId: reviewerId,
-    action: action === "approve" ? "approved" : "rejected",
-    details: { previousStatus, newStatus, approvedAmount: request.approvedAmount ?? null, reviewNotes: reviewNotes ?? null },
+    action: "info_requested",
+    details: { reviewNotes: reviewNotes.trim() },
     req,
   });
 
-  // Notify sponsor.
   try {
     await notifyUser(tenantDb, request.sponsorId, {
-      type: action === "approve" ? NotificationTypes.SUCCESS : NotificationTypes.ERROR,
-      priority: action === "approve" ? NotificationPriority.MEDIUM : NotificationPriority.HIGH,
-      title: action === "approve" ? "CoS Request Approved" : "CoS Request Rejected",
-      message:
-        action === "approve"
-          ? `Your CoS request #${request.id} was approved for ${request.approvedAmount} allocation(s).`
-          : `Your CoS request #${request.id} was rejected.${reviewNotes ? ` Reason: ${reviewNotes}` : ""}`,
+      type: NotificationTypes.WARNING,
+      priority: NotificationPriority.HIGH,
+      title: "Additional Information Required",
+      message: `Your CoS request #${request.id} requires additional information: ${reviewNotes.trim()}`,
       category: "cos",
       entityType: "cos_request",
       entityId: request.id,
-      actionType: `cos_${action}`,
+      actionType: "cos_info_requested",
       sendEmail: true,
     });
   } catch (err) {
-    logger.error({ err }, "Failed to notify sponsor of CoS decision");
+    logger.error({ err }, "Failed to notify sponsor of CoS information request");
   }
 
   return request;
@@ -328,7 +383,7 @@ export async function reviewCosRequest({ tenantDb, id, action, approvedAmount, r
  */
 export async function getCosSummary(tenantDb, sponsorId) {
   const [approved, profile, activeCases] = await Promise.all([
-    tenantDb.CosRequest.findAll({ where: { sponsorId, status: COS_STATUS.APPROVED } }),
+    tenantDb.CosRequest.findAll({ where: { sponsorId, status: { [Op.in]: [COS_STATUS.APPROVED, COS_STATUS.ALLOCATED] } } }),
     tenantDb.SponsorProfile.findOne({ where: { userId: sponsorId } }),
     tenantDb.Case.findAll({
       where: { sponsorId, status: { [Op.notIn]: INACTIVE_CASE } },

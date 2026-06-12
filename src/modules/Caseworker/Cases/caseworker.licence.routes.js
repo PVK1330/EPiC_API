@@ -6,10 +6,29 @@ import {
     getLicenceApplicationAudit,
     getLicenceApplicationV2Full
 } from '../caseworkerLicence.controller.js';
+import {
+    startLicenceReview,
+    startLicenceGovernmentRegistration,
+    completeLicenceGovernmentRegistration,
+    requestLicenceGovernmentCredentials,
+    recordLicenceGovernmentSubmission,
+} from '../caseworkerLicenceGovernment.controller.js';
+import {
+    getCaseworkerIntakeSummary,
+    getIntakeReadiness,
+    verifyCaseworkerDocument,
+    rejectCaseworkerDocument,
+    requestCaseworkerDocumentInfo,
+} from './caseworkerLicenceIntake.controller.js';
 import { verifyTokenAndTenant } from '../../../middlewares/authStack.middleware.js';
 import { checkRole, ROLES } from '../../../middlewares/role.middleware.js';
 import { ensureAssignedCaseworker } from '../../../middlewares/ensureAssignedCaseworker.middleware.js';
+import { validate } from '../../../middlewares/validate.middleware.js';
 import { getLicenceStages, completeLicenceStageTask, downloadLicenceDocument } from '../../Shared/Licence/licenceStage.controller.js';
+import {
+    completeRegistrationSchema,
+    governmentSubmissionSchema,
+} from '../../../validations/licenceGovernment.validation.js';
 
 const router = Router();
 
@@ -36,5 +55,19 @@ router.post("/:id/stages/:stageKey/complete", ensureAssignedCaseworker(), comple
 
 // Stream an uploaded evidence document (assignment-guarded).
 router.get("/:id/documents/:index/download", ensureAssignedCaseworker(), downloadLicenceDocument);
+
+// Intake: information form + document checklist review.
+router.get("/:id/intake", ensureAssignedCaseworker(), getCaseworkerIntakeSummary);
+router.get("/:id/intake/readiness", ensureAssignedCaseworker(), getIntakeReadiness);
+router.patch("/:id/intake/documents/:documentKey/verify", ensureAssignedCaseworker(), verifyCaseworkerDocument);
+router.patch("/:id/intake/documents/:documentKey/reject", ensureAssignedCaseworker(), rejectCaseworkerDocument);
+router.patch("/:id/intake/documents/:documentKey/request-info", ensureAssignedCaseworker(), requestCaseworkerDocumentInfo);
+
+// Government processing pipeline (Phase 3).
+router.post("/:id/start-review", ensureAssignedCaseworker(), startLicenceReview);
+router.post("/:id/government-registration/start", ensureAssignedCaseworker(), startLicenceGovernmentRegistration);
+router.post("/:id/government-registration/complete", ensureAssignedCaseworker(), validate(completeRegistrationSchema), completeLicenceGovernmentRegistration);
+router.post("/:id/request-government-credentials", ensureAssignedCaseworker(), requestLicenceGovernmentCredentials);
+router.post("/:id/government-submission", ensureAssignedCaseworker(), validate(governmentSubmissionSchema), recordLicenceGovernmentSubmission);
 
 export default router;

@@ -23,7 +23,7 @@ export default (sequelize, DataTypes) => {
                 defaultValue: 'New',
             },
             status: {
-                type: DataTypes.ENUM('Draft', 'Pending', 'Approved', 'Rejected', 'Under Review', 'Information Requested'),
+                type: DataTypes.ENUM('Draft', 'Pending', 'Approved', 'Rejected', 'Under Review', 'Information Requested', 'Government Processing', 'Decision Pending'),
                 allowNull: false,
                 defaultValue: 'Pending',
             },
@@ -141,6 +141,28 @@ export default (sequelize, DataTypes) => {
             adminNotes: {
                 type: DataTypes.TEXT,
                 allowNull: true,
+            },
+            // Phase 1 — government processing tracking (headline fields mirrored
+            // from licence_government_tracking for fast filter/sort queries).
+            governmentRegistrationRef: {
+                type: DataTypes.STRING(100),
+                allowNull: true,
+                field: "government_registration_ref",
+            },
+            governmentSubmissionRef: {
+                type: DataTypes.STRING(100),
+                allowNull: true,
+                field: "government_submission_ref",
+            },
+            governmentSubmissionDate: {
+                type: DataTypes.DATEONLY,
+                allowNull: true,
+                field: "government_submission_date",
+            },
+            reviewStartedAt: {
+                type: DataTypes.DATE,
+                allowNull: true,
+                field: "review_started_at",
             },
         },
         {

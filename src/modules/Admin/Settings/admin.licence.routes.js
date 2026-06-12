@@ -1,7 +1,7 @@
 import express from 'express';
-import { 
-    getAllLicenceApplications, 
-    updateLicenceApplicationStatus, 
+import {
+    getAllLicenceApplications,
+    updateLicenceApplicationStatus,
     getAdminLicenceApplicationDetails,
     requestAdditionalInformation,
     assignCaseworker,
@@ -11,12 +11,20 @@ import {
     assignCosRequestToCaseworker,
     approveCosRequest,
     rejectCosRequest,
+    requestInfoForCosRequestAdmin,
     getLicenceApplicationV2,
     downloadLicenceDocument
 } from './licenceManagement.controller.js';
+import {
+    generateLicenceCredentials,
+    resendLicenceCredentials,
+} from './adminLicenceGovernment.controller.js';
 import { verifyTokenAndTenant } from '../../../middlewares/authStack.middleware.js';
 import { checkRole, ROLES } from '../../../middlewares/role.middleware.js';
+import { validate } from '../../../middlewares/validate.middleware.js';
 import { getLicenceStages, completeLicenceStageTask } from '../../Shared/Licence/licenceStage.controller.js';
+import { generateCredentialsSchema } from '../../../validations/licenceGovernment.validation.js';
+import { adminUpdateLicenceSchema } from '../../../validations/licenceApplication.validation.js';
 
 const router = express.Router();
 
@@ -38,7 +46,12 @@ router.get("/cos-requests", getCosRequests);
 router.post("/cos-requests/:id/assign-caseworker", assignCosRequestToCaseworker);
 router.patch("/cos-requests/:id/approve", approveCosRequest);
 router.patch("/cos-requests/:id/reject", rejectCosRequest);
+router.patch("/cos-requests/:id/request-info", requestInfoForCosRequestAdmin);
 router.delete("/delete/:id", deleteLicenceApplication);
-router.put("/update/:id", updateLicenceApplicationByAdmin);
+router.put("/update/:id", validate(adminUpdateLicenceSchema, "adminUpdateLicenceSchema"), updateLicenceApplicationByAdmin);
+
+// Government credential management (Phase 3).
+router.post("/:id/generate-credentials", validate(generateCredentialsSchema), generateLicenceCredentials);
+router.post("/:id/resend-credentials", resendLicenceCredentials);
 
 export default router;

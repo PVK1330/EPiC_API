@@ -1,4 +1,5 @@
 import { Op } from "sequelize";
+import logger from "../utils/logger.js";
 import { getStepById } from "../constants/immigrationCaseProcess.js";
 import { isFeesApprovedForClient } from "./cclCandidateRelease.service.js";
 import { notifyTaskAssigned, notifyUser, NotificationTypes, NotificationPriority } from "./notification.service.js";
@@ -86,11 +87,14 @@ export async function createWorkflowTask({
 
   const plain = task.get({ plain: true });
   if (!skipAssigneeNotification) {
-    await notifyTaskAssigned(tenantDb, assigneeId, {
+    const notification = await notifyTaskAssigned(tenantDb, assigneeId, {
       ...plain,
       organisationId,
       metadata: { caseId: caseLabel, taskId: task.id },
-    }).catch(() => { });
+    });
+    if (!notification) {
+      logger.error({ caseId: caseRecord.id, taskId: task.id, assigneeId }, "createWorkflowTask: failed to notify assignee");
+    }
   }
 
   return task;
@@ -299,7 +303,7 @@ export async function syncWorkflowTasksForStage({
     if (t) created.push(t);
 
     if (spec.notify) {
-      await notifyUser(tenantDb, candidateId, {
+      const result = await notifyUser(tenantDb, candidateId, {
         tenantDb,
         type: NotificationTypes.INFO,
         priority: NotificationPriority.HIGH,
@@ -311,7 +315,10 @@ export async function syncWorkflowTasksForStage({
         metadata: { caseId: caseLabel, stageId },
         sendEmail: true,
         organisationId,
-      }).catch(() => { });
+      });
+      if (!result) {
+        logger.error({ caseId: caseRecord.id, candidateId }, "syncWorkflowTasksForStage: failed to notify candidate workflow task");
+      }
     }
   }
 

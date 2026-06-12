@@ -11,6 +11,7 @@ import * as sponsorshipNotify from '../../services/sponsorshipNotification.servi
 import { loadFullApplication as loadFullApplicationV2, serializeApplication as serializeApplicationV2 } from '../../services/licenceApplicationV2.service.js';
 import { ensureStageTasks } from '../../services/licenceStageTask.service.js';
 import { resolveLicenceDocumentPaths } from '../../utils/licenceDocuments.util.js';
+import { validateTransition, WORKFLOW_TYPES } from '../../services/workflowEngine.service.js';
 
 export const getAssignedLicenceApplications = async (req, res) => {
     try {
@@ -71,6 +72,11 @@ export const updateLicenceReviewStatus = async (req, res) => {
 
         const previousStatus = application.status;
 
+        const transitionCheck = validateTransition(WORKFLOW_TYPES.LICENCE, previousStatus, status);
+        if (!transitionCheck.valid) {
+            return res.status(400).json({ status: 'error', message: transitionCheck.message });
+        }
+
         application.status = status;
         if (adminNotes) {
             application.adminNotes = adminNotes;
@@ -100,6 +106,7 @@ export const updateLicenceReviewStatus = async (req, res) => {
                 tenantDb: req.tenantDb,
                 application,
                 status,
+                previousStatus,
                 adminNotes,
                 req,
             });

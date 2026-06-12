@@ -22,10 +22,12 @@ import {
   listCosRequests,
   assignCosRequest,
   reviewCosRequest,
+  requestInfoCosRequest,
 } from "../../../services/cosRequest.service.js";
 import * as sponsorshipNotify from "../../../services/sponsorshipNotification.service.js";
 import { ensureStageTasks } from "../../../services/licenceStageTask.service.js";
 import { resolveLicenceDocumentPaths } from "../../../utils/licenceDocuments.util.js";
+import { validateTransition, WORKFLOW_TYPES } from "../../../services/workflowEngine.service.js";
 
 // Licence documents are stored as raw disk paths in LicenceApplication.documents
 // (e.g. storage/private/temp/<uuid>.pdf). The /uploads dir is no longer served
@@ -102,6 +104,17 @@ export const getAllLicenceApplications = async (req, res) => {
           attributes: ["id", "first_name", "last_name", "email"],
           required: false,
         },
+        {
+          model: req.tenantDb.LicenceGovernmentTracking,
+          as: "governmentTracking",
+          required: false,
+          // Never return the encrypted password to the frontend.
+          attributes: [
+            "id", "ukviPortalUserId", "smsPortalUsername", "smsRegistrationRef",
+            "credentialsGeneratedAt", "credentialsSentAt",
+            "governmentRegistrationRef", "governmentSubmissionRef", "governmentSubmissionDate",
+          ],
+        },
       ],
       order: [["createdAt", "DESC"]],
     });
@@ -125,7 +138,6 @@ export const getAllLicenceApplications = async (req, res) => {
     res.status(500).json({
       status: "error",
       message: "Failed to fetch licence applications",
-      error: error.message,
     });
   }
 };
@@ -160,6 +172,11 @@ export const updateLicenceApplicationStatus = async (req, res) => {
 
     const previousStatus = application.status;
 
+    const transitionCheck = validateTransition(WORKFLOW_TYPES.LICENCE, previousStatus, status);
+    if (!transitionCheck.valid) {
+      return res.status(400).json({ status: "error", message: transitionCheck.message });
+    }
+
     application.status = status;
     if (adminNotes) application.adminNotes = adminNotes;
     await application.save();
@@ -189,6 +206,7 @@ export const updateLicenceApplicationStatus = async (req, res) => {
         tenantDb: req.tenantDb,
         application,
         status,
+        previousStatus,
         adminNotes,
         req,
       });
@@ -226,7 +244,6 @@ export const updateLicenceApplicationStatus = async (req, res) => {
     res.status(500).json({
       status: "error",
       message: "Failed to update licence application status",
-      error: error.message,
     });
   }
 };
@@ -257,15 +274,10 @@ export const getAdminLicenceApplicationDetails = async (req, res) => {
       data: application,
     });
   } catch (error) {
-    logger.error(
-      { err: error },
-      "Error fetching licence application details for admin",
-      error,
-    );
+    logger.error({ err: error }, "Error fetching licence application details for admin");
     res.status(500).json({
       status: "error",
       message: "Failed to fetch licence application details",
-      error: error.message,
     });
   }
 };
@@ -285,6 +297,11 @@ export const requestAdditionalInformation = async (req, res) => {
     }
 
     const previousStatus = application.status;
+
+    const transitionCheck = validateTransition(WORKFLOW_TYPES.LICENCE, previousStatus, "Information Requested");
+    if (!transitionCheck.valid) {
+      return res.status(400).json({ status: "error", message: transitionCheck.message });
+    }
 
     application.status = "Information Requested";
     application.requestedDocuments = requestedDocuments; // Array of doc titles or instructions
@@ -325,7 +342,6 @@ export const requestAdditionalInformation = async (req, res) => {
     res.status(500).json({
       status: "error",
       message: "Failed to request information",
-      error: error.message,
     });
   }
 };
@@ -353,6 +369,11 @@ export const assignCaseworker = async (req, res) => {
 
     const previousAssignment = extractCaseworkerIds(application.assignedcaseworkerId);
     const previousStatus = application.status;
+
+    const transitionCheck = validateTransition(WORKFLOW_TYPES.LICENCE, previousStatus, "Under Review");
+    if (!transitionCheck.valid) {
+      return res.status(400).json({ status: "error", message: transitionCheck.message });
+    }
 
     application.assignedcaseworkerId = caseworkerIds;
     application.status = "Under Review";
@@ -402,7 +423,6 @@ export const assignCaseworker = async (req, res) => {
     res.status(500).json({
       status: "error",
       message: "Failed to assign caseworker",
-      error: error.message,
     });
   }
 };
@@ -430,7 +450,6 @@ export const deleteLicenceApplication = async (req, res) => {
     res.status(500).json({
       status: "error",
       message: "Failed to delete licence application",
-      error: error.message,
     });
   }
 };
@@ -446,15 +465,10 @@ export const updateLicenceApplicationByAdmin = async (req, res) => {
       });
     }
 
+    // req.body has already been stripped to the adminUpdateLicenceSchema whitelist
+    // by validate() middleware — only explicitly-allowed fields reach here.
+    // The date transform in the schema has also normalised "" / "Invalid date" → null.
     const updateData = { ...req.body };
-
-    // Sanitize date fields
-    if (
-      updateData.proposedStartDate === "" ||
-      updateData.proposedStartDate === "Invalid date"
-    ) {
-      updateData.proposedStartDate = null;
-    }
 
     await application.update(updateData);
 
@@ -468,7 +482,6 @@ export const updateLicenceApplicationByAdmin = async (req, res) => {
     res.status(500).json({
       status: "error",
       message: "Failed to update licence application",
-      error: error.message,
     });
   }
 };
@@ -508,7 +521,7 @@ export const assignCosRequestToCaseworker = async (req, res) => {
   } catch (error) {
     const code = error?.statusCode || 500;
     if (code >= 500) logger.error({ err: error }, "Error assigning CoS request to caseworker");
-    res.status(code).json({ status: "error", message: error.message || "Failed to assign CoS request", data: null });
+    res.status(code).json({ status: "error", message: code < 500 ? (error.message || "Failed to assign CoS request") : "Failed to assign CoS request", data: null });
   }
 };
 
@@ -528,7 +541,7 @@ export const approveCosRequest = async (req, res) => {
   } catch (error) {
     const code = error?.statusCode || 500;
     if (code >= 500) logger.error({ err: error }, "Error approving CoS request");
-    res.status(code).json({ status: "error", message: error.message || "Failed to approve CoS request" });
+    res.status(code).json({ status: "error", message: code < 500 ? (error.message || "Failed to approve CoS request") : "Failed to approve CoS request" });
   }
 };
 
@@ -547,6 +560,24 @@ export const rejectCosRequest = async (req, res) => {
   } catch (error) {
     const code = error?.statusCode || 500;
     if (code >= 500) logger.error({ err: error }, "Error rejecting CoS request");
-    res.status(code).json({ status: "error", message: error.message || "Failed to reject CoS request" });
+    res.status(code).json({ status: "error", message: code < 500 ? (error.message || "Failed to reject CoS request") : "Failed to reject CoS request" });
+  }
+};
+
+export const requestInfoForCosRequestAdmin = async (req, res) => {
+  try {
+    const { reviewNotes } = req.body;
+    const request = await requestInfoCosRequest({
+      tenantDb: req.tenantDb,
+      id: req.params.id,
+      reviewNotes,
+      reviewerId: req.user?.userId ?? null,
+      req,
+    });
+    res.status(200).json({ status: "success", message: "Information requested from sponsor", data: request });
+  } catch (error) {
+    const code = error?.statusCode || 500;
+    if (code >= 500) logger.error({ err: error }, "Error requesting CoS information");
+    res.status(code).json({ status: "error", message: code < 500 ? (error.message || "Failed to request information") : "Failed to request information" });
   }
 };

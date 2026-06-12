@@ -1,4 +1,5 @@
 import { Op } from "sequelize";
+import logger from "../utils/logger.js";
 import { getStepById } from "../constants/immigrationCaseProcess.js";
 import {
   notifyUser,
@@ -77,18 +78,28 @@ export async function notifyWorkflowStageChange({
 
   const candidateId = caseRecord.candidateId;
   if (candidateId && candidateId !== performedBy) {
-    await notifyUser(tenantDb, candidateId, base).catch(() => {});
+    const result = await notifyUser(tenantDb, candidateId, base);
+    if (!result) {
+      logger.error({ caseId: caseRecord.id, targetId: candidateId, previousStage, nextStage }, "notifyWorkflowStageChange: failed to notify candidate");
+    }
   }
 
   const caseworkerIds = parseCaseworkerIds(caseRecord);
   for (const cwId of caseworkerIds) {
     if (cwId && cwId !== performedBy) {
-      await notifyUser(tenantDb, cwId, base).catch(() => {});
+      const result = await notifyUser(tenantDb, cwId, base);
+      if (!result) {
+        logger.error({ caseId: caseRecord.id, targetId: cwId, previousStage, nextStage }, "notifyWorkflowStageChange: failed to notify caseworker");
+      }
     }
   }
 
-  await notifyAdmins(tenantDb, { ...base, isInternalAdminOnly: true }).catch(() => {});
+  const adminResults = await notifyAdmins(tenantDb, { ...base, isInternalAdminOnly: true });
+  if (!adminResults || !adminResults.length) {
+    logger.error({ caseId: caseRecord.id, previousStage, nextStage }, "notifyWorkflowStageChange: failed to notify admins");
+  }
 }
+
 
 /**
  * Create a high-priority task for each active admin (e.g. CCL payment approval).
@@ -136,11 +147,14 @@ export async function createAdminWorkflowTask({
     });
     created.push(task);
     const plain = task.get({ plain: true });
-    await notifyTaskAssigned(tenantDb, adminId, {
+    const notification = await notifyTaskAssigned(tenantDb, adminId, {
       ...plain,
       organisationId,
       metadata: { caseId: caseRecord.caseId || `#${caseRecord.id}` },
-    }).catch(() => {});
+    });
+    if (!notification) {
+      logger.error({ caseId: caseRecord.id, taskId: task.id, assigneeId: adminId }, "createAdminWorkflowTask: failed to notify assigned admin");
+    }
   }
 
   return created;
@@ -157,7 +171,7 @@ export async function notifyCclFeeProposed({
   const fee = Number(ccl?.feeAmount || 0).toFixed(2);
   const count = Array.isArray(ccl?.installmentPlan) ? ccl.installmentPlan.length : 0;
 
-  await notifyAdmins(tenantDb, {
+  const adminResults = await notifyAdmins(tenantDb, {
     tenantDb,
     type: NotificationTypes.INFO,
     priority: NotificationPriority.HIGH,
@@ -170,7 +184,10 @@ export async function notifyCclFeeProposed({
     sendEmail: true,
     isInternalAdminOnly: true,
     organisationId,
-  }).catch(() => {});
+  });
+  if (!adminResults || !adminResults.length) {
+    logger.error({ caseId: caseRecord.id }, "notifyCclFeeProposed: failed to notify admins");
+  }
 
   // Admin tasks are created by syncWorkflowTasksForStage on ccl_fee_admin_review (avoid duplicates).
 }
@@ -185,7 +202,7 @@ export async function notifyCclFeeApproved({
   const fee = Number(ccl?.feeAmount || 0).toFixed(2);
 
   if (caseRecord.candidateId) {
-    await notifyUser(tenantDb, caseRecord.candidateId, {
+    const candidateResult = await notifyUser(tenantDb, caseRecord.candidateId, {
       tenantDb,
       type: NotificationTypes.PAYMENT_RECEIVED,
       priority: NotificationPriority.HIGH,
@@ -197,12 +214,15 @@ export async function notifyCclFeeApproved({
       metadata: { caseId: caseLabel, feeAmount: ccl?.feeAmount },
       sendEmail: true,
       organisationId,
-    }).catch(() => {});
+    });
+    if (!candidateResult) {
+      logger.error({ caseId: caseRecord.id, candidateId: caseRecord.candidateId }, "notifyCclFeeApproved: failed to notify candidate");
+    }
   }
 
   const caseworkerIds = parseCaseworkerIds(caseRecord);
   for (const cwId of caseworkerIds) {
-    await notifyUser(tenantDb, cwId, {
+    const result = await notifyUser(tenantDb, cwId, {
       tenantDb,
       type: NotificationTypes.SUCCESS,
       priority: NotificationPriority.MEDIUM,
@@ -213,7 +233,10 @@ export async function notifyCclFeeApproved({
       entityType: "case",
       metadata: { caseId: caseLabel },
       sendEmail: false,
-    }).catch(() => {});
+    });
+    if (!result) {
+      logger.error({ caseId: caseRecord.id, caseworkerId: cwId }, "notifyCclFeeApproved: failed to notify caseworker");
+    }
   }
 }
 
@@ -230,7 +253,7 @@ export async function notifyCclFeeRejected({
     : "Admin returned the CCL fee proposal for revision.";
 
   if (proposedBy) {
-    await notifyUser(tenantDb, proposedBy, {
+    const result = await notifyUser(tenantDb, proposedBy, {
       tenantDb,
       type: NotificationTypes.WARNING,
       priority: NotificationPriority.HIGH,
@@ -242,11 +265,14 @@ export async function notifyCclFeeRejected({
       metadata: { caseId: caseLabel, reviewNotes },
       sendEmail: true,
       organisationId,
-    }).catch(() => {});
+    });
+    if (!result) {
+      logger.error({ caseId: caseRecord.id, targetId: proposedBy }, 'notifyCclFeeRejected: failed to notify proposer');
+    }
   } else {
     const caseworkerIds = parseCaseworkerIds(caseRecord);
     for (const cwId of caseworkerIds) {
-      await notifyUser(tenantDb, cwId, {
+      const result = await notifyUser(tenantDb, cwId, {
         tenantDb,
         type: NotificationTypes.WARNING,
         priority: NotificationPriority.HIGH,
@@ -257,7 +283,10 @@ export async function notifyCclFeeRejected({
         entityType: "case",
         sendEmail: true,
         organisationId,
-      }).catch(() => {});
+      });
+      if (!result) {
+        logger.error({ caseId: caseRecord.id, caseworkerId: cwId }, 'notifyCclFeeRejected: failed to notify caseworker');
+      }
     }
   }
 }

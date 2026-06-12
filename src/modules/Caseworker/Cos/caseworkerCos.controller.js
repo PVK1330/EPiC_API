@@ -4,6 +4,7 @@ import {
   listCosRequests,
   getCosRequestById,
   reviewCosRequest,
+  requestInfoCosRequest,
   isCaseworkerAssignedToCos,
 } from "../../../services/cosRequest.service.js";
 
@@ -70,3 +71,27 @@ const review = (action) => async (req, res) => {
 
 export const approveAssignedCosRequest = review("approve");
 export const rejectAssignedCosRequest = review("reject");
+
+export const requestInfoForCosRequest = async (req, res) => {
+  try {
+    const allowed = await loadReviewable(req, res);
+    if (!allowed) return;
+    const { reviewNotes } = req.body;
+    const request = await requestInfoCosRequest({
+      tenantDb: req.tenantDb,
+      id: req.params.id,
+      reviewNotes,
+      reviewerId: req.user.userId,
+      req,
+    });
+    res.status(200).json({
+      status: "success",
+      message: "Information requested from sponsor",
+      data: request,
+    });
+  } catch (error) {
+    const code = error?.statusCode || 500;
+    if (code >= 500) logger.error({ err: error }, "Error requesting CoS information");
+    res.status(code).json({ status: "error", message: error.message || "Failed to request information" });
+  }
+};

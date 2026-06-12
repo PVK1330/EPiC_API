@@ -34,6 +34,8 @@ import {
 } from "./services/tenantSeed.service.js";
 import { checkAndExpireSubscriptions } from "./services/subscriptionExpiry.service.js";
 import { runComplianceAlerts } from "./services/complianceAlerts.service.js";
+import { startScheduledJobs, listScheduledJobs } from "./jobs/index.js";
+import { processScheduledNotifications } from "./services/licenceScheduled.service.js";
 import http from "http";
 import { initSocketIO } from "./realtime/socketServer.js";
 import { normalizePostgresDatabaseName } from "./utils/postgresDbName.js";
@@ -158,23 +160,13 @@ async function bootstrapPlatform() {
 
     await verifyMailTransport();
 
-    setInterval(
-      () => {
-        checkAndExpireSubscriptions();
-      },
-      6 * 60 * 60 * 1000,
-    );
+    // Register all scheduled jobs (replaces raw setInterval calls).
+    startScheduledJobs();
 
+    // Run once immediately on boot so no window is missed between restarts.
     checkAndExpireSubscriptions();
-
-    setInterval(
-      () => {
-        runComplianceAlerts();
-      },
-      24 * 60 * 60 * 1000,
-    );
-
     runComplianceAlerts();
+    processScheduledNotifications();
 
     server.listen(PORT, () => {
       logger.info({ port: PORT }, 'Server started');

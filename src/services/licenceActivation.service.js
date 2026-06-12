@@ -7,6 +7,8 @@ import {
 } from "./notification.service.js";
 import { sendTransactionalEmail } from "./mail.service.js";
 import { generateNotificationEmailTemplate } from "../utils/emailTemplates.js";
+import { recordLicenceAudit, extractCaseworkerIds } from "./licenceAssignment.service.js";
+import { licenceActivatedCaseworkers } from "./sponsorshipNotification.service.js";
 
 /** Standard UK sponsor licence validity. */
 const LICENCE_VALIDITY_YEARS = 4;
@@ -37,7 +39,7 @@ function addYears(date, years) {
 function generateLicenceNumber(profile, application) {
   const year = new Date().getFullYear();
   const seed = profile.userId || application.userId;
-  return `SL-${year}-${String(seed).padStart(6, "0")}`;
+  return `SLN-${year}-${String(seed).padStart(6, "0")}`;
 }
 
 /**
@@ -74,12 +76,19 @@ export async function activateSponsorLicence({
 
   const now = new Date();
   const issuedDate = now;
-  const expiryDate = addYears(now, LICENCE_VALIDITY_YEARS);
+  const isRenewal = application.type === "Renewal";
   const licenceNumber =
     profile.sponsorLicenceNumber || generateLicenceNumber(profile, application);
   const wasActive =
     profile.licenceStatus === LICENCE_STATUS.ACTIVE &&
     !!profile.sponsorLicenceNumber;
+
+  // For renewals, extend from the existing expiry date so no time is lost
+  // (or gained) due to processing lag. For new activations, start from now.
+  const renewalBase = isRenewal && profile.licenceExpiryDate
+    ? new Date(profile.licenceExpiryDate)
+    : now;
+  const expiryDate = addYears(renewalBase, LICENCE_VALIDITY_YEARS);
 
   // 1-3) Activate the licence on the sponsor profile.
   profile.licenceStatus = LICENCE_STATUS.ACTIVE;
@@ -89,8 +98,20 @@ export async function activateSponsorLicence({
   if (!profile.licenceRating) profile.licenceRating = "A";
   await profile.save();
 
+  // Seed initial CoS pool from the intake form's requested count, the
+  // application's own cosAllocation field, or a safe default of 5.
+  if (!profile.cosAllocation) {
+    const intakeForm = await (tenantDb.LicenceIntakeForm?.findOne({
+      where: { licenceApplicationId: application.id },
+      attributes: ["numberOfCosRequired"],
+    }) ?? Promise.resolve(null)).catch(() => null);
+    const cosPoolSize = intakeForm?.numberOfCosRequired || application.cosAllocation || 5;
+    profile.cosAllocation = cosPoolSize;
+    await profile.save();
+  }
+
   // 4) Audit log — Licence Approved / Approved By / Approved Date (best effort).
-  recordAuditLog({
+  await recordAuditLog({
     tenantDb,
     userId: approvedByUserId,
     action: "LICENCE_APPROVED",
@@ -110,7 +131,23 @@ export async function activateSponsorLicence({
     req,
     organisationId: profile.organisation_id ?? null,
   }).catch((err) =>
-    logger.error({ err }, "Failed to record licence approval audit log")
+    logger.error({ err, applicationId: application.id, sponsorUserId: application.userId }, "Failed to record licence approval audit log")
+  );
+
+  // 4b) Timeline entry — LICENCE_ACTIVATED / LICENCE_RENEWED.
+  await recordLicenceAudit({
+    tenantDb,
+    application,
+    actorId: approvedByUserId,
+    action: isRenewal ? "renewed" : "activated",
+    previousStatus: null,
+    newStatus: "Approved",
+    notes: isRenewal
+      ? `Licence renewed: ${licenceNumber}. New expiry: ${new Date(expiryDate).toLocaleDateString("en-GB")}. CoS pool: ${profile.cosAllocation ?? 0}.`
+      : `Licence activated: ${licenceNumber}. CoS pool: ${profile.cosAllocation ?? 0}. Expires: ${new Date(expiryDate).toLocaleDateString("en-GB")}.`,
+    req,
+  }).catch((err) =>
+    logger.error({ err, applicationId: application.id, sponsorUserId: application.userId }, "Failed to record licence timeline entry")
   );
 
   // 5) Notify the sponsor (portal + email).
@@ -121,7 +158,23 @@ export async function activateSponsorLicence({
     licenceNumber,
     issuedDate,
     expiryDate,
+    isRenewal,
   });
+
+  // 6) Notify assigned caseworkers (in-app).
+  const cwIds = extractCaseworkerIds(application.assignedcaseworkerId);
+  if (cwIds.length > 0) {
+    await licenceActivatedCaseworkers({
+      tenantDb,
+      application,
+      licenceNumber,
+      cosAllocation: profile.cosAllocation ?? 0,
+      caseworkerIds: cwIds,
+      req,
+    }).catch((err) =>
+      logger.error({ err, applicationId: application.id, caseworkerIds: cwIds }, "Failed to notify caseworkers of licence activation")
+    );
+  }
 
   logger.info(
     {
@@ -148,33 +201,36 @@ async function notifySponsorLicenceActivated({
   licenceNumber,
   issuedDate,
   expiryDate,
+  isRenewal = false,
 }) {
   const userId = application.userId;
+  const notifTitle = isRenewal ? "Sponsor Licence Renewed" : "Sponsor Licence Approved";
+  const notifMessage = isRenewal
+    ? `Your sponsor licence has been renewed (Licence No. ${licenceNumber}). New expiry: ${new Date(expiryDate).toLocaleDateString("en-GB")}.`
+    : `Your sponsor licence is now Active (Licence No. ${licenceNumber}). You can now request CoS and sponsor workers.`;
 
   // Portal notification (sendEmail:false — the email is sent explicitly below).
   try {
     await notifyUser(tenantDb, userId, {
       type: NotificationTypes.SUCCESS,
       priority: NotificationPriority.HIGH,
-      title: "Sponsor Licence Approved",
-      message: `Your sponsor licence is now Active (Licence No. ${licenceNumber}). You can now request CoS and sponsor workers.`,
+      title: notifTitle,
+      message: notifMessage,
       category: "licence",
       entityType: "licence_application",
       entityId: application.id,
-      actionType: "licence_activated",
+      actionType: isRenewal ? "licence_renewed" : "licence_activated",
       sendEmail: false,
       metadata: {
         licenceNumber,
         issuedDate,
         expiryDate,
         licenceStatus: LICENCE_STATUS.ACTIVE,
+        isRenewal,
       },
     });
   } catch (err) {
-    logger.error(
-      { err },
-      "Failed to create licence activation portal notification"
-    );
+    logger.error({ err }, "Failed to create licence portal notification");
   }
 
   // Transactional email.
@@ -185,9 +241,7 @@ async function notifySponsorLicenceActivated({
       profile.billingEmail ||
       null;
     if (!recipientEmail) {
-      const user = await tenantDb.User.findByPk(userId, {
-        attributes: ["email"],
-      });
+      const user = await tenantDb.User.findByPk(userId, { attributes: ["email"] });
       recipientEmail = user?.email || null;
     }
 
@@ -195,16 +249,23 @@ async function notifySponsorLicenceActivated({
       await sendTransactionalEmail({
         organisationId: profile.organisation_id ?? null,
         to: recipientEmail,
-        subject: `Your sponsor licence is now active — ${licenceNumber}`,
+        subject: isRenewal
+          ? `Your sponsor licence has been renewed — ${licenceNumber}`
+          : `Your sponsor licence is now active — ${licenceNumber}`,
         html: generateNotificationEmailTemplate({
           recipientName: profile.companyName || "Sponsor",
-          title: "Sponsor Licence Approved",
-          message:
-            `Congratulations — your sponsor licence application has been approved and your licence is now ACTIVE.\n\n` +
-            `Licence Number: ${licenceNumber}\n` +
-            `Issued: ${new Date(issuedDate).toLocaleDateString("en-GB")}\n` +
-            `Expires: ${new Date(expiryDate).toLocaleDateString("en-GB")}\n\n` +
-            `You can now request Certificates of Sponsorship (CoS) and add sponsored workers.`,
+          title: notifTitle,
+          message: isRenewal
+            ? `Congratulations — your sponsor licence has been successfully renewed.\n\n` +
+              `Licence Number: ${licenceNumber}\n` +
+              `Renewed On: ${new Date(issuedDate).toLocaleDateString("en-GB")}\n` +
+              `New Expiry: ${new Date(expiryDate).toLocaleDateString("en-GB")}\n\n` +
+              `Your CoS allocation and sponsorship rights remain in force.`
+            : `Congratulations — your sponsor licence application has been approved and your licence is now ACTIVE.\n\n` +
+              `Licence Number: ${licenceNumber}\n` +
+              `Issued: ${new Date(issuedDate).toLocaleDateString("en-GB")}\n` +
+              `Expires: ${new Date(expiryDate).toLocaleDateString("en-GB")}\n\n` +
+              `You can now request Certificates of Sponsorship (CoS) and add sponsored workers.`,
           priority: NotificationPriority.HIGH,
           notificationType: NotificationTypes.SUCCESS,
           actionUrl: `${process.env.FRONTEND_URL || ""}/business/licence`,
@@ -212,12 +273,9 @@ async function notifySponsorLicenceActivated({
         }),
       });
     } else {
-      logger.warn(
-        { userId },
-        "Licence activated but no email address found for sponsor"
-      );
+      logger.warn({ userId }, "Licence notification: no email address found for sponsor");
     }
   } catch (err) {
-    logger.error({ err }, "Failed to send licence activation email");
+    logger.error({ err }, "Failed to send licence email");
   }
 }

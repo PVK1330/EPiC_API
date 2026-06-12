@@ -55,6 +55,7 @@ import LicenceAuthorisingOfficerModel from "./tenant/licenceAuthorisingOfficer.m
 import LicenceKeyContactModel from "./tenant/licenceKeyContact.model.js";
 import LicenceLevel1UserModel from "./tenant/licenceLevel1User.model.js";
 import LicenceDeclarationModel from "./tenant/licenceDeclaration.model.js";
+import LicenceGovernmentTrackingModel from "./tenant/licenceGovernmentTracking.model.js";
 import CosRequestModel from "./tenant/cosRequest.model.js";
 import ComplianceReviewHistoryModel from "./tenant/complianceReviewHistory.model.js";
 import SponsorUserPreferenceModel from "./tenant/sponsorUserPreference.model.js";
@@ -76,6 +77,8 @@ import ChangeRequestHistoryModel from "./tenant/changeRequestHistory.model.js";
 import IntegrationSyncLogModel from "./tenant/integrationSyncLog.model.js";
 import MeetingIntegrationModel from "./tenant/meetingIntegration.model.js";
 import IntegrationRetryQueueModel from "./tenant/integrationRetryQueue.model.js";
+import LicenceIntakeFormModel from "./tenant/licenceIntakeForm.model.js";
+import LicenceIntakeDocumentModel from "./tenant/licenceIntakeDocument.model.js";
 
 /**
  * Register all models and associations on a Sequelize instance (main or tenant DB).
@@ -142,6 +145,7 @@ export function buildDb(sequelize) {
   db.LicenceKeyContact = LicenceKeyContactModel(sequelize, Sequelize.DataTypes);
   db.LicenceLevel1User = LicenceLevel1UserModel(sequelize, Sequelize.DataTypes);
   db.LicenceDeclaration = LicenceDeclarationModel(sequelize, Sequelize.DataTypes);
+  db.LicenceGovernmentTracking = LicenceGovernmentTrackingModel(sequelize, Sequelize.DataTypes);
   db.CosRequest = CosRequestModel(sequelize, Sequelize.DataTypes);
   db.ComplianceReviewHistory = ComplianceReviewHistoryModel(sequelize, Sequelize.DataTypes);
   db.CalendarMeeting = CalendarMeetingModel(sequelize, Sequelize.DataTypes);
@@ -159,6 +163,8 @@ export function buildDb(sequelize) {
   db.IntegrationSyncLog = IntegrationSyncLogModel(sequelize, Sequelize.DataTypes);
   db.MeetingIntegration = MeetingIntegrationModel(sequelize, Sequelize.DataTypes);
   db.IntegrationRetryQueue = IntegrationRetryQueueModel(sequelize, Sequelize.DataTypes);
+  db.LicenceIntakeForm = LicenceIntakeFormModel(sequelize);
+  db.LicenceIntakeDocument = LicenceIntakeDocumentModel(sequelize);
 
   // Associations (Same as before)
   db.Conversation.belongsTo(db.User, { foreignKey: "participantOneId", as: "participantOne" });
@@ -294,6 +300,10 @@ export function buildDb(sequelize) {
   db.LicenceLevel1User.belongsTo(db.LicenceApplication, { foreignKey: "licenceApplicationId", as: "application" });
   db.LicenceApplication.hasOne(db.LicenceDeclaration, { foreignKey: "licenceApplicationId", as: "declaration" });
   db.LicenceDeclaration.belongsTo(db.LicenceApplication, { foreignKey: "licenceApplicationId", as: "application" });
+
+  // Phase 1 — government processing tracking (1:1 with licence_applications).
+  db.LicenceApplication.hasOne(db.LicenceGovernmentTracking, { foreignKey: "licenceApplicationId", as: "governmentTracking" });
+  db.LicenceGovernmentTracking.belongsTo(db.LicenceApplication, { foreignKey: "licenceApplicationId", as: "application" });
   db.LicenceApplicationRoute.belongsTo(db.Organisation, { foreignKey: "organisationId", as: "organisation" });
   db.LicenceOrganisationInfo.belongsTo(db.Organisation, { foreignKey: "organisationId", as: "organisation" });
   db.LicenceCosRequirement.belongsTo(db.Organisation, { foreignKey: "organisationId", as: "organisation" });
@@ -385,6 +395,14 @@ export function buildDb(sequelize) {
   db.Appointment.hasMany(db.MeetingIntegration, { foreignKey: "appointment_id", as: "integrations" });
 
   db.IntegrationRetryQueue.belongsTo(db.User, { foreignKey: "user_id", as: "user" });
+
+  // Licence Intake — information form + document checklist (1:1 and 1:M with licence_applications).
+  db.LicenceApplication.hasOne(db.LicenceIntakeForm, { foreignKey: "licenceApplicationId", as: "intakeForm" });
+  db.LicenceIntakeForm.belongsTo(db.LicenceApplication, { foreignKey: "licenceApplicationId", as: "application" });
+  db.LicenceApplication.hasMany(db.LicenceIntakeDocument, { foreignKey: "licenceApplicationId", as: "intakeDocuments" });
+  db.LicenceIntakeDocument.belongsTo(db.LicenceApplication, { foreignKey: "licenceApplicationId", as: "application" });
+  db.LicenceIntakeDocument.belongsTo(db.User, { foreignKey: "uploadedByUserId", as: "uploader" });
+  db.LicenceIntakeDocument.belongsTo(db.User, { foreignKey: "verifiedByUserId", as: "verifier" });
 
   return db;
 }

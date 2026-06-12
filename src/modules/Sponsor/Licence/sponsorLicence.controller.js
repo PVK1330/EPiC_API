@@ -6,6 +6,7 @@ import { notifyAdmins, notifyUser, NotificationTypes, NotificationPriority } fro
 import { validateTransition, WORKFLOW_TYPES } from '../../../services/workflowEngine.service.js';
 import * as sponsorshipNotify from '../../../services/sponsorshipNotification.service.js';
 import { resolveLicenceDocumentPaths } from '../../../utils/licenceDocuments.util.js';
+import { recordLicenceAudit } from '../../../services/licenceAssignment.service.js';
 
 /**
  * Notification matrix for Licence Documents (Sponsor side)
@@ -28,6 +29,8 @@ const extractCaseworkerIds = (assignedcaseworkerId) => {
 export const submitLicenceApplication = async (req, res) => {
     try {
         const userId = req.user.userId;
+        // req.body has been stripped to sponsorSubmitLicenceSchema whitelist by validate().
+        // Server-side fields are set after the spread so they cannot be overridden.
         const applicationData = {
             ...req.body,
             userId,
@@ -65,7 +68,6 @@ export const submitLicenceApplication = async (req, res) => {
         res.status(500).json({
             status: 'error',
             message: 'Failed to submit licence application',
-            error: error.message
         });
     }
 };
@@ -98,7 +100,6 @@ export const getMyLicenceApplications = async (req, res) => {
         res.status(500).json({
             status: 'error',
             message: 'Failed to fetch licence applications',
-            error: error.message
         });
     }
 };
@@ -128,7 +129,6 @@ export const getLicenceApplicationDetails = async (req, res) => {
         res.status(500).json({
             status: 'error',
             message: 'Failed to fetch licence application details',
-            error: error.message
         });
     }
 };
@@ -155,33 +155,23 @@ export const updateLicenceApplication = async (req, res) => {
             });
         }
 
+        // req.body has been stripped to sponsorUpdateLicenceSchema whitelist by
+        // validate() — status, assignedcaseworkerId, userId, cosAllocation, etc.
+        // are not present here.  The date transform in the schema normalises
+        // "" / "Invalid date" → null so no manual sanitisation is needed.
         const updateData = { ...req.body };
 
-        // If updating from Information Requested, move back to Pending for re-review
+        // Auto-transition: move back to Pending so the application is re-queued
+        // for review after the sponsor responds to an information request.
         if (application.status === 'Information Requested') {
             updateData.status = 'Pending';
         }
-        
-        // Handle new documents
+
+        // Handle new documents via the file upload (separate from field data).
         if (req.files && req.files.length > 0) {
             const newDocs = req.files.map(file => file.path);
             const existingDocs = application.documents || [];
             updateData.documents = [...existingDocs, ...newDocs];
-        }
-
-        // Sanitize date fields
-        if (updateData.proposedStartDate === '' || updateData.proposedStartDate === 'Invalid date') {
-            updateData.proposedStartDate = null;
-        }
-
-        if (updateData.status && updateData.status !== application.status) {
-            const validation = validateTransition(WORKFLOW_TYPES.LICENCE, application.status, updateData.status);
-            if (!validation.valid) {
-                return res.status(400).json({
-                    status: 'error',
-                    message: `Invalid state transition: ${validation.message}`
-                });
-            }
         }
 
         await application.update(updateData);
@@ -216,7 +206,6 @@ export const updateLicenceApplication = async (req, res) => {
         res.status(500).json({
             status: 'error',
             message: 'Failed to update licence application',
-            error: error.message
         });
     }
 };
@@ -256,29 +245,76 @@ export const deleteMyLicenceApplication = async (req, res) => {
         res.status(500).json({
             status: 'error',
             message: 'Failed to delete licence application',
-            error: error.message
         });
     }
 };
+/** Days before expiry at which renewal applications are accepted. */
+const RENEWAL_ELIGIBILITY_DAYS = 90;
+
+/** Statuses that block a second renewal submission (one-in-flight rule). */
+const RENEWAL_IN_PROGRESS_STATUSES = [
+    'Pending', 'Under Review', 'Information Requested',
+    'Government Processing', 'Decision Pending',
+];
+
 export const renewLicenceApplication = async (req, res) => {
     try {
         const userId = req.user.userId;
         const { id } = req.params;
+        const { renewalType = 'Standard Renewal', reason = '', notes = '' } = req.body;
 
-        // Find the existing application
+        // 1) Verify the source application belongs to this sponsor and is Approved.
         const existingApp = await req.tenantDb.LicenceApplication.findOne({
-            where: { id, userId }
+            where: { id, userId },
         });
-
         if (!existingApp) {
-            return res.status(404).json({
+            return res.status(404).json({ status: 'error', message: 'Licence application not found.' });
+        }
+        if (existingApp.status !== 'Approved') {
+            return res.status(400).json({
                 status: 'error',
-                message: 'Existing licence application not found'
+                message: 'You can only renew an approved licence application.',
             });
         }
 
-        // Create a new application copying the company details
-        const renewalData = {
+        // 2) One-in-flight guard — prevent duplicate pending renewals.
+        const inFlight = await req.tenantDb.LicenceApplication.findOne({
+            where: { userId, type: 'Renewal', status: { [Op.in]: RENEWAL_IN_PROGRESS_STATUSES } },
+            attributes: ['id', 'status'],
+            order: [['createdAt', 'DESC']],
+        });
+        if (inFlight) {
+            return res.status(409).json({
+                status: 'error',
+                message: `A renewal application (#LIC-${inFlight.id}) is already in progress. Please wait for it to be resolved before submitting another.`,
+                data: { existingRenewalId: inFlight.id, existingRenewalStatus: inFlight.status },
+            });
+        }
+
+        // 3) Eligibility window: only allow within RENEWAL_ELIGIBILITY_DAYS of expiry (or already expired).
+        const profile = await req.tenantDb.SponsorProfile.findOne({ where: { userId } });
+        if (profile?.licenceExpiryDate) {
+            const daysRemaining = Math.ceil(
+                (new Date(profile.licenceExpiryDate) - new Date()) / 86400000
+            );
+            if (daysRemaining > RENEWAL_ELIGIBILITY_DAYS) {
+                return res.status(400).json({
+                    status: 'error',
+                    message: `Renewal applications open ${RENEWAL_ELIGIBILITY_DAYS} days before expiry. Your licence expires in ${daysRemaining} days.`,
+                    data: { daysRemaining, eligibleFromDays: RENEWAL_ELIGIBILITY_DAYS },
+                });
+            }
+        }
+
+        // 4) Build and persist the renewal application.
+        const renewalReason = [
+            `${renewalType}`,
+            reason ? reason : null,
+            notes ? `Notes: ${notes}` : null,
+            `Original application: #LIC-${existingApp.id}`,
+        ].filter(Boolean).join(' — ');
+
+        const newApplication = await req.tenantDb.LicenceApplication.create({
             userId,
             companyName: existingApp.companyName,
             tradingName: existingApp.tradingName,
@@ -288,47 +324,88 @@ export const renewLicenceApplication = async (req, res) => {
             contactEmail: existingApp.contactEmail,
             contactPhone: existingApp.contactPhone,
             licenceType: existingApp.licenceType,
-            type: 'Renewal', // Set type to Renewal
+            type: 'Renewal',
             status: 'Pending',
             cosAllocation: existingApp.cosAllocation,
-            reason: `Quick Renewal based on application #LIC-${existingApp.id}`,
-            documents: existingApp.documents || [] // Copy existing documents
-        };
+            reason: renewalReason,
+            documents: existingApp.documents || [],
+        });
 
-        const newApplication = await req.tenantDb.LicenceApplication.create(renewalData);
+        // 5) Audit trail.
+        recordLicenceAudit({
+            tenantDb: req.tenantDb,
+            application: newApplication,
+            actorId: userId,
+            action: 'renewal_submitted',
+            previousStatus: null,
+            newStatus: 'Pending',
+            notes: `Renewal submitted by sponsor. Type: ${renewalType}. Original: #LIC-${existingApp.id}.`,
+            req,
+        }).catch((err) => logger.error({ err }, 'Failed to record renewal audit'));
 
+        // Respond before firing notifications (don't block the client).
         res.status(201).json({
             status: 'success',
             message: 'Renewal application submitted successfully',
-            data: newApplication
+            data: newApplication,
         });
 
-        // Notify Admins
-        try {
-            await notifyAdmins(req.tenantDb, {
-                type: NotificationTypes.INFO,
-                priority: NotificationPriority.HIGH,
-                title: `Licence Renewal Request: ${newApplication.companyName}`,
-                message: `${newApplication.contactName} has submitted a quick renewal for application #LIC-${existingApp.id}.`,
-                actionType: 'licence_renewal',
-                entityId: newApplication.id,
-                entityType: 'licence_application',
-                metadata: {
-                    originalAppId: existingApp.id,
-                    newAppId: newApplication.id,
-                    company: newApplication.companyName,
-                    type: 'Renewal'
-                }
-            });
-        } catch (err) {
-            logger.error({ err }, 'Failed to notify admins of renewal');
+        // 6) Notify sponsor — in-app confirmation.
+        notifyUser(req.tenantDb, userId, {
+            type: NotificationTypes.SUCCESS,
+            priority: NotificationPriority.HIGH,
+            title: 'Renewal Application Submitted',
+            message: `Your licence renewal (#LIC-${newApplication.id}) is now pending review. You will be notified when a decision is made.`,
+            category: 'licence',
+            entityType: 'licence_application',
+            entityId: newApplication.id,
+            actionType: 'licence_renewal_submitted',
+            sendEmail: false,
+        }).catch((err) => logger.error({ err }, 'Failed to send sponsor renewal notification'));
+
+        // 7) Notify admins.
+        notifyAdmins(req.tenantDb, {
+            type: NotificationTypes.INFO,
+            priority: NotificationPriority.HIGH,
+            title: `Licence Renewal: ${newApplication.companyName}`,
+            message: `${newApplication.contactName} submitted a ${renewalType} for ${newApplication.companyName} (#LIC-${newApplication.id}). Original: #LIC-${existingApp.id}.`,
+            actionType: 'licence_renewal',
+            entityId: newApplication.id,
+            entityType: 'licence_application',
+        }).catch((err) => logger.error({ err }, 'Failed to notify admins of renewal'));
+
+        // 8) Transactional confirmation email to sponsor.
+        const recipientEmail =
+            profile?.keyContactEmail ||
+            profile?.authorisingEmail ||
+            existingApp.contactEmail ||
+            null;
+        if (recipientEmail) {
+            sendTransactionalEmail({
+                organisationId: profile?.organisation_id ?? null,
+                to: recipientEmail,
+                subject: `Renewal application received — ${newApplication.companyName}`,
+                html: generateNotificationEmailTemplate({
+                    recipientName: newApplication.companyName || 'Sponsor',
+                    title: 'Licence Renewal Submitted',
+                    message:
+                        `Your sponsor licence renewal application has been received and is pending review.\n\n` +
+                        `Reference: #LIC-${newApplication.id}\n` +
+                        `Type: ${renewalType}\n` +
+                        `Status: Pending Review\n\n` +
+                        `You will be notified by email and in-app once a decision has been made.`,
+                    priority: NotificationPriority.HIGH,
+                    notificationType: NotificationTypes.SUCCESS,
+                    actionUrl: `${process.env.FRONTEND_URL || ''}/business/licence-process`,
+                }),
+            }).catch((err) => logger.error({ err }, 'Failed to send renewal confirmation email'));
         }
+
     } catch (error) {
-        logger.error({ err: error }, 'Error in quick renewal');
+        logger.error({ err: error }, 'Error processing licence renewal');
         res.status(500).json({
             status: 'error',
             message: 'Failed to process renewal',
-            error: error.message
         });
     }
 };
@@ -346,31 +423,29 @@ export const getLicenceDocuments = async (req, res) => {
         const allDocuments = [];
         let docIdCounter = 1;
 
-        applications.forEach(app => {
-            if (app.documents && Array.isArray(app.documents)) {
-                app.documents.forEach(docPath => {
-                    // Extract filename from path
-                    const filename = docPath.split('\\').pop().split('/').pop();
-                    
-                    const status = app.status === 'Approved' ? 'Verified' : 
-                                  app.status === 'Rejected' ? 'Rejected' : 
-                                  app.status === 'Information Requested' ? 'Action Required' : 'Pending';
-                    
-                    allDocuments.push({
-                        id: docIdCounter++,
-                        name: filename || "Unnamed Document",
-                        path: docPath,
-                        uploadDate: app.createdAt,
-                        expiryDate: "N/A",
-                        status: status,
-                        category: `${app.type} Evidence`,
-                        size: "N/A",
-                        applicationId: app.id,
-                        applicationType: app.type
-                    });
+        for (const app of applications) {
+            const docPaths = await resolveLicenceDocumentPaths(req.tenantDb, app);
+
+            const docStatus = app.status === 'Approved' ? 'Verified' :
+                              app.status === 'Rejected' ? 'Rejected' :
+                              app.status === 'Information Requested' ? 'Action Required' : 'Pending';
+
+            for (const docPath of docPaths) {
+                const filename = docPath.split('\\').pop().split('/').pop();
+                allDocuments.push({
+                    id: docIdCounter++,
+                    name: filename || 'Unnamed Document',
+                    path: docPath,
+                    uploadDate: app.createdAt,
+                    expiryDate: 'N/A',
+                    status: docStatus,
+                    category: `${app.type} Evidence`,
+                    size: 'N/A',
+                    applicationId: app.id,
+                    applicationType: app.type
                 });
             }
-        });
+        }
 
         res.status(200).json({
             status: 'success',
@@ -381,7 +456,6 @@ export const getLicenceDocuments = async (req, res) => {
         res.status(500).json({
             status: 'error',
             message: 'Failed to fetch licence documents',
-            error: error.message
         });
     }
 };
@@ -417,6 +491,21 @@ export const getLicenceSummary = async (req, res) => {
         const availableCos = Math.max(totalAllocation - usedCos, 0);
         const expiryDate = sponsorProfile?.licenceExpiryDate || null;
         const renewalDue = expiryDate ? new Date(expiryDate) : null;
+        const daysRemaining = expiryDate
+            ? Math.ceil((new Date(expiryDate) - new Date()) / 86400000)
+            : null;
+        const renewalEligible = daysRemaining !== null && daysRemaining <= 90;
+
+        // Check for an in-progress renewal so the frontend can show its status.
+        const pendingRenewal = await req.tenantDb.LicenceApplication.findOne({
+            where: {
+                userId,
+                type: 'Renewal',
+                status: { [Op.in]: ['Pending', 'Under Review', 'Information Requested', 'Government Processing', 'Decision Pending'] },
+            },
+            attributes: ['id', 'status', 'createdAt'],
+            order: [['createdAt', 'DESC']],
+        });
 
         res.status(200).json({
             status: 'success',
@@ -430,19 +519,21 @@ export const getLicenceSummary = async (req, res) => {
                 cosAllocation: {
                     total: totalAllocation,
                     used: usedCos,
-                    available: availableCos
+                    available: availableCos,
                 },
                 cos: {
                     total: totalAllocation,
                     used: usedCos,
-                    available: availableCos
+                    available: availableCos,
                 },
                 expiryDate,
                 renewalDue,
-                daysRemaining: expiryDate
-                    ? Math.ceil((new Date(expiryDate) - new Date()) / 86400000)
-                    : null
-            }
+                daysRemaining,
+                renewalEligible,
+                pendingRenewal: pendingRenewal
+                    ? { id: pendingRenewal.id, status: pendingRenewal.status, submittedAt: pendingRenewal.createdAt }
+                    : null,
+            },
         });
     } catch (error) {
         logger.error({ err: error }, 'Error fetching licence summary');

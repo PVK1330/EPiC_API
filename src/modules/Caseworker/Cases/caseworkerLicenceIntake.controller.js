@@ -1,0 +1,148 @@
+/**
+ * Caseworker — Licence Intake Controller
+ *
+ * Routes handled:
+ *   GET  /:id/intake          — view form + document checklist
+ *   GET  /:id/intake/readiness — check readiness for government registration
+ *   PATCH /:id/intake/documents/:documentKey/verify   — verify a document
+ *   PATCH /:id/intake/documents/:documentKey/reject   — reject a document
+ *   PATCH /:id/intake/documents/:documentKey/request-info — request more info
+ */
+
+import logger from "../../../utils/logger.js";
+import {
+  getIntakeSummary,
+  checkIntakeReadiness,
+  verifyDocument,
+  rejectDocument,
+  requestDocumentInfo,
+} from "../../../services/licenceIntake.service.js";
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function getApp(req) {
+  // ensureAssignedCaseworker middleware attaches the application
+  return req.licenceApplication || null;
+}
+
+async function resolveApplication(req, res) {
+  let app = getApp(req);
+  if (!app) {
+    app = await req.tenantDb.LicenceApplication.findByPk(req.params.id);
+    if (!app) {
+      res.status(404).json({ success: false, message: "Application not found" });
+      return null;
+    }
+  }
+  return app;
+}
+
+// ─── GET /:id/intake ──────────────────────────────────────────────────────────
+
+export async function getCaseworkerIntakeSummary(req, res) {
+  try {
+    const { id } = req.params;
+    const tenantDb = req.tenantDb;
+    const organisationId = req.user?.organisation_id;
+
+    const app = await resolveApplication(req, res);
+    if (!app) return;
+
+    const summary = await getIntakeSummary(tenantDb, Number(id), organisationId);
+
+    return res.json({ success: true, data: summary });
+  } catch (err) {
+    logger.error({ err }, "getCaseworkerIntakeSummary failed");
+    return res.status(err.statusCode || 500).json({ success: false, message: err.message });
+  }
+}
+
+// ─── GET /:id/intake/readiness ────────────────────────────────────────────────
+
+export async function getIntakeReadiness(req, res) {
+  try {
+    const { id } = req.params;
+    const tenantDb = req.tenantDb;
+
+    const { isReady, reasons } = await checkIntakeReadiness(tenantDb, Number(id));
+
+    return res.json({ success: true, data: { isReady, reasons } });
+  } catch (err) {
+    logger.error({ err }, "getIntakeReadiness failed");
+    return res.status(err.statusCode || 500).json({ success: false, message: err.message });
+  }
+}
+
+// ─── PATCH /:id/intake/documents/:documentKey/verify ─────────────────────────
+
+export async function verifyCaseworkerDocument(req, res) {
+  try {
+    const { id, documentKey } = req.params;
+    const { notes } = req.body;
+    const tenantDb = req.tenantDb;
+    const caseworkerId = req.user?.userId ?? req.user?.id;
+    const organisationId = req.user?.organisation_id;
+
+    const app = await resolveApplication(req, res);
+    if (!app) return;
+
+    const doc = await verifyDocument(tenantDb, Number(id), organisationId, documentKey, caseworkerId, notes, req);
+
+    return res.json({ success: true, message: "Document verified", data: doc });
+  } catch (err) {
+    logger.error({ err }, "verifyCaseworkerDocument failed");
+    return res.status(err.statusCode || 500).json({ success: false, message: err.message });
+  }
+}
+
+// ─── PATCH /:id/intake/documents/:documentKey/reject ─────────────────────────
+
+export async function rejectCaseworkerDocument(req, res) {
+  try {
+    const { id, documentKey } = req.params;
+    const { reason } = req.body;
+    const tenantDb = req.tenantDb;
+    const caseworkerId = req.user?.userId ?? req.user?.id;
+    const organisationId = req.user?.organisation_id;
+
+    if (!reason || !reason.trim()) {
+      return res.status(400).json({ success: false, message: "Rejection reason is required" });
+    }
+
+    const app = await resolveApplication(req, res);
+    if (!app) return;
+
+    const doc = await rejectDocument(tenantDb, Number(id), organisationId, documentKey, reason.trim(), caseworkerId, req);
+
+    return res.json({ success: true, message: "Document rejected", data: doc });
+  } catch (err) {
+    logger.error({ err }, "rejectCaseworkerDocument failed");
+    return res.status(err.statusCode || 500).json({ success: false, message: err.message });
+  }
+}
+
+// ─── PATCH /:id/intake/documents/:documentKey/request-info ───────────────────
+
+export async function requestCaseworkerDocumentInfo(req, res) {
+  try {
+    const { id, documentKey } = req.params;
+    const { notes } = req.body;
+    const tenantDb = req.tenantDb;
+    const caseworkerId = req.user?.userId ?? req.user?.id;
+    const organisationId = req.user?.organisation_id;
+
+    if (!notes || !notes.trim()) {
+      return res.status(400).json({ success: false, message: "Notes are required when requesting document information" });
+    }
+
+    const app = await resolveApplication(req, res);
+    if (!app) return;
+
+    const doc = await requestDocumentInfo(tenantDb, Number(id), organisationId, documentKey, notes.trim(), caseworkerId, req);
+
+    return res.json({ success: true, message: "Information requested", data: doc });
+  } catch (err) {
+    logger.error({ err }, "requestCaseworkerDocumentInfo failed");
+    return res.status(err.statusCode || 500).json({ success: false, message: err.message });
+  }
+}

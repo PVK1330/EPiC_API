@@ -67,7 +67,7 @@ export async function recordCaseAssignmentOutcome({
 }) {
   const assigned = !!caseworker;
 
-  recordAuditLog({
+  await recordAuditLog({
     tenantDb,
     userId: actorId,
     action: assigned ? "CASE_AUTO_ASSIGNED" : "CASE_UNASSIGNED_QUEUE",
@@ -83,19 +83,22 @@ export async function recordCaseAssignmentOutcome({
     }),
     req,
     organisationId: caseRecord.organisation_id ?? null,
-  }).catch((err) => logger.error({ err }, "Failed to audit case assignment"));
+  }).catch((err) => logger.error({ err, caseId: caseRecord?.caseId, caseRowId: caseRecord?.id }, "Failed to audit case assignment"));
 
   if (assigned) {
     // Event 10 — Immigration Case Created: in-app + email to the caseworker.
     try {
-      await notifyCaseAssigned(tenantDb, caseworker.id, {
+      const notification = await notifyCaseAssigned(tenantDb, caseworker.id, {
         id: caseRecord.id,
         caseId: caseRecord.caseId,
         title: `New Case Assigned: ${caseRecord.caseId}`,
         message: `A new sponsored-worker immigration case (${candidateName}) has been assigned to you. Review can begin.`,
       });
+      if (!notification) {
+        logger.error({ caseId: caseRecord?.caseId, caseworkerId: caseworker.id }, "Failed to persist in-app assignment notification");
+      }
     } catch (err) {
-      logger.error({ err }, "Failed to notify assigned caseworker");
+      logger.error({ err, caseId: caseRecord?.caseId, caseworkerId: caseworker.id }, "Failed to notify assigned caseworker");
     }
     try {
       if (caseworker.email) {
@@ -112,9 +115,11 @@ export async function recordCaseAssignmentOutcome({
             actionUrl: `${process.env.FRONTEND_URL || ""}/caseworker/cases`,
           }),
         });
+      } else {
+        logger.warn({ caseId: caseRecord?.caseId, caseworkerId: caseworker.id }, "Assigned caseworker has no email address configured");
       }
     } catch (err) {
-      logger.error({ err }, "Failed to email assigned caseworker");
+      logger.error({ err, caseId: caseRecord?.caseId, caseworkerId: caseworker.id, email: caseworker.email }, "Failed to email assigned caseworker");
     }
   } else {
     try {

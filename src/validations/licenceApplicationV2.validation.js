@@ -12,8 +12,23 @@ import { z } from "zod";
 
 const routeEnum = z.enum(["SkilledWorker", "Student", "ScaleUp", "GBM", "GAE"]);
 const str = (max) => z.string().trim().max(max).optional().nullable();
-const dateStr = z.string().trim().max(40).optional().nullable();
+const normalizeEmptyToNull = (schema) =>
+  z
+    .preprocess((value) => {
+      if (value === "" || value === null) return null;
+      return value;
+    }, schema.nullable())
+    .optional();
+const dateStr = normalizeEmptyToNull(z.string().trim().max(40));
 const strArray = z.array(z.string().trim().max(255)).optional().nullable();
+
+const normalizeNumberOrNull = (schema) =>
+  z
+    .preprocess((value) => {
+      if (value === "" || value === null) return null;
+      return value;
+    }, schema.nullable())
+    .optional();
 
 const organisationInfoSchema = z
   .object({
@@ -36,15 +51,15 @@ const cosRequirementSchema = z
   .object({
     socCode: str(10),
     roleTitle: str(255),
-    salary: z.coerce.number().nonnegative().optional().nullable(),
+    salary: normalizeNumberOrNull(z.coerce.number().nonnegative()),
     salaryCurrency: str(3),
     candidateName: str(255),
     candidateNationality: str(100),
     candidateDob: dateStr,
     candidateEmail: str(255),
-    sponsorshipDurationMonths: z.coerce.number().int().min(0).max(120).optional().nullable(),
+    sponsorshipDurationMonths: normalizeNumberOrNull(z.coerce.number().int().min(0).max(600)),
   })
-  .strict();
+  .strip();
 
 const authorisingOfficerSchema = z
   .object({
@@ -119,7 +134,7 @@ export const feePreviewSchema = z.object({
       sponsorSize: z.enum(["small", "large"]).optional().nullable(),
       charityStatus: z.boolean().optional().nullable(),
       cosRequirements: z
-        .array(z.object({ sponsorshipDurationMonths: z.coerce.number().int().min(0).max(120).optional().nullable() }).strip())
+        .array(z.object({ sponsorshipDurationMonths: normalizeNumberOrNull(z.coerce.number().int().min(0).max(600)) }).strip())
         .optional(),
     })
     .strict(),
