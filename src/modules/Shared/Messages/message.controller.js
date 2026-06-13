@@ -258,12 +258,13 @@ export const getChatUsers = async (req, res) => {
     const organisationId = req.user.organisation_id;
     const sequelize = req.tenantDb.sequelize;
 
-    // Admin can see everyone in their organization
+    // Admin can see everyone in their organization (active only)
     if (userRole === 3) {
       const chatUsers = await req.tenantDb.User.findAll({
-        where: { 
+        where: {
           id: { [Op.ne]: userId },
-          organisation_id: organisationId
+          organisation_id: organisationId,
+          status: 'active'
         },
         attributes: ['id', 'first_name', 'last_name', 'email', 'role_id', 'profile_pic'],
         include: [{ model: req.tenantDb.Role, as: 'role', attributes: ['name'] }]
@@ -273,12 +274,13 @@ export const getChatUsers = async (req, res) => {
 
     let allowedUserIds = new Set();
 
-    // EVERYONE can always talk to Admins (role_id = 3) in the same organization
+    // EVERYONE can always talk to Admins (role_id = 3) in the same organization (active only)
     const admins = await req.tenantDb.User.findAll({
-      where: { 
-        role_id: 3, 
+      where: {
+        role_id: 3,
         id: { [Op.ne]: userId },
-        organisation_id: organisationId
+        organisation_id: organisationId,
+        status: 'active'
       },
       attributes: ['id']
     });
@@ -337,7 +339,8 @@ export const getChatUsers = async (req, res) => {
     const chatUsers = await req.tenantDb.User.findAll({
       where: {
         id: { [Op.in]: Array.from(allowedUserIds) },
-        organisation_id: organisationId
+        organisation_id: organisationId,
+        status: 'active'
       },
       attributes: ['id', 'first_name', 'last_name', 'email', 'role_id', 'profile_pic'],
       include: [
