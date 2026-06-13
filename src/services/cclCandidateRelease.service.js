@@ -116,7 +116,16 @@ export async function syncCclReleaseForApprovedFees({
   }
 
   const stage = resolveCaseStage(caseRecord);
-  if (!["ccl_issued", "ccl_payment_received"].includes(stage)) {
+  // Only push the case onto the CCL stage when it has not already advanced past
+  // it. A case at a later stage (e.g. biometrics_booked, order 11) must never be
+  // dragged backward to client_care_letter (order 9) — the state machine rejects
+  // that transition and the candidate CCL read endpoint would 500.
+  const currentOrder = getStepById(stage)?.order ?? 0;
+  const cclOrder = getStepById("client_care_letter")?.order ?? Infinity;
+  if (
+    !["ccl_issued", "ccl_payment_received"].includes(stage) &&
+    currentOrder < cclOrder
+  ) {
     await applyCaseStageChange({
       tenantDb,
       caseRecord,

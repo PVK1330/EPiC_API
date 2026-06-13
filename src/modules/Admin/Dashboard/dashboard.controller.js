@@ -4,6 +4,7 @@ import { generatePdfBufferFromDefinition } from '../../../services/pdfGenerator.
 import catchAsync from '../../../utils/catchAsync.js';
 import ApiResponse from '../../../utils/apiResponse.js';
 import logger from '../../../utils/logger.js';
+import { countUnassignedCases } from '../../../services/caseAssignment.service.js';
 
 /** Run a dashboard query without failing the whole endpoint when a table/model is missing. */
 async function safeDashboardQuery(promise, fallback, label = 'query') {
@@ -13,6 +14,23 @@ async function safeDashboardQuery(promise, fallback, label = 'query') {
     logger.warn({ errMessage: err.message }, `Dashboard ${label} skipped`);
     return fallback;
   }
+}
+
+/**
+ * Count sponsor compliance submissions awaiting reviewer action across all
+ * compliance entities (Right To Work, Worker Events, Change Requests use the
+ * title-case `reviewStatus`; Compliance Documents use the lowercase `status`).
+ */
+async function countPendingComplianceReviews(tenantDb) {
+  const reviewable = ['Submitted', 'Under Review'];
+  const docReviewable = ['submitted', 'under_review'];
+  const counts = await Promise.all([
+    safeDashboardQuery(tenantDb.RightToWorkRecord?.count({ where: { reviewStatus: { [Op.in]: reviewable } } }), 0, 'rtw review count'),
+    safeDashboardQuery(tenantDb.WorkerEvent?.count({ where: { reviewStatus: { [Op.in]: reviewable } } }), 0, 'worker event review count'),
+    safeDashboardQuery(tenantDb.SponsorChangeRequest?.count({ where: { reviewStatus: { [Op.in]: reviewable } } }), 0, 'change request review count'),
+    safeDashboardQuery(tenantDb.ComplianceDocument?.count({ where: { status: { [Op.in]: docReviewable } } }), 0, 'compliance doc review count'),
+  ]);
+  return counts.reduce((sum, n) => sum + (n || 0), 0);
 }
 
 // Get Dashboard Statistics
@@ -185,6 +203,23 @@ export const getDashboardStats = async (req, res) => {
       }).catch(() => [])
     ]);
 
+    // Newly created immigration cases (last 7 days) + the unassigned-queue size.
+    const unassignedCases = await countUnassignedCases(req.tenantDb).catch(() => 0);
+
+    // Pending review-queue sizes surfaced to admins (licence applications, CoS
+    // requests, and sponsor compliance submissions awaiting reviewer action).
+    const [pendingLicenceReviews, pendingCosRequests, pendingComplianceReviews] = await Promise.all([
+      safeDashboardQuery(
+        req.tenantDb.LicenceApplication?.count({ where: { status: { [Op.in]: ['Pending', 'Under Review'] } } }),
+        0, 'pending licence reviews'
+      ),
+      safeDashboardQuery(
+        req.tenantDb.CosRequest?.count({ where: { status: { [Op.in]: ['Pending', 'Under Review'] } } }),
+        0, 'pending cos requests'
+      ),
+      countPendingComplianceReviews(req.tenantDb),
+    ]);
+
     res.status(200).json({
       status: "success",
       message: "Dashboard statistics retrieved successfully",
@@ -201,9 +236,16 @@ export const getDashboardStats = async (req, res) => {
           activeCases,
           completedCases,
           pendingCases,
+          newImmigrationCases: recentCases,
+          unassignedCases,
           visaExpiryAlerts,
           sponsorExpiryAlerts,
           completionRate: totalCases > 0 ? Math.round((completedCases / totalCases) * 100) : 0
+        },
+        reviewStats: {
+          pendingLicenceReviews: pendingLicenceReviews ?? 0,
+          pendingCosRequests: pendingCosRequests ?? 0,
+          pendingComplianceReviews: pendingComplianceReviews ?? 0
         },
         taskStats: {
           totalTasks,

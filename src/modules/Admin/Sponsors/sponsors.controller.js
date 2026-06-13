@@ -5,6 +5,7 @@ import platformDb from '../../../models/index.js';
 import { isPlatformEmailTaken, normalizePlatformEmail } from '../../../utils/platformUserEmail.js';
 import { ROLES } from '../../../middlewares/role.middleware.js';
 import { notifyUserCreated } from '../../../services/notification.service.js';
+import * as sponsorshipNotify from '../../../services/sponsorshipNotification.service.js';
 import {
   createUserOnPlatformAndTenant,
   syncUserToPlatformAndTenant,
@@ -38,7 +39,6 @@ export const createSponsor = async (req, res) => {
       registrationNumber,
       industrySector,
       sponsorLicenceNumber,
-      licenceStatus,
       licenceExpiryDate,
       registeredAddress,
       city,
@@ -146,7 +146,9 @@ export const createSponsor = async (req, res) => {
     if (registrationNumber) profileData.registrationNumber = registrationNumber;
     if (industrySector) profileData.industrySector = industrySector;
     if (sponsorLicenceNumber) profileData.sponsorLicenceNumber = sponsorLicenceNumber;
-    if (licenceStatus) profileData.licenceStatus = licenceStatus;
+    // licenceStatus is intentionally NOT settable here — it is managed solely by
+    // the licence activation workflow (activateSponsorLicence). New sponsor
+    // profiles default to 'Pending' until their licence is approved/activated.
     if (licenceExpiryDate) profileData.licenceExpiryDate = licenceExpiryDate;
     if (registeredAddress) profileData.registeredAddress = registeredAddress;
     if (city) profileData.city = city;
@@ -190,6 +192,18 @@ export const createSponsor = async (req, res) => {
       });
     } catch (notifError) {
       logger.error({ err: notifError }, "Failed to send user creation notification");
+    }
+
+    // Event 1 — Sponsor Created: sponsor in-app welcome + audit log.
+    try {
+      await sponsorshipNotify.sponsorCreated({
+        tenantDb: req.tenantDb,
+        sponsor,
+        actorId: req.user?.userId ?? null,
+        req,
+      });
+    } catch (e) {
+      logger.error({ err: e }, "sponsorCreated notification failed");
     }
 
     const { password: _, ...sponsorData } = sponsor.toJSON();
@@ -384,7 +398,6 @@ export const updateSponsor = async (req, res) => {
       hrPolicies,
       organisationalChart,
       recruitmentDocs,
-      licenceStatus,
       riskLevel,
       activeCases,
       sponsoredWorkers,
@@ -472,7 +485,7 @@ export const updateSponsor = async (req, res) => {
       hrName || hrPhone || hrEmail || licenceIssueDate || licenceExpiryDate || 
       cosAllocation || billingName || billingEmail || billingPhone || 
       outstandingBalance || paymentTerms || sponsorLetter || insuranceCertificate || 
-      hrPolicies || organisationalChart || recruitmentDocs || licenceStatus || riskLevel ||
+      hrPolicies || organisationalChart || recruitmentDocs || riskLevel ||
       activeCases || sponsoredWorkers || notes || riskPct;
     
     if (hasBusinessFields) {
@@ -516,7 +529,8 @@ export const updateSponsor = async (req, res) => {
       if (hrPolicies) profileData.hrPolicies = hrPolicies;
       if (organisationalChart) profileData.organisationalChart = organisationalChart;
       if (recruitmentDocs) profileData.recruitmentDocs = recruitmentDocs;
-      if (licenceStatus) profileData.licenceStatus = licenceStatus;
+      // licenceStatus is intentionally NOT settable here — it is managed solely
+      // by the licence activation workflow (activateSponsorLicence).
       if (riskLevel) profileData.riskLevel = riskLevel;
       if (activeCases) profileData.activeCases = activeCases;
       if (sponsoredWorkers) profileData.sponsoredWorkers = sponsoredWorkers;
@@ -751,7 +765,8 @@ export const bulkImportSponsors = async (req, res) => {
           userId: sponsor.id,
           organisation_id: organisationId,
           companyName: rowData.companyName || null,
-          licenceStatus: rowData.licenceStatus || null,
+          // licenceStatus is NOT imported — it defaults to 'Pending' and is only
+          // set to Active by the licence activation workflow (activateSponsorLicence).
           riskLevel: rowData.riskLevel || null,
         });
 

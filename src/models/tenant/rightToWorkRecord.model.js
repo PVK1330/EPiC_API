@@ -68,6 +68,29 @@ export default (sequelize, DataTypes) => {
         allowNull: false,
         defaultValue: "valid",
       },
+      // ── Compliance review workflow (separate from operational `status`) ──
+      reviewStatus: {
+        type: DataTypes.STRING(30),
+        allowNull: false,
+        defaultValue: "Submitted",
+        field: "review_status",
+      },
+      reviewedBy: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        field: "reviewed_by",
+        references: { model: "users", key: "id" },
+      },
+      reviewedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: "reviewed_at",
+      },
+      reviewNotes: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        field: "review_notes",
+      },
     },
     {
       tableName: "right_to_work_records",

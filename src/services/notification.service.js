@@ -135,15 +135,16 @@ export async function notifyUser(tenantDb, userId, payload = {}) {
  * Notify all admin-role users in the tenant DB.
  */
 export async function notifyAdmins(tenantDb, payload = {}) {
-  if (!tenantDb) return;
+  if (!tenantDb) return [];
   try {
     const admins = await tenantDb.User.findAll({
       where: { role_id: ROLES.ADMIN, status: 'active' },
       attributes: ['id'],
     });
-    await Promise.all(admins.map((u) => notifyUser(tenantDb, u.id, payload)));
+    return await Promise.all(admins.map((u) => notifyUser(tenantDb, u.id, payload)));
   } catch (err) {
     logger.error({ err }, 'notifyAdmins failed');
+    return [];
   }
 }
 
@@ -441,28 +442,6 @@ export async function notifyEscalationResolved(tenantDb, userIds, data = {}) {
   });
 }
 
-export async function notifyLicenceStatusChanged(userId, application, status, adminNotes) {
-  logger.info({ userId, appId: application?.id, status }, 'notifyLicenceStatusChanged');
-}
-
-/**
- * Notify a user that more information is required for their licence application.
- * @param {number} userId
- * @param {object} application
- */
-export async function notifyLicenceInfoRequested(userId, application) {
-  logger.info({ userId, appId: application?.id }, 'notifyLicenceInfoRequested');
-}
-
-/**
- * Notify a caseworker that a licence application has been assigned to them.
- * @param {number} userId
- * @param {object} application
- */
-export async function notifyLicenceAssigned(userId, application) {
-  logger.info({ userId, appId: application?.id }, 'notifyLicenceAssigned');
-}
-
 export async function notifyCaseCreated(tenantDb, { id, caseId, candidateName } = {}) {
   return notifyAdmins(tenantDb, {
     type: NotificationTypes.INFO,
@@ -681,9 +660,6 @@ export default {
   notifyEscalationCreated,
   notifyEscalationResolved,
   notifyCaseCreated,
-  notifyLicenceStatusChanged,
-  notifyLicenceInfoRequested,
-  notifyLicenceAssigned,
   NotificationTypes,
   NotificationPriority,
 };

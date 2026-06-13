@@ -14,10 +14,17 @@ import {
   getSmsLogsBySponsor,
 } from './sponsorWorker.controller.js';
 import { upload } from '../../../middlewares/upload.middleware.js';
+import { requireActiveSponsorLicence } from '../../../middlewares/requireActiveSponsorLicence.middleware.js';
 
 const router = express.Router();
 
-router.post('/', addSponsoredWorker);
+// --- Worker sponsorship actions: require an ACTIVE sponsor licence ---
+// Creation + mutations on sponsored workers are gated.
+router.post('/', requireActiveSponsorLicence(), addSponsoredWorker);
+router.put('/:id', requireActiveSponsorLicence(), updateSponsoredWorker);
+router.patch('/:id/status', requireActiveSponsorLicence(), updateWorkerStatus);
+
+// --- Allowed regardless of licence status (reads + compliance reporting) ---
 router.get('/', getSponsoredWorkers);
 router.get('/employee-records', getEmployeeRecords);
 router.get('/absence/worker/:workerId', getAbsenceByWorker);
@@ -26,9 +33,7 @@ router.put('/absence/:id', upload.single('document'), updateAbsenceRecord);
 router.get('/sms-logs', getSmsLogsBySponsor);
 router.post('/sms-logs', upload.single('screenshot'), createSmsLog);
 router.get('/:id', getSponsoredWorkerDetails);
-router.put('/:id', updateSponsoredWorker);
 router.delete('/:id', deleteSponsoredWorker);
-router.patch('/:id/status', updateWorkerStatus);
 
 export default router;
 

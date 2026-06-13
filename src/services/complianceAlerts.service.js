@@ -143,11 +143,16 @@ const checkWorkerEventDeadlines = async (tenantDb, organisationId, today) => {
   const todayStr = toDateOnly(today);
   const twoDaysLaterStr = toDateOnly(addDays(today, 2));
 
+  // Scope to this organisation so tenants that share a database don't emit
+  // duplicate alerts for one another's worker events.
+  const where = {
+    status: "pending",
+    deadlineDate: { [Op.between]: [todayStr, twoDaysLaterStr] },
+  };
+  if (organisationId != null) where.organisationId = organisationId;
+
   const events = await tenantDb.WorkerEvent.findAll({
-    where: {
-      status: "pending",
-      deadlineDate: { [Op.between]: [todayStr, twoDaysLaterStr] },
-    },
+    where,
     include: [
       {
         model: tenantDb.User,

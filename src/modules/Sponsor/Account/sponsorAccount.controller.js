@@ -188,7 +188,10 @@ export const updateProfile = async (req, res) => {
       'authorisingName', 'authorisingPhone', 'authorisingEmail', 'authorisingJobTitle',
       'keyContactName', 'keyContactPhone', 'keyContactEmail', 'keyContactDepartment',
       'hrName', 'hrEmail', 'hrPhone', 'hrJobTitle',
-      'licenceIssueDate', 'licenceExpiryDate', 'cosAllocation', 'licenceStatus',
+      // licenceStatus is intentionally NOT writable here — it is owned solely by
+      // the licence activation workflow (activateSponsorLicence). A sponsor must
+      // never be able to set their own licence status via the registration form.
+      'licenceIssueDate', 'licenceExpiryDate', 'cosAllocation',
       'billingName', 'billingEmail', 'billingPhone', 'outstandingBalance', 'paymentTerms',
       'ownershipType', 'shareholders', 'directors', 'level1Users', 'notes'
     ];

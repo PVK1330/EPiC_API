@@ -23,9 +23,55 @@ export default (sequelize, DataTypes) => {
                 defaultValue: 'New',
             },
             status: {
-                type: DataTypes.ENUM('Pending', 'Approved', 'Rejected', 'Under Review', 'Information Requested'),
+                type: DataTypes.ENUM('Draft', 'Pending', 'Approved', 'Rejected', 'Under Review', 'Information Requested', 'Government Processing', 'Decision Pending'),
                 allowNull: false,
                 defaultValue: 'Pending',
+            },
+            // V2 metadata: distinguishes the lightweight V1 intake (1) from the
+            // normalized 8-step V2 application (2). See sponsorLicenceV2 module.
+            applicationVersion: {
+                type: DataTypes.SMALLINT,
+                allowNull: false,
+                defaultValue: 1,
+                field: 'application_version',
+            },
+            currentStep: {
+                type: DataTypes.SMALLINT,
+                allowNull: true,
+                defaultValue: 1,
+                field: 'current_step',
+            },
+            submittedAt: {
+                type: DataTypes.DATE,
+                allowNull: true,
+                field: 'submitted_at',
+            },
+            // Computed fee snapshot (see services/licenceFee.service.js).
+            feeSponsorSize: {
+                type: DataTypes.STRING(20),
+                allowNull: true,
+                field: 'fee_sponsor_size',
+            },
+            feeBase: {
+                type: DataTypes.DECIMAL(10, 2),
+                allowNull: true,
+                field: 'fee_base',
+            },
+            feeIscEstimate: {
+                type: DataTypes.DECIMAL(12, 2),
+                allowNull: true,
+                field: 'fee_isc_estimate',
+            },
+            feeTotal: {
+                type: DataTypes.DECIMAL(10, 2),
+                allowNull: true,
+                field: 'fee_total',
+            },
+            feeCurrency: {
+                type: DataTypes.STRING(3),
+                allowNull: true,
+                defaultValue: 'GBP',
+                field: 'fee_currency',
             },
             requestedDocuments: {
                 type: DataTypes.JSON,
@@ -38,7 +84,7 @@ export default (sequelize, DataTypes) => {
             },
             companyName: {
                 type: DataTypes.STRING(255),
-                allowNull: false,
+                allowNull: true, // V2 drafts capture this in licence_organisation_info; mirrored on submit
             },
             tradingName: {
                 type: DataTypes.STRING(255),
@@ -46,19 +92,19 @@ export default (sequelize, DataTypes) => {
             },
             registrationNumber: {
                 type: DataTypes.STRING(50),
-                allowNull: false,
+                allowNull: true,
             },
             industry: {
                 type: DataTypes.STRING(100),
-                allowNull: false,
+                allowNull: true,
             },
             licenceType: {
                 type: DataTypes.STRING(100),
-                allowNull: false,
+                allowNull: true,
             },
             cosAllocation: {
                 type: DataTypes.STRING(50),
-                allowNull: false,
+                allowNull: true,
             },
             proposedStartDate: {
                 type: DataTypes.DATEONLY,
@@ -70,15 +116,15 @@ export default (sequelize, DataTypes) => {
             },
             contactName: {
                 type: DataTypes.STRING(255),
-                allowNull: false,
+                allowNull: true,
             },
             contactEmail: {
                 type: DataTypes.STRING(255),
-                allowNull: false,
+                allowNull: true,
             },
             contactPhone: {
                 type: DataTypes.STRING(20),
-                allowNull: false,
+                allowNull: true,
             },
             fundingSource: {
                 type: DataTypes.STRING(100),
@@ -95,6 +141,28 @@ export default (sequelize, DataTypes) => {
             adminNotes: {
                 type: DataTypes.TEXT,
                 allowNull: true,
+            },
+            // Phase 1 — government processing tracking (headline fields mirrored
+            // from licence_government_tracking for fast filter/sort queries).
+            governmentRegistrationRef: {
+                type: DataTypes.STRING(100),
+                allowNull: true,
+                field: "government_registration_ref",
+            },
+            governmentSubmissionRef: {
+                type: DataTypes.STRING(100),
+                allowNull: true,
+                field: "government_submission_ref",
+            },
+            governmentSubmissionDate: {
+                type: DataTypes.DATEONLY,
+                allowNull: true,
+                field: "government_submission_date",
+            },
+            reviewStartedAt: {
+                type: DataTypes.DATE,
+                allowNull: true,
+                field: "review_started_at",
             },
         },
         {

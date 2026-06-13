@@ -138,10 +138,13 @@ export default (sequelize, DataTypes) => {
                 type: DataTypes.INTEGER,
                 allowNull: true,
             },
+            // Sponsors start Pending and are only set Active by Phase 4 licence
+            // activation when their licence application is approved. CoS requests
+            // and sponsored-worker creation are gated on this being 'Active'.
             licenceStatus: {
                 type: DataTypes.ENUM('Active', 'Suspended', 'Expired', 'Pending'),
                 allowNull: true,
-                defaultValue: 'Active',
+                defaultValue: 'Pending',
             },
             riskLevel: {
                 type: DataTypes.ENUM('Low', 'Medium', 'High'),

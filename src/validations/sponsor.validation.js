@@ -1,6 +1,21 @@
 import { z } from 'zod';
 import { emailSchema, phoneSchema, passwordSchema, paginationSchema, UserStatusEnum } from './common.validation.js';
 
+/**
+ * Licence status is set ONLY by the licence activation workflow
+ * (services/licenceActivation.service.js → activateSponsorLicence). It must
+ * never be set through sponsor create/update DTOs — doing so would bypass
+ * licence-number / issue-date / expiry-date generation, the audit trail and
+ * notifications. Any attempt to supply it is rejected with a validation error.
+ */
+const licenceStatusForbidden = z
+  .any()
+  .refine((v) => v === undefined || v === null, {
+    message:
+      'licenceStatus cannot be set directly. It is managed by the licence activation workflow (application → caseworker review → approval → activation).',
+  })
+  .optional();
+
 export const createSponsorSchema = z.object({
   body: z.object({
     first_name: z.string().trim().min(1, 'First name is required').max(100),
@@ -16,7 +31,7 @@ export const createSponsorSchema = z.object({
     registrationNumber: z.string().trim().max(100).optional().nullable(),
     industrySector: z.string().trim().max(100).optional().nullable(),
     sponsorLicenceNumber: z.string().trim().max(100).optional().nullable(),
-    licenceStatus: z.string().trim().max(50).optional().nullable(),
+    licenceStatus: licenceStatusForbidden, // managed only by licence activation workflow
     licenceExpiryDate: z.string().optional().nullable(),
     registeredAddress: z.string().trim().max(500).optional().nullable(),
     city: z.string().trim().max(100).optional().nullable(),
@@ -92,7 +107,7 @@ export const updateSponsorSchema = z.object({
     hrPolicies: z.string().optional().nullable(),
     organisationalChart: z.string().optional().nullable(),
     recruitmentDocs: z.string().optional().nullable(),
-    licenceStatus: z.string().trim().max(50).optional().nullable(),
+    licenceStatus: licenceStatusForbidden, // managed only by licence activation workflow
     riskLevel: z.string().trim().max(50).optional().nullable(),
     activeCases: z.coerce.number().int().optional().nullable(),
     sponsoredWorkers: z.coerce.number().int().optional().nullable(),
