@@ -12,6 +12,7 @@ import { dirname, join } from "path";
 import { Op } from "sequelize";
 import platformDb from "../models/index.js";
 import { getTenantDb } from "../services/tenantDb.service.js";
+import logger from "../utils/logger.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -46,7 +47,7 @@ function listSqlFiles(subDir) {
       .sort()
       .map((f) => join(subDir, f));
   } catch (e) {
-    console.warn(`Warning: Could not read directory ${fullPath}`);
+    logger.warn(`Warning: Could not read directory ${fullPath}`);
     return [];
   }
 }
@@ -57,7 +58,7 @@ function listOrderedSqlFiles(subDir, bootstrapOrder) {
   try {
     all = readdirSync(fullPath).filter((f) => f.endsWith(".sql"));
   } catch (e) {
-    console.warn(`Warning: Could not read directory ${fullPath}`);
+    logger.warn(`Warning: Could not read directory ${fullPath}`);
     return [];
   }
 
@@ -88,7 +89,7 @@ function migrationKey(file) {
 
 async function runSqlFiles(sequelize, files, label) {
   if (!files.length) {
-    console.log(`No ${label} migrations found.`);
+    logger.info(`No ${label} migrations found.`);
     return;
   }
 
@@ -124,7 +125,7 @@ async function runSqlFiles(sequelize, files, label) {
     }
 
     const sql = readFileSync(join(__dirname, file), "utf8");
-    console.log(`[${label}] Running:`, key);
+    logger.info({ key }, `[${label}] Running`);
 
     await sequelize.query(sql);
 
@@ -134,12 +135,12 @@ async function runSqlFiles(sequelize, files, label) {
       { bind: [key] },
     );
 
-    console.log(`[${label}] OK:`, key);
+    logger.info({ key }, `[${label}] OK`);
   }
 }
 
 export async function runPlatformMigrations() {
-  console.log("\n--- Running Platform Migrations ---");
+  logger.info("\n--- Running Platform Migrations ---");
   await platformDb.sequelize.authenticate();
   const files = listPlatformSqlFiles();
   await runSqlFiles(platformDb.sequelize, files, "platform");
@@ -148,12 +149,12 @@ export async function runPlatformMigrations() {
 export async function runTenantMigrations(specificDatabaseName = null) {
   const tenantFiles = listTenantSqlFiles();
   if (!tenantFiles.length) {
-    console.log("No tenant migrations found.");
+    logger.info("No tenant migrations found.");
     return;
   }
 
   if (specificDatabaseName) {
-    console.log(`\n--- Running Migrations for Specific Tenant: ${specificDatabaseName} ---`);
+    logger.info(`\n--- Running Migrations for Specific Tenant: ${specificDatabaseName} ---`);
     const tenantDb = getTenantDb(specificDatabaseName);
     await tenantDb.sequelize.authenticate();
     await runSqlFiles(tenantDb.sequelize, tenantFiles, specificDatabaseName);
@@ -167,7 +168,7 @@ export async function runTenantMigrations(specificDatabaseName = null) {
 
   for (const org of orgs) {
     if (!org.database_name) continue;
-    console.log(`\n--- Tenant: ${org.slug} (${org.database_name}) ---`);
+    logger.info(`\n--- Tenant: ${org.slug} (${org.database_name}) ---`);
     const tenantDb = getTenantDb(org.database_name);
     await tenantDb.sequelize.authenticate();
     await runSqlFiles(tenantDb.sequelize, tenantFiles, org.slug);
@@ -187,14 +188,13 @@ async function run() {
       await runPlatformMigrations();
       await runTenantMigrations();
     } else {
-      console.error(`Unknown mode "${mode}". Use: platform | tenants | all`);
+      logger.error(`Unknown mode "${mode}". Use: platform | tenants | all`);
       process.exit(1);
     }
 
-    console.log("\nMigrations finished.");
+    logger.info("\nMigrations finished.");
   } catch (err) {
-    console.error("\nMigration failed:");
-    console.error(err);
+    logger.error({ err }, "\nMigration failed");
     process.exit(1);
   } finally {
     // Only close if we are running as a standalone script
@@ -207,7 +207,7 @@ async function run() {
 // Only auto-run if called directly
 if (process.argv[1] && (process.argv[1].endsWith('run.js') || process.argv[1].endsWith('run'))) {
     run().catch((err) => {
-      console.error(err);
+      logger.error({ err }, "Migration run failed");
       process.exit(1);
     });
 }

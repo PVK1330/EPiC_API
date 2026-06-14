@@ -3,6 +3,7 @@ import {
   PLATFORM_PERMISSIONS,
   moduleIdsToPermissionNames,
 } from "../constants/platformModules.js";
+import logger from "../utils/logger.js";
 
 const PLATFORM_ROLE_DEFAULTS = [
   {
@@ -79,7 +80,7 @@ export async function seedPlatformRbacForDb(db) {
     await superAdmin.setPermissions(merged);
   }
 
-  console.log("✔ Platform RBAC seeded");
+  logger.info("✔ Platform RBAC seeded");
 }
 
 export { PLATFORM_MODULES };

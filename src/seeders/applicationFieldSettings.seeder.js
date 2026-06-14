@@ -1,3 +1,5 @@
+import logger from "../utils/logger.js";
+
 const BUILTIN = [
   ["applicationType", "Application type", "select", 1],
   ["firstName", "First name", "text", 2],
@@ -81,7 +83,7 @@ export async function seedApplicationFieldSettingsForDb(db) {
       });
     }
   } catch (err) {
-    console.error("applicationFieldSettings seeder:", err.message);
+    logger.error({ err }, "applicationFieldSettings seeder");
     throw err;
   }
 }

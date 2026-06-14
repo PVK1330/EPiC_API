@@ -2,6 +2,7 @@ import platformDb from "../models/index.js";
 import { getTenantDb } from "../services/tenantDb.service.js";
 import { isPlatformStaffUser } from "../utils/tenantScope.js";
 import { hasFullAccessRole } from "./role.middleware.js";
+import logger from "../utils/logger.js";
 import {
   getCachedOrg,
   setCachedOrg,
@@ -139,7 +140,7 @@ export async function attachTenantDb(req, res, next) {
         req.user.permissions = perms;
       }
     } catch (permErr) {
-      console.error("Error loading tenant permissions:", permErr);
+      logger.error({ err: permErr }, "Error loading tenant permissions");
       req.user.permissions = hasFullAccessRole(req.user.role_id) ? ["*"] : [];
     }
 

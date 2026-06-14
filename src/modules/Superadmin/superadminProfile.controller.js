@@ -4,6 +4,7 @@ import QRCode from 'qrcode';
 import path from 'path';
 import catchAsync from '../../utils/catchAsync.js';
 import ApiResponse from '../../utils/apiResponse.js';
+import logger from '../../utils/logger.js';
 import platformDb from '../../models/index.js';
 import { mirrorUserToTenant } from '../../services/userSync.service.js';
 import { getTenantDb } from '../../services/tenantDb.service.js';
@@ -71,7 +72,9 @@ export const updateSuperadminProfile = catchAsync(async (req, res) => {
   }
 
   await user.update(updates);
-  await mirrorSuperadminById(userId).catch(() => {});
+  await mirrorSuperadminById(userId).catch((err) =>
+    logger.warn({ err, userId }, 'Failed to mirror superadmin profile to tenant'),
+  );
 
   return ApiResponse.success(res, 'Profile updated', { user: buildProfileResponse(user) });
 });
@@ -89,7 +92,9 @@ export const uploadSuperadminAvatar = catchAsync(async (req, res) => {
   const avatarUrl = `${baseUrl}/${relativePath}`;
 
   await user.update({ profile_pic: avatarUrl });
-  await mirrorSuperadminById(userId).catch(() => {});
+  await mirrorSuperadminById(userId).catch((err) =>
+    logger.warn({ err, userId }, 'Failed to mirror superadmin profile to tenant'),
+  );
 
   return ApiResponse.success(res, 'Avatar uploaded', { profile_pic: avatarUrl });
 });
@@ -119,7 +124,9 @@ export const changeSuperadminPassword = catchAsync(async (req, res) => {
     password_changed_at: new Date(),
   });
 
-  await mirrorSuperadminById(userId).catch(() => {});
+  await mirrorSuperadminById(userId).catch((err) =>
+    logger.warn({ err, userId }, 'Failed to mirror superadmin profile to tenant'),
+  );
 
   return ApiResponse.success(res, 'Password updated successfully');
 });
@@ -161,7 +168,9 @@ export const verify2FASetupForSuperadmin = catchAsync(async (req, res) => {
   if (!verified) return ApiResponse.badRequest(res, 'Invalid verification token');
 
   await user.update({ two_factor_enabled: true });
-  await mirrorSuperadminById(userId).catch(() => {});
+  await mirrorSuperadminById(userId).catch((err) =>
+    logger.warn({ err, userId }, 'Failed to mirror superadmin profile to tenant'),
+  );
 
   return ApiResponse.success(res, '2FA enabled successfully');
 });
@@ -197,7 +206,9 @@ export const disable2FAForSuperadmin = catchAsync(async (req, res) => {
     two_factor_enabled: false,
     two_factor_secret: null,
   });
-  await mirrorSuperadminById(userId).catch(() => {});
+  await mirrorSuperadminById(userId).catch((err) =>
+    logger.warn({ err, userId }, 'Failed to mirror superadmin profile to tenant'),
+  );
 
   return ApiResponse.success(res, '2FA disabled successfully');
 });

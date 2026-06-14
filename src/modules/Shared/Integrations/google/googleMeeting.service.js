@@ -138,7 +138,9 @@ export const updateGoogleCalendarEvent = async ({ tenantDb, userId, eventId, tit
     const platformDb = (await import("../../../../models/index.js")).default;
     const org = await platformDb.Organisation.findByPk(connection.organisation_id, { attributes: ["smtp_settings"] });
     tenantGoogleConfig = org?.smtp_settings?.google || org?.smtp_settings?.integrations?.google || null;
-  } catch (e) {}
+  } catch (err) {
+    logger.warn({ err }, "Failed to load tenant Google config; falling back to defaults");
+  }
 
   const oauth2Client = getOAuth2Client(tenantGoogleConfig);
   if (!oauth2Client) throw new Error("Google OAuth client not configured.");
@@ -186,7 +188,9 @@ export const deleteGoogleCalendarEvent = async ({ tenantDb, userId, eventId }) =
     const platformDb = (await import("../../../../models/index.js")).default;
     const org = await platformDb.Organisation.findByPk(connection.organisation_id, { attributes: ["smtp_settings"] });
     tenantGoogleConfig = org?.smtp_settings?.google || org?.smtp_settings?.integrations?.google || null;
-  } catch (e) {}
+  } catch (err) {
+    logger.warn({ err }, "Failed to load tenant Google config; falling back to defaults");
+  }
 
   const oauth2Client = getOAuth2Client(tenantGoogleConfig);
   if (!oauth2Client) throw new Error("Google OAuth client not configured.");

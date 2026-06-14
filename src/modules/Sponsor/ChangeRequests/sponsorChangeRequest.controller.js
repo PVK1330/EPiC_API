@@ -66,14 +66,28 @@ export const getChangeRequestsBySponsor = async (req, res) => {
       order: [["eventDate", "DESC"]],
     });
 
-    const data = requests.map((reqItem) => {
-      const plain = reqItem.toJSON();
-      const status = resolveStatus(plain.dateReported, plain.reportingDeadline);
-      return {
-        ...plain,
-        status,
-      };
-    });
+    const data = await Promise.all(
+      requests.map(async (reqItem) => {
+        const plain = reqItem.toJSON();
+        const status = resolveStatus(plain.dateReported, plain.reportingDeadline);
+        // Persist the derived "overdue" state so it is durable rather than
+        // recomputed on every read.
+        if (status === "overdue" && plain.status !== "overdue") {
+          try {
+            await reqItem.update({ status: "overdue" });
+          } catch (persistError) {
+            logger.error(
+              { err: persistError, changeRequestId: plain.id },
+              "Failed to persist overdue status for sponsor change request"
+            );
+          }
+        }
+        return {
+          ...plain,
+          status,
+        };
+      })
+    );
 
     return res.status(200).json({ status: "success", data });
   } catch (error) {

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import ApiResponse from "../utils/apiResponse.js";
+import logger from "../utils/logger.js";
 
 /**
  * Copy `source`'s enumerable keys onto `target` in place, removing keys that are
@@ -26,7 +27,7 @@ const replaceInPlace = (target, source) => {
  * @param {z.ZodSchema} schema
  */
 export const validate = (schema, schemaName = null) => async (req, res, next) => {
-  console.log({
+  logger.info({
     url: req.originalUrl,
     method: req.method,
     schema: schemaName || schema?.description || schema?.name || 'unknown',

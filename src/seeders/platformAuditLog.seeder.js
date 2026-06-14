@@ -1,10 +1,11 @@
 import platformDb from "../models/index.js";
+import logger from "../utils/logger.js";
 
 export default async function seedPlatformAuditLogs() {
   try {
     const existing = await platformDb.PlatformAuditLog.count();
     if (existing > 0) {
-      console.log("✔ Platform audit logs already seeded.");
+      logger.info("✔ Platform audit logs already seeded.");
       return;
     }
 
@@ -33,8 +34,8 @@ export default async function seedPlatformAuditLogs() {
     ];
 
     await platformDb.PlatformAuditLog.bulkCreate(logs);
-    console.log("✔ Platform audit logs seeded successfully.");
+    logger.info("✔ Platform audit logs seeded successfully.");
   } catch (err) {
-    console.error("Platform audit log seeder failed:", err.message);
+    logger.error({ err }, "Platform audit log seeder failed");
   }
 }

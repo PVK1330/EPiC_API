@@ -1,6 +1,7 @@
 import { Op } from 'sequelize';
 import logger from '../../../utils/logger.js';
 import { rowsToXlsxBuffer, sendXlsxDownload } from '../../../utils/excelExport.util.js';
+import { buildCaseworkerAssignmentWhere } from '../../../utils/caseworkerScope.js';
 
 
 /**
@@ -25,13 +26,11 @@ export const getCaseworkerPerformance = async (req, res) => {
     const start = startDate ? new Date(startDate) : defaultStart;
     const end = endDate ? new Date(endDate) : defaultEnd;
 
-    // Build where clause for caseworker JSONB array
-    const caseworkerWhereClause = {
-      [Op.or]: [
-        req.tenantDb.sequelize.literal(`"assignedcaseworkerId"::jsonb @> '${JSON.stringify([userId])}'::jsonb`),
-        req.tenantDb.sequelize.literal(`"assignedcaseworkerId"::jsonb ? '${userId.toString()}'`)
-      ]
-    };
+    // Build where clause for caseworker JSONB array (injection-safe — BUG-001)
+    const caseworkerWhereClause = buildCaseworkerAssignmentWhere(
+      req.tenantDb.sequelize,
+      userId,
+    );
 
     const caseWhere = { ...caseworkerWhereClause };
     // Only apply date filter to overall stats if explicitly requested
@@ -276,13 +275,11 @@ export const exportCaseworkerPerformance = async (req, res) => {
     const start = startDate ? new Date(startDate) : defaultStart;
     const end = endDate ? new Date(endDate) : defaultEnd;
 
-    // Build where clause for caseworker JSONB array
-    const caseworkerWhereClause = {
-      [Op.or]: [
-        req.tenantDb.sequelize.literal(`"assignedcaseworkerId"::jsonb @> '${JSON.stringify([userId])}'::jsonb`),
-        req.tenantDb.sequelize.literal(`"assignedcaseworkerId"::jsonb ? '${userId.toString()}'`)
-      ]
-    };
+    // Build where clause for caseworker JSONB array (injection-safe — BUG-001)
+    const caseworkerWhereClause = buildCaseworkerAssignmentWhere(
+      req.tenantDb.sequelize,
+      userId,
+    );
 
     const caseWhere = { ...caseworkerWhereClause };
     // Only apply date filter to overall stats if explicitly requested

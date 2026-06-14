@@ -6,6 +6,7 @@ import { verifyTokenAndTenant } from '../../../middlewares/authStack.middleware.
 import { checkRole, ensureSelfOrRole, ROLES } from '../../../middlewares/role.middleware.js';
 import * as candidateApplicationController from '../../Candidate/Application/candidateApplication.controller.js';
 import multer from 'multer';
+import logger from '../../../utils/logger.js';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -33,7 +34,7 @@ router.post(
 const STAFF = [ROLES.ADMIN, ROLES.CASEWORKER];
 
 const logCreateCandidateRequest = (req, res, next) => {
-  console.log({
+  logger.info({
     route: '/api/admin/candidates',
     method: req.method,
     schema: 'createCandidateSchema',

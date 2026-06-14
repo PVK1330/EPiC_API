@@ -7,6 +7,7 @@ import {
 } from '../../../realtime/messagingRealtime.js';
 import { getIO } from '../../../realtime/ioRegistry.js';
 import { notifyMessageReceived } from '../../../services/notification.service.js';
+import { buildCaseworkerAssignmentWhere } from '../../../utils/caseworkerScope.js';
 
 export const getMessages = async (req, res) => {
   try {
@@ -290,10 +291,7 @@ export const getChatUsers = async (req, res) => {
       const myCases = await req.tenantDb.Case.findAll({
         where: {
           organisation_id: organisationId,
-          [Op.or]: [
-            sequelize.literal(`"assignedcaseworkerId"::jsonb @> '${JSON.stringify([userId])}'::jsonb`),
-            sequelize.literal(`"assignedcaseworkerId"::jsonb ? '${userId}'`)
-          ]
+          ...buildCaseworkerAssignmentWhere(sequelize, userId)
         },
         attributes: ['candidateId', 'businessId', 'sponsorId']
       });

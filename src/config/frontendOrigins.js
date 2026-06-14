@@ -1,4 +1,5 @@
 import { parseOrganisationSlugFromHost } from "../utils/organisationHost.js";
+import logger from "../utils/logger.js";
 
 const LOCAL_DEV_ORIGINS = [
   "http://localhost:3000",
@@ -110,7 +111,7 @@ export function corsOriginDelegate(origin, callback) {
   }
 
   if (process.env.NODE_ENV !== "production") {
-    console.warn(`[CORS] Blocked origin: ${origin}`);
+    logger.warn(`[CORS] Blocked origin: ${origin}`);
   }
   callback(null, false);
 }
@@ -135,11 +136,11 @@ export function getCorsOptions() {
 
 export function logCorsConfiguration() {
   const origins = getFrontendOrigins();
-  console.log(`CORS platform domain: ${getPlatformDomain()}`);
-  console.log(
+  logger.info(`CORS platform domain: ${getPlatformDomain()}`);
+  logger.info(
     `CORS explicit origins (${origins.length}): ${origins.join(", ") || "(none)"}`,
   );
-  console.log(
+  logger.info(
     `CORS tenant subdomains: *.${getPlatformDomain()} (allowed via Origin header)`,
   );
 }

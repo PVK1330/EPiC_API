@@ -3,6 +3,7 @@ import { verifyTokenAndTenant } from '../../../middlewares/authStack.middleware.
 import { checkAnyPermission } from '../../../middlewares/role.middleware.js';
 import { handleDocumentUpload } from '../../../middlewares/upload.middleware.js';
 import { uploadLimiter } from '../../../middlewares/uploadRateLimiter.js';
+import { downloadLimiter } from '../../../middlewares/downloadRateLimiter.js';
 import {
   uploadDocuments,
   getUserDocumentsByCategory,
@@ -55,12 +56,14 @@ router.get('/case/:caseId',
 
 router.get('/download/:documentId',
   verifyTokenAndTenant,
+  downloadLimiter,
   checkAnyPermission(DOWNLOAD_PERMS),
   downloadDocument
 );
 
 router.get('/temp/:filename',
   verifyTokenAndTenant,
+  downloadLimiter,
   (req, res) => {
     import('path').then(path => {
       import('fs').then(fs => {
@@ -82,6 +85,7 @@ router.get('/temp/:filename',
 
 router.get('/bundle/me',
   verifyTokenAndTenant,
+  downloadLimiter,
   checkAnyPermission(DOWNLOAD_PERMS),
   downloadMyDocumentsBundle
 );

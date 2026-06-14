@@ -21,10 +21,22 @@ function useSsl() {
   return /render\.com|supabase|amazonaws|neon\.tech|rds\./i.test(host);
 }
 
+function resolveDbPassword() {
+  const pw = dbPassword();
+  // BUG-017: never ship a hardcoded fallback credential in production.
+  if (!pw) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("DB_PASSWORD (or DB_PASS) env var is required in production");
+    }
+    return "postgres"; // local-dev convenience only
+  }
+  return pw;
+}
+
 function buildBaseConfig(databaseName) {
   const cfg = {
     username: process.env.DB_USER || "postgres",
-    password: dbPassword() || "postgres",
+    password: resolveDbPassword(),
     database: databaseName,
     host: process.env.DB_HOST || "localhost",
     port: Number(process.env.DB_PORT || 5432),

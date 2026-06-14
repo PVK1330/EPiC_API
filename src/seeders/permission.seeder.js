@@ -1,3 +1,4 @@
+import logger from "../utils/logger.js";
 
 const PERMISSIONS_DATA = [
   // ==================== ADMIN PANEL MODULES ====================
@@ -259,7 +260,7 @@ const getCandidatePermissions = () => {
 const seedPermissions = async (db) => {
   const { Permission } = db;
   try {
-    console.log('Seeding permissions...');
+    logger.info('Seeding permissions...');
 
     // Create all permissions
     for (const permData of PERMISSIONS_DATA) {
@@ -269,9 +270,9 @@ const seedPermissions = async (db) => {
       });
     }
 
-    console.log('Permissions seeded successfully');
+    logger.info('Permissions seeded successfully');
   } catch (error) {
-    console.error('Error seeding permissions:', error);
+    logger.error({ err: error }, 'Error seeding permissions');
     throw error;
   }
 };
@@ -279,7 +280,7 @@ const seedPermissions = async (db) => {
 const seedRolePermissions = async (db) => {
   const { Permission, Role } = db;
   try {
-    console.log('Seeding role permissions...');
+    logger.info('Seeding role permissions...');
 
     // Get all roles
     const roles = await Role.findAll();
@@ -289,14 +290,14 @@ const seedRolePermissions = async (db) => {
     const superAdminRole = roles.find(r => r.id === 5);
     if (superAdminRole) {
       await superAdminRole.setPermissions(allPermissions);
-      console.log('SuperAdmin role assigned all permissions');
+      logger.info('SuperAdmin role assigned all permissions');
     }
 
     // Admin (role_id: 3) - All permissions
     const adminRole = roles.find(r => r.id === 3);
     if (adminRole) {
       await adminRole.setPermissions(allPermissions);
-      console.log('Admin role assigned all permissions');
+      logger.info('Admin role assigned all permissions');
     }
 
     // Caseworker (role_id: 2) - Case, Escalation, Reports
@@ -305,7 +306,7 @@ const seedRolePermissions = async (db) => {
       const caseworkerPermNames = getCaseworkerPermissions();
       const caseworkerPerms = allPermissions.filter(p => caseworkerPermNames.includes(p.name));
       await caseworkerRole.setPermissions(caseworkerPerms);
-      console.log('Caseworker role assigned permissions');
+      logger.info('Caseworker role assigned permissions');
     }
 
     // Candidate (role_id: 1) - View own cases
@@ -314,7 +315,7 @@ const seedRolePermissions = async (db) => {
       const candidatePermNames = getCandidatePermissions();
       const candidatePerms = allPermissions.filter(p => candidatePermNames.includes(p.name));
       await candidateRole.setPermissions(candidatePerms);
-      console.log('Candidate role assigned permissions');
+      logger.info('Candidate role assigned permissions');
     }
 
     // Sponsor/Business (role_id: 4) - Case, Payment, Reports
@@ -323,12 +324,12 @@ const seedRolePermissions = async (db) => {
       const sponsorPermNames = getSponsorPermissions();
       const sponsorPerms = allPermissions.filter(p => sponsorPermNames.includes(p.name));
       await sponsorRole.setPermissions(sponsorPerms);
-      console.log('Sponsor role assigned permissions');
+      logger.info('Sponsor role assigned permissions');
     }
 
-    console.log('Role permissions seeded successfully');
+    logger.info('Role permissions seeded successfully');
   } catch (error) {
-    console.error('Error seeding role permissions:', error);
+    logger.error({ err: error }, 'Error seeding role permissions');
     throw error;
   }
 };
@@ -337,9 +338,9 @@ export async function seedPermissionsForDb(db) {
   try {
     await seedPermissions(db);
     await seedRolePermissions(db);
-    console.log('All permissions and role permissions seeded successfully');
+    logger.info('All permissions and role permissions seeded successfully');
   } catch (error) {
-    console.error('Error seeding permissions:', error);
+    logger.error({ err: error }, 'Error seeding permissions');
     throw error;
   }
 }
@@ -363,7 +364,7 @@ export async function ensureAdminHasAllPermissions(db) {
   if (current.length >= allPermissions.length) return;
 
   await adminRole.setPermissions(allPermissions);
-  console.log(`Admin role synced with ${allPermissions.length} permissions`);
+  logger.info(`Admin role synced with ${allPermissions.length} permissions`);
 }
 
 export default seedPermissionsForDb;

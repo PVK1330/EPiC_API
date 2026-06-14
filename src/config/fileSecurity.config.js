@@ -61,11 +61,11 @@ export const createFileFilter = (allowedExtensions) => {
       return cb(new Error(`Unsupported file type: ${ext}. Allowed: ${allowedExtensions.join(', ')}`));
     }
 
-    const expectedMime = ALLOWED_MIME_TYPES[ext];
-    if (expectedMime && file.mimetype !== expectedMime) {
-      // Basic MIME check (spoofable, but good for fast rejection)
-      return cb(new Error(`MIME type mismatch for ${ext}. Expected ${expectedMime}, got ${file.mimetype}`));
-    }
+    // BUG-014: do NOT reject on the client-supplied MIME header — it is trivially
+    // spoofable and rejects legitimate files whose browser-reported type differs
+    // slightly from our table. The authoritative check is the magic-byte
+    // inspection in processFileSecurity() (upload.middleware.js), which runs after
+    // multer. Extension allow/block lists above remain the fast pre-filter.
 
     cb(null, true);
   };

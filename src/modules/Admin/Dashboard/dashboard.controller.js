@@ -5,6 +5,7 @@ import catchAsync from '../../../utils/catchAsync.js';
 import ApiResponse from '../../../utils/apiResponse.js';
 import logger from '../../../utils/logger.js';
 import { countUnassignedCases } from '../../../services/caseAssignment.service.js';
+import { buildCaseworkerAssignmentWhere } from '../../../utils/caseworkerScope.js';
 
 /** Run a dashboard query without failing the whole endpoint when a table/model is missing. */
 async function safeDashboardQuery(promise, fallback, label = 'query') {
@@ -653,9 +654,7 @@ export const testPdfGeneration = catchAsync(async (req, res) => {
     logger.error({ err: error }, '[Test PDF] Error');
     return res.status(500).json({
       status: "error",
-      message: "Test PDF generation failed",
-      error: error.message,
-      stack: error.stack
+      message: "Test PDF generation failed"
     });
   }
 });
@@ -729,7 +728,8 @@ export const exportDashboardPDF = catchAsync(async (req, res) => {
 
     const caseworkers = await req.tenantDb.User.findAll({
       where: { role_id: 2 },
-      attributes: ['id', 'first_name', 'last_name']
+      attributes: ['id', 'first_name', 'last_name'],
+      limit: 100, // BUG-016: bound the result set rather than fetching every row
     }).catch((err) => {
       logger.error({ errMessage: err.message }, '[PDF Export] Error fetching caseworkers');
       return [];
@@ -944,20 +944,13 @@ export const exportDashboardPDF = catchAsync(async (req, res) => {
     logger.info('[PDF Export] PDF sent successfully');
 
   } catch (error) {
+    // BUG-008: log the full error server-side; never leak message/stack to the client.
     logger.error({ err: error }, "Export Dashboard PDF Error");
-    
-    // Return detailed error in development
-    if (process.env.NODE_ENV === 'development') {
-      return res.status(500).json({
-        status: "error",
-        message: "Failed to generate dashboard PDF",
-        data: null,
-        error: error.message,
-        stack: error.stack
-      });
-    }
-    
-    return ApiResponse.error(res, "Failed to generate dashboard PDF", 500, error);
+    return res.status(500).json({
+      status: "error",
+      message: "Failed to generate dashboard PDF",
+      data: null,
+    });
   }
 });
 
@@ -975,14 +968,10 @@ export const getDueOverdueTasks = async (req, res) => {
     };
 
     if (roleId === 2 && userId) {
-      caseWhere[Op.or] = [
-        req.tenantDb.sequelize.literal(
-          `"assignedcaseworkerId"::jsonb @> '${JSON.stringify([Number(userId)])}'::jsonb`,
-        ),
-        req.tenantDb.sequelize.literal(
-          `"assignedcaseworkerId"::jsonb ? '${Number(userId)}'`,
-        ),
-      ];
+      caseWhere[Op.or] = buildCaseworkerAssignmentWhere(
+        req.tenantDb.sequelize,
+        userId,
+      )[Op.or];
     }
 
     const cases = await req.tenantDb.Case.findAll({

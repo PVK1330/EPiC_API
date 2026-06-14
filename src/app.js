@@ -45,6 +45,13 @@ app.use(compression({ level: 6, threshold: 1024 }));
 
 app.use(cors(getCorsOptions()));
 
+// ── Health check (BUG-045) ────────────────────────────────────────────────────
+// Public, unauthenticated, CSRF-exempt (registered before the /api CSRF guard).
+// Used by load balancers / uptime monitors to confirm the process is serving.
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
 // Stripe webhooks must use raw body for signature verification.
 app.post(
   '/api/stripe/webhook',

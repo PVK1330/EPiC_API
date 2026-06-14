@@ -1,5 +1,6 @@
 import platformDb from "../models/index.js";
 import bcrypt from "bcryptjs";
+import logger from "../utils/logger.js";
 
 /**
  * Platform superadmin only. Organisations are created via POST /api/superadmin/organisations.
@@ -27,13 +28,13 @@ export default async function seedAdmin() {
     const existing = await platformDb.User.findOne({ where: { email } });
     if (existing) {
       await existing.update(userData);
-      console.log(`✔ Superadmin ready: ${email}`);
+      logger.info(`✔ Superadmin ready: ${email}`);
     } else {
       await platformDb.User.create(userData);
-      console.log(`✔ Superadmin created: ${email}`);
+      logger.info(`✔ Superadmin created: ${email}`);
     }
   } catch (err) {
-    console.error("Admin seeder failed:", err.message);
+    logger.error({ err }, "Admin seeder failed");
     throw err;
   }
 }

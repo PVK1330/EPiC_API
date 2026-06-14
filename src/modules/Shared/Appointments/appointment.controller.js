@@ -13,6 +13,13 @@ export const getMyAppointments = async (req, res) => {
     const userId = req.user.userId;
     const isAdmin = hasFullAccessRole(req.user.role_id);
 
+    // Coerce to a validated integer before embedding in raw SQL (BUG-001 — injection-safe)
+    const numericUserId = Number(userId);
+    const invitedStaffClause =
+      Number.isInteger(numericUserId) && numericUserId >= 0
+        ? req.tenantDb.sequelize.literal(`invited_staff::jsonb @> '[${numericUserId}]'`)
+        : req.tenantDb.sequelize.literal('FALSE');
+
     const where = isAdmin
       ? {}
       : {
@@ -20,7 +27,7 @@ export const getMyAppointments = async (req, res) => {
             { candidate_id: userId },
             { caseworker_id: userId },
             // Check if userId is in the invited_staff JSON array using Postgres @> operator
-            req.tenantDb.sequelize.literal(`invited_staff::jsonb @> '[${userId}]'`)
+            invitedStaffClause
           ]
         };
 

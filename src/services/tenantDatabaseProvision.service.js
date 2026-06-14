@@ -1,4 +1,5 @@
 import pkg from "pg";
+import format from "pg-format";
 import config from "../config/config.js";
 import {
   normalizePostgresDatabaseName,
@@ -112,7 +113,8 @@ export async function createTenantPostgresDatabase(databaseName) {
     if (check.rowCount > 0) {
       return { created: false, databaseName };
     }
-    await client.query(`CREATE DATABASE ${databaseName}`);
+    // Identifier escaped via pg-format %I in addition to the whitelist above (BUG-002).
+    await client.query(format("CREATE DATABASE %I", databaseName));
     return { created: true, databaseName };
   } finally {
     await client.end();
@@ -191,7 +193,8 @@ export async function dropTenantPostgresDatabase(databaseName) {
       `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()`,
       [databaseName],
     );
-    await client.query(`DROP DATABASE IF EXISTS ${databaseName}`);
+    // Identifier escaped via pg-format %I in addition to the whitelist above (BUG-002).
+    await client.query(format("DROP DATABASE IF EXISTS %I", databaseName));
   } finally {
     await client.end();
   }

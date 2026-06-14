@@ -1,6 +1,7 @@
 import { CandidateService } from './candidate.service.js';
 import ApiResponse from '../../../utils/apiResponse.js';
 import catchAsync from '../../../utils/catchAsync.js';
+import logger from '../../../utils/logger.js';
 
 /**
  * Handles incoming HTTP requests for Candidate management.
@@ -9,7 +10,7 @@ import catchAsync from '../../../utils/catchAsync.js';
 
 // Create Candidate
 export const createCandidate = catchAsync(async (req, res) => {
-  console.log({
+  logger.info({
     route: req.originalUrl,
     method: req.method,
     stage: 'candidate.controller.createCandidate',

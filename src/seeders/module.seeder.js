@@ -1,4 +1,5 @@
 import platformDb from "../models/index.js";
+import logger from "../utils/logger.js";
 
 const MODULES = [
   { key: "admin.dashboard",        label: "Dashboard",        panel: "admin",      sort_order: 1 },
@@ -62,10 +63,10 @@ export const seedModules = async () => {
     for (const mod of MODULES) {
       await platformDb.Module.upsert(mod, { conflictFields: ["key"] });
     }
-    console.log("✔ Modules seeded");
+    logger.info("✔ Modules seeded");
     await seedPlanModules();
   } catch (err) {
-    console.error("Module seeder failed:", err.message);
+    logger.error({ err }, "Module seeder failed");
     throw err;
   }
 };
@@ -83,9 +84,9 @@ async function seedPlanModules() {
         });
       }
     }
-    console.log("✔ Plan modules seeded (all modules assigned to all plans)");
+    logger.info("✔ Plan modules seeded (all modules assigned to all plans)");
   } catch (err) {
-    console.error("Plan modules seeder failed:", err.message);
+    logger.error({ err }, "Plan modules seeder failed");
     throw err;
   }
 }

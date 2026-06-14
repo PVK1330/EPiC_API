@@ -1,4 +1,5 @@
 import platformDb from "../models/index.js";
+import logger from "../utils/logger.js";
 
 const plans = [
   {
@@ -50,8 +51,8 @@ export const seedPlans = async () => {
         defaults: plan
       });
     }
-    console.log("Plans seeded successfully");
+    logger.info("Plans seeded successfully");
   } catch (error) {
-    console.error("Error seeding plans:", error);
+    logger.error({ err: error }, "Error seeding plans");
   }
 };

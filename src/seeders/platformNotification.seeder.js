@@ -1,10 +1,11 @@
 import platformDb from "../models/index.js";
+import logger from "../utils/logger.js";
 
 export default async function seedPlatformNotifications() {
   try {
     const existing = await platformDb.PlatformNotification.count();
     if (existing > 0) {
-      console.log("✔ Platform notifications already seeded.");
+      logger.info("✔ Platform notifications already seeded.");
       return;
     }
 
@@ -18,8 +19,8 @@ export default async function seedPlatformNotifications() {
     ];
 
     await platformDb.PlatformNotification.bulkCreate(notifications);
-    console.log("✔ Platform notifications seeded successfully.");
+    logger.info("✔ Platform notifications seeded successfully.");
   } catch (err) {
-    console.error("Platform notification seeder failed:", err.message);
+    logger.error({ err }, "Platform notification seeder failed");
   }
 }
