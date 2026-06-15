@@ -7,7 +7,7 @@ import compression from 'compression';
 import routes from './routes/index.js';
 import { getCorsOptions } from './config/frontendOrigins.js';
 import { getHelmetMiddleware } from './config/helmet.config.js';
-import { doubleCsrfProtection, generateCsrfToken } from './config/csrf.config.js';
+import { csrfProtection, generateCsrfToken } from './config/csrf.config.js';
 import { handleWebhook } from './modules/Candidate/Payments/stripepayment.controller.js';
 import {
   requestContextMiddleware,
@@ -74,7 +74,9 @@ app.get('/api/csrf-token', (req, res) => {
 });
 
 // Enforce CSRF on all mutating /api requests (GET/HEAD/OPTIONS are ignored).
-app.use('/api', doubleCsrfProtection);
+// In dev, csrfProtection also fills the missing cookie from the header for
+// cross-origin subdomain requests (see csrf.config.js for the security rationale).
+app.use('/api', csrfProtection);
 
 const STATIC_CACHE = { maxAge: '7d', etag: true, lastModified: true };
 // WARNING: The /uploads directory is no longer served statically for security reasons.

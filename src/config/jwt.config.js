@@ -57,12 +57,17 @@ export function getCookieConfig(overrides = {}) {
   
   return {
     httpOnly: true,
-    // In production, 'strict' prevents CSRF.
-    // Locally, tenant subdomains (e.g. acme.localhost) are treated as cross-site 
-    // by browsers, requiring sameSite: 'none' and secure: true for API requests.
-    // Localhost is a secure context, so secure: true works without HTTPS.
-    secure: isProduction ? true : true,
-    sameSite: isProduction ? "strict" : "none",
+    // Production: Secure + SameSite=Strict (HTTPS, same registrable domain).
+    // Development: Secure=false so the cookie works over plain HTTP.
+    //   SameSite=Lax allows the cookie to be sent on same-site cross-origin
+    //   requests (elite-visa.localhost → localhost share the "localhost" eTLD+1
+    //   so Chrome/Firefox treat them as same-site).
+    //   We do NOT use SameSite=None because None requires Secure, and
+    //   *.localhost subdomains are NOT granted the localhost Secure-context
+    //   exception — the browser silently drops Secure cookies over HTTP from
+    //   a subdomain origin, which causes immediate 401 → logout after login.
+    secure: isProduction,
+    sameSite: isProduction ? "strict" : "lax",
     path: "/",
     ...overrides,
   };

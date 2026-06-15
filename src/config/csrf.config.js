@@ -15,9 +15,15 @@
  *      • httpOnly: false  → the frontend JS needs to read it
  *      • domain: .<platformDomain> (prod) → readable on every subdomain
  *    In dev (localhost) cookies ignore the port, so no domain is needed.
- *  - sameSite mirrors the auth cookie: 'strict' in prod (subdomains share the
- *    registrable domain, so the cookie is still sent), 'none' in dev for
- *    *.localhost tenant testing.
+ *  - In production sameSite:'strict' works because all subdomains share the same
+ *    registrable domain.
+ *  - In development, tenant subdomains (elite-visa.localhost:5173) make
+ *    cross-origin requests to localhost:5000. Even with secure:false + sameSite:lax
+ *    some browsers decline to send the cookie on cross-origin same-site POST
+ *    requests. To handle this reliably, csrfProtection (dev export) falls back to
+ *    accepting the HMAC-signed header alone when the cookie is absent. Browsers
+ *    cannot set custom request headers on cross-site requests (CORS policy), so
+ *    the HMAC validation alone is equivalent security in dev.
  *
  * The session identifier is intentionally constant: this is a stateless
  * double-submit setup, so tokens must stay valid across login/logout (binding to
@@ -53,8 +59,8 @@ function csrfCookieOptions() {
 
   const options = {
     httpOnly: false, // frontend must read it to echo in the header
-    secure: true,
-    sameSite: isProd ? "strict" : "none",
+    secure: isProd,  // dev runs over HTTP — Secure flag blocks cookie on plain HTTP
+    sameSite: isProd ? "strict" : "lax",
     path: "/",
   };
 
@@ -89,6 +95,40 @@ const { doubleCsrfProtection, generateCsrfToken, invalidCsrfTokenError } =
     getCsrfTokenFromRequest: (req) => req.headers[CSRF_COOKIE_NAME],
     skipCsrfProtection: shouldSkipCsrf,
   });
+
+/**
+ * Dev-mode shim: if the CSRF cookie is absent (cross-origin subdomain request from
+ * elite-visa.localhost → localhost:5000 where the browser may not send the cookie),
+ * copy the header value into req.cookies so doubleCsrfProtection can find it.
+ *
+ * Security: the token is still HMAC-validated by doubleCsrfProtection — an
+ * attacker cannot forge a valid token without the server secret, and browsers
+ * block custom headers on cross-site requests (CORS), so this is safe in dev.
+ */
+function devCsrfCookieFill(req, res, next) {
+  const headerToken = req.headers[CSRF_COOKIE_NAME];
+  if (headerToken && !req.cookies[CSRF_COOKIE_NAME]) {
+    req.cookies = req.cookies || {};
+    req.cookies[CSRF_COOKIE_NAME] = headerToken;
+  }
+  next();
+}
+
+const isProd = process.env.NODE_ENV === "production";
+
+/**
+ * Use this instead of doubleCsrfProtection in app.js.
+ * - Production: full double-submit cookie check (cookie + header must match).
+ * - Development: fills missing cookie from header before the double-submit check,
+ *   so subdomain tenant URLs (elite-visa.localhost:5173) work without needing
+ *   the browser to send the cookie cross-origin.
+ */
+export function csrfProtection(req, res, next) {
+  if (isProd) {
+    return doubleCsrfProtection(req, res, next);
+  }
+  devCsrfCookieFill(req, res, () => doubleCsrfProtection(req, res, next));
+}
 
 export {
   CSRF_COOKIE_NAME,
