@@ -56,9 +56,14 @@ async function notifyAdminsOfPaymentReceived({ tenantDb, caseRecord, organisatio
   }
 }
 
-async function findCasePaymentByTransaction(tenantDb, transactionId) {
+async function findCasePaymentByTransaction(tenantDb, transactionId, caseId = null) {
   if (!transactionId || !tenantDb?.CasePayment) return null;
-  return tenantDb.CasePayment.findOne({ where: { transactionId: String(transactionId) } });
+  // BUG-015: when a caseId is known (the only safe context for a user-facing
+  // lookup), scope the query to that case so a payment can never be read across
+  // accounts by transaction id alone.
+  const where = { transactionId: String(transactionId) };
+  if (caseId != null) where.caseId = caseId;
+  return tenantDb.CasePayment.findOne({ where });
 }
 
 async function resolveCandidateCaseForPayment(tenantDb, userId) {
@@ -125,7 +130,7 @@ async function recordStripeCasePayment({ tenantDb, caseRecord, paymentIntent, us
   const txnId = paymentIntent?.id;
   if (!txnId) return null;
 
-  const existing = await findCasePaymentByTransaction(tenantDb, txnId);
+  const existing = await findCasePaymentByTransaction(tenantDb, txnId, caseRecord.id);
   if (existing) {
     await caseRecord.reload();
     return existing;
@@ -226,7 +231,11 @@ async function finalizeStripePaymentForUser({ userId, paymentIntent, caseRef = n
     invoiceId: paymentIntent.id,
     amount: paymentIntent.amount / 100,
     caseId: caseRecord.caseId || 'your case',
-  }).catch(() => {});
+  }).catch((err) =>
+    // Payment is already recorded; a notification failure must not roll it back,
+    // but it must be visible in logs (BUG-005).
+    logger.error({ err, userId, paymentIntentId: paymentIntent.id }, 'Payment-received notification failed'),
+  );
 
   return { tenantDb, caseRecord, recorded };
 }

@@ -1,3 +1,5 @@
+import logger from "../utils/logger.js";
+
 const ROLES = [
   { id: 1, name: "candidate" },
   { id: 2, name: "caseworker" },
@@ -14,10 +16,10 @@ export async function seedRolesForDb(db) {
         defaults: role,
       });
     }
-    console.log("✔ Roles seeded");
+    logger.info("✔ Roles seeded");
     await assignDefaultPermissions(db);
   } catch (err) {
-    console.error("Role seeder failed:", err.message);
+    logger.error({ err }, "Role seeder failed");
     throw err;
   }
 }
@@ -35,7 +37,7 @@ async function assignDefaultPermissions(db) {
     const superAdminRole = await Role.findByPk(5);
     if (superAdminRole) {
       await superAdminRole.setPermissions(allPermissions);
-      console.log('SuperAdmin role assigned all permissions');
+      logger.info('SuperAdmin role assigned all permissions');
     }
 
     // Admin (role_id: 3) - Most permissions (except platform management if applicable)
@@ -43,7 +45,7 @@ async function assignDefaultPermissions(db) {
     if (adminRole) {
       // For now, give admin everything, but we might want to exclude superadmin-only perms later
       await adminRole.setPermissions(allPermissions);
-      console.log('Admin role assigned permissions');
+      logger.info('Admin role assigned permissions');
     }
     
     // Caseworker (role_id: 2) - Case, Document, Task permissions
@@ -59,7 +61,7 @@ async function assignDefaultPermissions(db) {
         .map(p => p.name);
       const caseworkerPerms = allPermissions.filter(p => caseworkerPermNames.includes(p.name));
       await caseworkerRole.setPermissions(caseworkerPerms);
-      console.log('Caseworker role assigned permissions');
+      logger.info('Caseworker role assigned permissions');
     }
     
     // Candidate (role_id: 1) - View own cases and documents
@@ -75,7 +77,7 @@ async function assignDefaultPermissions(db) {
         .map(p => p.name);
       const candidatePerms = allPermissions.filter(p => candidatePermNames.includes(p.name));
       await candidateRole.setPermissions(candidatePerms);
-      console.log('Candidate role assigned permissions');
+      logger.info('Candidate role assigned permissions');
     }
     
     // Sponsor/Business (role_id: 4) - Case, Payment, Report permissions
@@ -91,11 +93,11 @@ async function assignDefaultPermissions(db) {
         .map(p => p.name);
       const sponsorPerms = allPermissions.filter(p => sponsorPermNames.includes(p.name));
       await sponsorRole.setPermissions(sponsorPerms);
-      console.log('Sponsor role assigned permissions');
+      logger.info('Sponsor role assigned permissions');
     }
-    
-    console.log('Role permissions assigned successfully');
+
+    logger.info('Role permissions assigned successfully');
   } catch (error) {
-    console.error('Error assigning role permissions:', error);
+    logger.error({ err: error }, 'Error assigning role permissions');
   }
 }

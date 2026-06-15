@@ -125,6 +125,10 @@ const getDocumentAttributes = async (tenantDb) => {
 // Upload documents with system-generated document names
 export const uploadDocuments = async (req, res) => {
   try {
+    // BUG-011: require tenant context before touching tenant-scoped models.
+    if (!req.tenantDb) {
+      return res.status(400).json({ message: 'Tenant context required' });
+    }
     // Multer processes files and form fields differently
     const documentCategory = req.body?.documentCategory || 'general';
     let userId = req.body?.userId;

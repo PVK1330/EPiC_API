@@ -10,6 +10,8 @@
  *   validateRequiredEnv();
  */
 
+import logger from "./logger.js";
+
 const REQUIRED_VARS = [
   {
     key: "JWT_SECRET",
@@ -70,23 +72,23 @@ export function validateRequiredEnv(vars = REQUIRED_VARS) {
   }
 
   if (missing.length > 0) {
-    console.error("");
-    console.error("╔══════════════════════════════════════════════════════════╗");
-    console.error("║  FATAL: Required environment variable(s) missing/weak   ║");
-    console.error("╠══════════════════════════════════════════════════════════╣");
+    logger.error("");
+    logger.error("╔══════════════════════════════════════════════════════════╗");
+    logger.error("║  FATAL: Required environment variable(s) missing/weak   ║");
+    logger.error("╠══════════════════════════════════════════════════════════╣");
     for (const m of missing) {
-      console.error(`║  • ${m.label.padEnd(48)} ║`);
-      console.error(`║    ${m.hint.padEnd(50)} ║`);
-      console.error("║                                                        ║");
+      logger.error(`║  • ${m.label.padEnd(48)} ║`);
+      logger.error(`║    ${m.hint.padEnd(50)} ║`);
+      logger.error("║                                                        ║");
     }
-    console.error("║  Server startup ABORTED. Set the variable(s) above      ║");
-    console.error("║  in your .env file and restart.                        ║");
-    console.error("╚══════════════════════════════════════════════════════════╝");
-    console.error("");
+    logger.error("║  Server startup ABORTED. Set the variable(s) above      ║");
+    logger.error("║  in your .env file and restart.                        ║");
+    logger.error("╚══════════════════════════════════════════════════════════╝");
+    logger.error("");
     process.exit(1);
   }
 
-  console.log("✔ Environment validation passed");
+  logger.info("✔ Environment validation passed");
 }
 
 export default validateRequiredEnv;

@@ -90,24 +90,33 @@ export async function activateSponsorLicence({
     : now;
   const expiryDate = addYears(renewalBase, LICENCE_VALIDITY_YEARS);
 
-  // 1-3) Activate the licence on the sponsor profile.
-  profile.licenceStatus = LICENCE_STATUS.ACTIVE;
-  profile.sponsorLicenceNumber = licenceNumber;
-  profile.licenceIssueDate = issuedDate;
-  profile.licenceExpiryDate = expiryDate;
-  if (!profile.licenceRating) profile.licenceRating = "A";
-  await profile.save();
-
   // Seed initial CoS pool from the intake form's requested count, the
-  // application's own cosAllocation field, or a safe default of 5.
+  // application's own cosAllocation field, or a safe default of 5. Resolve this
+  // before the transaction so the read does not hold the write lock open.
+  let seedCosPool = null;
   if (!profile.cosAllocation) {
     const intakeForm = await (tenantDb.LicenceIntakeForm?.findOne({
       where: { licenceApplicationId: application.id },
       attributes: ["numberOfCosRequired"],
     }) ?? Promise.resolve(null)).catch(() => null);
-    const cosPoolSize = intakeForm?.numberOfCosRequired || application.cosAllocation || 5;
-    profile.cosAllocation = cosPoolSize;
-    await profile.save();
+    seedCosPool = intakeForm?.numberOfCosRequired || application.cosAllocation || 5;
+  }
+
+  // 1-3) Activate the licence + seed the CoS pool atomically (BUG-018). Either
+  // the profile is fully activated (status + number + dates + pool) or not at all.
+  const t = await tenantDb.sequelize.transaction();
+  try {
+    profile.licenceStatus = LICENCE_STATUS.ACTIVE;
+    profile.sponsorLicenceNumber = licenceNumber;
+    profile.licenceIssueDate = issuedDate;
+    profile.licenceExpiryDate = expiryDate;
+    if (!profile.licenceRating) profile.licenceRating = "A";
+    if (seedCosPool != null) profile.cosAllocation = seedCosPool;
+    await profile.save({ transaction: t });
+    await t.commit();
+  } catch (err) {
+    await t.rollback();
+    throw err;
   }
 
   // 4) Audit log — Licence Approved / Approved By / Approved Date (best effort).

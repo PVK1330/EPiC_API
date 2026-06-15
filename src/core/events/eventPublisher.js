@@ -1,4 +1,5 @@
 import eventBus from './eventBus.js';
+import logger from '../../utils/logger.js';
 
 /**
  * Publishes an event to the system event bus.
@@ -17,7 +18,7 @@ export const publishEvent = (eventName, payload, context = {}) => {
   try {
     eventBus.emit(eventName, { ...payload, __context: context });
   } catch (error) {
-    console.error(`[EventPublisher] Failed to publish event: ${eventName}`, error);
+    logger.error({ err: error }, `[EventPublisher] Failed to publish event: ${eventName}`);
   }
   return Promise.resolve();
 };

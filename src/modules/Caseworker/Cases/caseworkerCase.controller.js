@@ -5,6 +5,7 @@ import { assertUsersInOrganisation } from '../../../utils/tenantScope.js';
 import { localDateStr } from '../../../utils/dateHelpers.js';
 import catchAsync from '../../../utils/catchAsync.js';
 import ApiResponse from '../../../utils/apiResponse.js';
+import { buildCaseworkerAssignmentWhere } from '../../../utils/caseworkerScope.js';
 import { rowsToXlsxBuffer, sendXlsxDownload } from '../../../utils/excelExport.util.js';
 import {
   IMMIGRATION_CASE_STEPS,
@@ -12,16 +13,10 @@ import {
   DEFAULT_CASE_STAGE,
 } from '../../../constants/immigrationCaseProcess.js';
 
-// Helper function to check if userId is in assignedcaseworkerId (JSONB array)
-const buildCaseworkerWhereClause = (req, userId) => {
-  const { sequelize } = req.tenantDb;
-  return {
-    [Op.or]: [
-      sequelize.literal(`"assignedcaseworkerId"::jsonb @> '${JSON.stringify([userId])}'::jsonb`),
-      sequelize.literal(`"assignedcaseworkerId"::jsonb ? '${userId}'`)
-    ]
-  };
-};
+// Helper function to check if userId is in assignedcaseworkerId (JSONB array).
+// Delegates to the shared, injection-safe builder (BUG-001).
+const buildCaseworkerWhereClause = (req, userId) =>
+  buildCaseworkerAssignmentWhere(req.tenantDb.sequelize, userId);
 
 // Generate unique case ID (scoped to organisation when present on request)
 const generateCaseId = async (req) => {
