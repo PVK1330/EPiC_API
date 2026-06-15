@@ -84,7 +84,7 @@ export async function recordLicenceAudit({
   req = null,
 }) {
   const organisationId =
-    application?.organisation_id ??
+    application?.organisationId ??
     (req?.user?.organisation_id != null ? Number(req.user.organisation_id) : null);
 
   try {
@@ -150,7 +150,7 @@ export async function recordLicenceAudit({
 export async function onLicenceAssigned({ tenantDb, application, actorUser, req = null }) {
   const actorId = actorUser?.userId ?? actorUser?.id ?? null;
   const organisationId =
-    application?.organisation_id ??
+    application?.organisationId ??
     (req?.user?.organisation_id != null ? Number(req.user.organisation_id) : null);
 
   // 1. Global audit log — LICENCE_ASSIGNED (past-tense, matches Phase 1 constant).

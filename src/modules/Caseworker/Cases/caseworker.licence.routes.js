@@ -21,7 +21,7 @@ import {
     requestCaseworkerDocumentInfo,
 } from './caseworkerLicenceIntake.controller.js';
 import { verifyTokenAndTenant } from '../../../middlewares/authStack.middleware.js';
-import { checkRole, ROLES } from '../../../middlewares/role.middleware.js';
+import { checkRole, STAFF_ROLES } from '../../../middlewares/role.middleware.js';
 import { ensureAssignedCaseworker } from '../../../middlewares/ensureAssignedCaseworker.middleware.js';
 import { validate } from '../../../middlewares/validate.middleware.js';
 import { getLicenceStages, completeLicenceStageTask, downloadLicenceDocument } from '../../Shared/Licence/licenceStage.controller.js';
@@ -33,7 +33,7 @@ import {
 const router = Router();
 
 router.use(verifyTokenAndTenant);
-router.use(checkRole([ROLES.CASEWORKER, ROLES.ADMIN]));
+router.use(checkRole(STAFF_ROLES));
 
 // My Assigned Applications dashboard (assigned list + status counts).
 router.get("/assigned", getAssignedLicenceApplications);

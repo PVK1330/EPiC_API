@@ -17,6 +17,17 @@ export default (sequelize, DataTypes) => {
                 onUpdate: "CASCADE",
                 onDelete: "CASCADE",
             },
+            organisationId: {
+                type: DataTypes.INTEGER,
+                allowNull: true,
+                field: "organisation_id",
+                references: {
+                    model: "organisations",
+                    key: "id",
+                },
+                onUpdate: "CASCADE",
+                onDelete: "SET NULL",
+            },
             type: {
                 type: DataTypes.ENUM('New', 'Renewal'),
                 allowNull: false,

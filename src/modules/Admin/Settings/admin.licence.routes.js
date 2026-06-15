@@ -20,7 +20,7 @@ import {
     resendLicenceCredentials,
 } from './adminLicenceGovernment.controller.js';
 import { verifyTokenAndTenant } from '../../../middlewares/authStack.middleware.js';
-import { checkRole, ROLES } from '../../../middlewares/role.middleware.js';
+import { checkRole, ADMIN_ROLES } from '../../../middlewares/role.middleware.js';
 import { validate } from '../../../middlewares/validate.middleware.js';
 import { getLicenceStages, completeLicenceStageTask } from '../../Shared/Licence/licenceStage.controller.js';
 import { generateCredentialsSchema } from '../../../validations/licenceGovernment.validation.js';
@@ -29,7 +29,7 @@ import { adminUpdateLicenceSchema } from '../../../validations/licenceApplicatio
 const router = express.Router();
 
 router.use(verifyTokenAndTenant);
-router.use(checkRole([ROLES.ADMIN]));
+router.use(checkRole(ADMIN_ROLES));
 
 router.get("/all", getAllLicenceApplications);
 router.get("/v2/:id", getLicenceApplicationV2);

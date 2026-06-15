@@ -9,7 +9,7 @@ import {
 } from "../../../services/licenceApplicationV2.service.js";
 import { validateForSubmission } from "../../../validations/licenceApplicationV2.validation.js";
 import { computeFee } from "../../../services/licenceFee.service.js";
-import { recordLicenceAudit } from "../../../services/licenceAssignment.service.js";
+import { recordLicenceAudit, getLicenceAuditTrail } from "../../../services/licenceAssignment.service.js";
 import * as sponsorshipNotify from "../../../services/sponsorshipNotification.service.js";
 import { ensureStageTasks } from "../../../services/licenceStageTask.service.js";
 
@@ -33,8 +33,10 @@ export const createDraft = async (req, res) => {
     const full = await loadFullApplication(req.tenantDb, app.id, { ownerUserId: userId });
     return res.status(201).json({ status: "success", data: serializeApplication(full) });
   } catch (error) {
-    logger.error({ err: error }, "createDraft (licence v2) failed");
-    return res.status(500).json({ status: "error", message: "Failed to create draft application" });
+    const code = error.statusCode || 500;
+    if (code < 500) logger.info({ err: error }, "createDraft (licence v2) blocked");
+    else logger.error({ err: error }, "createDraft (licence v2) failed");
+    return res.status(code).json({ status: "error", message: error.message || "Failed to create draft application" });
   }
 };
 
@@ -59,6 +61,7 @@ export const listMyApplications = async (req, res) => {
 export const getApplication = async (req, res) => {
   try {
     const userId = uid(req);
+    if (!userId) return res.status(401).json({ status: "error", message: "Invalid session" });
     const app = await loadFullApplication(req.tenantDb, req.params.id, { ownerUserId: userId });
     if (!app) return res.status(404).json({ status: "error", message: "Application not found" });
     return res.status(200).json({ status: "success", data: serializeApplication(app) });
@@ -72,6 +75,7 @@ export const getApplication = async (req, res) => {
 export const saveDraft = async (req, res) => {
   try {
     const userId = uid(req);
+    if (!userId) return res.status(401).json({ status: "error", message: "Invalid session" });
     const app = await req.tenantDb.LicenceApplication.findOne({
       where: { id: req.params.id, userId, applicationVersion: APPLICATION_VERSION_V2 },
     });
@@ -96,6 +100,7 @@ export const saveDraft = async (req, res) => {
 export const submitApplication = async (req, res) => {
   try {
     const userId = uid(req);
+    if (!userId) return res.status(401).json({ status: "error", message: "Invalid session" });
     const app = await loadFullApplication(req.tenantDb, req.params.id, { ownerUserId: userId });
     if (!app) return res.status(404).json({ status: "error", message: "Application not found" });
     if (!EDITABLE.includes(app.status)) {
@@ -145,6 +150,7 @@ export const submitApplication = async (req, res) => {
 export const uploadAppendixDocument = async (req, res) => {
   try {
     const userId = uid(req);
+    if (!userId) return res.status(401).json({ status: "error", message: "Invalid session" });
     const app = await req.tenantDb.LicenceApplication.findOne({
       where: { id: req.params.id, userId, applicationVersion: APPLICATION_VERSION_V2 },
     });
@@ -171,6 +177,7 @@ export const uploadAppendixDocument = async (req, res) => {
 export const deleteDraft = async (req, res) => {
   try {
     const userId = uid(req);
+    if (!userId) return res.status(401).json({ status: "error", message: "Invalid session" });
     const app = await req.tenantDb.LicenceApplication.findOne({
       where: { id: req.params.id, userId, applicationVersion: APPLICATION_VERSION_V2 },
     });
@@ -183,6 +190,25 @@ export const deleteDraft = async (req, res) => {
   } catch (error) {
     logger.error({ err: error }, "deleteDraft (licence v2) failed");
     return res.status(500).json({ status: "error", message: "Failed to delete draft" });
+  }
+};
+
+/** GET /api/business/licence/v2/applications/:id/audit-trail — immutable event history. */
+export const getApplicationAuditTrail = async (req, res) => {
+  try {
+    const userId = uid(req);
+    if (!userId) return res.status(401).json({ status: "error", message: "Invalid session" });
+    // Ownership: sponsors may only read the trail for their own application.
+    const app = await req.tenantDb.LicenceApplication.findOne({
+      where: { id: req.params.id, userId },
+      attributes: ["id"],
+    });
+    if (!app) return res.status(404).json({ status: "error", message: "Application not found" });
+    const entries = await getLicenceAuditTrail(req.tenantDb, app.id);
+    return res.status(200).json({ status: "success", data: entries });
+  } catch (error) {
+    logger.error({ err: error }, "getApplicationAuditTrail (licence v2) failed");
+    return res.status(500).json({ status: "error", message: "Failed to fetch audit trail" });
   }
 };
 

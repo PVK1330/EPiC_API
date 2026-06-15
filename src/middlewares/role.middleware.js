@@ -11,6 +11,34 @@ export const ROLES = {
   SUPERADMIN: 5,
 };
 
+/**
+ * Normalise a raw role_id value from a JWT payload to a safe integer.
+ * JWT libraries may serialise numeric fields as strings ("3" instead of 3),
+ * so every comparison against the ROLES constants must go through this helper.
+ * Returns NaN when the value cannot be converted to a positive finite integer
+ * (null, undefined, "abc", negative numbers, Infinity).
+ */
+function toRoleId(raw) {
+  const id = Number(raw);
+  return Number.isFinite(id) && id > 0 ? id : NaN;
+}
+
+/**
+ * Canonical role arrays for router-level checkRole() guards.
+ *
+ * Using named exports rather than inline literals ensures that SUPERADMIN is
+ * never accidentally omitted from a route file, and that adding a new
+ * privileged role requires a change in only one place.
+ *
+ *   ADMIN_ROLES  — routes restricted to organisation admins and the platform
+ *                  superadmin (e.g. admin licence management).
+ *   STAFF_ROLES  — routes open to caseworkers, admins, and superadmin
+ *                  (e.g. caseworker review panel; inner guards such as
+ *                  ensureAssignedCaseworker provide the per-application check).
+ */
+export const ADMIN_ROLES = [ROLES.ADMIN, ROLES.SUPERADMIN];
+export const STAFF_ROLES = [ROLES.CASEWORKER, ROLES.ADMIN, ROLES.SUPERADMIN];
+
 /** Organisation admins and platform superadmins have unrestricted access. */
 export function hasFullAccessRole(roleId) {
   const id = Number(roleId);
@@ -27,7 +55,12 @@ export const checkRole = (allowedRoles) => {
       return ApiResponse.unauthorized(res, "Authentication required");
     }
 
-    if (allowedRoles.includes(req.user.role_id)) {
+    const roleId = toRoleId(req.user.role_id);
+    if (Number.isNaN(roleId)) {
+      return ApiResponse.forbidden(res, "Token contains an invalid role identifier");
+    }
+
+    if (allowedRoles.includes(roleId)) {
       return next();
     }
 
@@ -100,7 +133,10 @@ export const ensureSelfOrRole = (allowedRoles = [], options = {}) => {
     }
 
     // Privileged roles (e.g. admin / caseworker) get through unconditionally.
-    if (allowedRoles.includes(req.user.role_id)) {
+    // Normalise to a number so "3" (string from JWT) matches ROLES.ADMIN (3).
+    // NaN falls through naturally — the self-access check below still applies.
+    const roleId = toRoleId(req.user.role_id);
+    if (!Number.isNaN(roleId) && allowedRoles.includes(roleId)) {
       return next();
     }
 

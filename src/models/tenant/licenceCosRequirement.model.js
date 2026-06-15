@@ -18,13 +18,15 @@ export default (sequelize, DataTypes) => {
       },
       socCode: { type: DataTypes.STRING(10), allowNull: true, field: "soc_code" },
       roleTitle: { type: DataTypes.STRING(255), allowNull: true, field: "role_title" },
+      numberOfWorkers: { type: DataTypes.SMALLINT, allowNull: true, defaultValue: 1, field: "number_of_workers" },
       salary: { type: DataTypes.DECIMAL(12, 2), allowNull: true },
       salaryCurrency: { type: DataTypes.STRING(3), allowNull: true, defaultValue: "GBP", field: "salary_currency" },
+      sponsorshipDurationMonths: { type: DataTypes.SMALLINT, allowNull: true, field: "sponsorship_duration_months" },
+      // Retained for legacy V1 data — not collected at licence application stage.
       candidateName: { type: DataTypes.STRING(255), allowNull: true, field: "candidate_name" },
       candidateNationality: { type: DataTypes.STRING(100), allowNull: true, field: "candidate_nationality" },
       candidateDob: { type: DataTypes.DATEONLY, allowNull: true, field: "candidate_dob" },
       candidateEmail: { type: DataTypes.STRING(255), allowNull: true, field: "candidate_email" },
-      sponsorshipDurationMonths: { type: DataTypes.SMALLINT, allowNull: true, field: "sponsorship_duration_months" },
     },
     {
       tableName: "licence_cos_requirements",

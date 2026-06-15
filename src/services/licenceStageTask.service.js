@@ -230,6 +230,15 @@ function deriveStageCompletion(app) {
     key_personnel:                  !!app.authorisingOfficer,
     declarations:                   !!(app.declaration && app.declaration.accuracyConfirmed),
     payment:                        submitted || app.fee?.total != null,
+    // Intake stages (orders 9-10) — status-inferred, same pattern as Phase 2.
+    // Intake form and document data live in separate tables not included in the
+    // V2 serializer shape, so we use application status as the completion proxy:
+    //   - information form: considered done once the application is under active
+    //     review (caseworker has received and acknowledged it — "Under Review" or beyond).
+    //   - document checklist: considered done once government registration has been
+    //     triggered, which the engine only allows after all intake docs are verified.
+    intake_information_form:        infoProvided,   // Under Review / Info Requested / Gov Processing / Decision Pending / Approved
+    intake_document_checklist:      govActive,      // Government Processing / Decision Pending / Approved
     // Phase 2 — government pipeline (status-inferred until tracking data is in shape)
     sponsor_information_provision:  infoProvided,
     government_sms_registration:    govActive,
@@ -337,7 +346,10 @@ function pickAssignee(role, recipients) {
   switch (role) {
     case "sponsor": return recipients.sponsor;
     case "admin": return recipients.admin;
-    case "caseworker": return recipients.caseworkers[0] || null;
+    // Return a display-only placeholder when no caseworker is assigned yet.
+    // userId stays null so no fake ID is written; the real values are filled
+    // in by the first patch branch in seedStageRows once a caseworker is assigned.
+    case "caseworker": return recipients.caseworkers[0] || { userId: null, name: "Awaiting Assignment", email: null };
     case "candidate": return recipients.candidate;
     default: return null;
   }
@@ -345,13 +357,76 @@ function pickAssignee(role, recipients) {
 
 // ─── Seeding & assignee sync ────────────────────────────────────────────────────
 
+/** Seed/update all role tasks for a single stage definition. */
+async function seedStageRows(tenantDb, application, stage, { org, completed, recipients }) {
+  const rows = [];
+  let failures = 0;
+  for (const role of STAGE_ROLE_KEYS) {
+    const taskText = stage.tasks[role];
+    if (!taskText) continue;
+    try {
+      const assignee = pickAssignee(role, recipients);
+      const autoComplete = roleAutoCompletes(role, completed.has(stage.key), application.status);
+
+      const [row, isNew] = await tenantDb.LicenceStageTask.findOrCreate({
+        where: { licenceApplicationId: application.id, stageKey: stage.key, role },
+        defaults: {
+          organisationId: org,
+          stageOrder: stage.order,
+          role,
+          title: taskText,
+          description: stage.title,
+          assignedToUserId: assignee?.userId ?? null,
+          assigneeName: assignee?.name ?? null,
+          assigneeEmail: assignee?.email ?? null,
+          status: autoComplete ? "completed" : "pending",
+          completedAt: autoComplete ? new Date() : null,
+          metadata: { govSection: stage.govSection },
+        },
+      });
+
+      if (!isNew) {
+        const patch = {};
+        if (assignee?.userId != null && row.assignedToUserId !== assignee.userId) {
+          patch.assignedToUserId = assignee.userId;
+          patch.assigneeName = assignee.name ?? null;
+          patch.assigneeEmail = assignee.email ?? null;
+        } else if (assignee && row.assignedToUserId == null && (assignee.name || assignee.email)) {
+          // Only write if the value actually changes (avoids a DB write every call
+          // when the placeholder is already stored and no caseworker is assigned).
+          const newName  = assignee.name  ?? null;
+          const newEmail = assignee.email ?? null;
+          if (newName  !== row.assigneeName)  patch.assigneeName  = newName;
+          if (newEmail !== row.assigneeEmail) patch.assigneeEmail = newEmail;
+        }
+        if (row.status !== "completed" && autoComplete) {
+          patch.status = "completed";
+          patch.completedAt = new Date();
+        }
+        if (Object.keys(patch).length) await row.update(patch);
+      }
+      rows.push(row);
+    } catch (err) {
+      failures += 1;
+      logger.error({ err, applicationId: application.id, stageKey: stage.key, role }, "seedStageRows: row failed");
+    }
+  }
+  if (failures) logger.warn({ applicationId: application.id, failures, stageKey: stage.key }, "seedStageRows: completed with failures");
+  return rows;
+}
+
 /**
- * Idempotently ensure a task row exists for every (stage, role) of an
- * application, with the responsible person resolved and the initial status
- * inferred from the application's own data. Safe to call repeatedly — it never
- * un-completes a task that was completed, and only fills missing assignees.
+ * Idempotently seed task rows for the CURRENT active stage only.
  *
- * @returns {Promise<Array>} all stage-task rows for the application.
+ * Stages are unlocked one at a time: the next stage is seeded only after every
+ * task in the current stage has been marked completed. For terminal statuses
+ * (Approved / Rejected) all remaining stages are seeded at once so the full
+ * history is visible in the panel.
+ *
+ * Safe to call repeatedly — never un-completes a previously completed task and
+ * only fills missing assignees.
+ *
+ * @returns {Promise<Array>} all existing stage-task rows for the application.
  */
 export async function ensureStageTasks(tenantDb, applicationOrId, { req = null, organisationId = null } = {}) {
   if (!tenantDb?.LicenceStageTask) return [];
@@ -365,66 +440,45 @@ export async function ensureStageTasks(tenantDb, applicationOrId, { req = null, 
   const appShape = await buildAppShape(tenantDb, application);
   const { completed } = deriveStageCompletion(appShape);
   const recipients = await resolveRoleRecipients(tenantDb, application);
+  const ctx = { org, completed, recipients };
 
-  const rows = [];
-  let failures = 0;
-  for (const stage of LICENCE_STAGE_DEFINITIONS) {
-    for (const role of STAGE_ROLE_KEYS) {
-      const taskText = stage.tasks[role];
-      if (!taskText) continue;
-      // Isolate each row so one DB error can't abort the whole seed (leaving the
-      // application with a half-built, misaligned task set).
-      try {
-        const assignee = pickAssignee(role, recipients);
-        const autoComplete = roleAutoCompletes(role, completed.has(stage.key), application.status);
+  // For terminal states seed all remaining stages so the full panel is populated.
+  const seedAll = ["Approved", "Rejected"].includes(application.status);
 
-        const [row, isNew] = await tenantDb.LicenceStageTask.findOrCreate({
-          where: { licenceApplicationId: application.id, stageKey: stage.key, role },
-          defaults: {
-            organisationId: org,
-            stageOrder: stage.order,
-            role,
-            title: taskText,
-            description: stage.title,
-            assignedToUserId: assignee?.userId ?? null,
-            assigneeName: assignee?.name ?? null,
-            assigneeEmail: assignee?.email ?? null,
-            status: autoComplete ? "completed" : "pending",
-            completedAt: autoComplete ? new Date() : null,
-            metadata: { govSection: stage.govSection },
-          },
-        });
+  // Load existing rows to decide which stage to unlock next.
+  const allRows = await tenantDb.LicenceStageTask.findAll({
+    where: { licenceApplicationId: application.id },
+    order: [["stageOrder", "ASC"]],
+  });
+  const byStage = new Map();
+  for (const r of allRows) {
+    if (!byStage.has(r.stageKey)) byStage.set(r.stageKey, []);
+    byStage.get(r.stageKey).push(r);
+  }
 
-        if (!isNew) {
-          const patch = {};
-          // Fill / refresh assignee when newly resolvable.
-          if (assignee?.userId != null && row.assignedToUserId !== assignee.userId) {
-            patch.assignedToUserId = assignee.userId;
-            patch.assigneeName = assignee.name ?? null;
-            patch.assigneeEmail = assignee.email ?? null;
-          } else if (assignee && row.assignedToUserId == null && (assignee.name || assignee.email)) {
-            // Candidate (no user id) — keep the contact snapshot fresh.
-            patch.assigneeName = assignee.name ?? row.assigneeName;
-            patch.assigneeEmail = assignee.email ?? row.assigneeEmail;
-          }
-          // Auto-complete from data, but never revert a manually/previously completed task.
-          if (row.status !== "completed" && autoComplete) {
-            patch.status = "completed";
-            patch.completedAt = new Date();
-          }
-          if (Object.keys(patch).length) await row.update(patch);
-        }
-        rows.push(row);
-      } catch (err) {
-        failures += 1;
-        logger.error({ err, applicationId: application.id, stageKey: stage.key, role }, "ensureStageTasks: row failed");
-      }
+  if (seedAll) {
+    // Seed every stage that doesn't have a full set of rows yet.
+    for (const stage of LICENCE_STAGE_DEFINITIONS) {
+      await seedStageRows(tenantDb, application, stage, ctx);
+    }
+  } else {
+    // Sequential: walk stages in order and seed the first one that is not yet
+    // fully completed. Stages that have all rows completed are skipped.
+    for (const stage of LICENCE_STAGE_DEFINITIONS) {
+      const stageRows = byStage.get(stage.key) || [];
+      const allComplete = stageRows.length > 0 && stageRows.every((r) => r.status === "completed");
+      if (allComplete) continue; // already done — advance to next
+      // This is the active stage: seed/update it, then stop.
+      await seedStageRows(tenantDb, application, stage, ctx);
+      break;
     }
   }
-  if (failures) {
-    logger.warn({ applicationId: application.id, failures }, "ensureStageTasks: completed with some row failures");
-  }
-  return rows;
+
+  // Return the full current snapshot (re-query so callers always see fresh data).
+  return tenantDb.LicenceStageTask.findAll({
+    where: { licenceApplicationId: application.id },
+    order: [["stageOrder", "ASC"]],
+  });
 }
 
 /**

@@ -172,7 +172,7 @@ export const updateLicenceApplicationStatus = async (req, res) => {
 
     const previousStatus = application.status;
 
-    const transitionCheck = validateTransition(WORKFLOW_TYPES.LICENCE, previousStatus, status);
+    const transitionCheck = validateTransition(WORKFLOW_TYPES.LICENCE, previousStatus, status, { roleId: req.user.role_id });
     if (!transitionCheck.valid) {
       return res.status(400).json({ status: "error", message: transitionCheck.message });
     }
@@ -332,6 +332,18 @@ export const requestAdditionalInformation = async (req, res) => {
       req,
     });
 
+    // Re-sync stage tasks so the sponsor gets an actionable task row in their
+    // Pending Actions tab. The status change to "Information Requested" shifts
+    // deriveStageCompletion() output, which seedStageRows() uses to decide
+    // which role tasks are auto-completed vs left pending. Without this call,
+    // the sponsor-facing stages panel and task list stay stale until the next
+    // unrelated trigger. Best-effort — never blocks the response.
+    try {
+      await ensureStageTasks(req.tenantDb, application, { req });
+    } catch (err) {
+      logger.error({ err }, "ensureStageTasks failed on information request");
+    }
+
     res.status(200).json({
       status: "success",
       message: "Information request sent to business successfully",
@@ -370,9 +382,14 @@ export const assignCaseworker = async (req, res) => {
     const previousAssignment = extractCaseworkerIds(application.assignedcaseworkerId);
     const previousStatus = application.status;
 
-    const transitionCheck = validateTransition(WORKFLOW_TYPES.LICENCE, previousStatus, "Under Review");
-    if (!transitionCheck.valid) {
-      return res.status(400).json({ status: "error", message: transitionCheck.message });
+    // Only validate the FSM transition when the status is actually changing.
+    // Re-assigning a caseworker on an already-Under-Review application is a
+    // reassignment, not a status change, so no transition check is needed.
+    if (previousStatus !== "Under Review") {
+      const transitionCheck = validateTransition(WORKFLOW_TYPES.LICENCE, previousStatus, "Under Review");
+      if (!transitionCheck.valid) {
+        return res.status(400).json({ status: "error", message: transitionCheck.message });
+      }
     }
 
     application.assignedcaseworkerId = caseworkerIds;
