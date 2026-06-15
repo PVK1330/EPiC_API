@@ -16,6 +16,8 @@ import {
   verifyDocument,
   rejectDocument,
   requestDocumentInfo,
+  verifyAppendixDocument,
+  rejectAppendixDocument,
 } from "../../../services/licenceIntake.service.js";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -143,6 +145,46 @@ export async function requestCaseworkerDocumentInfo(req, res) {
     return res.json({ success: true, message: "Information requested", data: doc });
   } catch (err) {
     logger.error({ err }, "requestCaseworkerDocumentInfo failed");
+    return res.status(err.statusCode || 500).json({ success: false, message: err.message });
+  }
+}
+
+// ─── Appendix document review (V2 wizard uploads) ────────────────────────────
+
+export async function verifyCaseworkerAppendixDocument(req, res) {
+  try {
+    const { id, documentId } = req.params;
+    const { notes } = req.body;
+    const caseworkerId = req.user?.userId ?? req.user?.id;
+
+    const app = await resolveApplication(req, res);
+    if (!app) return;
+
+    const doc = await verifyAppendixDocument(req.tenantDb, Number(id), Number(documentId), caseworkerId, notes, req);
+    return res.json({ success: true, message: "Appendix document verified", data: doc });
+  } catch (err) {
+    logger.error({ err }, "verifyCaseworkerAppendixDocument failed");
+    return res.status(err.statusCode || 500).json({ success: false, message: err.message });
+  }
+}
+
+export async function rejectCaseworkerAppendixDocument(req, res) {
+  try {
+    const { id, documentId } = req.params;
+    const { reason } = req.body;
+    const caseworkerId = req.user?.userId ?? req.user?.id;
+
+    if (!reason || !reason.trim()) {
+      return res.status(400).json({ success: false, message: "Rejection reason is required" });
+    }
+
+    const app = await resolveApplication(req, res);
+    if (!app) return;
+
+    const doc = await rejectAppendixDocument(req.tenantDb, Number(id), Number(documentId), reason.trim(), caseworkerId, req);
+    return res.json({ success: true, message: "Appendix document rejected", data: doc });
+  } catch (err) {
+    logger.error({ err }, "rejectCaseworkerAppendixDocument failed");
     return res.status(err.statusCode || 500).json({ success: false, message: err.message });
   }
 }

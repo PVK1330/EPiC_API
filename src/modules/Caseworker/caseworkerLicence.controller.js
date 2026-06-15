@@ -72,7 +72,7 @@ export const updateLicenceReviewStatus = async (req, res) => {
 
         const previousStatus = application.status;
 
-        const transitionCheck = validateTransition(WORKFLOW_TYPES.LICENCE, previousStatus, status);
+        const transitionCheck = validateTransition(WORKFLOW_TYPES.LICENCE, previousStatus, status, { roleId: req.user.role_id });
         if (!transitionCheck.valid) {
             return res.status(400).json({ status: 'error', message: transitionCheck.message });
         }

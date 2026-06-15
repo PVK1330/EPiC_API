@@ -17,6 +17,7 @@ import {
   statusToAuditAction,
   extractCaseworkerIds,
   LICENCE_AUDIT_ACTIONS,
+  onLicenceAssigned,
 } from "../../../services/licenceAssignment.service.js";
 import {
   listCosRequests,
@@ -26,6 +27,7 @@ import {
 } from "../../../services/cosRequest.service.js";
 import * as sponsorshipNotify from "../../../services/sponsorshipNotification.service.js";
 import { ensureStageTasks } from "../../../services/licenceStageTask.service.js";
+import { verifyAppendixDocument, rejectAppendixDocument } from "../../../services/licenceIntake.service.js";
 import { resolveLicenceDocumentPaths } from "../../../utils/licenceDocuments.util.js";
 import { validateTransition, WORKFLOW_TYPES } from "../../../services/workflowEngine.service.js";
 
@@ -172,7 +174,7 @@ export const updateLicenceApplicationStatus = async (req, res) => {
 
     const previousStatus = application.status;
 
-    const transitionCheck = validateTransition(WORKFLOW_TYPES.LICENCE, previousStatus, status);
+    const transitionCheck = validateTransition(WORKFLOW_TYPES.LICENCE, previousStatus, status, { roleId: req.user.role_id });
     if (!transitionCheck.valid) {
       return res.status(400).json({ status: "error", message: transitionCheck.message });
     }
@@ -332,6 +334,18 @@ export const requestAdditionalInformation = async (req, res) => {
       req,
     });
 
+    // Re-sync stage tasks so the sponsor gets an actionable task row in their
+    // Pending Actions tab. The status change to "Information Requested" shifts
+    // deriveStageCompletion() output, which seedStageRows() uses to decide
+    // which role tasks are auto-completed vs left pending. Without this call,
+    // the sponsor-facing stages panel and task list stay stale until the next
+    // unrelated trigger. Best-effort — never blocks the response.
+    try {
+      await ensureStageTasks(req.tenantDb, application, { req });
+    } catch (err) {
+      logger.error({ err }, "ensureStageTasks failed on information request");
+    }
+
     res.status(200).json({
       status: "success",
       message: "Information request sent to business successfully",
@@ -370,9 +384,14 @@ export const assignCaseworker = async (req, res) => {
     const previousAssignment = extractCaseworkerIds(application.assignedcaseworkerId);
     const previousStatus = application.status;
 
-    const transitionCheck = validateTransition(WORKFLOW_TYPES.LICENCE, previousStatus, "Under Review");
-    if (!transitionCheck.valid) {
-      return res.status(400).json({ status: "error", message: transitionCheck.message });
+    // Only validate the FSM transition when the status is actually changing.
+    // Re-assigning a caseworker on an already-Under-Review application is a
+    // reassignment, not a status change, so no transition check is needed.
+    if (previousStatus !== "Under Review") {
+      const transitionCheck = validateTransition(WORKFLOW_TYPES.LICENCE, previousStatus, "Under Review");
+      if (!transitionCheck.valid) {
+        return res.status(400).json({ status: "error", message: transitionCheck.message });
+      }
     }
 
     application.assignedcaseworkerId = caseworkerIds;
@@ -413,6 +432,14 @@ export const assignCaseworker = async (req, res) => {
       logger.error({ err }, "ensureStageTasks failed on caseworker assignment");
     }
 
+    // Complete the admin's enquiry_onboarding stage task now that a caseworker has
+    // been assigned. Also fires the timeline event for the assignment. Idempotent.
+    try {
+      await onLicenceAssigned({ tenantDb: req.tenantDb, application, actorUser: req.user, req });
+    } catch (err) {
+      logger.error({ err }, "onLicenceAssigned failed on caseworker assignment");
+    }
+
     res.status(200).json({
       status: "success",
       message: "Caseworkers assigned successfully",
@@ -439,7 +466,18 @@ export const deleteLicenceApplication = async (req, res) => {
       });
     }
 
-    await application.destroy(); // Soft delete
+    // Approved licences must never be deleted — they are live legal records.
+    if (application.status === "Approved") {
+      return res.status(409).json({
+        status: "error",
+        message: "Approved licence applications cannot be deleted. Archive or cancel the licence through the appropriate workflow.",
+      });
+    }
+
+    // Soft-delete: sets deleted_at; the row and all audit history remain in the DB.
+    // Child rows (stage tasks, appendix documents, audit entries) are preserved
+    // because their FK references the id column which is still present.
+    await application.destroy();
 
     res.status(200).json({
       status: "success",
@@ -450,6 +488,52 @@ export const deleteLicenceApplication = async (req, res) => {
     res.status(500).json({
       status: "error",
       message: "Failed to delete licence application",
+    });
+  }
+};
+
+/**
+ * POST /api/admin/licence/restore/:id
+ * Undelete a soft-deleted licence application. Requires the row to currently
+ * have a non-null deleted_at (i.e. have been soft-deleted). Hard-deleted rows
+ * cannot be restored.
+ */
+export const restoreLicenceApplication = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // paranoid:true means findByPk() excludes soft-deleted rows; use paranoid:false
+    // so we can restore rows that are currently soft-deleted.
+    const application = await req.tenantDb.LicenceApplication.findByPk(id, {
+      paranoid: false,
+    });
+
+    if (!application) {
+      return res.status(404).json({
+        status: "error",
+        message: "Licence application not found",
+      });
+    }
+
+    if (!application.deletedAt) {
+      return res.status(409).json({
+        status: "error",
+        message: "Licence application is not deleted; nothing to restore.",
+      });
+    }
+
+    await application.restore();
+
+    res.status(200).json({
+      status: "success",
+      message: "Licence application restored successfully",
+      data: application,
+    });
+  } catch (error) {
+    logger.error({ err: error }, "Error restoring licence application");
+    res.status(500).json({
+      status: "error",
+      message: "Failed to restore licence application",
     });
   }
 };
@@ -579,5 +663,36 @@ export const requestInfoForCosRequestAdmin = async (req, res) => {
     const code = error?.statusCode || 500;
     if (code >= 500) logger.error({ err: error }, "Error requesting CoS information");
     res.status(code).json({ status: "error", message: code < 500 ? (error.message || "Failed to request information") : "Failed to request information" });
+  }
+};
+
+export const verifyAdminAppendixDocument = async (req, res) => {
+  try {
+    const { id, documentId } = req.params;
+    const { notes } = req.body;
+    const adminId = req.user?.userId ?? req.user?.id ?? null;
+    const doc = await verifyAppendixDocument(req.tenantDb, Number(id), Number(documentId), adminId, notes, req);
+    res.status(200).json({ status: "success", message: "Appendix document verified", data: doc });
+  } catch (err) {
+    const code = err.statusCode || 500;
+    if (code >= 500) logger.error({ err }, "verifyAdminAppendixDocument failed");
+    res.status(code).json({ status: "error", message: err.message || "Failed to verify document" });
+  }
+};
+
+export const rejectAdminAppendixDocument = async (req, res) => {
+  try {
+    const { id, documentId } = req.params;
+    const { reason } = req.body;
+    if (!reason || !String(reason).trim()) {
+      return res.status(400).json({ status: "error", message: "Rejection reason is required" });
+    }
+    const adminId = req.user?.userId ?? req.user?.id ?? null;
+    const doc = await rejectAppendixDocument(req.tenantDb, Number(id), Number(documentId), String(reason).trim(), adminId, req);
+    res.status(200).json({ status: "success", message: "Appendix document rejected", data: doc });
+  } catch (err) {
+    const code = err.statusCode || 500;
+    if (code >= 500) logger.error({ err }, "rejectAdminAppendixDocument failed");
+    res.status(code).json({ status: "error", message: err.message || "Failed to reject document" });
   }
 };

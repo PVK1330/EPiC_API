@@ -34,6 +34,7 @@ export const submitLicenceApplication = async (req, res) => {
         const applicationData = {
             ...req.body,
             userId,
+            organisationId: req.user.organisation_id ? Number(req.user.organisation_id) : null,
             status: 'Pending',
             documents: req.files ? req.files.map(file => file.path) : []
         };
@@ -316,6 +317,7 @@ export const renewLicenceApplication = async (req, res) => {
 
         const newApplication = await req.tenantDb.LicenceApplication.create({
             userId,
+            organisationId: existingApp.organisationId ?? (req.user.organisation_id ? Number(req.user.organisation_id) : null),
             companyName: existingApp.companyName,
             tradingName: existingApp.tradingName,
             registrationNumber: existingApp.registrationNumber,

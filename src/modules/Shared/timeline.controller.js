@@ -1,3 +1,5 @@
+import logger from "../../utils/logger.js";
+
 /**
  * Get timeline entries for a specific case
  */

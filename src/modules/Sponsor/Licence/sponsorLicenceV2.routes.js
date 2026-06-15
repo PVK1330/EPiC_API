@@ -11,6 +11,7 @@ import {
   uploadAppendixDocument,
   deleteDraft,
   feePreview,
+  getApplicationAuditTrail,
 } from "./sponsorLicenceV2.controller.js";
 import { getLicenceStages, completeLicenceStageTask } from "../../Shared/Licence/licenceStage.controller.js";
 
@@ -27,6 +28,9 @@ router.put("/applications/:id", validate(saveDraftSchema), saveDraft);
 router.delete("/applications/:id", deleteDraft);
 router.post("/applications/:id/submit", submitApplication);
 router.post("/applications/:id/appendix-documents/:docId/file", upload.single("file"), uploadAppendixDocument);
+
+// Audit trail — immutable event history for the Timeline tab.
+router.get("/applications/:id/audit-trail", getApplicationAuditTrail);
 
 // Stages panel — the owning sponsor views their lifecycle and completes their tasks.
 router.get("/applications/:id/stages", getLicenceStages);

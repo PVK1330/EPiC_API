@@ -419,6 +419,94 @@ export async function requestDocumentInfo(tenantDb, licenceApplicationId, organi
   return doc;
 }
 
+// ─── Appendix document review (V2 wizard — LicenceAppendixDocument) ──────────
+
+/** Caseworker marks an appendix (Appendix A) document as Verified. */
+export async function verifyAppendixDocument(tenantDb, licenceApplicationId, documentId, caseworkerId, notes, req) {
+  const doc = await tenantDb.LicenceAppendixDocument.findOne({
+    where: { id: documentId, licenceApplicationId },
+  });
+  if (!doc) {
+    const err = new Error("Appendix document not found");
+    err.statusCode = 404;
+    throw err;
+  }
+  if (doc.verificationStatus === "Verified") return doc; // idempotent
+
+  doc.verificationStatus = "Verified";
+  doc.receivedStatus = "Received";
+  doc.verifiedBy = caseworkerId ?? null;
+  doc.verifiedAt = new Date();
+  if (notes) doc.notes = notes;
+  await doc.save();
+
+  const application = await tenantDb.LicenceApplication.findByPk(licenceApplicationId);
+
+  await recordAuditLog({
+    tenantDb,
+    userId: caseworkerId,
+    action: "APPENDIX_DOCUMENT_VERIFIED",
+    resource: `LicenceApplication:${licenceApplicationId}`,
+    status: "Success",
+    details: `Appendix document verified: "${doc.documentName}" (key: ${doc.documentKey})`,
+    req,
+    organisationId: application?.organisationId,
+  }).catch((err) => logger.error({ err }, "verifyAppendixDocument: audit failed"));
+
+  return doc;
+}
+
+/** Caseworker rejects an appendix document and notifies the sponsor to re-upload. */
+export async function rejectAppendixDocument(tenantDb, licenceApplicationId, documentId, reason, caseworkerId, req) {
+  const doc = await tenantDb.LicenceAppendixDocument.findOne({
+    where: { id: documentId, licenceApplicationId },
+  });
+  if (!doc) {
+    const err = new Error("Appendix document not found");
+    err.statusCode = 404;
+    throw err;
+  }
+
+  doc.verificationStatus = "Rejected";
+  doc.verifiedBy = null;
+  doc.verifiedAt = null;
+  doc.notes = reason || "No reason provided";
+  await doc.save();
+
+  const application = await tenantDb.LicenceApplication.findByPk(licenceApplicationId);
+
+  await recordAuditLog({
+    tenantDb,
+    userId: caseworkerId,
+    action: "APPENDIX_DOCUMENT_REJECTED",
+    resource: `LicenceApplication:${licenceApplicationId}`,
+    status: "Success",
+    details: `Appendix document rejected: "${doc.documentName}". Reason: ${doc.notes}`,
+    req,
+    organisationId: application?.organisationId,
+  }).catch((err) => logger.error({ err }, "rejectAppendixDocument: audit failed"));
+
+  if (application?.userId) {
+    notify.deliver({
+      tenantDb,
+      recipientUserId: application.userId,
+      type: "warning",
+      priority: "high",
+      category: "sponsorship",
+      title: `Document rejected: ${doc.documentName}`,
+      message: `Your document "${doc.documentName}" was rejected. Reason: ${doc.notes}. Please re-upload a corrected copy.`,
+      entityType: "licence_application",
+      entityId: licenceApplicationId,
+      actionType: "appendix_document_rejected",
+      actionUrl: "/business/licence-process",
+      req,
+      organisationId: application?.organisationId,
+    }).catch((err) => logger.error({ err }, "rejectAppendixDocument: notification failed"));
+  }
+
+  return doc;
+}
+
 // ─── Readiness check ──────────────────────────────────────────────────────────
 
 /**

@@ -269,6 +269,8 @@ export function buildDb(sequelize) {
   db.Case.hasMany(db.Appointment, { foreignKey: "case_id", as: "appointments" });
   db.User.hasMany(db.LicenceApplication, { foreignKey: "userId", as: "licenceApplications" });
   db.LicenceApplication.belongsTo(db.User, { foreignKey: "userId", as: "user" });
+  db.LicenceApplication.belongsTo(db.Organisation, { foreignKey: "organisationId", as: "organisation" });
+  db.Organisation.hasMany(db.LicenceApplication, { foreignKey: "organisationId", as: "licenceApplications" });
 
   db.LicenceApplication.hasMany(db.LicenceApplicationAudit, { foreignKey: "licenceApplicationId", as: "auditTrail" });
   db.LicenceApplicationAudit.belongsTo(db.LicenceApplication, { foreignKey: "licenceApplicationId", as: "application" });

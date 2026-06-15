@@ -27,10 +27,17 @@ const CASE_TRANSITIONS = {
   case_closure: []
 };
 
+// Role IDs permitted to record a final 'Approved' decision on a licence.
+// Defined inline to avoid a circular import from role.middleware.js.
+//   3 = ROLES.ADMIN   5 = ROLES.SUPERADMIN
+const LICENCE_APPROVER_ROLE_IDS = new Set([3, 5]);
+
 const LICENCE_TRANSITIONS = {
   'Draft':                  ['Pending'],
   'Pending':                ['Under Review', 'Information Requested', 'Approved', 'Rejected'],
-  'Under Review':           ['Information Requested', 'Government Processing', 'Approved', 'Rejected'],
+  // 'Approved' removed: no-one may skip Government Processing from Under Review.
+  // The only legal path to Approved is: Government Processing → Decision Pending → Approved.
+  'Under Review':           ['Information Requested', 'Government Processing', 'Rejected'],
   'Information Requested':  ['Under Review', 'Rejected'],
   'Government Processing':  ['Decision Pending', 'Information Requested', 'Rejected'],
   'Decision Pending':       ['Approved', 'Rejected'],
@@ -78,23 +85,53 @@ const MATRICES = {
 };
 
 /**
- * Validates if a transition is allowed based on the strict matrix
+ * Validates if a transition is allowed based on the strict matrix.
+ *
+ * @param {string} workflowType   - One of WORKFLOW_TYPES.*
+ * @param {string} currentState   - The application's present status (must not be null/undefined)
+ * @param {string} nextState      - The desired target status
+ * @param {{ roleId?: number|string }} [options]
+ *   roleId — when provided, enforces role-aware constraints on top of the matrix.
+ *   For LICENCE workflows, only ADMIN and SUPERADMIN may record 'Approved';
+ *   caseworkers must advance the case to 'Decision Pending' for an admin to confirm.
+ * @returns {{ valid: boolean, message?: string }}
  */
-export function validateTransition(workflowType, currentState, nextState) {
+export function validateTransition(workflowType, currentState, nextState, options = {}) {
   const matrix = MATRICES[workflowType];
-  if (!matrix) return { valid: true }; // Opt-out if workflow type not registered
+  // Unknown workflow types are rejected — a missing matrix entry is a programmer error,
+  // not a signal to let all transitions through.
+  if (!matrix) {
+    return { valid: false, message: `Unknown workflow type '${workflowType}'. Transition blocked.` };
+  }
 
-  // If there's no current state, assume it's the beginning of the flow (valid)
-  if (!currentState) return { valid: true };
+  // A null/undefined currentState is not a valid starting point; callers must
+  // supply the application's actual status before requesting a transition.
+  if (!currentState) {
+    return { valid: false, message: 'Current state is required for transition validation.' };
+  }
 
   const allowedNext = matrix[currentState];
-  
+
   if (!allowedNext) {
     return { valid: false, message: `Current state '${currentState}' is terminal or unrecognized.` };
   }
 
   if (!allowedNext.includes(nextState)) {
     return { valid: false, message: `Invalid transition from '${currentState}' to '${nextState}'. Allowed: ${allowedNext.join(', ')}` };
+  }
+
+  // Role-aware constraint for the LICENCE workflow: only ADMIN / SUPERADMIN may
+  // record an 'Approved' outcome. Caseworkers drive the pipeline forward
+  // (Under Review → Government Processing → Decision Pending) but cannot make
+  // the final approval call — that belongs to an administrator.
+  if (workflowType === WORKFLOW_TYPES.LICENCE && nextState === 'Approved' && options.roleId !== undefined) {
+    const roleId = Number(options.roleId);
+    if (!LICENCE_APPROVER_ROLE_IDS.has(roleId)) {
+      return {
+        valid: false,
+        message: `Only administrators may record a licence approval. Advance the case to 'Decision Pending' and ask an administrator to confirm the final decision.`
+      };
+    }
   }
 
   return { valid: true };

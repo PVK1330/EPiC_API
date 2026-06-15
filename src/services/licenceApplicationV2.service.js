@@ -1,3 +1,4 @@
+import { Op } from "sequelize";
 import logger from "../utils/logger.js";
 import { computeFee } from "./licenceFee.service.js";
 
@@ -59,9 +60,49 @@ const fullIncludes = (tenantDb) => [
   { model: tenantDb.LicenceDeclaration, as: "declaration" },
 ];
 
-export async function loadFullApplication(tenantDb, id, { ownerUserId = null } = {}) {
+/**
+ * Load the full normalized V2 application graph.
+ *
+ * @param {object}  tenantDb
+ * @param {number}  id            - Application primary key.
+ * @param {object}  [opts]
+ * @param {number}  [opts.ownerUserId]
+ *   When provided, the query is owner-scoped: only the application whose
+ *   `userId` matches is returned.  Pass a positive integer for sponsor-owned
+ *   access, or omit / pass `undefined` for admin/caseworker access (no filter).
+ *
+ *   Passing `null` (which happens when the session token is missing a userId)
+ *   is treated as a programming error rather than "no filter": it throws a
+ *   401 error instead of silently exposing every application in the tenant.
+ *   The distinction is:
+ *     loadFullApplication(db, id)                → no filter (admin path)
+ *     loadFullApplication(db, id, {})             → no filter (admin path)
+ *     loadFullApplication(db, id, { ownerUserId: undefined }) → no filter (admin path)
+ *     loadFullApplication(db, id, { ownerUserId: null })      → throws 401
+ *     loadFullApplication(db, id, { ownerUserId: 0 })         → throws 401
+ *     loadFullApplication(db, id, { ownerUserId: 123 })       → filtered  (sponsor path)
+ */
+export async function loadFullApplication(tenantDb, id, { ownerUserId = undefined } = {}) {
   const where = { id, applicationVersion: APPLICATION_VERSION_V2 };
-  if (ownerUserId != null) where.userId = ownerUserId;
+
+  if (ownerUserId !== undefined) {
+    // Caller requested an ownership-scoped fetch. A null, zero, or non-integer
+    // ownerUserId means the session is invalid — throw rather than silently
+    // dropping the WHERE clause and returning data for any user.
+    if (
+      typeof ownerUserId !== "number" ||
+      !Number.isFinite(ownerUserId) ||
+      ownerUserId <= 0
+    ) {
+      const err = new Error(
+        "ownerUserId must be a positive integer for owner-scoped queries — re-authenticate and try again."
+      );
+      err.statusCode = 401;
+      throw err;
+    }
+    where.userId = ownerUserId;
+  }
+
   return tenantDb.LicenceApplication.findOne({ where, include: fullIncludes(tenantDb) });
 }
 
@@ -91,11 +132,29 @@ export async function seedAppendixDocuments(tenantDb, applicationId, organisatio
 
 /** Create a new V2 draft application (status Draft) and seed the base Appendix A list. */
 export async function createDraft({ tenantDb, userId, organisationId }) {
+  // Block if a non-terminal, non-draft application already exists.
+  // Sponsors may only re-apply once their licence is Approved (or Rejected/Cancelled).
+  const blocking = await tenantDb.LicenceApplication.findOne({
+    where: {
+      userId,
+      applicationVersion: APPLICATION_VERSION_V2,
+      status: { [Op.notIn]: ["Draft", "Rejected", "Approved"] },
+    },
+    attributes: ["id", "status"],
+  });
+  if (blocking) {
+    const err = new Error(
+      `You already have an application under review (${blocking.status}). Please wait for a decision before submitting a new one.`
+    );
+    err.statusCode = 409;
+    throw err;
+  }
+
   return tenantDb.sequelize.transaction(async (t) => {
     const app = await tenantDb.LicenceApplication.create(
       {
         userId,
-        organisation_id: organisationId ?? null,
+        organisationId: organisationId ?? null,
         type: "New",
         status: "Draft",
         applicationVersion: APPLICATION_VERSION_V2,
@@ -153,7 +212,7 @@ export async function saveDraft({ tenantDb, application, body, organisationId })
     await upsertOne(tenantDb.LicenceOrganisationInfo, appId, organisationId, body.organisationInfo, t);
     await upsertOne(tenantDb.LicenceAuthorisingOfficer, appId, organisationId, body.authorisingOfficer, t);
     await upsertOne(tenantDb.LicenceKeyContact, appId, organisationId, body.keyContact, t);
-    await upsertOne(tenantDb.LicenceDeclaration, appId, organisationId, body.declarations, t);
+    await upsertOne(tenantDb.LicenceDeclaration, appId, organisationId, body.declaration, t);
 
     await replaceChildren(tenantDb.LicenceCosRequirement, appId, organisationId, body.cosRequirements, t);
     await replaceChildren(tenantDb.LicenceLevel1User, appId, organisationId, body.level1Users, t);
@@ -221,7 +280,7 @@ export async function submitApplication({ tenantDb, application }) {
     status: "Pending",
     submittedAt: new Date(),
     currentStep: 8,
-    companyName: application.companyName || profile?.companyName || full.organisationInfo?.organisationType || "Sponsor",
+    companyName: profile?.companyName || full.organisationInfo?.organisationType || application.companyName || "Sponsor",
     registrationNumber: full.organisationInfo?.companiesHouseNumber || application.registrationNumber || null,
     licenceType: licenceTypeSummary || application.licenceType || null,
     cosAllocation: String((full.cosRequirements || []).length),
@@ -263,12 +322,9 @@ export function serializeApplication(app) {
     cosRequirements: (j.cosRequirements || []).map((c) => ({
       socCode: c.socCode ?? "",
       roleTitle: c.roleTitle ?? "",
+      numberOfWorkers: c.numberOfWorkers ?? 1,
       salary: c.salary ?? "",
       salaryCurrency: c.salaryCurrency ?? "GBP",
-      candidateName: c.candidateName ?? "",
-      candidateNationality: c.candidateNationality ?? "",
-      candidateDob: c.candidateDob ?? "",
-      candidateEmail: c.candidateEmail ?? "",
       sponsorshipDurationMonths: c.sponsorshipDurationMonths ?? "",
     })),
     appendixDocuments: j.appendixDocuments || [],

@@ -6,6 +6,7 @@ import {
     requestAdditionalInformation,
     assignCaseworker,
     deleteLicenceApplication,
+    restoreLicenceApplication,
     updateLicenceApplicationByAdmin,
     getCosRequests,
     assignCosRequestToCaseworker,
@@ -13,14 +14,16 @@ import {
     rejectCosRequest,
     requestInfoForCosRequestAdmin,
     getLicenceApplicationV2,
-    downloadLicenceDocument
+    downloadLicenceDocument,
+    verifyAdminAppendixDocument,
+    rejectAdminAppendixDocument,
 } from './licenceManagement.controller.js';
 import {
     generateLicenceCredentials,
     resendLicenceCredentials,
 } from './adminLicenceGovernment.controller.js';
 import { verifyTokenAndTenant } from '../../../middlewares/authStack.middleware.js';
-import { checkRole, ROLES } from '../../../middlewares/role.middleware.js';
+import { checkRole, ADMIN_ROLES } from '../../../middlewares/role.middleware.js';
 import { validate } from '../../../middlewares/validate.middleware.js';
 import { getLicenceStages, completeLicenceStageTask } from '../../Shared/Licence/licenceStage.controller.js';
 import { generateCredentialsSchema } from '../../../validations/licenceGovernment.validation.js';
@@ -29,7 +32,7 @@ import { adminUpdateLicenceSchema } from '../../../validations/licenceApplicatio
 const router = express.Router();
 
 router.use(verifyTokenAndTenant);
-router.use(checkRole([ROLES.ADMIN]));
+router.use(checkRole(ADMIN_ROLES));
 
 router.get("/all", getAllLicenceApplications);
 router.get("/v2/:id", getLicenceApplicationV2);
@@ -48,7 +51,12 @@ router.patch("/cos-requests/:id/approve", approveCosRequest);
 router.patch("/cos-requests/:id/reject", rejectCosRequest);
 router.patch("/cos-requests/:id/request-info", requestInfoForCosRequestAdmin);
 router.delete("/delete/:id", deleteLicenceApplication);
+router.post("/restore/:id", restoreLicenceApplication);
 router.put("/update/:id", validate(adminUpdateLicenceSchema, "adminUpdateLicenceSchema"), updateLicenceApplicationByAdmin);
+
+// Appendix A documents — admin verify / reject (same as caseworker but admin-gated).
+router.patch("/:id/appendix-documents/:documentId/verify", verifyAdminAppendixDocument);
+router.patch("/:id/appendix-documents/:documentId/reject", rejectAdminAppendixDocument);
 
 // Government credential management (Phase 3).
 router.post("/:id/generate-credentials", validate(generateCredentialsSchema), generateLicenceCredentials);
