@@ -121,7 +121,7 @@ const draftBody = z
     authorisingOfficer: authorisingOfficerSchema.optional(),
     keyContact: keyContactSchema.optional(),
     level1Users: z.array(level1UserSchema).max(20).optional(),
-    declarations: declarationsSchema.optional(),
+    declaration: declarationsSchema.optional(),
   })
   .strict();
 

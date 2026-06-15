@@ -131,15 +131,16 @@ export async function recordLicenceAudit({
 
 /**
  * Orchestrator called immediately after a caseworker is assigned to a licence
- * application. Performs two post-assignment side-effects:
+ * application. Performs one post-assignment side-effect:
  *
- *   1. Records a LICENCE_ASSIGNED entry in the global audit log.
- *   2. Marks the admin's `enquiry_onboarding` stage task as complete — assigning
- *      a caseworker is the final admin action in the intake stage.
+ *   - Marks the admin's `enquiry_onboarding` stage task as complete. The admin
+ *     has triaged the enquiry and assigned a caseworker — their intake task is done.
  *
- * Uses a dynamic import of licenceStageTask.service.js to avoid the circular
- * static import (licenceStageTask already imports extractCaseworkerIds from here).
- * Both side-effects are best-effort and never throw.
+ * Audit and notifications are handled upstream by recordLicenceAudit() and
+ * sponsorshipNotify.licenceAssigned(), so this function does NOT re-write them.
+ * Dynamic import of licenceStageTask.service.js avoids the circular static import
+ * (licenceStageTask already imports extractCaseworkerIds from here).
+ * Best-effort — never throws.
  *
  * @param {object} opts
  * @param {object} opts.tenantDb
@@ -148,28 +149,6 @@ export async function recordLicenceAudit({
  * @param {object} [opts.req]
  */
 export async function onLicenceAssigned({ tenantDb, application, actorUser, req = null }) {
-  const actorId = actorUser?.userId ?? actorUser?.id ?? null;
-  const organisationId =
-    application?.organisationId ??
-    (req?.user?.organisation_id != null ? Number(req.user.organisation_id) : null);
-
-  // 1. Global audit log — LICENCE_ASSIGNED (past-tense, matches Phase 1 constant).
-  await recordAuditLog({
-    tenantDb,
-    userId: actorId,
-    action: "LICENCE_ASSIGNED",
-    resource: "licence_application",
-    status: "Success",
-    details: JSON.stringify({
-      applicationId: application.id,
-      company: application.companyName,
-      newStatus: application.status,
-    }),
-    req,
-    organisationId: Number.isNaN(organisationId) ? null : organisationId,
-  }).catch((err) => logger.error({ err, applicationId: application.id }, "onLicenceAssigned: global audit failed"));
-
-  // 2. Complete admin's enquiry_onboarding task (admin opened & assigned — stage done).
   try {
     const { completeStageTask } = await import("./licenceStageTask.service.js");
     await completeStageTask(tenantDb, {

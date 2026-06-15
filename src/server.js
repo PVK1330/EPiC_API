@@ -26,7 +26,7 @@ import {
   resolveOrganisationDatabaseName,
   syncTenantDatabaseSchema,
 } from "./services/tenantDatabaseProvision.service.js";
-import { runPlatformMigrations } from "./migrations/run.js";
+import { runPlatformMigrations, runTenantMigrations } from "./migrations/run.js";
 import { getTenantDb } from "./services/tenantDb.service.js";
 import {
   seedTenantDefaults,
@@ -58,6 +58,7 @@ async function ensureOrganisationTenantDatabase(org) {
   }
 
   await syncTenantDatabaseSchema(databaseName);
+  await runTenantMigrations(databaseName);
 
   const tenantDb = getTenantDb(databaseName);
   await seedTenantDefaults(tenantDb);

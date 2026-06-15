@@ -212,7 +212,7 @@ export async function saveDraft({ tenantDb, application, body, organisationId })
     await upsertOne(tenantDb.LicenceOrganisationInfo, appId, organisationId, body.organisationInfo, t);
     await upsertOne(tenantDb.LicenceAuthorisingOfficer, appId, organisationId, body.authorisingOfficer, t);
     await upsertOne(tenantDb.LicenceKeyContact, appId, organisationId, body.keyContact, t);
-    await upsertOne(tenantDb.LicenceDeclaration, appId, organisationId, body.declarations, t);
+    await upsertOne(tenantDb.LicenceDeclaration, appId, organisationId, body.declaration, t);
 
     await replaceChildren(tenantDb.LicenceCosRequirement, appId, organisationId, body.cosRequirements, t);
     await replaceChildren(tenantDb.LicenceLevel1User, appId, organisationId, body.level1Users, t);

@@ -175,13 +175,24 @@ export default (sequelize, DataTypes) => {
                 allowNull: true,
                 field: "review_started_at",
             },
+            // Soft-delete timestamp. Non-null means the row has been soft-deleted
+            // via Sequelize paranoid mode; hard-deleted rows are gone from the DB.
+            // Restored via LicenceApplication.restore() or the restore endpoint.
+            deletedAt: {
+                type: DataTypes.DATE,
+                allowNull: true,
+                field: "deleted_at",
+            },
         },
         {
             tableName: "licence_applications",
             timestamps: true,
             createdAt: "createdAt",
             updatedAt: "updatedAt",
-            paranoid: false,
+            // Soft deletes: destroy() sets deleted_at rather than removing the row.
+            // Audit rows, stage tasks, and appendix documents are preserved because
+            // their FK references the id column that still exists in the table.
+            paranoid: true,
         }
     );
 

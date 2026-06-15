@@ -1,7 +1,6 @@
 import logger from "../utils/logger.js";
 import { ROLES } from "../middlewares/role.middleware.js";
 import { deliver } from "./sponsorshipNotification.service.js";
-import { recordAuditLog } from "./audit.service.js";
 import { NotificationTypes, NotificationPriority } from "./notification.service.js";
 import { extractCaseworkerIds } from "./licenceAssignment.service.js";
 import { loadFullApplication, serializeApplication } from "./licenceApplicationV2.service.js";
@@ -358,7 +357,7 @@ function pickAssignee(role, recipients) {
 // ─── Seeding & assignee sync ────────────────────────────────────────────────────
 
 /** Seed/update all role tasks for a single stage definition. */
-async function seedStageRows(tenantDb, application, stage, { org, completed, recipients }) {
+async function seedStageRows(tenantDb, application, stage, { org, completed, recipients, req = null }) {
   const rows = [];
   let failures = 0;
   for (const role of STAGE_ROLE_KEYS) {
@@ -405,6 +404,26 @@ async function seedStageRows(tenantDb, application, stage, { org, completed, rec
         }
         if (Object.keys(patch).length) await row.update(patch);
       }
+
+      // Notify the assignee when their task is first created (not auto-completed ones).
+      if (isNew && !autoComplete && assignee?.userId) {
+        deliver({
+          tenantDb,
+          recipientUserId: assignee.userId,
+          type: NotificationTypes.INFO,
+          priority: NotificationPriority.MEDIUM,
+          category: "sponsorship",
+          title: `New task assigned: ${stage.title}`,
+          message: taskText,
+          entityType: "licence_application",
+          entityId: application.id,
+          actionType: "licence_stage_task_assigned",
+          actionUrl: actionUrlForAudience(role),
+          req,
+          organisationId: org,
+        }).catch((err) => logger.warn({ err, applicationId: application.id, stageKey: stage.key, role }, "seedStageRows: new-task notification failed"));
+      }
+
       rows.push(row);
     } catch (err) {
       failures += 1;
@@ -440,7 +459,7 @@ export async function ensureStageTasks(tenantDb, applicationOrId, { req = null, 
   const appShape = await buildAppShape(tenantDb, application);
   const { completed } = deriveStageCompletion(appShape);
   const recipients = await resolveRoleRecipients(tenantDb, application);
-  const ctx = { org, completed, recipients };
+  const ctx = { org, completed, recipients, req };
 
   // For terminal states seed all remaining stages so the full panel is populated.
   const seedAll = ["Approved", "Rejected"].includes(application.status);
@@ -604,13 +623,69 @@ export async function completeStageTask(tenantDb, { applicationId, stageKey, rol
   }
   if (task.status === "completed") return task; // idempotent
 
-  await task.update({
-    status: "completed",
-    completedAt: new Date(),
-    completedByUserId: actorUser?.userId ?? null,
+  // Enforce sequential stage ordering: no task can be completed while any earlier
+  // stage still has incomplete tasks. This prevents stages from being bypassed.
+  if (stageDef.order > 1) {
+    const { Op } = tenantDb.Sequelize;
+    const incompletePrevious = await tenantDb.LicenceStageTask.count({
+      where: {
+        licenceApplicationId: applicationId,
+        stageOrder: { [Op.lt]: stageDef.order },
+        status: { [Op.ne]: "completed" },
+      },
+    });
+    if (incompletePrevious > 0) {
+      const e = new Error(
+        `Complete all tasks in earlier stages before advancing to "${stageDef.title}" (${incompletePrevious} task(s) remaining).`,
+      );
+      e.statusCode = 409;
+      throw e;
+    }
+  }
+
+  const actorId = actorUser?.userId ?? null;
+  const org = application.organisationId ?? req?.user?.organisation_id ?? null;
+
+  let ipAddress = null;
+  if (req) {
+    ipAddress = req.headers?.["x-forwarded-for"] || req.socket?.remoteAddress || null;
+    if (ipAddress?.includes(",")) ipAddress = ipAddress.split(",")[0].trim();
+  }
+
+  // Task completion and its audit entry are atomic: if the audit write fails,
+  // the task stays incomplete and can be retried. Notifications are best-effort
+  // and happen after the transaction commits so a notification failure cannot
+  // roll back the completion.
+  await tenantDb.sequelize.transaction(async (t) => {
+    await task.update(
+      {
+        status: "completed",
+        completedAt: new Date(),
+        completedByUserId: actorId,
+      },
+      { transaction: t },
+    );
+
+    await tenantDb.AuditLog.create(
+      {
+        user_id:         actorId,
+        organisation_id: org != null && !Number.isNaN(Number(org)) ? Number(org) : null,
+        action:          "LICENCE_STAGE_TASK_COMPLETED",
+        resource:        "licence_stage_task",
+        ip_address:      ipAddress,
+        status:          "Success",
+        details: JSON.stringify({
+          applicationId: application.id,
+          stageKey:      stageDef.key,
+          role,
+          taskId:        task.id,
+        }),
+      },
+      { transaction: t },
+    );
   });
 
-  // Notify the parties who care about this progress (best-effort, never throws).
+  // Fan-out notifications (in-app + email) — best-effort, never throws.
   try {
     await notifyStageTaskCompleted({ tenantDb, application, stageDef, role, task, actorUser, req });
   } catch (err) {
@@ -623,8 +698,8 @@ export async function completeStageTask(tenantDb, { applicationId, stageKey, rol
 /**
  * Fan a "task completed" event across in-app + email to the parties who care
  * (tenant admin, sponsor owner, assigned caseworkers, and the candidate by
- * email), skipping the actor. The audit row is recorded exactly once, decoupled
- * from the notification fan-out.
+ * email), skipping the actor. The audit row is written atomically by
+ * completeStageTask() before this function is called; it is not re-written here.
  */
 async function notifyStageTaskCompleted({ tenantDb, application, stageDef, role, task, actorUser, req }) {
   const recipients = await resolveRoleRecipients(tenantDb, application);
@@ -632,18 +707,6 @@ async function notifyStageTaskCompleted({ tenantDb, application, stageDef, role,
   const actorId = actorUser?.userId ?? null;
   const company = application.companyName || `#LIC-${application.id}`;
   const roleLabel = role.charAt(0).toUpperCase() + role.slice(1);
-
-  // Record the audit exactly once, regardless of who (if anyone) is notified.
-  recordAuditLog({
-    tenantDb,
-    userId: actorId,
-    action: "LICENCE_STAGE_TASK_COMPLETED",
-    resource: "licence_stage_task",
-    status: "Success",
-    details: JSON.stringify({ applicationId: application.id, stageKey: stageDef.key, role, taskId: task.id }),
-    req,
-    organisationId: org,
-  }).catch((err) => logger.error({ err }, "notifyStageTaskCompleted: audit failed"));
 
   const targets = [];
   if (recipients.admin?.userId) targets.push({ ...recipients.admin, audience: "admin" });

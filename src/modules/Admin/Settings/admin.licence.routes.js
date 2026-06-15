@@ -6,6 +6,7 @@ import {
     requestAdditionalInformation,
     assignCaseworker,
     deleteLicenceApplication,
+    restoreLicenceApplication,
     updateLicenceApplicationByAdmin,
     getCosRequests,
     assignCosRequestToCaseworker,
@@ -13,7 +14,9 @@ import {
     rejectCosRequest,
     requestInfoForCosRequestAdmin,
     getLicenceApplicationV2,
-    downloadLicenceDocument
+    downloadLicenceDocument,
+    verifyAdminAppendixDocument,
+    rejectAdminAppendixDocument,
 } from './licenceManagement.controller.js';
 import {
     generateLicenceCredentials,
@@ -48,7 +51,12 @@ router.patch("/cos-requests/:id/approve", approveCosRequest);
 router.patch("/cos-requests/:id/reject", rejectCosRequest);
 router.patch("/cos-requests/:id/request-info", requestInfoForCosRequestAdmin);
 router.delete("/delete/:id", deleteLicenceApplication);
+router.post("/restore/:id", restoreLicenceApplication);
 router.put("/update/:id", validate(adminUpdateLicenceSchema, "adminUpdateLicenceSchema"), updateLicenceApplicationByAdmin);
+
+// Appendix A documents — admin verify / reject (same as caseworker but admin-gated).
+router.patch("/:id/appendix-documents/:documentId/verify", verifyAdminAppendixDocument);
+router.patch("/:id/appendix-documents/:documentId/reject", rejectAdminAppendixDocument);
 
 // Government credential management (Phase 3).
 router.post("/:id/generate-credentials", validate(generateCredentialsSchema), generateLicenceCredentials);
