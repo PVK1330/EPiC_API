@@ -4,6 +4,7 @@ import fs from 'fs';
 import { Op } from 'sequelize';
 
 import logger from '../../../utils/logger.js';
+import { toPublicImagePath } from '../../../utils/storagePath.util.js';
 
 /**
  * Resolve user ID from request
@@ -81,7 +82,7 @@ export const getProfile = async (req, res) => {
       data: {
         user: {
           ...user.toJSON(),
-          profile_pic: user.profile_pic ? `${process.env.BASE_URL}/${user.profile_pic.replace(/\\/g, '/')}` : null,
+          profile_pic: user.profile_pic ? toPublicImagePath(user.profile_pic) : null,
         },
         profile: profile,
         preferences: preferences,
@@ -145,12 +146,14 @@ export const updateProfile = async (req, res) => {
         fs.mkdirSync(userDir, { recursive: true });
       }
 
-      // Profile pic
+      // Profile pic — move into the served avatars dir and store the public path.
       if (req.files['profile_pic']?.[0]) {
         const file = req.files['profile_pic'][0];
-        const targetPath = path.join(userDir, `profile_${file.filename}`);
-        fs.renameSync(file.path, targetPath);
-        userUpdate.profile_pic = targetPath.replace(/\\/g, '/');
+        const avatarDir = path.join('storage', 'private', 'avatars');
+        fs.mkdirSync(avatarDir, { recursive: true });
+        const avatarPath = path.join(avatarDir, file.filename);
+        fs.renameSync(file.path, avatarPath);
+        userUpdate.profile_pic = toPublicImagePath(avatarPath);
       }
 
       // Registration Documents (matching field names to model keys)
@@ -241,7 +244,7 @@ export const updateProfile = async (req, res) => {
     });
 
     if (updatedUser.profile_pic) {
-      updatedUser.profile_pic = `${process.env.BASE_URL}/${updatedUser.profile_pic.replace(/\\/g, '/')}`;
+      updatedUser.profile_pic = toPublicImagePath(updatedUser.profile_pic);
     }
 
     res.status(200).json({

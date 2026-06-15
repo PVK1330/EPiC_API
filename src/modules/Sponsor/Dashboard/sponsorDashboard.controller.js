@@ -1,6 +1,7 @@
 import logger from '../../../utils/logger.js';
 import { Op } from 'sequelize';
 import { mergeCaseWhere } from '../../../utils/tenantScope.js';
+import { toPublicImagePath } from '../../../utils/storagePath.util.js';
 
 const INACTIVE = ['Cancelled', 'Closed', 'Rejected'];
 
@@ -109,6 +110,11 @@ export const getBusinessCases = async (req, res) => {
       order: [['created_at', 'DESC']],
       limit: parseInt(limit),
       offset: (parseInt(page) - 1) * parseInt(limit)
+    });
+    rows.forEach((c) => {
+      if (c.candidate && 'profile_pic' in c.candidate) {
+        c.candidate.profile_pic = toPublicImagePath(c.candidate.profile_pic);
+      }
     });
     res.status(200).json({
       status: 'success',

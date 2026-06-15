@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import { Op } from 'sequelize';
+import { Op, Sequelize } from 'sequelize';
 import { CandidateRepository } from './candidate.repository.js';
 import { generateStrongPassword } from '../../../utils/passwordGenerator.js';
 import { notifyUserCreated, notifyUser } from '../../../services/notification.service.js';
@@ -271,8 +271,10 @@ export class CandidateService {
     const pageNum = parseInt(page, 10) || 1;
     const limitNum = parseInt(limit, 10) || 10;
     const offset = (pageNum - 1) * limitNum;
+    const sequelize = this.repository.tenantDb.sequelize;
 
     const whereClause = { role_id: ROLES.CANDIDATE };
+    const andConditions = [];
     if (search) {
       whereClause[Op.or] = [
         { first_name: { [Op.iLike]: `%${search}%` } },
@@ -289,6 +291,73 @@ export class CandidateService {
       whereClause.status = status;
     } else {
       whereClause.status = { [Op.ne]: "inactive" };
+    }
+
+    // Visa-type filter. The candidate's visa lives in two places: the
+    // application's free-text `visaType` ("Skilled Worker Visa") and the case's
+    // linked VisaType.name. The frontend sends a short label ("Skilled Worker"),
+    // so we match on a normalised (lowercased, alphanumerics-only) substring
+    // against *either* source via a correlated EXISTS subquery. This keeps
+    // findAndCountAll's pagination/count correct (no extra include rows).
+    if (visaType) {
+      const normFilter = String(visaType).toLowerCase().replace(/[^a-z0-9]/g, "");
+      if (normFilter) {
+        // Escaped, parameter-free LIKE pattern (no replacements threading needed).
+        const likePattern = sequelize.escape(`%${normFilter}%`);
+        // SQL-side normaliser mirrors normaliseVisaName(): lower + strip non-alnum.
+        const norm = (col) => `regexp_replace(lower(${col}), '[^a-z0-9]', '', 'g')`;
+        andConditions.push(
+          sequelize.literal(
+            `(
+              EXISTS (
+                SELECT 1 FROM candidate_applications ca
+                WHERE ca."userId" = "User".id
+                  AND ca."visaType" IS NOT NULL
+                  AND ${norm('ca."visaType"')} LIKE ${likePattern}
+              )
+              OR EXISTS (
+                SELECT 1 FROM cases c
+                JOIN visa_types vt ON vt.id = c."visaTypeId"
+                WHERE c."candidateId" = "User".id
+                  AND c.deleted_at IS NULL
+                  AND ${norm('vt.name')} LIKE ${likePattern}
+              )
+            )`,
+          ),
+        );
+      }
+    }
+
+    // Payment-status filter. Mirrors the frontend's per-case computation from
+    // Case.totalAmount / Case.paidAmount: Paid (paid ≥ total > 0),
+    // Partial (0 < paid < total), Outstanding (total > 0, paid = 0),
+    // Waived (total = 0). A candidate matches if any of their (non-deleted)
+    // cases falls in the selected bucket.
+    if (paymentStatus) {
+      const total = `COALESCE(c."totalAmount", 0)::numeric`;
+      const paid = `COALESCE(c."paidAmount", 0)::numeric`;
+      const bucketSql = {
+        Paid: `${total} > 0 AND ${paid} >= ${total}`,
+        Partial: `${total} > 0 AND ${paid} > 0 AND ${paid} < ${total}`,
+        Outstanding: `${total} > 0 AND ${paid} = 0`,
+        Waived: `${total} = 0`,
+      }[paymentStatus];
+      if (bucketSql) {
+        andConditions.push(
+          sequelize.literal(
+            `EXISTS (
+              SELECT 1 FROM cases c
+              WHERE c."candidateId" = "User".id
+                AND c.deleted_at IS NULL
+                AND ${bucketSql}
+            )`,
+          ),
+        );
+      }
+    }
+
+    if (andConditions.length > 0) {
+      whereClause[Op.and] = andConditions;
     }
 
     const includeClause = [

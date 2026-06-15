@@ -1,9 +1,8 @@
 import { Op } from 'sequelize';
 import bcrypt from 'bcryptjs';
-import path from 'path';
-import fs from 'fs';
 import platformDb from '../../models/index.js';
 import logger from '../../utils/logger.js';
+import { toPublicImagePath } from '../../utils/storagePath.util.js';
 
 // Get user profile
 export const profile = async (req, res) => {
@@ -35,10 +34,9 @@ export const profile = async (req, res) => {
       });
     }
 
-    // Convert profile_pic path to URL-friendly format and add base URL
+    // Normalize to the relative public path; the frontend resolves it to a URL.
     if (user.profile_pic) {
-      const normalizedPath = user.profile_pic.replace(/\\/g, '/');
-      user.profile_pic = `${process.env.BASE_URL}/${normalizedPath}`;
+      user.profile_pic = toPublicImagePath(user.profile_pic);
     }
 
     res.status(200).json({
@@ -107,13 +105,10 @@ export const editProfile = async (req, res) => {
       gender: gender || user.gender,
     };
 
-    // Add profile_pic if file was uploaded
+    // Add profile_pic if file was uploaded. The upload middleware already wrote
+    // it to the served avatars dir, so just store the relative public path.
     if (req.file?.path) {
-      const userDir = path.join('uploads', 'profile_pics', String(userId));
-      fs.mkdirSync(userDir, { recursive: true });
-      const targetPath = path.join(userDir, req.file.filename);
-      fs.renameSync(req.file.path, targetPath);
-      updateData.profile_pic = targetPath.replace(/\\/g, '/');
+      updateData.profile_pic = toPublicImagePath(req.file.path);
     }
 
     await user.update(updateData);
@@ -134,10 +129,9 @@ export const editProfile = async (req, res) => {
       },
     });
 
-    // Convert profile_pic path to URL-friendly format and add base URL
+    // Normalize to the relative public path; the frontend resolves it to a URL.
     if (updatedUser.profile_pic) {
-      const normalizedPath = updatedUser.profile_pic.replace(/\\/g, '/');
-      updatedUser.profile_pic = `${process.env.BASE_URL}/${normalizedPath}`;
+      updatedUser.profile_pic = toPublicImagePath(updatedUser.profile_pic);
     }
 
     res.status(200).json({

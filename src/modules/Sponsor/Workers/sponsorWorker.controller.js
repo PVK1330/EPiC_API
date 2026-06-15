@@ -8,6 +8,7 @@ import { ROLES } from '../../../middlewares/role.middleware.js';
 import { pickLeastLoadedCaseworker, recordCaseAssignmentOutcome } from '../../../services/caseAssignment.service.js';
 import * as sponsorshipNotify from '../../../services/sponsorshipNotification.service.js';
 import logger from '../../../utils/logger.js';
+import { toPublicImagePath } from '../../../utils/storagePath.util.js';
 
 const REQUIRED_DOCUMENT_KEYS = ['passport', 'visaCopy', 'cosCopy', 'contract', 'payslips'];
 
@@ -258,7 +259,7 @@ export const getSponsoredWorkers = async (req, res) => {
         last_name: worker.candidate?.last_name,
         email: worker.candidate?.email,
         mobile: worker.candidate?.mobile,
-        profile_pic: worker.candidate?.profile_pic
+        profile_pic: toPublicImagePath(worker.candidate?.profile_pic)
       },
       status: worker.status,
       jobTitle: worker.jobTitle,

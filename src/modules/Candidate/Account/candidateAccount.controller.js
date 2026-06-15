@@ -8,6 +8,7 @@ import {
   NotificationTypes,
   NotificationPriority,
 } from '../../../services/notification.service.js';
+import { toPublicImagePath } from '../../../utils/storagePath.util.js';
 
 const ALLOWED_EXP_TAG_IDS = new Set(['easy', 'fast', 'support', 'guidance']);
 
@@ -204,7 +205,7 @@ export const getAccount = async (req, res) => {
           mobile: user.mobile,
           role_id: user.role_id,
           gender: user.gender,
-          profile_pic: user.profile_pic ? `${process.env.BASE_URL}/${user.profile_pic.replace(/\\/g, '/')}` : null,
+          profile_pic: user.profile_pic ? toPublicImagePath(user.profile_pic) : null,
           two_factor_enabled: !!user.two_factor_enabled,
         },
         settings: {
@@ -707,18 +708,10 @@ export const updateProfile = async (req, res) => {
       gender: gender || user.gender,
     };
 
-    // Handle profile pic if uploaded
+    // Handle profile pic if uploaded — written directly to the served avatars dir.
     if (req.file) {
       logger.debug({ originalname: req.file.originalname }, 'File detected in request');
-      const userDir = path.join('uploads', 'profile_pics', String(idNum));
-      if (!fs.existsSync(userDir)) {
-        logger.debug({ userDir }, 'Creating user directory');
-        fs.mkdirSync(userDir, { recursive: true });
-      }
-      const targetPath = path.join(userDir, req.file.filename);
-      logger.debug({ from: req.file.path, to: targetPath }, 'Moving file');
-      fs.renameSync(req.file.path, targetPath);
-      updateData.profile_pic = targetPath.replace(/\\/g, '/');
+      updateData.profile_pic = toPublicImagePath(req.file.path);
       logger.debug({ profile_pic: updateData.profile_pic }, 'Profile pic updated in data');
     } else {
       logger.debug('No file detected in req.file');
@@ -734,8 +727,7 @@ export const updateProfile = async (req, res) => {
     });
 
     if (updatedUser.profile_pic) {
-      const normalizedPath = updatedUser.profile_pic.replace(/\\/g, '/');
-      updatedUser.profile_pic = `${process.env.BASE_URL}/${normalizedPath}`;
+      updatedUser.profile_pic = toPublicImagePath(updatedUser.profile_pic);
     }
 
     res.status(200).json({

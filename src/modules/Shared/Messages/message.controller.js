@@ -8,6 +8,17 @@ import {
 import { getIO } from '../../../realtime/ioRegistry.js';
 import { notifyMessageReceived } from '../../../services/notification.service.js';
 import { buildCaseworkerAssignmentWhere } from '../../../utils/caseworkerScope.js';
+import { toPublicImagePath } from '../../../utils/storagePath.util.js';
+
+// Normalize a User-like Sequelize row's profile_pic to the canonical relative
+// "api/public/images/<basename>" web path (idempotent, null-safe). Mutates the
+// row's dataValues in place so the value is correct when serialized to JSON.
+const normalizeUserProfilePic = (user) => {
+  if (user && 'profile_pic' in user) {
+    user.profile_pic = toPublicImagePath(user.profile_pic);
+  }
+  return user;
+};
 
 export const getMessages = async (req, res) => {
   try {
@@ -63,6 +74,11 @@ export const getMessages = async (req, res) => {
           include: [{ model: req.tenantDb.Role, as: 'role', attributes: ['name'] }]
         }
       ]
+    });
+
+    messages.forEach((m) => {
+      normalizeUserProfilePic(m.sender);
+      normalizeUserProfilePic(m.receiver);
     });
 
     res.status(200).json({ status: "success", message: "Messages retrieved successfully", data: { count: messages.length, messages } });
@@ -160,6 +176,9 @@ export const sendMessage = async (req, res) => {
       ]
     });
 
+    normalizeUserProfilePic(messageInfo.sender);
+    normalizeUserProfilePic(messageInfo.receiver);
+
     await conversation.reload();
     const io = getIO() ?? req.app.get("io");
     await emitMessageNewAndConversationUpdated(io, {
@@ -230,6 +249,7 @@ export const getRecentConversations = async (req, res) => {
       }
 
       const unreadCount = await getUnreadCountForUserInConversation(req.tenantDb, userId, conv.id);
+      normalizeUserProfilePic(otherUser);
       formattedConversations.push({
         id: conv.id,
         user: otherUser,
@@ -270,6 +290,7 @@ export const getChatUsers = async (req, res) => {
         attributes: ['id', 'first_name', 'last_name', 'email', 'role_id', 'profile_pic'],
         include: [{ model: req.tenantDb.Role, as: 'role', attributes: ['name'] }]
       });
+      chatUsers.forEach(normalizeUserProfilePic);
       return res.status(200).json({ status: "success", message: "Chat users retrieved successfully", data: { count: chatUsers.length, users: chatUsers } });
     }
 
@@ -345,6 +366,8 @@ export const getChatUsers = async (req, res) => {
         { model: req.tenantDb.Role, as: 'role', attributes: ['name'] }
       ]
     });
+
+    chatUsers.forEach(normalizeUserProfilePic);
 
     res.status(200).json({ status: "success", message: "Chat users retrieved successfully", data: { count: chatUsers.length, users: chatUsers } });
   } catch (error) {

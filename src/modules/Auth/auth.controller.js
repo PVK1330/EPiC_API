@@ -28,6 +28,7 @@ import {
 import { permissionNamesToModuleIds } from '../../constants/platformModules.js';
 import { signToken, signShortToken, signImpersonationToken, verifyToken, getCookieConfig } from '../../config/jwt.config.js';
 import { redeemImpersonationTicket } from '../../services/impersonationTicket.service.js';
+import { toPublicImagePath } from '../../utils/storagePath.util.js';
 import logger from '../../utils/logger.js';
 
 const RESET_TOKEN_EXPIRY = '10m';
@@ -67,7 +68,7 @@ function buildLoginUserResponse(user, roleMeta) {
     organisation_id: user.organisation_id,
     status: user.status,
     two_factor_enabled: user.two_factor_enabled,
-    profile_pic: user.profile_pic || user.avatar_url || null,
+    profile_pic: toPublicImagePath(user.profile_pic || user.avatar_url),
   };
 }
 

@@ -1,13 +1,13 @@
 import bcrypt from 'bcryptjs';
 import speakeasy from 'speakeasy';
 import QRCode from 'qrcode';
-import path from 'path';
 import catchAsync from '../../utils/catchAsync.js';
 import ApiResponse from '../../utils/apiResponse.js';
 import logger from '../../utils/logger.js';
 import platformDb from '../../models/index.js';
 import { mirrorUserToTenant } from '../../services/userSync.service.js';
 import { getTenantDb } from '../../services/tenantDb.service.js';
+import { toPublicImagePath } from '../../utils/storagePath.util.js';
 
 async function mirrorSuperadminById(userId) {
   const user = await platformDb.User.findByPk(userId);
@@ -66,9 +66,7 @@ export const updateSuperadminProfile = catchAsync(async (req, res) => {
   }
 
   if (req.file) {
-    const relativePath = req.file.path.replace(/\\/g, '/');
-    const baseUrl = String(process.env.BASE_URL || 'http://localhost:5000').replace(/\/$/, '');
-    updates.profile_pic = `${baseUrl}/${relativePath}`;
+    updates.profile_pic = toPublicImagePath(req.file.path);
   }
 
   await user.update(updates);
@@ -87,9 +85,7 @@ export const uploadSuperadminAvatar = catchAsync(async (req, res) => {
   const user = await platformDb.User.findByPk(userId);
   if (!user) return ApiResponse.notFound(res, 'User not found');
 
-  const relativePath = req.file.path.replace(/\\/g, '/');
-  const baseUrl = String(process.env.BASE_URL || 'http://localhost:5000').replace(/\/$/, '');
-  const avatarUrl = `${baseUrl}/${relativePath}`;
+  const avatarUrl = toPublicImagePath(req.file.path);
 
   await user.update({ profile_pic: avatarUrl });
   await mirrorSuperadminById(userId).catch((err) =>

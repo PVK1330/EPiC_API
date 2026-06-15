@@ -28,6 +28,7 @@ import {
   sendTransactionalEmail,
 } from "../../services/mail.service.js";
 import { generateDiagnosticTemplate } from "../../utils/emailTemplates.js";
+import { toPublicImagePath } from "../../utils/storagePath.util.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -312,10 +313,8 @@ export const uploadPlatformLogo = catchAsync(async (req, res) => {
     return ApiResponse.badRequest(res, "No logo file received");
   }
 
-  // Build a public URL — app.js already serves /uploads as static
-  const relativePath = req.file.path.replace(/\\/g, "/"); // normalise Windows paths
-  const baseUrl = String(process.env.BASE_URL || "http://localhost:5000").replace(/\/$/, "");
-  const logoUrl = `${baseUrl}/${relativePath}`;
+  // Store the RELATIVE public path; the frontend resolves it to a full URL.
+  const logoUrl = toPublicImagePath(req.file.path);
 
   await upsertSetting("logo_url", logoUrl);
 
@@ -332,9 +331,7 @@ export const uploadPlatformFavicon = catchAsync(async (req, res) => {
     return ApiResponse.badRequest(res, "No favicon file received");
   }
 
-  const relativePath = req.file.path.replace(/\\/g, "/");
-  const baseUrl = String(process.env.BASE_URL || "http://localhost:5000").replace(/\/$/, "");
-  const faviconUrl = `${baseUrl}/${relativePath}`;
+  const faviconUrl = toPublicImagePath(req.file.path);
 
   await upsertSetting("favicon_url", faviconUrl);
 

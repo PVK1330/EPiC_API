@@ -44,7 +44,7 @@ BEGIN
   UPDATE "licence_applications" la
   SET    organisation_id = u.organisation_id
   FROM   "users" u
-  WHERE  la.user_id         = u.id
+  WHERE  la."userId"        = u.id
     AND  la.organisation_id IS NULL
     AND  u.organisation_id  IS NOT NULL;
 

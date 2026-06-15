@@ -5,6 +5,17 @@ import { localDateStr } from '../../../utils/dateHelpers.js';
 import logger from '../../../utils/logger.js';
 
 
+/**
+ * Coerce a form value into a nullable integer for INTEGER FK columns.
+ * Empty strings, null, undefined, and non-numeric values all become null
+ * (avoids Postgres 'invalid input syntax for type integer: ""').
+ */
+const toNullableInt = (value) => {
+  if (value === null || value === undefined || value === "") return null;
+  const n = Number.parseInt(value, 10);
+  return Number.isNaN(n) ? null : n;
+};
+
 /** Shared filters for listing and export (DRY). */
 export const buildEscalationWhereClause = (query = {}) => {
   const { severity, status, triggerType, assignedAdminId, quickTypeFilter } =
@@ -100,9 +111,15 @@ export const createEscalation = async (req, res) => {
       });
     }
 
+    // assignedAdminId and relatedCaseId are nullable INTEGER FKs. The form may send
+    // "" (empty string) for an unset value, which Postgres rejects with
+    // 'invalid input syntax for type integer: ""'. Coerce empty/blank to null.
+    const adminFk = toNullableInt(assignedAdminId);
+    const relatedCaseFk = toNullableInt(relatedCaseId);
+
     let assignedAdminName = null;
-    if (assignedAdminId) {
-      const admin = await req.tenantDb.User.findByPk(assignedAdminId);
+    if (adminFk) {
+      const admin = await req.tenantDb.User.findByPk(adminFk);
       if (admin) {
         assignedAdminName = `${admin.first_name} ${admin.last_name}`;
       }
@@ -114,18 +131,18 @@ export const createEscalation = async (req, res) => {
       severity,
       trigger,
       triggerType: triggerType || "Other",
-      assignedAdminId,
+      assignedAdminId: adminFk,
       assignedAdminName,
       daysOpen: 0,
       status: "Open",
       notes,
-      relatedCaseId,
+      relatedCaseId: relatedCaseFk,
     });
 
     // Send notification to assigned admin
-    if (assignedAdminId) {
+    if (adminFk) {
       try {
-        await notifyEscalationCreated(req.tenantDb, assignedAdminId, {
+        await notifyEscalationCreated(req.tenantDb, adminFk, {
           id: escalation.id,
           title: trigger,
           caseId: caseId,
@@ -239,7 +256,7 @@ export const getEscalationById = async (req, res) => {
 export const updateEscalation = async (req, res) => {
   try {
     const { id } = req.params;
-    const { severity, trigger, triggerType, assignedAdminId, status, notes } = req.body;
+    const { severity, trigger, triggerType, assignedAdminId, relatedCaseId, status, notes } = req.body;
 
     const escalation = await req.tenantDb.Escalation.findByPk(id);
 
@@ -250,12 +267,18 @@ export const updateEscalation = async (req, res) => {
       });
     }
 
+    // Nullable INTEGER FKs — coerce "" / blanks to null (see createEscalation).
+    const adminFk =
+      assignedAdminId !== undefined ? toNullableInt(assignedAdminId) : escalation.assignedAdminId;
+
     let assignedAdminName = escalation.assignedAdminName;
-    if (assignedAdminId && assignedAdminId !== escalation.assignedAdminId) {
-      const admin = await req.tenantDb.User.findByPk(assignedAdminId);
+    if (adminFk && adminFk !== escalation.assignedAdminId) {
+      const admin = await req.tenantDb.User.findByPk(adminFk);
       if (admin) {
         assignedAdminName = `${admin.first_name} ${admin.last_name}`;
       }
+    } else if (adminFk === null) {
+      assignedAdminName = null;
     }
 
     const oldStatus = escalation.status;
@@ -264,8 +287,10 @@ export const updateEscalation = async (req, res) => {
       severity: severity || escalation.severity,
       trigger: trigger || escalation.trigger,
       triggerType: triggerType || escalation.triggerType,
-      assignedAdminId: assignedAdminId !== undefined ? assignedAdminId : escalation.assignedAdminId,
+      assignedAdminId: adminFk,
       assignedAdminName,
+      relatedCaseId:
+        relatedCaseId !== undefined ? toNullableInt(relatedCaseId) : escalation.relatedCaseId,
       status: status || escalation.status,
       notes: notes !== undefined ? notes : escalation.notes,
     };

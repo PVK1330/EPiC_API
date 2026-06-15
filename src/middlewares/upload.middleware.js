@@ -98,6 +98,17 @@ const superadminAvatarUpload = multer({
   fileFilter: imageOnlyFilter
 });
 
+// Tenant/user profile pictures land directly in a PUBLICLY-SERVED subdir
+// (storage/private/avatars). Previously they went to storage/private/temp and
+// were renamed into uploads/profile_pics/<id>/ — a directory the app no longer
+// serves, which is why those avatars stopped rendering. Writing here removes the
+// rename step entirely; controllers store toPublicImagePath(req.file.path).
+const avatarUpload = multer({
+  storage: createSecureDiskStorage('avatars'),
+  limits: { fileSize: MAX_FILE_SIZES.AVATAR },
+  fileFilter: imageOnlyFilter
+});
+
 /**
  * ── POST-UPLOAD VALIDATION ───────────────────────────────────────────────────
  * Validates magic bytes, checks malware, sanitizes images, and logs audits.
@@ -205,7 +216,8 @@ const withSecurityProcessing = (uploadMiddleware) => {
 };
 
 // ── EXPORTED HANDLERS ────────────────────────────────────────────────────────
-export const handleProfilePicUpload = withSecurityProcessing(upload.single('profile_pic'));
+// Profile pics go straight to the served avatars dir (see avatarUpload above).
+export const handleProfilePicUpload = withSecurityProcessing(avatarUpload.single('profile_pic'));
 export const handleMessageFileUpload = withSecurityProcessing(upload.single('file'));
 export const handleCandidateIssueReportUpload = withSecurityProcessing(upload.single('evidence'));
 // The sponsor registration form uploads each document under its own field name
