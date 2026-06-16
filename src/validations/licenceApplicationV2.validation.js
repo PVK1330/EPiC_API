@@ -45,7 +45,7 @@ const organisationInfoSchema = z
     accreditations: strArray,
     previousTradingNames: strArray,
   })
-  .strict();
+  .strip();
 
 const cosRequirementSchema = z
   .object({
@@ -75,7 +75,7 @@ const authorisingOfficerSchema = z
     email: str(255),
     phone: str(30),
   })
-  .strict();
+  .strip();
 
 const keyContactSchema = z
   .object({
@@ -87,7 +87,7 @@ const keyContactSchema = z
     phone: str(30),
     jobTitle: str(150),
   })
-  .strict();
+  .strip();
 
 const level1UserSchema = z
   .object({
@@ -98,7 +98,7 @@ const level1UserSchema = z
     jobTitle: str(150),
     isAuthorisingOfficer: z.boolean().optional().nullable(),
   })
-  .strict();
+  .strip();
 
 const declarationsSchema = z
   .object({
@@ -109,7 +109,7 @@ const declarationsSchema = z
     signatoryRole: str(150),
     signedDate: dateStr,
   })
-  .strict();
+  .strip();
 
 const draftBody = z
   .object({
@@ -123,7 +123,7 @@ const draftBody = z
     level1Users: z.array(level1UserSchema).max(20).optional(),
     declaration: declarationsSchema.optional(),
   })
-  .strict();
+  .strip();
 
 export const saveDraftSchema = z.object({ body: draftBody });
 

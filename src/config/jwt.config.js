@@ -54,21 +54,19 @@ export const IMPERSONATION_TOKEN_EXPIRY = process.env.JWT_IMPERSONATION_EXPIRY |
  */
 export function getCookieConfig(overrides = {}) {
   const isProduction = process.env.NODE_ENV === "production";
-  
+  const platformDomain = process.env.PLATFORM_DOMAIN || "localhost";
+
   return {
     httpOnly: true,
-    // Production: Secure + SameSite=Strict (HTTPS, same registrable domain).
-    // Development: Secure=false so the cookie works over plain HTTP.
-    //   SameSite=Lax allows the cookie to be sent on same-site cross-origin
-    //   requests (elite-visa.localhost → localhost share the "localhost" eTLD+1
-    //   so Chrome/Firefox treat them as same-site).
-    //   We do NOT use SameSite=None because None requires Secure, and
-    //   *.localhost subdomains are NOT granted the localhost Secure-context
-    //   exception — the browser silently drops Secure cookies over HTTP from
-    //   a subdomain origin, which causes immediate 401 → logout after login.
     secure: isProduction,
     sameSite: isProduction ? "strict" : "lax",
     path: "/",
+    // In production share across all tenant subdomains.
+    // In dev, do NOT set domain — browsers reject domain=.localhost (they treat
+    // localhost as a public suffix), which would silently discard the cookie.
+    ...(isProduction && platformDomain !== "localhost"
+      ? { domain: `.${platformDomain}` }
+      : {}),
     ...overrides,
   };
 }

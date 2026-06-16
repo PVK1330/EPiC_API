@@ -245,6 +245,35 @@ export async function informationRequested({ tenantDb, application, adminNotes =
   });
 }
 
+// ─── Event 5a: Licence Granted ────────────────────────────────────────────────
+export async function licenceGranted({ tenantDb, application, licenceNumber = null, expiryDate = null, req = null }) {
+  const company = application.companyName || `#LIC-${application.id}`;
+  const expiryStr = expiryDate ? ` Expires: ${new Date(expiryDate).toLocaleDateString("en-GB")}.` : "";
+  await deliver({
+    tenantDb,
+    recipientUserId: application.userId,
+    type: NotificationTypes.SUCCESS,
+    priority: NotificationPriority.HIGH,
+    title: "Sponsor Licence Granted",
+    message: `Congratulations — your sponsorship licence for ${company} has been granted.${licenceNumber ? ` Licence Number: ${licenceNumber}.` : ""}${expiryStr}`,
+    entityType: "licence_application",
+    entityId: application.id,
+    actionType: "licence_granted",
+    actionUrl: "/business/licence",
+    emailSubject: licenceNumber
+      ? `Your sponsor licence has been granted — ${licenceNumber}`
+      : "Your sponsor licence has been granted",
+    audit: {
+      actorId: req?.user?.userId ?? null,
+      action: "LICENCE_GRANTED",
+      resource: "licence_application",
+      details: { applicationId: application.id, company, licenceNumber, expiryDate },
+    },
+    req,
+    organisationId: orgFrom(req),
+  });
+}
+
 // ─── Event 6: Licence Rejected ───────────────────────────────────────────────
 export async function licenceRejected({ tenantDb, application, adminNotes = null, req = null }) {
   await deliver({
@@ -274,7 +303,11 @@ export async function licenceStatusChanged({ tenantDb, application, status, prev
   switch (status) {
     case "Approved":
       return; // handled by activateSponsorLicence (event 5)
+    case "Licence Granted":
+      return; // handled by licenceGrant.service (calls activateSponsorLicence + licenceGranted)
     case "Rejected":
+      return licenceRejected({ tenantDb, application, adminNotes, req });
+    case "Licence Rejected":
       return licenceRejected({ tenantDb, application, adminNotes, req });
     case "Information Requested":
       return informationRequested({ tenantDb, application, adminNotes, req });

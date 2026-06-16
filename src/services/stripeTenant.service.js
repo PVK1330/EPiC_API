@@ -3,41 +3,16 @@ import { Op } from "sequelize";
 import platformDb from "../models/index.js";
 import { getTenantDb } from "./tenantDb.service.js";
 import { notifyUser, NotificationTypes, NotificationPriority } from "./notification.service.js";
-import { normalizeStorageRelativePath } from "../utils/storagePath.util.js";
+import { toPublicImagePath } from "../utils/storagePath.util.js";
 
+/**
+ * @deprecated Prefer toPublicImagePath() directly. Retained as a thin alias so
+ * existing callers keep working. Returns the RELATIVE public image path
+ * ("api/public/images/<basename>"); the frontend's resolveAssetUrl() prepends
+ * the API origin, so no host is embedded here anymore.
+ */
 export function toPublicAssetUrl(relativePath) {
-  if (!relativePath) return null;
-  if (String(relativePath).startsWith("http")) return relativePath;
-
-  const base = (process.env.BASE_URL || process.env.API_BASE_URL || "").replace(/\/$/, "");
-  let normalizedPath =
-    normalizeStorageRelativePath(relativePath) || String(relativePath).replace(/\\/g, "/");
-
-  // Rewrite secure storage paths to the safe public serving endpoint
-  if (
-    normalizedPath.startsWith("storage/private/organisations/") ||
-    normalizedPath.startsWith("storage/private/platform/") ||
-    normalizedPath.startsWith("storage/private/superadmin/")
-  ) {
-    normalizedPath = normalizedPath.replace(
-      /^storage\/private\/(organisations|platform|superadmin)\//,
-      "api/public/images/",
-    );
-  } else if (
-    normalizedPath.startsWith("uploads/organisations/") ||
-    normalizedPath.startsWith("uploads/platform/") ||
-    normalizedPath.startsWith("uploads/superadmin/")
-  ) {
-    // Backwards compatibility for legacy DB paths
-    normalizedPath = normalizedPath.replace(
-      /^uploads\/(organisations|platform|superadmin)\//,
-      "api/public/images/",
-    );
-  } else if (normalizedPath.startsWith("api/public/images/")) {
-    // Already a public path — keep as-is
-  }
-
-  return base ? `${base}/${normalizedPath}` : `/${normalizedPath}`;
+  return toPublicImagePath(relativePath);
 }
 
 /** Load tenant payment row; falls back to env keys when DB empty. */

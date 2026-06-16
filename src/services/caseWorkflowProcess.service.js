@@ -2,8 +2,13 @@ import { Op } from "sequelize";
 import {
   resolveCaseStage,
   getStageOrder,
+  assertSubmissionGate,
 } from "../constants/immigrationCaseProcess.js";
 import { applyCaseStageChange } from "./caseStageAutomation.service.js";
+import {
+  validateTransition,
+  WORKFLOW_TYPES,
+} from "./workflowEngine.service.js";
 import { recordTimelineEntry } from "./caseTimeline.service.js";
 import {
   createWorkflowTask,
@@ -504,6 +509,46 @@ export async function bookBiometricDirect({
     };
   }
 
+  // Validate the move to `biometrics_booked` BEFORE persisting anything. The slot
+  // write + stage change must be all-or-nothing: previously the slot was saved
+  // first and the stage transition threw a 500 (e.g. dragging an early-stage case
+  // straight onto the Biometrics column), leaving half-written data. Guard up front
+  // so an illegal booking is a clean 400 with no side effects.
+  //
+  // Only a FORWARD move into `biometrics_booked` is a stage change. When the case
+  // is already at or past that stage (e.g. re-sending the slot from
+  // `biometrics_confirmation_sent`), this is just a slot update — no transition,
+  // no gate re-check.
+  const currentStage = resolveCaseStage(caseRecord);
+  const isForwardToBiometrics =
+    getStageOrder(currentStage) < getStageOrder("biometrics_booked");
+  if (isForwardToBiometrics) {
+    const validation = validateTransition(
+      WORKFLOW_TYPES.CASE,
+      currentStage,
+      "biometrics_booked",
+    );
+    if (!validation.valid) {
+      return {
+        ok: false,
+        status: 400,
+        message:
+          "Biometrics can only be booked after the application has been submitted. Advance the case to 'Application Submitted' first.",
+      };
+    }
+
+    // `biometrics_booked` is past the submission gate — enforce CCL accepted +
+    // fees paid, exactly like the pipeline-move endpoints do.
+    const gate = await assertSubmissionGate(
+      tenantDb,
+      caseRecord,
+      "biometrics_booked",
+    );
+    if (!gate.ok) {
+      return { ok: false, status: 400, message: gate.message };
+    }
+  }
+
   const bookedSlot = {
     location: location.trim(),
     appointmentDate,
@@ -560,8 +605,11 @@ export async function bookBiometricDirect({
     }).catch(() => {});
   }
 
+  // Advance the stage only when moving forward into biometrics. If the case is
+  // already at/past `biometrics_booked` this is a slot update — do not attempt a
+  // backward transition (the state machine would reject it).
   const stage = resolveCaseStage(caseRecord);
-  if (stage !== "biometrics_booked") {
+  if (getStageOrder(stage) < getStageOrder("biometrics_booked")) {
     await applyCaseStageChange({
       tenantDb,
       caseRecord,

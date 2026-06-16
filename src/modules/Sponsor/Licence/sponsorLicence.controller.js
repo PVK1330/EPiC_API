@@ -162,10 +162,22 @@ export const updateLicenceApplication = async (req, res) => {
         // "" / "Invalid date" → null so no manual sanitisation is needed.
         const updateData = { ...req.body };
 
-        // Auto-transition: move back to Pending so the application is re-queued
-        // for review after the sponsor responds to an information request.
+        // When a sponsor updates their application while in 'Information Requested',
+        // re-queue it for caseworker review via the FSM (ISSUE-007).
+        // 'Information Requested → Under Review' is valid in the matrix;
+        // 'Information Requested → Pending' is NOT — and was the prior bug.
         if (application.status === 'Information Requested') {
-            updateData.status = 'Pending';
+            const transitionCheck = validateTransition(
+                WORKFLOW_TYPES.LICENCE,
+                'Information Requested',
+                'Under Review',
+            );
+            if (transitionCheck.valid) {
+                updateData.status = 'Under Review';
+            } else {
+                logger.error({ applicationId: application.id, message: transitionCheck.message },
+                    'sponsorLicence: unexpected FSM rejection for Information Requested → Under Review');
+            }
         }
 
         // Handle new documents via the file upload (separate from field data).

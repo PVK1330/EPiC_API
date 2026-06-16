@@ -61,9 +61,11 @@ export async function activateSponsorLicence({
   application,
   approvedByUserId = null,
   req = null,
+  transaction = null,
 }) {
   const profile = await tenantDb.SponsorProfile.findOne({
     where: { userId: application.userId },
+    ...(transaction && { transaction }),
   });
 
   if (!profile) {
@@ -77,11 +79,25 @@ export async function activateSponsorLicence({
   const now = new Date();
   const issuedDate = now;
   const isRenewal = application.type === "Renewal";
+
+  // ── Idempotency guard (ISSUE-006) ────────────────────────────────────────
+  // A New/initial licence that is already Active with a licence number must
+  // not be reactivated: doing so would overwrite the expiry date, re-seed the
+  // CoS pool, and fire activation notifications a second time. Renewals are
+  // the only legitimate re-entry — they intentionally extend the expiry.
+  const alreadyActive =
+    profile.licenceStatus === LICENCE_STATUS.ACTIVE && !!profile.sponsorLicenceNumber;
+  if (alreadyActive && !isRenewal) {
+    logger.warn(
+      { applicationId: application.id, sponsorUserId: application.userId, licenceNumber: profile.sponsorLicenceNumber },
+      "activateSponsorLicence: profile already Active — returning early (idempotency guard)"
+    );
+    return { profile, licenceNumber: profile.sponsorLicenceNumber, wasActive: true };
+  }
+
   const licenceNumber =
     profile.sponsorLicenceNumber || generateLicenceNumber(profile, application);
-  const wasActive =
-    profile.licenceStatus === LICENCE_STATUS.ACTIVE &&
-    !!profile.sponsorLicenceNumber;
+  const wasActive = alreadyActive;
 
   // For renewals, extend from the existing expiry date so no time is lost
   // (or gained) due to processing lag. For new activations, start from now.
@@ -91,20 +107,23 @@ export async function activateSponsorLicence({
   const expiryDate = addYears(renewalBase, LICENCE_VALIDITY_YEARS);
 
   // Seed initial CoS pool from the intake form's requested count, the
-  // application's own cosAllocation field, or a safe default of 5. Resolve this
-  // before the transaction so the read does not hold the write lock open.
+  // application's own cosAllocation field, or a safe default of 5.
   let seedCosPool = null;
   if (!profile.cosAllocation) {
     const intakeForm = await (tenantDb.LicenceIntakeForm?.findOne({
       where: { licenceApplicationId: application.id },
       attributes: ["numberOfCosRequired"],
+      ...(transaction && { transaction }),
     }) ?? Promise.resolve(null)).catch(() => null);
     seedCosPool = intakeForm?.numberOfCosRequired || application.cosAllocation || 5;
   }
 
-  // 1-3) Activate the licence + seed the CoS pool atomically (BUG-018). Either
-  // the profile is fully activated (status + number + dates + pool) or not at all.
-  const t = await tenantDb.sequelize.transaction();
+  // Activate the licence + seed the CoS pool.
+  // When an external transaction is provided the caller owns commit/rollback;
+  // otherwise we manage our own transaction so this function stays atomic
+  // when called without an outer transaction (e.g. legacy callers, renewals).
+  const ownTxn = !transaction;
+  const t = transaction ?? await tenantDb.sequelize.transaction();
   try {
     profile.licenceStatus = LICENCE_STATUS.ACTIVE;
     profile.sponsorLicenceNumber = licenceNumber;
@@ -113,9 +132,9 @@ export async function activateSponsorLicence({
     if (!profile.licenceRating) profile.licenceRating = "A";
     if (seedCosPool != null) profile.cosAllocation = seedCosPool;
     await profile.save({ transaction: t });
-    await t.commit();
+    if (ownTxn) await t.commit();
   } catch (err) {
-    await t.rollback();
+    if (ownTxn) await t.rollback();
     throw err;
   }
 

@@ -193,6 +193,250 @@ export const LICENCE_STAGE_DEFINITIONS = [
 
 const STAGE_BY_KEY = Object.fromEntries(LICENCE_STAGE_DEFINITIONS.map((s) => [s.key, s]));
 
+// ─── Phase mapping ────────────────────────────────────────────────────────────
+
+/**
+ * Maps each of the 18 stage keys to the 5-phase workflow architecture.
+ *
+ * Phase 2 (Application)       = stages 1–10  (enquiry through intake)
+ * Phase 3 (Review & Approval) = stages 11–18 (government pipeline through UKVI decision)
+ *
+ * Phases 1 (Onboarding), 4 (CoS), 5 (Workers) operate outside the stage
+ * pipeline and are enforced by dedicated middleware and services.
+ */
+export const STAGE_PHASE_MAP = {
+  enquiry_onboarding:            2,
+  licence_routes:                2,
+  organisation_details:          2,
+  cos_requirements:              2,
+  supporting_documents:          2,
+  key_personnel:                 2,
+  declarations:                  2,
+  payment:                       2,
+  intake_information_form:       2,
+  intake_document_checklist:     2,
+  sponsor_information_provision: 3,
+  government_sms_registration:   3,
+  sponsor_portal_onboarding:     3,
+  government_portal_credentials: 3,
+  government_application_forms:  3,
+  government_submission:         3,
+  submission:                    3,
+  decision_activation:           3,
+};
+
+/**
+ * Within-stage role execution order. A role may not complete its task until
+ * every role listed before it in this array has completed theirs for the
+ * same stage.
+ *
+ * Default (no explicit entry): ["sponsor", "caseworker", "admin"]
+ * Government-pipeline stages where the caseworker drives portal work first
+ * are listed explicitly with reversed ordering.
+ */
+const STAGE_ROLE_ORDER = {
+  // Data-entry stages (1–10) use the default order: sponsor → caseworker → admin.
+  // Government-pipeline stages: caseworker operates the portal first, then
+  // sponsor confirms receipt/submission, then admin records the outcome.
+  government_sms_registration:   ["caseworker", "sponsor", "admin"],
+  sponsor_portal_onboarding:     ["caseworker", "sponsor", "admin"],
+  government_portal_credentials: ["caseworker", "sponsor", "admin"],
+  government_application_forms:  ["caseworker", "admin"],
+  government_submission:         ["caseworker", "sponsor", "admin"],
+};
+
+const DEFAULT_ROLE_ORDER = ["sponsor", "caseworker", "admin", "candidate"];
+
+/** Returns the within-stage role execution order for the given stage key. */
+export function stageRoleOrder(stageKey) {
+  return STAGE_ROLE_ORDER[stageKey] ?? DEFAULT_ROLE_ORDER;
+}
+
+/**
+ * Minimum application statuses required before certain government-pipeline
+ * stages can be acted on.
+ *
+ * Attempting to complete a task in a gated stage while the application has not
+ * yet reached the required status yields HTTP 409 (phase not yet unlocked).
+ * Stages without an entry here have no application-status prerequisite.
+ */
+export const STAGE_STATUS_GATE = {
+  sponsor_information_provision: new Set(["Under Review", "Information Requested", "Government Processing", "Decision Pending"]),
+  government_sms_registration:   new Set(["Government Processing", "Decision Pending"]),
+  sponsor_portal_onboarding:     new Set(["Government Processing", "Decision Pending"]),
+  government_portal_credentials: new Set(["Government Processing", "Decision Pending"]),
+  government_application_forms:  new Set(["Government Processing", "Decision Pending"]),
+  government_submission:         new Set(["Government Processing", "Decision Pending"]),
+  submission:                    new Set(["Government Processing", "Decision Pending"]),
+  decision_activation:           new Set(["Decision Pending"]),
+};
+
+// ─── Stage-level sequential validators ───────────────────────────────────────
+
+/**
+ * Asserts that all task rows in every stage BEFORE `stageDef` are completed.
+ * Throws HTTP 409 if any incomplete predecessor tasks exist in the DB.
+ */
+export async function checkSequentialOrder(tenantDb, applicationId, stageDef) {
+  if (stageDef.order <= 1) return;
+  const { Op } = tenantDb.Sequelize;
+  const incompletePrevious = await tenantDb.LicenceStageTask.count({
+    where: {
+      licenceApplicationId: applicationId,
+      stageOrder: { [Op.lt]: stageDef.order },
+      status: { [Op.ne]: "completed" },
+    },
+  });
+  if (incompletePrevious > 0) {
+    const e = new Error(
+      `Complete all tasks in earlier stages before advancing to "${stageDef.title}" (${incompletePrevious} task(s) remaining).`,
+    );
+    e.statusCode = 409;
+    throw e;
+  }
+}
+
+/**
+ * Asserts that all roles with a higher-priority position in the stage's role
+ * execution order have completed their task before `role` can complete theirs.
+ *
+ * Example: for most data-entry stages the order is sponsor → caseworker → admin.
+ * A caseworker cannot mark their review done if the sponsor has not yet
+ * provided the underlying data.
+ *
+ * Throws HTTP 409 if any preceding-role tasks are still incomplete.
+ */
+export async function checkIntraStageOrder(tenantDb, applicationId, stageDef, role) {
+  const roleOrder = stageRoleOrder(stageDef.key);
+  const roleIndex = roleOrder.indexOf(role);
+  if (roleIndex <= 0) return; // first in sequence, or role absent from order — no prerequisite
+
+  // Only check roles that actually have a task defined for this stage.
+  const precedingRoles = roleOrder
+    .slice(0, roleIndex)
+    .filter((r) => stageDef.tasks[r] != null);
+
+  if (precedingRoles.length === 0) return;
+
+  const { Op } = tenantDb.Sequelize;
+  const completedCount = await tenantDb.LicenceStageTask.count({
+    where: {
+      licenceApplicationId: applicationId,
+      stageKey: stageDef.key,
+      role: { [Op.in]: precedingRoles },
+      status: "completed",
+    },
+  });
+
+  if (completedCount < precedingRoles.length) {
+    const e = new Error(
+      `Complete the ${precedingRoles.join(" and ")} task(s) in "${stageDef.title}" before the ${role} task can be marked done.`,
+    );
+    e.statusCode = 409;
+    throw e;
+  }
+}
+
+/**
+ * Asserts that the application's current status meets the minimum required for
+ * the given stage. Synchronous — no DB access needed.
+ * Throws HTTP 409 if the phase gate is not yet open.
+ */
+export function checkStatusGate(application, stageDef) {
+  const gate = STAGE_STATUS_GATE[stageDef.key];
+  if (!gate) return;
+  if (!gate.has(application.status)) {
+    const allowed = [...gate].join(" or ");
+    const e = new Error(
+      `Stage "${stageDef.title}" is not accessible while the application is "${application.status}". Required status: ${allowed}.`,
+    );
+    e.statusCode = 409;
+    throw e;
+  }
+}
+
+// ─── Active-stage query ───────────────────────────────────────────────────────
+
+/**
+ * Returns the key of the first stage in the pipeline that still has at least
+ * one incomplete task row, or null if every seeded stage is fully complete.
+ *
+ * Only seeded stages (rows in licence_stage_tasks) are considered. A stage
+ * that has not been seeded yet is not the active stage — it is locked.
+ */
+export async function getActiveStageKey(tenantDb, applicationId) {
+  if (!tenantDb?.LicenceStageTask) return LICENCE_STAGE_DEFINITIONS[0].key;
+
+  const rows = await tenantDb.LicenceStageTask.findAll({
+    where: { licenceApplicationId: applicationId },
+    attributes: ["stageKey", "stageOrder", "status"],
+    order: [["stageOrder", "ASC"]],
+  });
+
+  if (!rows.length) return LICENCE_STAGE_DEFINITIONS[0].key;
+
+  // Aggregate per stage: track the lowest order and whether any task is incomplete.
+  const stageInfo = new Map();
+  for (const r of rows) {
+    if (!stageInfo.has(r.stageKey)) {
+      stageInfo.set(r.stageKey, { order: r.stageOrder, incomplete: 0 });
+    }
+    if (r.status !== "completed") {
+      stageInfo.get(r.stageKey).incomplete += 1;
+    }
+  }
+
+  // Walk stages in ascending order and return the first with any incomplete task.
+  const sorted = [...stageInfo.entries()].sort((a, b) => a[1].order - b[1].order);
+  for (const [key, info] of sorted) {
+    if (info.incomplete > 0) return key;
+  }
+
+  return null; // all seeded stages are fully complete
+}
+
+// ─── Task chain structure ─────────────────────────────────────────────────────
+
+/**
+ * Returns the ordered list of roles that have non-null tasks for a given stage.
+ * Order follows stageRoleOrder() — sponsor-first for data-entry stages,
+ * caseworker-first for government-pipeline stages.
+ *
+ * Exported so tests and getStagesForApplication can enumerate the role slots
+ * for a stage without re-reading the definition arrays.
+ */
+export function getChainSequence(stageDef) {
+  return stageRoleOrder(stageDef.key).filter((r) => stageDef.tasks[r] != null);
+}
+
+/**
+ * Flat, ordered list of every (stageDef, role) node in the task chain.
+ *
+ * The chain is: for each stage in ascending order, for each role returned by
+ * getChainSequence(stage), one node. Completing node[i] creates node[i+1].
+ * Evaluated once at module load — treated as an immutable constant.
+ */
+export const TASK_CHAIN = Object.freeze(
+  LICENCE_STAGE_DEFINITIONS.flatMap((stageDef) =>
+    getChainSequence(stageDef).map((role) => Object.freeze({ stageDef, role })),
+  ),
+);
+
+/** O(1) lookup: chain index by "stageKey:role" composite key. */
+const CHAIN_INDEX = new Map(
+  TASK_CHAIN.map((node, i) => [`${node.stageDef.key}:${node.role}`, i]),
+);
+
+/**
+ * Returns the next chain node after the given (stageKey, role) position,
+ * or null when the end of the chain has been reached.
+ */
+export function nextChainNode(stageKey, role) {
+  const idx = CHAIN_INDEX.get(`${stageKey}:${role}`);
+  if (idx == null || idx >= TASK_CHAIN.length - 1) return null;
+  return TASK_CHAIN[idx + 1];
+}
+
 const fullName = (u) =>
   [u?.first_name, u?.last_name].filter(Boolean).join(" ").trim() || u?.email || null;
 
@@ -354,98 +598,173 @@ function pickAssignee(role, recipients) {
   }
 }
 
-// ─── Seeding & assignee sync ────────────────────────────────────────────────────
+// ─── Single-task seeding ──────────────────────────────────────────────────────
 
-/** Seed/update all role tasks for a single stage definition. */
-async function seedStageRows(tenantDb, application, stage, { org, completed, recipients, req = null }) {
-  const rows = [];
-  let failures = 0;
-  for (const role of STAGE_ROLE_KEYS) {
-    const taskText = stage.tasks[role];
-    if (!taskText) continue;
-    try {
-      const assignee = pickAssignee(role, recipients);
-      const autoComplete = roleAutoCompletes(role, completed.has(stage.key), application.status);
+/**
+ * Seeds exactly ONE task row for the given (stage, role) pair.
+ *
+ * Idempotent via findOrCreate. On first creation:
+ *   - Auto-completes sponsor/candidate tasks when the data signal says the
+ *     work is already done (bootstrap for pre-existing applications).
+ *   - Appends an AUDIT log entry recording the task creation.
+ *   - Fires an in-app + email notification to the assignee (skip if
+ *     auto-completed — no action is needed from them).
+ *
+ * On subsequent calls for the same (stage, role) it only updates the
+ * assignee when a caseworker is assigned or changed.
+ *
+ * Returns { row, isNew, wasAutoCompleted } or null if the role has no task.
+ */
+async function seedSingleTask(tenantDb, application, stage, role, ctx) {
+  const { org, completed, recipients, req } = ctx;
+  const taskText = stage.tasks[role];
+  if (!taskText) return null;
 
-      const [row, isNew] = await tenantDb.LicenceStageTask.findOrCreate({
-        where: { licenceApplicationId: application.id, stageKey: stage.key, role },
-        defaults: {
-          organisationId: org,
-          stageOrder: stage.order,
-          role,
-          title: taskText,
-          description: stage.title,
-          assignedToUserId: assignee?.userId ?? null,
-          assigneeName: assignee?.name ?? null,
-          assigneeEmail: assignee?.email ?? null,
-          status: autoComplete ? "completed" : "pending",
-          completedAt: autoComplete ? new Date() : null,
-          metadata: { govSection: stage.govSection },
-        },
-      });
+  const assignee = pickAssignee(role, recipients);
+  const autoComplete = roleAutoCompletes(role, completed.has(stage.key), application.status);
 
-      if (!isNew) {
-        const patch = {};
-        if (assignee?.userId != null && row.assignedToUserId !== assignee.userId) {
-          patch.assignedToUserId = assignee.userId;
-          patch.assigneeName = assignee.name ?? null;
-          patch.assigneeEmail = assignee.email ?? null;
-        } else if (assignee && row.assignedToUserId == null && (assignee.name || assignee.email)) {
-          // Only write if the value actually changes (avoids a DB write every call
-          // when the placeholder is already stored and no caseworker is assigned).
-          const newName  = assignee.name  ?? null;
-          const newEmail = assignee.email ?? null;
-          if (newName  !== row.assigneeName)  patch.assigneeName  = newName;
-          if (newEmail !== row.assigneeEmail) patch.assigneeEmail = newEmail;
-        }
-        if (row.status !== "completed" && autoComplete) {
-          patch.status = "completed";
-          patch.completedAt = new Date();
-        }
-        if (Object.keys(patch).length) await row.update(patch);
-      }
+  const [row, isNew] = await tenantDb.LicenceStageTask.findOrCreate({
+    where: { licenceApplicationId: application.id, stageKey: stage.key, role },
+    defaults: {
+      organisationId: org,
+      stageOrder: stage.order,
+      role,
+      title: taskText,
+      description: stage.title,
+      assignedToUserId: assignee?.userId ?? null,
+      assigneeName: assignee?.name ?? null,
+      assigneeEmail: assignee?.email ?? null,
+      status: autoComplete ? "completed" : "pending",
+      completedAt: autoComplete ? new Date() : null,
+      metadata: { govSection: stage.govSection },
+    },
+  });
 
-      // Notify the assignee when their task is first created (not auto-completed ones).
-      if (isNew && !autoComplete && assignee?.userId) {
-        deliver({
-          tenantDb,
-          recipientUserId: assignee.userId,
-          type: NotificationTypes.INFO,
-          priority: NotificationPriority.MEDIUM,
-          category: "sponsorship",
-          title: `New task assigned: ${stage.title}`,
-          message: taskText,
-          entityType: "licence_application",
-          entityId: application.id,
-          actionType: "licence_stage_task_assigned",
-          actionUrl: actionUrlForAudience(role),
-          req,
-          organisationId: org,
-        }).catch((err) => logger.warn({ err, applicationId: application.id, stageKey: stage.key, role }, "seedStageRows: new-task notification failed"));
-      }
-
-      rows.push(row);
-    } catch (err) {
-      failures += 1;
-      logger.error({ err, applicationId: application.id, stageKey: stage.key, role }, "seedStageRows: row failed");
+  if (!isNew) {
+    // Sync assignee when a caseworker is added or changed after initial seeding.
+    const patch = {};
+    if (assignee?.userId != null && row.assignedToUserId !== assignee.userId) {
+      patch.assignedToUserId = assignee.userId;
+      patch.assigneeName    = assignee.name  ?? null;
+      patch.assigneeEmail   = assignee.email ?? null;
+    } else if (assignee && row.assignedToUserId == null && (assignee.name || assignee.email)) {
+      const newName  = assignee.name  ?? null;
+      const newEmail = assignee.email ?? null;
+      if (newName  !== row.assigneeName)  patch.assigneeName  = newName;
+      if (newEmail !== row.assigneeEmail) patch.assigneeEmail = newEmail;
     }
+    if (Object.keys(patch).length) await row.update(patch);
+    return { row, isNew: false, wasAutoCompleted: false };
   }
-  if (failures) logger.warn({ applicationId: application.id, failures, stageKey: stage.key }, "seedStageRows: completed with failures");
-  return rows;
+
+  // ── Audit: record that this task was created by the chain engine ─────────────
+  const orgId = org != null && !Number.isNaN(Number(org)) ? Number(org) : null;
+  tenantDb.AuditLog.create({
+    user_id:         null,
+    organisation_id: orgId,
+    action:          "LICENCE_STAGE_TASK_CREATED",
+    resource:        "licence_stage_task",
+    ip_address:      null,
+    status:          "Success",
+    details: JSON.stringify({
+      applicationId: application.id,
+      stageKey:      stage.key,
+      stageOrder:    stage.order,
+      role,
+      taskId:        row.id,
+      autoCompleted: autoComplete,
+      chainAdvance:  true,
+    }),
+  }).catch((err) =>
+    logger.warn({ err, applicationId: application.id, stageKey: stage.key, role }, "seedSingleTask: audit failed"),
+  );
+
+  // ── Notify the assignee (skip if auto-completed — no action needed) ───────────
+  if (!autoComplete && assignee?.userId) {
+    deliver({
+      tenantDb,
+      recipientUserId: assignee.userId,
+      type: NotificationTypes.INFO,
+      priority: NotificationPriority.MEDIUM,
+      category: "sponsorship",
+      title: `New task assigned: ${stage.title}`,
+      message: taskText,
+      entityType: "licence_application",
+      entityId: application.id,
+      actionType: "licence_stage_task_assigned",
+      actionUrl: actionUrlForAudience(role),
+      req,
+      organisationId: org,
+    }).catch((err) =>
+      logger.warn({ err, applicationId: application.id, stageKey: stage.key, role }, "seedSingleTask: notify failed"),
+    );
+  }
+
+  return { row, isNew: true, wasAutoCompleted: autoComplete };
 }
 
 /**
- * Idempotently seed task rows for the CURRENT active stage only.
+ * Seeds the next task in the chain after `completedRole` has finished in `stageDef`.
  *
- * Stages are unlocked one at a time: the next stage is seeded only after every
- * task in the current stage has been marked completed. For terminal statuses
- * (Approved / Rejected) all remaining stages are seeded at once so the full
- * history is visible in the panel.
+ * Resolution order:
+ *   1. If there is another role in the same stage after `completedRole` → seed it.
+ *   2. If `completedRole` was the last role in its stage → seed the first role
+ *      of the next stage, automatically advancing to the next phase when needed.
  *
- * Safe to call repeatedly — never un-completes a previously completed task and
- * only fills missing assignees.
+ * If the newly created task is auto-completable (the underlying data signal is
+ * already satisfied), it is marked complete immediately and the chain continues
+ * recursively until a task requiring human action is reached.
  *
- * @returns {Promise<Array>} all existing stage-task rows for the application.
+ * Depth-limited to guard against data-signal misconfiguration infinite loops.
+ */
+async function seedNextInChain(tenantDb, application, stageDef, completedRole, ctx, depth = 0) {
+  if (depth > TASK_CHAIN.length) {
+    logger.error(
+      { applicationId: application.id, stageKey: stageDef.key, completedRole },
+      "seedNextInChain: depth limit exceeded — check roleAutoCompletes signals",
+    );
+    return;
+  }
+
+  const next = nextChainNode(stageDef.key, completedRole);
+  if (!next) return; // end of chain reached
+
+  const result = await seedSingleTask(tenantDb, application, next.stageDef, next.role, ctx).catch(
+    (err) => {
+      logger.error(
+        { err, applicationId: application.id, stageKey: next.stageDef.key, role: next.role },
+        "seedNextInChain: seedSingleTask failed",
+      );
+      return null;
+    },
+  );
+
+  // If the just-created task was immediately auto-completed, keep the chain moving.
+  if (result?.isNew && result.wasAutoCompleted) {
+    await seedNextInChain(tenantDb, application, next.stageDef, next.role, ctx, depth + 1);
+  }
+}
+
+/**
+ * Ensures the correct task exists at the chain frontier for this application.
+ *
+ * Chain-frontier model:
+ *   Only the NEXT task in the sequence is seeded. Tasks further ahead are not
+ *   pre-created; they appear as "locked" placeholders in the panel view-model
+ *   until the preceding task is completed and the chain advances.
+ *
+ * Frontier resolution:
+ *   Walk TASK_CHAIN in order. The first node whose DB row is absent or not yet
+ *   completed is the frontier. If the row is absent, seed it (and keep going if
+ *   it was auto-completed). If the row already exists and is pending, do nothing.
+ *
+ * Terminal statuses (Approved / Rejected):
+ *   Seed every chain node so the full history is visible in the panel.
+ *
+ * Safe to call repeatedly — findOrCreate is idempotent, completed rows are
+ * never un-completed, and assignees are only updated when they change.
+ *
+ * @returns {Promise<Array>} all task rows currently in DB for the application.
  */
 export async function ensureStageTasks(tenantDb, applicationOrId, { req = null, organisationId = null } = {}) {
   if (!tenantDb?.LicenceStageTask) return [];
@@ -461,39 +780,52 @@ export async function ensureStageTasks(tenantDb, applicationOrId, { req = null, 
   const recipients = await resolveRoleRecipients(tenantDb, application);
   const ctx = { org, completed, recipients, req };
 
-  // For terminal states seed all remaining stages so the full panel is populated.
-  const seedAll = ["Approved", "Rejected"].includes(application.status);
+  // Terminal: seed every chain node so the history panel is fully populated.
+  if (["Approved", "Rejected"].includes(application.status)) {
+    for (const { stageDef, role } of TASK_CHAIN) {
+      await seedSingleTask(tenantDb, application, stageDef, role, ctx).catch((err) =>
+        logger.warn({ err, stageKey: stageDef.key, role }, "ensureStageTasks: terminal seed failed"),
+      );
+    }
+    return tenantDb.LicenceStageTask.findAll({
+      where: { licenceApplicationId: application.id },
+      order: [["stageOrder", "ASC"]],
+    });
+  }
 
-  // Load existing rows to decide which stage to unlock next.
-  const allRows = await tenantDb.LicenceStageTask.findAll({
+  // Non-terminal: find and seed the frontier — the first chain node that
+  // doesn't yet have a completed row in the DB.
+  const existingRows = await tenantDb.LicenceStageTask.findAll({
     where: { licenceApplicationId: application.id },
+    attributes: ["stageKey", "role", "status"],
     order: [["stageOrder", "ASC"]],
   });
-  const byStage = new Map();
-  for (const r of allRows) {
-    if (!byStage.has(r.stageKey)) byStage.set(r.stageKey, []);
-    byStage.get(r.stageKey).push(r);
+
+  const rowStatus = new Map(
+    existingRows.map((r) => [`${r.stageKey}:${r.role}`, r.status]),
+  );
+
+  for (const { stageDef, role } of TASK_CHAIN) {
+    const status = rowStatus.get(`${stageDef.key}:${role}`);
+    if (status === "completed") continue; // chain has passed this node
+
+    if (!status) {
+      // Row doesn't exist yet — seed the frontier task.
+      const result = await seedSingleTask(tenantDb, application, stageDef, role, ctx).catch(
+        (err) => {
+          logger.error({ err, stageKey: stageDef.key, role }, "ensureStageTasks: seed failed");
+          return null;
+        },
+      );
+      // If auto-completed, advance the frontier immediately.
+      if (result?.isNew && result.wasAutoCompleted) {
+        await seedNextInChain(tenantDb, application, stageDef, role, ctx);
+      }
+    }
+    // Row is pending or was just seeded — frontier handled. Stop.
+    break;
   }
 
-  if (seedAll) {
-    // Seed every stage that doesn't have a full set of rows yet.
-    for (const stage of LICENCE_STAGE_DEFINITIONS) {
-      await seedStageRows(tenantDb, application, stage, ctx);
-    }
-  } else {
-    // Sequential: walk stages in order and seed the first one that is not yet
-    // fully completed. Stages that have all rows completed are skipped.
-    for (const stage of LICENCE_STAGE_DEFINITIONS) {
-      const stageRows = byStage.get(stage.key) || [];
-      const allComplete = stageRows.length > 0 && stageRows.every((r) => r.status === "completed");
-      if (allComplete) continue; // already done — advance to next
-      // This is the active stage: seed/update it, then stop.
-      await seedStageRows(tenantDb, application, stage, ctx);
-      break;
-    }
-  }
-
-  // Return the full current snapshot (re-query so callers always see fresh data).
   return tenantDb.LicenceStageTask.findAll({
     where: { licenceApplicationId: application.id },
     order: [["stageOrder", "ASC"]],
@@ -512,7 +844,7 @@ export async function ensureStageTasks(tenantDb, applicationOrId, { req = null, 
  */
 function roleAutoCompletes(role, dataComplete, appStatus) {
   if (appStatus === "Approved") return true;
-  if (!dataComplete) return false;
+  if (dataComplete) return true; // Auto-complete all roles if stage data is fully complete
   return role === "sponsor" || role === "candidate";
 }
 
@@ -553,20 +885,47 @@ export async function getStagesForApplication(tenantDb, applicationOrId, { req =
   }
 
   const stages = LICENCE_STAGE_DEFINITIONS.map((def) => {
-    const tasks = (byStage.get(def.key) || []).map((t) => ({
-      id: t.id,
-      role: t.role,
-      title: t.title,
-      status: t.status,
-      assigneeName: t.assigneeName,
-      assigneeEmail: t.assigneeEmail,
-      assignedToUserId: t.assignedToUserId,
-      completedAt: t.completedAt,
-      dueDate: t.dueDate,
-    }));
-    let status = completed.has(def.key) ? "completed" : def.key === currentKey ? "in_progress" : "pending";
-    if (rejected && def.key === "decision_activation") status = "rejected";
-    return { key: def.key, order: def.order, title: def.title, govSection: def.govSection, status, tasks };
+    // Index DB rows for this stage by role for O(1) look-up.
+    const dbByRole = new Map(
+      (byStage.get(def.key) || []).map((t) => [t.role, t]),
+    );
+
+    // Emit a task entry for every role in the stage's chain sequence.
+    // Roles that haven't been seeded yet appear as "locked" placeholders so
+    // the panel always shows the complete upcoming task list without creating
+    // rows in advance.
+    const tasks = getChainSequence(def).map((role) => {
+      const t = dbByRole.get(role);
+      if (t) {
+        return {
+          id: t.id,
+          role: t.role,
+          title: t.title,
+          status: t.status,
+          assigneeName: t.assigneeName,
+          assigneeEmail: t.assigneeEmail,
+          assignedToUserId: t.assignedToUserId,
+          completedAt: t.completedAt,
+          dueDate: t.dueDate,
+        };
+      }
+      // No DB row yet — task is in the future, not yet created by the chain.
+      return {
+        id: null,
+        role,
+        title: def.tasks[role],
+        status: "locked",
+        assigneeName: null,
+        assigneeEmail: null,
+        assignedToUserId: null,
+        completedAt: null,
+        dueDate: null,
+      };
+    });
+
+    let stageStatus = completed.has(def.key) ? "completed" : def.key === currentKey ? "in_progress" : "pending";
+    if (rejected && def.key === "decision_activation") stageStatus = "rejected";
+    return { key: def.key, order: def.order, title: def.title, govSection: def.govSection, status: stageStatus, tasks };
   });
 
   return { applicationId: application.id, status: application.status, currentStageKey: currentKey, stages };
@@ -613,35 +972,39 @@ export async function completeStageTask(tenantDb, { applicationId, stageKey, rol
     const e = new Error("Licence application not found"); e.statusCode = 404; throw e;
   }
 
+  // Phase gate: certain government-pipeline stages require the application to
+  // have reached a specific status before any role can act on them.
+  checkStatusGate(application, stageDef);
+
   await ensureStageTasks(tenantDb, application, { req });
 
   const task = await tenantDb.LicenceStageTask.findOne({
     where: { licenceApplicationId: applicationId, stageKey, role },
   });
-  if (!task) {
-    const e = new Error("Task not found for this stage/role"); e.statusCode = 404; throw e;
-  }
-  if (task.status === "completed") return task; // idempotent
 
-  // Enforce sequential stage ordering: no task can be completed while any earlier
-  // stage still has incomplete tasks. This prevents stages from being bypassed.
-  if (stageDef.order > 1) {
-    const { Op } = tenantDb.Sequelize;
-    const incompletePrevious = await tenantDb.LicenceStageTask.count({
-      where: {
-        licenceApplicationId: applicationId,
-        stageOrder: { [Op.lt]: stageDef.order },
-        status: { [Op.ne]: "completed" },
-      },
-    });
-    if (incompletePrevious > 0) {
+  if (!task) {
+    // Distinguish "future stage not yet unlocked" from "invalid stage/role combo".
+    const activeKey = await getActiveStageKey(tenantDb, applicationId);
+    const activeOrder = activeKey ? (STAGE_BY_KEY[activeKey]?.order ?? 0) : Infinity;
+    if (stageDef.order > activeOrder) {
       const e = new Error(
-        `Complete all tasks in earlier stages before advancing to "${stageDef.title}" (${incompletePrevious} task(s) remaining).`,
+        `Stage "${stageDef.title}" is not yet unlocked. Complete "${STAGE_BY_KEY[activeKey]?.title}" first.`,
       );
       e.statusCode = 409;
       throw e;
     }
+    const e = new Error("Task not found for this stage and role"); e.statusCode = 404; throw e;
   }
+
+  if (task.status === "completed") return task; // idempotent
+
+  // Sequential enforcement: all tasks in every earlier stage must be completed
+  // before any task in this stage can be marked done.
+  await checkSequentialOrder(tenantDb, applicationId, stageDef);
+
+  // Within-stage role ordering: earlier roles in the execution sequence must
+  // complete their task before later roles can complete theirs.
+  await checkIntraStageOrder(tenantDb, applicationId, stageDef, role);
 
   const actorId = actorUser?.userId ?? null;
   const org = application.organisationId ?? req?.user?.organisation_id ?? null;
@@ -685,7 +1048,26 @@ export async function completeStageTask(tenantDb, { applicationId, stageKey, rol
     );
   });
 
-  // Fan-out notifications (in-app + email) — best-effort, never throws.
+  // ── Chain advancement: create the next task now that this one is done ────────
+  // Runs after the transaction so the completion row is visible to findOrCreate.
+  // Uses fresh data signals and recipients in case caseworkers were assigned or
+  // form data was saved during this request.
+  {
+    const appShape = await buildAppShape(tenantDb, application);
+    const { completed: freshCompleted } = deriveStageCompletion(appShape);
+    const freshRecipients = await resolveRoleRecipients(tenantDb, application);
+    const chainCtx = {
+      org: application.organisationId ?? req?.user?.organisation_id ?? null,
+      completed: freshCompleted,
+      recipients: freshRecipients,
+      req,
+    };
+    await seedNextInChain(tenantDb, application, stageDef, role, chainCtx).catch((err) =>
+      logger.error({ err, applicationId, stageKey, role }, "completeStageTask: chain advance failed"),
+    );
+  }
+
+  // ── Fan-out notifications (in-app + email) — best-effort, never throws ────────
   try {
     await notifyStageTaskCompleted({ tenantDb, application, stageDef, role, task, actorUser, req });
   } catch (err) {
@@ -762,6 +1144,16 @@ function actionUrlForAudience(audience) {
 export default {
   LICENCE_STAGE_DEFINITIONS,
   STAGE_ROLE_KEYS,
+  STAGE_PHASE_MAP,
+  STAGE_STATUS_GATE,
+  TASK_CHAIN,
+  stageRoleOrder,
+  getChainSequence,
+  nextChainNode,
+  checkSequentialOrder,
+  checkIntraStageOrder,
+  checkStatusGate,
+  getActiveStageKey,
   resolveRoleRecipients,
   ensureStageTasks,
   getStagesForApplication,

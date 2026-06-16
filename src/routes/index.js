@@ -26,6 +26,8 @@ import caseworkerSponsorRoutes from '../modules/Caseworker/Sponsors/caseworkerSp
 import caseworkerAuditRoutes from '../modules/Caseworker/Audit/caseworkerAudit.routes.js';
 import caseworkerLicenceRoutes from '../modules/Caseworker/Cases/caseworker.licence.routes.js';
 import caseworkerCosRoutes from '../modules/Caseworker/Cos/caseworkerCos.routes.js';
+import caseworkerWorkerRoutes from '../modules/Caseworker/Workers/caseworkerWorker.routes.js';
+import adminWorkerRoutes from '../modules/Admin/Settings/admin.worker.routes.js';
 import caseworkerTimelineRoutes from '../modules/Caseworker/Cases/caseTimeline.routes.js';
 import caseworkerPerformanceRoutes from '../modules/Caseworker/Performance/caseworkerPerformance.routes.js';
 import rescheduleRoutes from '../modules/Caseworker/Cases/reschedule.routes.js';
@@ -75,6 +77,7 @@ router.use('/admin/finance', adminFinanceRoutes);
 router.use('/admin/candidates', adminCandidateRoutes);
 router.use('/admin/document-checklists', adminDocumentChecklistRoutes);
 router.use('/admin/licence', adminLicenceRoutes);
+router.use('/admin/workers', adminWorkerRoutes);
 router.use('/admin/announcements', adminAnnouncementRoutes);
 router.use('/admin', adminRoutes);
 
@@ -86,6 +89,7 @@ router.use('/caseworker/sponsors', caseworkerSponsorRoutes);
 router.use('/caseworker/audit', caseworkerAuditRoutes);
 router.use('/caseworker/licence', caseworkerLicenceRoutes);
 router.use('/caseworker/cos', caseworkerCosRoutes);
+router.use('/caseworker/visa-workers', caseworkerWorkerRoutes);
 router.use('/caseworker', caseworkerTimelineRoutes);
 router.use('/caseworker', caseworkerPerformanceRoutes);
 router.use('/caseworker', caseworkerRoutes);

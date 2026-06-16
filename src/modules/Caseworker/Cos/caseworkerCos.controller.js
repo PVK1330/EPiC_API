@@ -6,6 +6,7 @@ import {
   reviewCosRequest,
   requestInfoCosRequest,
   isCaseworkerAssignedToCos,
+  getCosAllocationRecord,
 } from "../../../services/cosRequest.service.js";
 
 /** CoS requests assigned to the logged-in caseworker (optionally by status). */
@@ -71,6 +72,27 @@ const review = (action) => async (req, res) => {
 
 export const approveAssignedCosRequest = review("approve");
 export const rejectAssignedCosRequest = review("reject");
+
+/** GET /:id/allocation — view the allocation record for an approved CoS request. */
+export const getCosAllocationRecordHandler = async (req, res) => {
+  try {
+    const request = await getCosRequestById(req.tenantDb, req.params.id);
+    if (!request) {
+      return res.status(404).json({ status: "error", message: "CoS request not found" });
+    }
+    if (!hasFullAccessRole(req.user.role_id) && !isCaseworkerAssignedToCos(request, req.user.userId)) {
+      return res.status(403).json({ status: "error", message: "You are not assigned to this CoS request" });
+    }
+    const record = await getCosAllocationRecord(req.tenantDb, req.params.id);
+    if (!record) {
+      return res.status(404).json({ status: "error", message: "No allocation record found — request may not be approved yet" });
+    }
+    return res.status(200).json({ status: "success", data: record });
+  } catch (err) {
+    logger.error({ err }, "Error fetching CoS allocation record");
+    return res.status(500).json({ status: "error", message: "Failed to fetch allocation record" });
+  }
+};
 
 export const requestInfoForCosRequest = async (req, res) => {
   try {

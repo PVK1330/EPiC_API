@@ -79,6 +79,12 @@ import MeetingIntegrationModel from "./tenant/meetingIntegration.model.js";
 import IntegrationRetryQueueModel from "./tenant/integrationRetryQueue.model.js";
 import LicenceIntakeFormModel from "./tenant/licenceIntakeForm.model.js";
 import LicenceIntakeDocumentModel from "./tenant/licenceIntakeDocument.model.js";
+import LicenceInformationRequestModel from "./tenant/licenceInformationRequest.model.js";
+import LicenceInformationRequestCommentModel from "./tenant/licenceInformationRequestComment.model.js";
+import LicenceGrantRecordModel from "./tenant/licenceGrantRecord.model.js";
+import CosAllocationRecordModel from "./tenant/cosAllocationRecord.model.js";
+import SponsoredWorkerModel from "./tenant/sponsoredWorker.model.js";
+import SponsoredWorkerAuditModel from "./tenant/sponsoredWorkerAudit.model.js";
 
 /**
  * Register all models and associations on a Sequelize instance (main or tenant DB).
@@ -165,6 +171,12 @@ export function buildDb(sequelize) {
   db.IntegrationRetryQueue = IntegrationRetryQueueModel(sequelize, Sequelize.DataTypes);
   db.LicenceIntakeForm = LicenceIntakeFormModel(sequelize);
   db.LicenceIntakeDocument = LicenceIntakeDocumentModel(sequelize);
+  db.LicenceInformationRequest = LicenceInformationRequestModel(sequelize, Sequelize.DataTypes);
+  db.LicenceInformationRequestComment = LicenceInformationRequestCommentModel(sequelize, Sequelize.DataTypes);
+  db.LicenceGrantRecord = LicenceGrantRecordModel(sequelize, Sequelize.DataTypes);
+  db.CosAllocationRecord = CosAllocationRecordModel(sequelize, Sequelize.DataTypes);
+  db.SponsoredWorker = SponsoredWorkerModel(sequelize, Sequelize.DataTypes);
+  db.SponsoredWorkerAudit = SponsoredWorkerAuditModel(sequelize, Sequelize.DataTypes);
 
   // Associations (Same as before)
   db.Conversation.belongsTo(db.User, { foreignKey: "participantOneId", as: "participantOne" });
@@ -319,6 +331,13 @@ export function buildDb(sequelize) {
   db.CosRequest.belongsTo(db.User, { foreignKey: "reviewedBy", as: "reviewer" });
   db.CosRequest.belongsTo(db.Organisation, { foreignKey: "organisationId", as: "organisation" });
   db.User.hasMany(db.CosRequest, { foreignKey: "sponsorId", as: "cosRequests" });
+
+  // CoS Allocation Records — 1:1 with an approved CoS request.
+  db.CosRequest.hasOne(db.CosAllocationRecord, { foreignKey: "cosRequestId", as: "allocationRecord" });
+  db.CosAllocationRecord.belongsTo(db.CosRequest, { foreignKey: "cosRequestId", as: "cosRequest" });
+  db.CosAllocationRecord.belongsTo(db.User, { foreignKey: "sponsorId", as: "sponsor" });
+  db.CosAllocationRecord.belongsTo(db.User, { foreignKey: "allocatedById", as: "allocatedBy" });
+  db.CosAllocationRecord.belongsTo(db.Organisation, { foreignKey: "organisationId", as: "organisation" });
   db.CalendarMeeting.belongsTo(db.User, { foreignKey: "user_id", as: "user" });
   db.User.hasMany(db.CalendarMeeting, { foreignKey: "user_id", as: "calendarMeetings" });
   db.CalendarConnection.belongsTo(db.User, { foreignKey: "user_id", as: "user" });
@@ -405,6 +424,32 @@ export function buildDb(sequelize) {
   db.LicenceIntakeDocument.belongsTo(db.LicenceApplication, { foreignKey: "licenceApplicationId", as: "application" });
   db.LicenceIntakeDocument.belongsTo(db.User, { foreignKey: "uploadedByUserId", as: "uploader" });
   db.LicenceIntakeDocument.belongsTo(db.User, { foreignKey: "verifiedByUserId", as: "verifier" });
+
+  // Licence Grant Record — 1:1 with the application (created on grant).
+  db.LicenceApplication.hasOne(db.LicenceGrantRecord, { foreignKey: "licenceApplicationId", as: "grantRecord" });
+  db.LicenceGrantRecord.belongsTo(db.LicenceApplication, { foreignKey: "licenceApplicationId", as: "application" });
+  db.LicenceGrantRecord.belongsTo(db.User, { foreignKey: "approvedById", as: "approvedBy" });
+
+  // Information Request workflow (1:M application → requests; 1:M request → comments).
+  db.LicenceApplication.hasMany(db.LicenceInformationRequest, { foreignKey: "licenceApplicationId", as: "infoRequests" });
+  db.LicenceInformationRequest.belongsTo(db.LicenceApplication, { foreignKey: "licenceApplicationId", as: "application" });
+  db.LicenceInformationRequest.belongsTo(db.User, { foreignKey: "requestedById", as: "requestedBy" });
+  db.LicenceInformationRequest.belongsTo(db.User, { foreignKey: "resolvedById", as: "resolvedBy" });
+  db.LicenceInformationRequest.hasMany(db.LicenceInformationRequestComment, { foreignKey: "licenceInformationRequestId", as: "comments" });
+  db.LicenceInformationRequestComment.belongsTo(db.LicenceInformationRequest, { foreignKey: "licenceInformationRequestId", as: "infoRequest" });
+  db.LicenceInformationRequestComment.belongsTo(db.User, { foreignKey: "authorId", as: "author" });
+
+  // Phase 5 — Sponsored Worker Management.
+  db.SponsoredWorker.belongsTo(db.User, { foreignKey: "sponsorId", as: "sponsor" });
+  db.SponsoredWorker.belongsTo(db.Organisation, { foreignKey: "organisationId", as: "organisation" });
+  db.SponsoredWorker.belongsTo(db.CosRequest, { foreignKey: "cosRequestId", as: "cosRequest" });
+  db.SponsoredWorker.belongsTo(db.CosAllocationRecord, { foreignKey: "cosAllocationRecordId", as: "cosAllocationRecord" });
+  db.SponsoredWorker.hasMany(db.SponsoredWorkerAudit, { foreignKey: "sponsoredWorkerId", as: "auditTrail" });
+  db.SponsoredWorkerAudit.belongsTo(db.SponsoredWorker, { foreignKey: "sponsoredWorkerId", as: "worker" });
+  db.SponsoredWorkerAudit.belongsTo(db.User, { foreignKey: "actorId", as: "actor" });
+  db.User.hasMany(db.SponsoredWorker, { foreignKey: "sponsorId", as: "sponsoredWorkers" });
+  db.CosRequest.hasMany(db.SponsoredWorker, { foreignKey: "cosRequestId", as: "sponsoredWorkers" });
+  db.CosAllocationRecord.hasMany(db.SponsoredWorker, { foreignKey: "cosAllocationRecordId", as: "sponsoredWorkers" });
 
   return db;
 }

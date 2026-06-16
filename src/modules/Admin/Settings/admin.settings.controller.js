@@ -1,13 +1,11 @@
 import { Op } from 'sequelize';
 
 import bcrypt from 'bcryptjs';
-import fs from 'fs';
-import path from 'path';
 
 import { ROLES } from '../../../middlewares/role.middleware.js';
 import platformDb from '../../../models/index.js';
 import { toPublicAssetUrl } from '../../../services/stripeTenant.service.js';
-import { normalizeStorageRelativePath } from '../../../utils/storagePath.util.js';
+import { normalizeStorageRelativePath, toPublicImagePath } from '../../../utils/storagePath.util.js';
 import { seedTenantOrganisation } from '../../../services/tenantSeed.service.js';
 import logger from '../../../utils/logger.js';
 
@@ -135,8 +133,8 @@ export const getMe = async (req, res) => {
           mobile: plain.mobile,
 
           phone: buildPhoneDisplay(plain.country_code, plain.mobile),
-          profile_pic: plain.profile_pic ? `${process.env.BASE_URL || ''}/${plain.profile_pic.replace(/\\/g, '/')}` : null,
-          avatar_url: prefs.avatar_url ? `${process.env.BASE_URL || ''}/${prefs.avatar_url.replace(/\\/g, '/')}` : null,
+          profile_pic: plain.profile_pic ? toPublicImagePath(plain.profile_pic) : null,
+          avatar_url: prefs.avatar_url ? toPublicImagePath(prefs.avatar_url) : null,
 
           role_id: plain.role_id,
 
@@ -290,11 +288,7 @@ export const patchMe = async (req, res) => {
 
     if (avatar_url !== undefined) prefUpdates.avatar_url = avatar_url === null ? null : String(avatar_url).trim() || null;
     if (req.file?.path) {
-      const userDir = path.join('uploads', 'profile_pics', String(user.id));
-      fs.mkdirSync(userDir, { recursive: true });
-      const targetPath = path.join(userDir, req.file.filename);
-      fs.renameSync(req.file.path, targetPath);
-      const urlPath = targetPath.replace(/\\/g, '/');
+      const urlPath = toPublicImagePath(req.file.path);
       prefUpdates.avatar_url = urlPath;
       profileUpdates.profile_pic = urlPath;
     }
@@ -383,8 +377,8 @@ export const patchMe = async (req, res) => {
           mobile: plain.mobile,
 
           phone: buildPhoneDisplay(plain.country_code, plain.mobile),
-          profile_pic: plain.profile_pic ? `${process.env.BASE_URL || ''}/${plain.profile_pic.replace(/\\/g, '/')}` : null,
-          avatar_url: prefs.avatar_url ? `${process.env.BASE_URL || ''}/${prefs.avatar_url.replace(/\\/g, '/')}` : null,
+          profile_pic: plain.profile_pic ? toPublicImagePath(plain.profile_pic) : null,
+          avatar_url: prefs.avatar_url ? toPublicImagePath(prefs.avatar_url) : null,
 
           role_id: plain.role_id,
 
@@ -541,7 +535,7 @@ export const patchMePreferences = async (req, res) => {
 
           phone: buildPhoneDisplay(plain.country_code, plain.mobile),
 
-          avatar_url: prefs.avatar_url ? `${process.env.BASE_URL || ''}/${prefs.avatar_url.replace(/\\/g, '/')}` : null,
+          avatar_url: prefs.avatar_url ? toPublicImagePath(prefs.avatar_url) : null,
 
           role_id: plain.role_id,
 

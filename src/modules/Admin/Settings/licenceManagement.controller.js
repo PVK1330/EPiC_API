@@ -5,10 +5,6 @@ import { sendTransactionalEmail } from "../../../services/mail.service.js";
 import { generateNotificationEmailTemplate } from "../../../utils/emailTemplates.js";
 import logger from "../../../utils/logger.js";
 import {
-  activateSponsorLicence,
-  isCosRequestApplication,
-} from "../../../services/licenceActivation.service.js";
-import {
   loadFullApplication as loadFullApplicationV2,
   serializeApplication as serializeApplicationV2,
 } from "../../../services/licenceApplicationV2.service.js";
@@ -24,6 +20,7 @@ import {
   assignCosRequest,
   reviewCosRequest,
   requestInfoCosRequest,
+  getCosAllocationRecord,
 } from "../../../services/cosRequest.service.js";
 import * as sponsorshipNotify from "../../../services/sponsorshipNotification.service.js";
 import { ensureStageTasks } from "../../../services/licenceStageTask.service.js";
@@ -183,26 +180,14 @@ export const updateLicenceApplicationStatus = async (req, res) => {
     if (adminNotes) application.adminNotes = adminNotes;
     await application.save();
 
-    // On approval, activate the sponsor licence (Phase 4 — Licence Activation:
-    // status Active, licence number, issue/expiry dates, audit, notification).
-    // CoS top-ups are owned by the dedicated CoS request workflow
-    // (cosRequest.service); the isCosRequestApplication guard keeps any
-    // pre-migration "CoS Request:" licence row from activating a licence.
-    if (status === "Approved" && !isCosRequestApplication(application)) {
-      try {
-        await activateSponsorLicence({
-          tenantDb: req.tenantDb,
-          application,
-          approvedByUserId: req.user?.userId ?? null,
-          req,
-        });
-      } catch (err) {
-        logger.error({ err }, "Failed to activate sponsor licence");
-      }
-    }
+    // Licence activation (ISSUE-013): the canonical activation path is
+    // Decision Pending → Licence Granted via grantLicence() which wraps
+    // activateSponsorLicence() in its own outer transaction. The legacy
+    // Pending → Approved branch that called activateSponsorLicence() directly
+    // has been removed to avoid double-activation and split-state risk.
 
     // Events 4/6 — Information Requested / Licence Rejected / status change.
-    // Approved is skipped here (handled by licence activation, event 5).
+    // Approved is handled by licenceGrant.service (via grantLicence).
     try {
       await sponsorshipNotify.licenceStatusChanged({
         tenantDb: req.tenantDb,
@@ -645,6 +630,19 @@ export const rejectCosRequest = async (req, res) => {
     const code = error?.statusCode || 500;
     if (code >= 500) logger.error({ err: error }, "Error rejecting CoS request");
     res.status(code).json({ status: "error", message: code < 500 ? (error.message || "Failed to reject CoS request") : "Failed to reject CoS request" });
+  }
+};
+
+export const getCosAllocationRecordAdmin = async (req, res) => {
+  try {
+    const record = await getCosAllocationRecord(req.tenantDb, req.params.id);
+    if (!record) {
+      return res.status(404).json({ status: "error", message: "No allocation record found — request may not be approved yet" });
+    }
+    return res.status(200).json({ status: "success", data: record });
+  } catch (error) {
+    logger.error({ err: error }, "Error fetching CoS allocation record (admin)");
+    return res.status(500).json({ status: "error", message: "Failed to fetch CoS allocation record" });
   }
 };
 

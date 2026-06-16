@@ -8,6 +8,8 @@ import {
   updateSponsorCosRequest,
   deleteSponsorCosRequest,
   getCosSummary as getCosSummaryService,
+  getCosAllocationRecord,
+  listSponsorAllocationRecords,
 } from "../../../services/cosRequest.service.js";
 
 const uid = (req) => {
@@ -93,6 +95,37 @@ export const deleteCosRequest = async (req, res) => {
     res.status(200).json({ status: "success", message: "Request deleted" });
   } catch (err) {
     handleError(res, err, "Failed to delete CoS request");
+  }
+};
+
+/** GET /requests/:id/allocation — sponsor views their own allocation record for one request. */
+export const getCosAllocationRecordForSponsor = async (req, res) => {
+  try {
+    const userId = uid(req);
+    if (!userId) return res.status(401).json({ status: "error", message: "Invalid session" });
+    const record = await getCosAllocationRecord(req.tenantDb, req.params.id);
+    if (!record) {
+      return res.status(404).json({ status: "error", message: "No allocation record found for this request" });
+    }
+    // Sponsors may only view their own records.
+    if (record.sponsorId !== userId) {
+      return res.status(403).json({ status: "error", message: "Forbidden" });
+    }
+    return res.status(200).json({ status: "success", data: record });
+  } catch (err) {
+    handleError(res, err, "Failed to fetch CoS allocation record");
+  }
+};
+
+/** GET /allocations — list all allocation records for the sponsor. */
+export const listMyAllocationRecords = async (req, res) => {
+  try {
+    const userId = uid(req);
+    if (!userId) return res.status(401).json({ status: "error", message: "Invalid session" });
+    const records = await listSponsorAllocationRecords(req.tenantDb, userId);
+    return res.status(200).json({ status: "success", data: records });
+  } catch (err) {
+    handleError(res, err, "Failed to fetch CoS allocation records");
   }
 };
 

@@ -89,9 +89,10 @@ app.use('/api/public/images', (req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Cache-Control', 'public, max-age=86400');
   next();
-}, express.static('storage/private/organisations', STATIC_CACHE), 
+}, express.static('storage/private/organisations', STATIC_CACHE),
    express.static('storage/private/platform', STATIC_CACHE),
-   express.static('storage/private/superadmin', STATIC_CACHE));
+   express.static('storage/private/superadmin', STATIC_CACHE),
+   express.static('storage/private/avatars', STATIC_CACHE));
 
 // API Routes
 app.use('/api', routes);

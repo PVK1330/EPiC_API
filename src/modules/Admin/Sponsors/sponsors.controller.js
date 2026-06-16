@@ -256,9 +256,9 @@ export const getAllSponsors = async (req, res) => {
     // hides inactive sponsors so a deleted record drops out of view and does
     // not reappear on refresh. They remain in the DB and are still reachable by
     // explicitly selecting the "inactive" status filter.
-    if (status) {
+    if (status && status !== "all") {
       whereClause.status = status;
-    } else {
+    } else if (!status) {
       whereClause.status = { [Op.ne]: "inactive" };
     }
 

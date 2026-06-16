@@ -13,6 +13,7 @@ import {
     approveCosRequest,
     rejectCosRequest,
     requestInfoForCosRequestAdmin,
+    getCosAllocationRecordAdmin,
     getLicenceApplicationV2,
     downloadLicenceDocument,
     verifyAdminAppendixDocument,
@@ -26,6 +27,18 @@ import { verifyTokenAndTenant } from '../../../middlewares/authStack.middleware.
 import { checkRole, ADMIN_ROLES } from '../../../middlewares/role.middleware.js';
 import { validate } from '../../../middlewares/validate.middleware.js';
 import { getLicenceStages, completeLicenceStageTask } from '../../Shared/Licence/licenceStage.controller.js';
+import {
+    createInfoRequestHandler,
+    listInfoRequestsHandler,
+    getInfoRequestHandler,
+    addCommentHandler,
+    closeInfoRequestHandler,
+} from '../../Shared/Licence/licenceInformationRequest.controller.js';
+import {
+    grantLicenceHandler,
+    rejectLicenceHandler,
+    getGrantRecordHandler,
+} from '../../Shared/Licence/licenceGrant.controller.js';
 import { generateCredentialsSchema } from '../../../validations/licenceGovernment.validation.js';
 import { adminUpdateLicenceSchema } from '../../../validations/licenceApplication.validation.js';
 
@@ -50,9 +63,22 @@ router.post("/cos-requests/:id/assign-caseworker", assignCosRequestToCaseworker)
 router.patch("/cos-requests/:id/approve", approveCosRequest);
 router.patch("/cos-requests/:id/reject", rejectCosRequest);
 router.patch("/cos-requests/:id/request-info", requestInfoForCosRequestAdmin);
+router.get("/cos-requests/:id/allocation", getCosAllocationRecordAdmin);
 router.delete("/delete/:id", deleteLicenceApplication);
 router.post("/restore/:id", restoreLicenceApplication);
 router.put("/update/:id", validate(adminUpdateLicenceSchema, "adminUpdateLicenceSchema"), updateLicenceApplicationByAdmin);
+
+// Information Request workflow — admin may raise, comment, and close requests.
+router.post("/:id/info-requests",                     createInfoRequestHandler);
+router.get("/:id/info-requests",                      listInfoRequestsHandler);
+router.get("/:id/info-requests/:requestId",           getInfoRequestHandler);
+router.post("/:id/info-requests/:requestId/comments", addCommentHandler);
+router.patch("/:id/info-requests/:requestId/close",   closeInfoRequestHandler);
+
+// Licence Grant workflow — admin-only; only ADMIN/SUPERADMIN roles may approve.
+router.post("/:id/grant",        grantLicenceHandler);
+router.post("/:id/reject-final", rejectLicenceHandler);
+router.get("/:id/grant-record",  getGrantRecordHandler);
 
 // Appendix A documents — admin verify / reject (same as caseworker but admin-gated).
 router.patch("/:id/appendix-documents/:documentId/verify", verifyAdminAppendixDocument);
