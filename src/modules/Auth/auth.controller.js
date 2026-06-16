@@ -619,6 +619,41 @@ export const login = catchAsync(async (req, res) => {
     }
   }
 
+  // Main URL (no org context): same email can exist across multiple orgs and
+  // platform roles. Identify the correct user by password match so that a
+  // locked/wrong-password platform row never blocks an org user from logging in.
+  if (!req.organisationContext?.organisation) {
+    // Sync any tenant-only users to platform DB first (users who haven't logged
+    // in via slug URL yet won't have a platform record).
+    if (!user) {
+      const orgs = await platformDb.Organisation.findAll({
+        where: { status: { [platformDb.Sequelize.Op.in]: ['active', 'trial'] } },
+        attributes: ['id', 'database_name'],
+      });
+      for (const org of orgs) {
+        if (!org.database_name) continue;
+        try {
+          const tDb = getTenantDb(org.database_name);
+          const tUser = await tDb.User.findOne({ where: { email: emailNorm } });
+          if (tUser) {
+            await ensureUserOnPlatformFromTenant(tDb, tUser.id, org.id);
+          }
+        } catch (_) { /* skip unreachable tenant DB */ }
+      }
+    }
+
+    // Now pick the user whose password actually matches — avoids wrong-row priority.
+    const allCandidates = await platformDb.User.findAll({
+      where: { email: emailNorm, status: 'active' },
+      order: [['id', 'ASC']],
+    });
+    user = null;
+    for (const candidate of allCandidates) {
+      const m = await bcrypt.compare(password, candidate.password);
+      if (m) { user = candidate; break; }
+    }
+  }
+
   if (!user) {
     return ApiResponse.unauthorized(res, 'Invalid credentials.');
   }
@@ -647,8 +682,6 @@ export const login = catchAsync(async (req, res) => {
       if (expiredSub) subscriptionExpired = true;
     }
 
-    // Only the org admin (role 3) may sign in while expired, to self-serve
-    // renewal and pay. Every other role stays blocked until reactivation.
     if (subscriptionExpired && user.role_id !== 3) {
       return ApiResponse.forbidden(res, 'Your organisation subscription has expired. Please contact your administrator.');
     }
@@ -666,7 +699,11 @@ export const login = catchAsync(async (req, res) => {
     return ApiResponse.forbidden(res, 'Account is locked due to multiple failed attempts. Please try again later.');
   }
 
-  const isMatch = await bcrypt.compare(password, user.password);
+  // For org-context logins the password check still runs here.
+  const isMatch = req.organisationContext?.organisation
+    ? await bcrypt.compare(password, user.password)
+    : true; // already verified above via password-match selection
+
   if (!isMatch) {
     user.failed_login_attempts = (user.failed_login_attempts || 0) + 1;
     if (user.failed_login_attempts >= 5) {

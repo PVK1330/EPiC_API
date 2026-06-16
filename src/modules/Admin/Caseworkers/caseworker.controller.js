@@ -663,8 +663,8 @@ export const getAllCaseworkers = async (req, res) => {
     // hides inactive caseworkers so a deleted record drops out of view and does
     // not reappear on refresh. They remain in the DB and are still reachable by
     // explicitly selecting the "inactive" status filter.
-    if (status) userFilters.status = status;
-    else userFilters.status = { [Op.ne]: "inactive" };
+    if (status && status !== "all") userFilters.status = status;
+    else if (!status) userFilters.status = { [Op.ne]: "inactive" };
     if (search) {
       userFilters = {
         [Op.and]: [

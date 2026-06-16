@@ -11,6 +11,13 @@ export const LICENCE_AUDIT_ACTIONS = Object.freeze({
   REQUEST_INFO:   "request_info",
   UNDER_REVIEW:   "under_review",
   REVIEW:         "review",
+  // Information Request workflow actions
+  INFO_RESPONDED:        "info_responded",
+  INFO_REQUEST_CLOSED:   "info_request_closed",
+  REVIEW_RESTARTED:      "review_restarted",
+  // Licence grant / rejection (formal terminal outcomes)
+  LICENCE_GRANTED:       "licence_granted",
+  LICENCE_REJECTED:      "licence_rejected",
   // Phase 1 — government processing pipeline actions
   REVIEW_STARTED:                      "review_started",
   GOVERNMENT_REGISTRATION_STARTED:     "government_registration_started",
@@ -28,6 +35,8 @@ export function statusToAuditAction(status) {
   switch (String(status || "")) {
     case "Approved":               return LICENCE_AUDIT_ACTIONS.APPROVE;
     case "Rejected":               return LICENCE_AUDIT_ACTIONS.REJECT;
+    case "Licence Granted":        return LICENCE_AUDIT_ACTIONS.LICENCE_GRANTED;
+    case "Licence Rejected":       return LICENCE_AUDIT_ACTIONS.LICENCE_REJECTED;
     case "Information Requested":  return LICENCE_AUDIT_ACTIONS.REQUEST_INFO;
     case "Under Review":           return LICENCE_AUDIT_ACTIONS.REVIEW_STARTED;
     case "Government Processing":  return LICENCE_AUDIT_ACTIONS.GOVERNMENT_REGISTRATION_STARTED;
@@ -82,6 +91,7 @@ export async function recordLicenceAudit({
   assignedCaseworkerIds = null,
   notes = null,
   req = null,
+  transaction = null,
 }) {
   const organisationId =
     application?.organisationId ??
@@ -97,7 +107,7 @@ export async function recordLicenceAudit({
       newStatus,
       assignedCaseworkerIds,
       notes,
-    });
+    }, ...(transaction ? [{ transaction }] : []));
   } catch (err) {
     logger.error({ err }, "Failed to write licence application audit row");
   }

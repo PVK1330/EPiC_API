@@ -34,7 +34,7 @@ export default (sequelize, DataTypes) => {
                 defaultValue: 'New',
             },
             status: {
-                type: DataTypes.ENUM('Draft', 'Pending', 'Approved', 'Rejected', 'Under Review', 'Information Requested', 'Government Processing', 'Decision Pending'),
+                type: DataTypes.ENUM('Draft', 'Pending', 'Approved', 'Rejected', 'Under Review', 'Information Requested', 'Government Processing', 'Decision Pending', 'Licence Granted', 'Licence Rejected'),
                 allowNull: false,
                 defaultValue: 'Pending',
             },
@@ -174,6 +174,23 @@ export default (sequelize, DataTypes) => {
                 type: DataTypes.DATE,
                 allowNull: true,
                 field: "review_started_at",
+            },
+            // Rejection reason stored directly for fast display without a join.
+            rejectionReason: {
+                type: DataTypes.TEXT,
+                allowNull: true,
+                field: "rejection_reason",
+            },
+            // Information Request workflow timestamps.
+            infoRequestedAt: {
+                type: DataTypes.DATE,
+                allowNull: true,
+                field: "info_requested_at",
+            },
+            infoReceivedAt: {
+                type: DataTypes.DATE,
+                allowNull: true,
+                field: "info_received_at",
             },
             // Soft-delete timestamp. Non-null means the row has been soft-deleted
             // via Sequelize paranoid mode; hard-deleted rows are gone from the DB.

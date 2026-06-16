@@ -64,8 +64,8 @@ function csrfCookieOptions() {
     path: "/",
   };
 
-  // Share across tenant subdomains in production so the frontend host can read
-  // the cookie that is also presented to the API host.
+  // In production share the CSRF cookie across all tenant subdomains.
+  // In dev, do NOT set domain — browsers reject domain=.localhost.
   if (isProd && platformDomain && platformDomain !== "localhost") {
     options.domain = `.${platformDomain}`;
   }

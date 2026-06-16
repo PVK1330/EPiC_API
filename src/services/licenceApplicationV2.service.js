@@ -1,6 +1,8 @@
-import { Op } from "sequelize";
+import { Op, UniqueConstraintError } from "sequelize";
 import logger from "../utils/logger.js";
 import { computeFee } from "./licenceFee.service.js";
+import { validateTransition, WORKFLOW_TYPES } from "./workflowEngine.service.js";
+
 
 /**
  * Orchestration for the normalized Sponsor Licence Application V2 (8-step wizard).
@@ -132,39 +134,65 @@ export async function seedAppendixDocuments(tenantDb, applicationId, organisatio
 
 /** Create a new V2 draft application (status Draft) and seed the base Appendix A list. */
 export async function createDraft({ tenantDb, userId, organisationId }) {
-  // Block if a non-terminal, non-draft application already exists.
-  // Sponsors may only re-apply once their licence is Approved (or Rejected/Cancelled).
-  const blocking = await tenantDb.LicenceApplication.findOne({
-    where: {
-      userId,
-      applicationVersion: APPLICATION_VERSION_V2,
-      status: { [Op.notIn]: ["Draft", "Rejected", "Approved"] },
-    },
-    attributes: ["id", "status"],
-  });
-  if (blocking) {
-    const err = new Error(
-      `You already have an application under review (${blocking.status}). Please wait for a decision before submitting a new one.`
+  // CRIT-002: Wrap check-and-create in a SERIALIZABLE transaction so that two
+  // concurrent requests from the same sponsor cannot both pass the blocking check
+  // and both create a Draft application (TOCTOU race window eliminated).
+  // The partial unique index `uq_active_v2_application_per_user` provides a DB-level
+  // last-resort guard; its UniqueConstraintError is caught and returned as HTTP 409.
+  try {
+    return await tenantDb.sequelize.transaction(
+      { isolationLevel: tenantDb.sequelize.constructor.Transaction.ISOLATION_LEVELS.SERIALIZABLE },
+      async (t) => {
+        // Re-run the blocking check inside the transaction so no concurrent request
+        // can slip past it between the check and the create.
+        const blocking = await tenantDb.LicenceApplication.findOne({
+          where: {
+            userId,
+            applicationVersion: APPLICATION_VERSION_V2,
+            status: { [Op.notIn]: ["Draft", "Rejected", "Approved", "Licence Granted", "Licence Rejected"] },
+            deletedAt: null,
+          },
+          attributes: ["id", "status"],
+          transaction: t,
+          lock: t.LOCK.UPDATE,
+        });
+        if (blocking) {
+          const err = new Error(
+            `You already have an application under review (${blocking.status}). Please wait for a decision before submitting a new one.`
+          );
+          err.statusCode = 409;
+          err.code = "ACTIVE_APPLICATION_EXISTS";
+          throw err;
+        }
+
+        const app = await tenantDb.LicenceApplication.create(
+          {
+            userId,
+            organisationId: organisationId ?? null,
+            type: "New",
+            status: "Draft",
+            applicationVersion: APPLICATION_VERSION_V2,
+            currentStep: 1,
+          },
+          { transaction: t }
+        );
+        await seedAppendixDocuments(tenantDb, app.id, organisationId, [], t);
+        return app;
+      }
     );
-    err.statusCode = 409;
+  } catch (err) {
+    // CRIT-002: DB unique index `uq_active_v2_application_per_user` fires when a
+    // concurrent request inserts before us inside the SERIALIZABLE window.
+    if (err instanceof UniqueConstraintError) {
+      const conflict = new Error(
+        "You already have an active application. Duplicate application creation is not permitted."
+      );
+      conflict.statusCode = 409;
+      conflict.code = "DUPLICATE_ACTIVE_APPLICATION";
+      throw conflict;
+    }
     throw err;
   }
-
-  return tenantDb.sequelize.transaction(async (t) => {
-    const app = await tenantDb.LicenceApplication.create(
-      {
-        userId,
-        organisationId: organisationId ?? null,
-        type: "New",
-        status: "Draft",
-        applicationVersion: APPLICATION_VERSION_V2,
-        currentStep: 1,
-      },
-      { transaction: t }
-    );
-    await seedAppendixDocuments(tenantDb, app.id, organisationId, [], t);
-    return app;
-  });
 }
 
 async function upsertOne(Model, applicationId, organisationId, data, t) {
@@ -254,6 +282,14 @@ async function currentRouteCodes(tenantDb, appId, t = null) {
  */
 export async function submitApplication({ tenantDb, application }) {
   const appId = application.id;
+
+  const check = validateTransition(WORKFLOW_TYPES.LICENCE, application.status, "Pending");
+  if (!check.valid) {
+    const err = new Error(check.message);
+    err.statusCode = 422;
+    throw err;
+  }
+
   const full = await loadFullApplication(tenantDb, appId, { ownerUserId: application.userId });
   const routeCodes = (full.routes || []).map((r) => r.routeCode);
 
@@ -336,6 +372,100 @@ export function serializeApplication(app) {
   };
 }
 
+export function splitFullName(name) {
+  const parts = (name || "").trim().split(/\s+/);
+  const firstName = parts[0] || "";
+  const lastName = parts.slice(1).join(" ") || "";
+  return { firstName, lastName };
+}
+
+export async function syncPersonnelFromProfile(tenantDb, applicationId, userId) {
+  const application = await tenantDb.LicenceApplication.findByPk(applicationId);
+  if (!application) {
+    const err = new Error("Application not found");
+    err.statusCode = 404;
+    throw err;
+  }
+
+  const profile = await tenantDb.SponsorProfile.findOne({ where: { userId } });
+  if (!profile) {
+    return application;
+  }
+
+  await tenantDb.sequelize.transaction(async (t) => {
+    if (profile.authorisingName) {
+      const { firstName, lastName } = splitFullName(profile.authorisingName);
+      const aoData = {
+        firstName,
+        lastName,
+        email: profile.authorisingEmail || null,
+        phone: profile.authorisingPhone || null,
+      };
+      const existingAo = await tenantDb.LicenceAuthorisingOfficer.findOne({
+        where: { licenceApplicationId: applicationId },
+        transaction: t,
+      });
+      if (existingAo) {
+        await existingAo.update(aoData, { transaction: t });
+      } else {
+        await tenantDb.LicenceAuthorisingOfficer.create({
+          licenceApplicationId: applicationId,
+          organisationId: application.organisationId,
+          ...aoData,
+        }, { transaction: t });
+      }
+    }
+
+    if (profile.keyContactName) {
+      const { firstName, lastName } = splitFullName(profile.keyContactName);
+      const kcData = {
+        firstName,
+        lastName,
+        email: profile.keyContactEmail || null,
+        phone: profile.keyContactPhone || null,
+        jobTitle: profile.keyContactDepartment || null,
+      };
+      const existingKc = await tenantDb.LicenceKeyContact.findOne({
+        where: { licenceApplicationId: applicationId },
+        transaction: t,
+      });
+      if (existingKc) {
+        await existingKc.update(kcData, { transaction: t });
+      } else {
+        await tenantDb.LicenceKeyContact.create({
+          licenceApplicationId: applicationId,
+          organisationId: application.organisationId,
+          ...kcData,
+        }, { transaction: t });
+      }
+    }
+
+    if (Array.isArray(profile.level1Users) && profile.level1Users.length > 0) {
+      await tenantDb.LicenceLevel1User.destroy({
+        where: { licenceApplicationId: applicationId },
+        transaction: t,
+      });
+
+      const toCreate = profile.level1Users.map((user) => {
+        const { firstName, lastName } = splitFullName(user.name);
+        return {
+          licenceApplicationId: applicationId,
+          organisationId: application.organisationId,
+          firstName,
+          lastName,
+          email: user.email || null,
+          phone: user.phone || null,
+          jobTitle: user.jobTitle || null,
+        };
+      });
+
+      await tenantDb.LicenceLevel1User.bulkCreate(toCreate, { transaction: t });
+    }
+  });
+
+  return loadFullApplication(tenantDb, applicationId, { ownerUserId: userId });
+}
+
 export default {
   APPLICATION_VERSION_V2,
   ROUTE_CODES,
@@ -346,4 +476,5 @@ export default {
   saveDraft,
   submitApplication,
   serializeApplication,
+  syncPersonnelFromProfile,
 };

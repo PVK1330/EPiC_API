@@ -1,5 +1,15 @@
 import { Router } from 'express';
-import { getCosSummary, requestCosAllocation, getCosRequests, updateCosRequest, deleteCosRequest, exportCosSummary, exportCosRequests } from './sponsorCos.controller.js';
+import {
+  getCosSummary,
+  requestCosAllocation,
+  getCosRequests,
+  updateCosRequest,
+  deleteCosRequest,
+  exportCosSummary,
+  exportCosRequests,
+  getCosAllocationRecordForSponsor,
+  listMyAllocationRecords,
+} from './sponsorCos.controller.js';
 import { requireActiveSponsorLicence } from '../../../middlewares/requireActiveSponsorLicence.middleware.js';
 
 const router = Router();
@@ -10,6 +20,9 @@ router.post('/request', requireActiveSponsorLicence(), requestCosAllocation);
 router.get('/requests', getCosRequests);
 router.put('/requests/:id', updateCosRequest);
 router.delete('/requests/:id', deleteCosRequest);
+// Allocation records — immutable record created when a CoS request is approved.
+router.get('/allocations', listMyAllocationRecords);
+router.get('/requests/:id/allocation', getCosAllocationRecordForSponsor);
 router.get('/export/summary', exportCosSummary);
 router.get('/export/requests', exportCosRequests);
 

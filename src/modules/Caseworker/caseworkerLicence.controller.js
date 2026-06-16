@@ -5,7 +5,6 @@ import {
     NotificationTypes,
     NotificationPriority
 } from '../../services/notification.service.js';
-import { activateSponsorLicence, isCosRequestApplication } from '../../services/licenceActivation.service.js';
 import { recordLicenceAudit, statusToAuditAction, getLicenceAuditTrail } from '../../services/licenceAssignment.service.js';
 import * as sponsorshipNotify from '../../services/sponsorshipNotification.service.js';
 import { loadFullApplication as loadFullApplicationV2, serializeApplication as serializeApplicationV2 } from '../../services/licenceApplicationV2.service.js';
@@ -83,22 +82,12 @@ export const updateLicenceReviewStatus = async (req, res) => {
         }
         await application.save();
 
-        // On approval, activate the sponsor licence (Phase 4 — Licence
-        // Activation). CoS top-ups are owned by the dedicated CoS request
-        // workflow (cosRequest.service); the isCosRequestApplication guard keeps
-        // any pre-migration "CoS Request:" licence row from activating a licence.
-        if (status === 'Approved' && !isCosRequestApplication(application)) {
-            try {
-                await activateSponsorLicence({
-                    tenantDb: req.tenantDb,
-                    application,
-                    approvedByUserId: caseworkerId,
-                    req,
-                });
-            } catch (err) {
-                logger.error({ err }, 'Failed to activate sponsor licence');
-            }
-        }
+        // Licence activation (ISSUE-013): activation is owned exclusively by
+        // grantLicence() (Decision Pending → Licence Granted). Caseworkers
+        // advance the application through review stages; only an admin/superadmin
+        // may grant (via the dedicated grant endpoint). The legacy
+        // Approved branch that called activateSponsorLicence() directly
+        // has been removed to prevent double-activation.
 
         // Notify Sponsor (centralized: Information Requested / Rejected / status change).
         try {

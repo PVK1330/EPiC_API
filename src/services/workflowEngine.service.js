@@ -19,7 +19,7 @@ const CASE_TRANSITIONS = {
   client_care_letter: ['application_submitted', 'case_closure'],
   ccl_payment_received: ['application_submitted', 'case_closure'], // Legacy
   application_submitted: ['biometrics_booked', 'awaiting_decision', 'case_closure'],
-  biometrics_booked: ['biometrics_confirmation_sent', 'documents_uploaded', 'case_closure'],
+  biometrics_booked: ['biometrics_confirmation_sent', 'documents_uploaded', 'awaiting_decision', 'case_closure'],
   biometrics_confirmation_sent: ['documents_uploaded', 'awaiting_decision', 'case_closure'],
   documents_uploaded: ['awaiting_decision', 'case_closure'],
   awaiting_decision: ['decision_communicated', 'case_closure'],
@@ -35,14 +35,16 @@ const LICENCE_APPROVER_ROLE_IDS = new Set([3, 5]);
 const LICENCE_TRANSITIONS = {
   'Draft':                  ['Pending'],
   'Pending':                ['Under Review', 'Information Requested', 'Approved', 'Rejected'],
-  // 'Approved' removed: no-one may skip Government Processing from Under Review.
-  // The only legal path to Approved is: Government Processing → Decision Pending → Approved.
+  // Direct 'Approved'/'Rejected' kept for legacy V1 flows.
+  // The formal grant path is: Government Processing → Decision Pending → Licence Granted | Licence Rejected.
   'Under Review':           ['Information Requested', 'Government Processing', 'Rejected'],
   'Information Requested':  ['Under Review', 'Rejected'],
   'Government Processing':  ['Decision Pending', 'Information Requested', 'Rejected'],
-  'Decision Pending':       ['Approved', 'Rejected'],
+  'Decision Pending':       ['Licence Granted', 'Licence Rejected', 'Approved', 'Rejected'],
   'Approved':               ['Expired'],
   'Rejected':               [],
+  'Licence Granted':        ['Expired'],
+  'Licence Rejected':       [],
   'Expired':                []
 };
 
@@ -54,6 +56,16 @@ const COS_REQUEST_TRANSITIONS = {
   'Used': [],
   'Expired': [],
   'Revoked': []
+};
+
+const WORKER_TRANSITIONS = {
+  'CoS Assigned':           ['Immigration Assessment', 'Visa Rejected'],
+  'Immigration Assessment': ['Visa Preparation', 'Visa Rejected'],
+  'Visa Preparation':       ['Compliance Review', 'Visa Rejected'],
+  'Compliance Review':      ['Visa Decision', 'Visa Rejected'],
+  'Visa Decision':          ['Visa Granted', 'Visa Rejected'],
+  'Visa Granted':           [],
+  'Visa Rejected':          [],
 };
 
 const SPONSOR_LIFECYCLE_TRANSITIONS = {
@@ -74,14 +86,16 @@ export const WORKFLOW_TYPES = {
   CASE: 'case',
   LICENCE: 'licence',
   COS: 'cos',
-  SPONSOR: 'sponsor'
+  SPONSOR: 'sponsor',
+  WORKER: 'worker',
 };
 
 const MATRICES = {
   [WORKFLOW_TYPES.CASE]: CASE_TRANSITIONS,
   [WORKFLOW_TYPES.LICENCE]: LICENCE_TRANSITIONS,
   [WORKFLOW_TYPES.COS]: COS_REQUEST_TRANSITIONS,
-  [WORKFLOW_TYPES.SPONSOR]: SPONSOR_LIFECYCLE_TRANSITIONS
+  [WORKFLOW_TYPES.SPONSOR]: SPONSOR_LIFECYCLE_TRANSITIONS,
+  [WORKFLOW_TYPES.WORKER]: WORKER_TRANSITIONS,
 };
 
 /**
@@ -121,10 +135,11 @@ export function validateTransition(workflowType, currentState, nextState, option
   }
 
   // Role-aware constraint for the LICENCE workflow: only ADMIN / SUPERADMIN may
-  // record an 'Approved' outcome. Caseworkers drive the pipeline forward
-  // (Under Review → Government Processing → Decision Pending) but cannot make
+  // record an 'Approved' or 'Licence Granted' outcome. Caseworkers drive the pipeline
+  // forward (Under Review → Government Processing → Decision Pending) but cannot make
   // the final approval call — that belongs to an administrator.
-  if (workflowType === WORKFLOW_TYPES.LICENCE && nextState === 'Approved' && options.roleId !== undefined) {
+  const APPROVAL_STATES = new Set(['Approved', 'Licence Granted']);
+  if (workflowType === WORKFLOW_TYPES.LICENCE && APPROVAL_STATES.has(nextState) && options.roleId !== undefined) {
     const roleId = Number(options.roleId);
     if (!LICENCE_APPROVER_ROLE_IDS.has(roleId)) {
       return {
@@ -290,4 +305,67 @@ export async function executeWorkflowTransition({
   }
 
   return { previousState: currentState, newState: nextState, success: true };
+}
+
+/**
+ * Validates whether a LicenceApplication's current status permits access to the
+ * given workflow phase number (1–5).
+ *
+ * This function operates on `LicenceApplication.status`, NOT on
+ * `SponsorProfile.licenceStatus`. Phases 4 and 5 (CoS / Sponsored Worker) also
+ * require `SponsorProfile.licenceStatus = 'Active'` — that is enforced by the
+ * requireActiveSponsorLicence middleware and is out of scope here.
+ *
+ * Phase rules:
+ *   1 — always accessible (onboarding).
+ *   2 — always accessible for any non-null application status.
+ *   3 — application must be Under Review or later in the government pipeline.
+ *   4 — application must be Approved (licence activated).
+ *   5 — application must be Approved (licence activated).
+ *
+ * @param {string} applicationStatus - LicenceApplication.status
+ * @param {number} targetPhase       - integer 1 through 5
+ * @returns {{ valid: boolean, message?: string }}
+ */
+export function validatePhaseGate(applicationStatus, targetPhase) {
+  if (!applicationStatus) {
+    return { valid: false, message: "Application status is required to validate phase access." };
+  }
+
+  const phase = Number(targetPhase);
+
+  if (phase <= 2) return { valid: true };
+
+  if (phase === 3) {
+    const phase3Statuses = new Set([
+      "Under Review",
+      "Information Requested",
+      "Government Processing",
+      "Decision Pending",
+      "Approved",
+      "Licence Granted",
+      "Licence Rejected",
+    ]);
+    if (phase3Statuses.has(applicationStatus)) return { valid: true };
+    return {
+      valid: false,
+      message:
+        `Phase 3 (Licence Review & Approval) requires the application to be ` +
+        `"Under Review" or later. Current status: "${applicationStatus}".`,
+    };
+  }
+
+  if (phase === 4 || phase === 5) {
+    const grantedStatuses = new Set(["Approved", "Licence Granted"]);
+    if (grantedStatuses.has(applicationStatus)) return { valid: true };
+    return {
+      valid: false,
+      message:
+        `Phase ${phase} requires the licence application to be "Licence Granted" or "Approved" ` +
+        `(SponsorProfile.licenceStatus must be "Active"). ` +
+        `Current application status: "${applicationStatus}".`,
+    };
+  }
+
+  return { valid: false, message: `Unknown phase: ${targetPhase}.` };
 }

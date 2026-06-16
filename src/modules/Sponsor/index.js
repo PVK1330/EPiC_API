@@ -6,6 +6,7 @@ import sponsorWorkerRoutes from './Workers/sponsorWorker.routes.js';
 import sponsorLicenceRoutes from './Licence/sponsorLicence.routes.js';
 import sponsorLicenceV2Routes from './Licence/sponsorLicenceV2.routes.js';
 import sponsorCosRoutes from './Licence/sponsorCos.routes.js';
+import sponsorVisaWorkerRoutes from './Licence/sponsorWorker.routes.js';
 import sponsorDashboardRoutes from './Dashboard/sponsorDashboard.routes.js';
 import workerEventRoutes from './Workers/workerEvent.routes.js';
 import complianceDocumentRoutes from './Compliance/complianceDocument.routes.js';
@@ -31,6 +32,8 @@ router.use('/workers', sponsorWorkerRoutes);
 router.use('/licence/v2', sponsorLicenceV2Routes);
 router.use('/licence', sponsorLicenceRoutes);
 router.use('/cos', sponsorCosRoutes);
+// Phase 5 — Visa workflow for sponsored workers (SponsoredWorker table, not legacy Cases).
+router.use('/visa-workers', sponsorVisaWorkerRoutes);
 router.use('/dashboard', sponsorDashboardRoutes);
 
 router.get('/cases', getBusinessCases);

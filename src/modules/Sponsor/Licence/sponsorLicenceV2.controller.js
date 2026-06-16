@@ -6,6 +6,7 @@ import {
   loadFullApplication,
   serializeApplication,
   APPLICATION_VERSION_V2,
+  syncPersonnelFromProfile as syncSvc,
 } from "../../../services/licenceApplicationV2.service.js";
 import { validateForSubmission } from "../../../validations/licenceApplicationV2.validation.js";
 import { computeFee } from "../../../services/licenceFee.service.js";
@@ -30,6 +31,7 @@ export const createDraft = async (req, res) => {
     const userId = uid(req);
     if (!userId) return res.status(401).json({ status: "error", message: "Invalid session" });
     const app = await createDraftSvc({ tenantDb: req.tenantDb, userId, organisationId: orgId(req) });
+    await syncSvc(req.tenantDb, app.id, userId);
     const full = await loadFullApplication(req.tenantDb, app.id, { ownerUserId: userId });
     return res.status(201).json({ status: "success", data: serializeApplication(full) });
   } catch (error) {
@@ -141,8 +143,10 @@ export const submitApplication = async (req, res) => {
 
     return res.status(200).json({ status: "success", message: "Application submitted", data: serializeApplication(submitted) });
   } catch (error) {
-    logger.error({ err: error }, "submitApplication (licence v2) failed");
-    return res.status(500).json({ status: "error", message: "Failed to submit application" });
+    const code = error.statusCode || 500;
+    if (code < 500) logger.info({ err: error }, "submitApplication (licence v2) blocked");
+    else logger.error({ err: error }, "submitApplication (licence v2) failed");
+    return res.status(code).json({ status: "error", message: error.message || "Failed to submit application" });
   }
 };
 
@@ -221,5 +225,26 @@ export const feePreview = async (req, res) => {
   } catch (error) {
     logger.error({ err: error }, "feePreview (licence v2) failed");
     return res.status(500).json({ status: "error", message: "Failed to calculate fee" });
+  }
+};
+
+/** POST /api/business/licence/v2/applications/:id/sync-from-profile */
+export const syncFromProfile = async (req, res) => {
+  try {
+    const userId = uid(req);
+    if (!userId) return res.status(401).json({ status: "error", message: "Invalid session" });
+    const app = await req.tenantDb.LicenceApplication.findOne({
+      where: { id: req.params.id, userId, applicationVersion: APPLICATION_VERSION_V2 },
+    });
+    if (!app) return res.status(404).json({ status: "error", message: "Application not found" });
+    if (!EDITABLE.includes(app.status)) {
+      return res.status(409).json({ status: "error", message: `A ${app.status} application can no longer be edited.` });
+    }
+
+    const updated = await syncSvc(req.tenantDb, app.id, userId);
+    return res.status(200).json({ status: "success", message: "Profile data synced successfully", data: serializeApplication(updated) });
+  } catch (error) {
+    logger.error({ err: error }, "syncFromProfile failed");
+    return res.status(500).json({ status: "error", message: error.message || "Failed to sync profile data" });
   }
 };

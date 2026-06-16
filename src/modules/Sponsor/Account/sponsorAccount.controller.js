@@ -67,13 +67,21 @@ export const getProfile = async (req, res) => {
     // Ensure sponsor profile exists
     let profile = user.sponsorProfile;
     if (!profile) {
-      profile = await req.tenantDb.SponsorProfile.create({ userId });
+      const [resProfile] = await req.tenantDb.SponsorProfile.findOrCreate({
+        where: { userId },
+        defaults: { userId }
+      });
+      profile = resProfile;
     }
 
     // Ensure preferences exist
     let preferences = user.sponsorPreferences;
     if (!preferences) {
-      preferences = await req.tenantDb.SponsorUserPreference.create({ userId });
+      const [resPref] = await req.tenantDb.SponsorUserPreference.findOrCreate({
+        where: { userId },
+        defaults: { userId }
+      });
+      preferences = resPref;
     }
 
     res.status(200).json({

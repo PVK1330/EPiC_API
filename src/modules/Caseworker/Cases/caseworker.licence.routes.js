@@ -28,6 +28,14 @@ import { ensureAssignedCaseworker } from '../../../middlewares/ensureAssignedCas
 import { validate } from '../../../middlewares/validate.middleware.js';
 import { getLicenceStages, completeLicenceStageTask, downloadLicenceDocument } from '../../Shared/Licence/licenceStage.controller.js';
 import {
+    createInfoRequestHandler,
+    listInfoRequestsHandler,
+    getInfoRequestHandler,
+    addCommentHandler,
+    closeInfoRequestHandler,
+} from '../../Shared/Licence/licenceInformationRequest.controller.js';
+import { getGrantRecordHandler } from '../../Shared/Licence/licenceGrant.controller.js';
+import {
     completeRegistrationSchema,
     governmentSubmissionSchema,
 } from '../../../validations/licenceGovernment.validation.js';
@@ -68,6 +76,16 @@ router.patch("/:id/intake/documents/:documentKey/request-info", ensureAssignedCa
 // Appendix A documents (V2 wizard uploads) — caseworker verify / reject.
 router.patch("/:id/appendix-documents/:documentId/verify", ensureAssignedCaseworker(), verifyCaseworkerAppendixDocument);
 router.patch("/:id/appendix-documents/:documentId/reject", ensureAssignedCaseworker(), rejectCaseworkerAppendixDocument);
+
+// Licence Grant — caseworker may view the grant record (read-only).
+router.get("/:id/grant-record", ensureAssignedCaseworker(), getGrantRecordHandler);
+
+// Information Request workflow — caseworker may raise, comment on, and close requests.
+router.post("/:id/info-requests",                           ensureAssignedCaseworker(), createInfoRequestHandler);
+router.get("/:id/info-requests",                            ensureAssignedCaseworker(), listInfoRequestsHandler);
+router.get("/:id/info-requests/:requestId",                 ensureAssignedCaseworker(), getInfoRequestHandler);
+router.post("/:id/info-requests/:requestId/comments",       ensureAssignedCaseworker(), addCommentHandler);
+router.patch("/:id/info-requests/:requestId/close",         ensureAssignedCaseworker(), closeInfoRequestHandler);
 
 // Government processing pipeline (Phase 3).
 router.post("/:id/start-review", ensureAssignedCaseworker(), startLicenceReview);
