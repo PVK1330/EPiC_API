@@ -24,6 +24,7 @@ router.get('/team/modules', teamController.listPlatformModules);
 router.get('/team', teamController.listTeamMembers);
 router.post('/team', requirePlatformPermission('platform.team.manage'), teamController.inviteTeamMember);
 router.patch('/team/:id', requirePlatformPermission('platform.team.manage'), teamController.updateTeamMember);
+router.delete('/team/:id', requirePlatformPermission('platform.team.manage'), teamController.deleteTeamMember);
 
 router.get('/platform-roles', teamController.listPlatformRoles);
 router.post('/platform-roles', requirePlatformPermission('platform.team.manage'), teamController.createPlatformRole);
@@ -66,6 +67,7 @@ import { validate } from '../../middlewares/validate.middleware.js';
 import { configureGatewaySchema } from '../../validations/superadminPayment.validation.js';
 
 router.get('/transactions', paymentController.getAllTransactions);
+router.get('/transactions/export', paymentController.exportTransactions);
 router.get('/transactions/:id', paymentController.getTransactionById);
 router.get('/payments/reconciliation', paymentController.getPaymentReconciliation);
 router.get('/gateway/status', paymentController.getGatewayStatus);

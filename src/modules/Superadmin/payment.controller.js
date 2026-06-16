@@ -2,6 +2,7 @@ import { Op } from "sequelize";
 import platformDb from "../../models/index.js";
 import catchAsync from "../../utils/catchAsync.js";
 import ApiResponse from "../../utils/apiResponse.js";
+import { rowsToXlsxBuffer, sendXlsxDownload } from "../../utils/excelExport.util.js";
 
 export const getAllTransactions = catchAsync(async (req, res) => {
   const { status, gateway, type } = req.query;
@@ -28,6 +29,67 @@ export const getAllTransactions = catchAsync(async (req, res) => {
   });
 
   return ApiResponse.success(res, "Transactions retrieved successfully", { transactions });
+});
+
+/**
+ * Export platform payment transactions as a real .xlsx file.
+ * Honours the same `status`/`gateway` filters as getAllTransactions so the
+ * download matches whatever the operator is viewing. Data is pulled live from
+ * the PaymentTransaction table — no mock rows.
+ */
+export const exportTransactions = catchAsync(async (req, res) => {
+  const { status, gateway } = req.query;
+  const where = {};
+  if (status) where.status = status;
+  if (gateway) where.gateway = gateway;
+
+  const transactions = await platformDb.PaymentTransaction.findAll({
+    where,
+    include: [
+      {
+        model: platformDb.Organisation,
+        as: "organisation",
+        attributes: ["id", "name", "slug"],
+      },
+      {
+        model: platformDb.Invoice,
+        as: "invoice",
+        attributes: ["id", "invoice_number"],
+      },
+    ],
+    order: [["createdAt", "DESC"]],
+  });
+
+  const columns = [
+    { key: "reference", header: "Reference" },
+    { key: "organisation", header: "Organisation" },
+    { key: "amount", header: "Amount" },
+    { key: "currency", header: "Currency" },
+    { key: "status", header: "Status" },
+    { key: "gateway", header: "Gateway" },
+    { key: "payment_method", header: "Payment Method" },
+    { key: "invoice_number", header: "Invoice Number" },
+    { key: "gateway_reference", header: "Gateway Reference" },
+    { key: "failure_reason", header: "Failure Reason" },
+    { key: "date", header: "Date" },
+  ];
+
+  const rows = transactions.map((txn) => ({
+    reference: txn.reference,
+    organisation: txn.organisation?.name || "—",
+    amount: txn.amount,
+    currency: txn.currency,
+    status: txn.status,
+    gateway: txn.gateway || "—",
+    payment_method: txn.payment_method || "—",
+    invoice_number: txn.invoice?.invoice_number || "—",
+    gateway_reference: txn.gateway_reference || "—",
+    failure_reason: txn.failure_reason || "",
+    date: txn.createdAt ? new Date(txn.createdAt).toLocaleString("en-GB") : "—",
+  }));
+
+  const buffer = rowsToXlsxBuffer(rows, columns);
+  sendXlsxDownload(res, buffer, `transactions_export_${Date.now()}.xlsx`);
 });
 
 export const getTransactionById = catchAsync(async (req, res) => {
