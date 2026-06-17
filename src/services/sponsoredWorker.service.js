@@ -206,7 +206,7 @@ export async function createSponsoredWorker(tenantDb, {
     }
   }
 
-  // CRIT-001: Validate cosRequestId ownership — the CoS request must belong to this sponsor.
+  // CRIT-001: Validate cosRequestId ownership — read-only check, no lock needed.
   if (cosRequestId != null) {
     const cosReq = await tenantDb.CosRequest.findByPk(cosRequestId, {
       attributes: ["id", "sponsorId"],
@@ -224,42 +224,86 @@ export async function createSponsoredWorker(tenantDb, {
     }
   }
 
-  // CRIT-001 + ISSUE-009: Validate cosAllocationRecord ownership and prevent over-allocation.
+  // ── Allocation path: atomic lock → count → create → audit ───────────────────
+  // P2-WM-12 fix: the entire allocation check, worker creation, and audit write
+  // happen inside a single transaction with SELECT FOR UPDATE on CosAllocationRecord.
+  //
+  // The FOR UPDATE lock serialises concurrent creation requests for the same
+  // allocation — request B blocks at findByPk until request A commits or rolls
+  // back. When B finally reads the row, it re-counts the workers and sees the
+  // committed state from A. This makes over-allocation mathematically impossible:
+  // the count is always read after the previous writer has fully committed.
   if (cosAllocationRecordId != null) {
-    const allocation = await tenantDb.CosAllocationRecord.findByPk(cosAllocationRecordId, {
-      attributes: ["id", "allocatedAmount", "sponsorId"],
+    return tenantDb.sequelize.transaction(async (t) => {
+      // Acquire exclusive row lock — serialises all concurrent creators.
+      const allocation = await tenantDb.CosAllocationRecord.findByPk(cosAllocationRecordId, {
+        attributes: ["id", "allocatedAmount", "sponsorId"],
+        lock: t.LOCK.UPDATE,
+        transaction: t,
+      });
+      if (!allocation) {
+        const err = new Error("CoS allocation record not found.");
+        err.statusCode = 404;
+        throw err;
+      }
+      if (Number(allocation.sponsorId) !== Number(sponsorId)) {
+        throw ownershipError(
+          "CoS allocation record does not belong to this sponsor.",
+          "ALLOCATION_OWNERSHIP_VIOLATION"
+        );
+      }
+
+      // Count is inside the transaction — sees the committed writes from any
+      // preceding concurrent request that held this lock before us.
+      const usedCount = await tenantDb.SponsoredWorker.count({
+        where: { cosAllocationRecordId },
+        transaction: t,
+      });
+      if (usedCount >= allocation.allocatedAmount) {
+        const err = new Error(
+          `CoS allocation exhausted. Allocated: ${allocation.allocatedAmount}, already assigned: ${usedCount}.`
+        );
+        err.statusCode = 409;
+        err.code = "ALLOCATION_EXCEEDED";
+        throw err;
+      }
+
+      // Create and audit in the same transaction — both roll back on failure.
+      const worker = await tenantDb.SponsoredWorker.create({
+        sponsorId,
+        organisationId: organisationId ?? null,
+        cosRequestId: cosRequestId ?? null,
+        cosAllocationRecordId,
+        workerFirstName: workerFirstName.trim(),
+        workerLastName: workerLastName.trim(),
+        workerEmail: workerEmail?.trim() ?? null,
+        workerNationality: workerNationality?.trim() ?? null,
+        visaType: visaType?.trim() ?? null,
+        status: WORKER_STATUS.COS_ASSIGNED,
+        notes: notes?.trim() ?? null,
+      }, { transaction: t });
+
+      await tenantDb.SponsoredWorkerAudit.create({
+        sponsoredWorkerId: worker.id,
+        action: WORKER_AUDIT_ACTIONS.CREATED,
+        fromStatus: null,
+        toStatus: WORKER_STATUS.COS_ASSIGNED,
+        actorId: actorId ?? null,
+        notes: notes ?? null,
+      }, { transaction: t });
+
+      return worker;
+      // Notifications (none currently in this function) must be added post-commit,
+      // i.e. after this transaction() block resolves, never inside it.
     });
-    if (!allocation) {
-      const err = new Error("CoS allocation record not found.");
-      err.statusCode = 404;
-      throw err;
-    }
-    // CRIT-001: Ownership check — the allocation must belong to this sponsor.
-    if (Number(allocation.sponsorId) !== Number(sponsorId)) {
-      throw ownershipError(
-        "CoS allocation record does not belong to this sponsor.",
-        "ALLOCATION_OWNERSHIP_VIOLATION"
-      );
-    }
-    // ISSUE-009: Prevent over-allocation — reject if all CoS slots are already taken.
-    const usedCount = await tenantDb.SponsoredWorker.count({
-      where: { cosAllocationRecordId },
-    });
-    if (usedCount >= allocation.allocatedAmount) {
-      const err = new Error(
-        `CoS allocation exhausted. Allocated: ${allocation.allocatedAmount}, already assigned: ${usedCount}.`
-      );
-      err.statusCode = 409;
-      err.code = "ALLOCATION_EXCEEDED";
-      throw err;
-    }
   }
 
+  // ── No-allocation path: simpler, no locking required ───────────────────────
   const worker = await tenantDb.SponsoredWorker.create({
     sponsorId,
     organisationId: organisationId ?? null,
     cosRequestId: cosRequestId ?? null,
-    cosAllocationRecordId: cosAllocationRecordId ?? null,
+    cosAllocationRecordId: null,
     workerFirstName: workerFirstName.trim(),
     workerLastName: workerLastName.trim(),
     workerEmail: workerEmail?.trim() ?? null,
