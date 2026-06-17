@@ -1,0 +1,37 @@
+"Test Suite","Test Name","File Location","Error Message","Stack Trace"
+"licenceTaskChain.test.js","ensureStageTasks: seeds only the first chain node for a fresh application","tests/licenceTaskChain.test.js:331","AssertionError: Expected exactly 6 tasks created for fresh app, got 2","AssertionError: Expected exactly 6 tasks created for fresh app, got 2
+    at TestContext.<anonymous> (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/tests/licenceTaskChain.test.js:351:10)
+    at async Test.run (node:internal/test_runner/test:1054:7)
+    at async Test.processPendingSubtests (node:internal/test_runner/test:744:7)"
+"licenceTaskChain.test.js","ensureStageTasks: is idempotent — calling twice creates no additional rows","tests/licenceTaskChain.test.js:360","TypeError: tenantDb.LicenceStageTask.update is not a function","TypeError: tenantDb.LicenceStageTask.update is not a function
+    at ensureStageTasks (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/src/services/licenceStageTask.service.js:890:39)
+    at async TestContext.<anonymous> (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/tests/licenceTaskChain.test.js:379:3)
+    at async Test.run (node:internal/test_runner/test:1054:7)
+    at async Test.processPendingSubtests (node:internal/test_runner/test:744:7)"
+"licenceTaskChain.test.js","ensureStageTasks: when stage 1 sponsor is complete, seeds caseworker task","tests/licenceTaskChain.test.js:387","AssertionError: Expected stage 2 caseworker task to be seeded","AssertionError: Expected stage 2 caseworker task to be seeded
+    at TestContext.<anonymous> (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/tests/licenceTaskChain.test.js:426:10)
+    at async Test.run (node:internal/test_runner/test:1054:7)
+    at async Test.processPendingSubtests (node:internal/test_runner/test:744:7)"
+"storagePath.test.js","toPublicAssetUrl maps storage path to public images URL","tests/storagePath.test.js:15","AssertionError [ERR_ASSERTION]: Expected values to be strictly equal: api/public/images/uuid_123.png !== http://localhost:5000/api/public/images/uuid_123.png","AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
++ actual - expected
+
++ 'api/public/images/uuid_123.png'
+- 'http://localhost:5000/api/public/images/uuid_123.png'
+    at TestContext.<anonymous> (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/tests/storagePath.test.js:20:10)
+    at Test.runInAsyncScope (node:async_hooks:214:14)
+    at Test.run (node:internal/test_runner/test:1047:25)"
+"workerSoftDelete.test.js","softDeleteWorker: worker is excluded from standard queries after deletion","tests/workerSoftDelete.test.js:63","TypeError: fn is not a function","TypeError: fn is not a function
+    at Object.transaction (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/tests/workerSoftDelete.test.js:41:16)
+    at softDeleteWorker (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/src/services/sponsoredWorker.service.js:467:38)
+    at TestContext.<anonymous> (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/tests/workerSoftDelete.test.js:71:9)
+    at async Test.run (node:internal/test_runner/test:1054:7)"
+"workerSoftDelete.test.js","restoreWorker: worker reappears in standard queries after restore","tests/workerSoftDelete.test.js:83","TypeError: fn is not a function","TypeError: fn is not a function
+    at Object.transaction (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/tests/workerSoftDelete.test.js:41:16)
+    at restoreWorker (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/src/services/sponsoredWorker.service.js:505:38)
+    at TestContext.<anonymous> (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/tests/workerSoftDelete.test.js:91:9)
+    at async Test.run (node:internal/test_runner/test:1054:7)"
+"workerSoftDelete.test.js","softDeleteWorker and restoreWorker each write an audit row","tests/workerSoftDelete.test.js:101","TypeError: fn is not a function","TypeError: fn is not a function
+    at Object.transaction (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/tests/workerSoftDelete.test.js:41:16)
+    at softDeleteWorker (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/src/services/sponsoredWorker.service.js:467:38)
+    at TestContext.<anonymous> (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/tests/workerSoftDelete.test.js:107:9)
+    at Test.runInAsyncScope (node:async_hooks:214:14)"
