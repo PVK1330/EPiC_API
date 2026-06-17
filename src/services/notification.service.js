@@ -1,5 +1,7 @@
 import logger from '../utils/logger.js';
 import { sendTransactionalEmail } from './mail.service.js';
+import { generateNotificationEmailTemplate } from '../utils/emailTemplates.js';
+import { getOrganisationEmailBranding } from '../utils/emailBranding.js';
 import { ROLES } from '../middlewares/role.middleware.js';
 import { getIO } from '../realtime/ioRegistry.js';
 import { userRoom } from '../realtime/messagingRealtime.js';
@@ -113,13 +115,27 @@ export async function notifyUser(tenantDb, userId, payload = {}) {
     }
 
     if (sendEmail) {
-      const user = await tenantDb.User.findByPk(userId, { attributes: ['email'] });
+      const user = await tenantDb.User.findByPk(userId, { attributes: ['email', 'first_name'] });
       if (user?.email) {
+        const branding = await getOrganisationEmailBranding(organisationId);
+        const absoluteActionUrl = actionUrl
+          ? (/^https?:\/\//i.test(actionUrl)
+              ? actionUrl
+              : `${(process.env.FRONTEND_URL?.split(',')[0]?.trim() || '').replace(/\/$/, '')}${actionUrl}`)
+          : null;
         await sendTransactionalEmail({
           organisationId,
           to: user.email,
           subject: title,
-          html: `<p>${message}</p>`,
+          html: generateNotificationEmailTemplate({
+            recipientName: user.first_name || 'there',
+            title,
+            message,
+            priority,
+            notificationType: type,
+            actionUrl: absoluteActionUrl,
+            branding,
+          }),
         }).catch((err) => logger.error({ err }, 'notifyUser email failed'));
       }
     }
@@ -581,8 +597,10 @@ export const generateNotification = async (context, payload) => {
       const user = await tenantDb.User.findByPk(recipientId, { attributes: ['email'] });
       if (user && user.email) {
         try {
+          // The send layer frames emailHtml/message in the branded shell and sets
+          // the org From-name. Use the RESOLVED org id so branding/SMTP resolve.
           await sendTransactionalEmail({
-            organisationId,
+            organisationId: resolvedOrganisationId,
             to: user.email,
             subject: emailSubject,
             html: emailHtml || message, // Fallback to message if no specific HTML template

@@ -3,6 +3,7 @@ import { Op } from 'sequelize';
 import logger from '../../../utils/logger.js';
 import { sendAppointmentEmail } from '../../../services/email.service.js';
 import { generateAppointmentTemplate } from '../../../utils/emailTemplates.js';
+import { getOrganisationEmailBranding } from '../../../utils/emailBranding.js';
 import { ROLES, hasFullAccessRole } from '../../../middlewares/role.middleware.js';
 import { syncAppointmentToMicrosoft, updateAppointmentInMicrosoft, cancelAppointmentInMicrosoft } from '../Integrations/microsoft/microsoftWorkflow.service.js';
 import { syncAppointmentToGoogle, updateAppointmentInGoogle, cancelAppointmentInGoogle } from '../Integrations/google/googleWorkflow.service.js';
@@ -109,6 +110,8 @@ export const createAppointment = async (req, res) => {
     const candidate = await req.tenantDb.User.findByPk(candidate_id);
     const allStaffIds = staff_ids || (caseworker_id ? [caseworker_id] : []);
 
+    const branding = await getOrganisationEmailBranding(organisationId);
+
     if (allStaffIds.length > 0 && candidate) {
       for (const staffId of allStaffIds) {
         const staff = await req.tenantDb.User.findByPk(staffId);
@@ -140,7 +143,8 @@ export const createAppointment = async (req, res) => {
               meetingUrl: meeting_url,
               candidateName: `${candidate.first_name} ${candidate.last_name}`,
               staffName: `${staff.first_name} ${staff.last_name}`,
-              isStaffRecipient: true
+              isStaffRecipient: true,
+              branding
             })
           });
         } catch (err) {
@@ -162,8 +166,9 @@ export const createAppointment = async (req, res) => {
             platform,
             meetingUrl: meeting_url,
             candidateName: `${candidate.first_name} ${candidate.last_name}`,
-            staffName: primaryStaff ? `${primaryStaff.first_name} ${primaryStaff.last_name}${allStaffIds.length > 1 ? ` + ${allStaffIds.length - 1} others` : ''}` : 'EPiC Staff',
-            isStaffRecipient: false
+            staffName: primaryStaff ? `${primaryStaff.first_name} ${primaryStaff.last_name}${allStaffIds.length > 1 ? ` + ${allStaffIds.length - 1} others` : ''}` : 'your case team',
+            isStaffRecipient: false,
+            branding
           })
         });
       } catch (err) {

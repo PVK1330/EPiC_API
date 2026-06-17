@@ -1,50 +1,68 @@
-import { 
-  wrapEpicEmail, 
-  credentialsBlockHtml, 
-  otpBlockHtml, 
-  infoBlockHtml, 
-  alertBlockHtml 
+import {
+  wrapEpicEmail,
+  credentialsBlockHtml,
+  otpBlockHtml,
+  infoBlockHtml,
+  alertBlockHtml,
 } from "./epicEmailLayout.js";
+
+// Every generator accepts an optional trailing `branding` object
+// ({ orgName, logoUrl, supportEmail, portalUrl, ... } — see emailBranding.js) so
+// the shared shell renders the sending organisation's logo + name. When branding
+// is omitted the shell falls back to a neutral platform identity, so existing
+// callers keep working unchanged.
+const brandName = (branding) => branding?.orgName || "EPiC";
 
 // Utility for formatting object data into a neat HTML block
 function metadataBlockHtml(metadata) {
   if (!metadata || Object.keys(metadata).length === 0) return "";
-  const rows = Object.entries(metadata).map(([key, val]) => `
-    <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f1f5f9;">
-      <span style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase;">${String(key).replace(/([A-Z])/g, ' $1').trim()}</span>
-      <span style="font-size: 13px; font-weight: 600; color: #0f172a; text-align: right;">${Array.isArray(val) ? val.join(', ') : val}</span>
+  const rows = Object.entries(metadata)
+    .filter(([, val]) => val !== undefined && val !== null && val !== "")
+    .map(
+      ([key, val]) => `
+    <div style="display:flex; justify-content:space-between; padding:9px 0; border-bottom:1px solid #DDE3EA;">
+      <span style="font-size:11px; font-weight:700; color:#6B7785; text-transform:uppercase; letter-spacing:0.4px;">${String(key).replace(/([A-Z])/g, " $1").trim()}</span>
+      <span style="font-size:13px; font-weight:600; color:#0B0C0C; text-align:right;">${Array.isArray(val) ? val.join(", ") : val}</span>
     </div>
-  `).join('');
-  return `<div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin-bottom: 32px;">${rows}</div>`;
+  `,
+    )
+    .join("");
+  return `<div style="background:#EEF1F5; border:1px solid #DDE3EA; border-radius:8px; padding:8px 16px; margin-bottom:30px;">${rows}</div>`;
 }
 
-export function generateOTPTemplate(otp) {
+export function generateOTPTemplate(otp, branding = {}) {
+  const name = brandName(branding);
   return wrapEpicEmail({
-    pageTitle: "EPiC — Email Verification",
+    branding,
+    pageTitle: `${name} — Email Verification`,
     badge: "Verification",
     title: "Your one-time code",
     messageHtml: "Enter this code to complete registration. It expires in <strong>10 minutes</strong>.",
     bodyHtml: otpBlockHtml(otp),
-    securityHtml: "<strong>Never share this code.</strong> EPiC staff will never ask for your OTP.",
+    securityHtml: `<strong>Never share this code.</strong> ${name} staff will never ask for your verification code.`,
   });
 }
 
-export function generatePasswordResetOTPTemplate(otp) {
+export function generatePasswordResetOTPTemplate(otp, branding = {}) {
+  const name = brandName(branding);
   return wrapEpicEmail({
-    pageTitle: "EPiC — Password Reset",
+    branding,
+    pageTitle: `${name} — Password Reset`,
     badge: "Password Reset",
     title: "Reset your password",
     messageHtml: "Use this code on the password reset page. It expires in <strong>10 minutes</strong>.",
     bodyHtml: otpBlockHtml(otp),
-    securityHtml: "<strong>Never share this code.</strong> If you did not request a reset, ignore this email.",
+    securityHtml: "<strong>Never share this code.</strong> If you did not request a reset, you can safely ignore this email.",
   });
 }
 
-export function generateCredentialsTemplate(email, password, loginUrl, mainLoginUrl) {
+export function generateCredentialsTemplate(email, password, loginUrl, mainLoginUrl, branding = {}) {
+  const name = brandName(branding);
   return wrapEpicEmail({
-    pageTitle: "EPiC — Your Account",
+    branding,
+    pageTitle: `${name} — Your Account`,
     badge: "Account Ready",
-    title: "Welcome to EPiC",
+    title: `Welcome to ${name}`,
     messageHtml: "Your account is active. Use the credentials below to sign in and continue your immigration case.",
     bodyHtml: credentialsBlockHtml({ email, password, loginUrl, mainLoginUrl }),
     ctaUrl: loginUrl,
@@ -53,9 +71,11 @@ export function generateCredentialsTemplate(email, password, loginUrl, mainLogin
   });
 }
 
-export function generateAdminCredentialsTemplate(email, password, loginUrl, mainLoginUrl) {
+export function generateAdminCredentialsTemplate(email, password, loginUrl, mainLoginUrl, branding = {}) {
+  const name = brandName(branding);
   return wrapEpicEmail({
-    pageTitle: "EPiC — Admin Account",
+    branding,
+    pageTitle: `${name} — Admin Account`,
     badge: "Administrator",
     title: "Admin account created",
     messageHtml: "Your administrator account has been set up. Use the credentials below to access your dashboard.",
@@ -66,16 +86,17 @@ export function generateAdminCredentialsTemplate(email, password, loginUrl, main
   });
 }
 
-export function generateOrganisationWelcomeTemplate({ organisationName, adminName, email, password, loginUrl, mainLoginUrl }) {
+export function generateOrganisationWelcomeTemplate({ organisationName, adminName, email, password, loginUrl, mainLoginUrl, branding = {} }) {
   const alt = mainLoginUrl && mainLoginUrl !== loginUrl
-    ? `<p style="margin-top: 16px; font-size: 13px; color: #64748b;">Main portal: <a href="${mainLoginUrl}" style="color: #2563eb; font-weight: 500;">${mainLoginUrl}</a></p>`
+    ? `<p style="margin-top:16px; font-size:13px; color:#6B7785;">Main portal: <a href="${mainLoginUrl}" style="color:#1D70B8; font-weight:500;">${mainLoginUrl}</a></p>`
     : "";
 
   return wrapEpicEmail({
-    pageTitle: `EPiC — ${organisationName}`,
+    branding,
+    pageTitle: `${organisationName} — Workspace Ready`,
     badge: organisationName,
     title: `Welcome, ${adminName}`,
-    messageHtml: `Your organisation workspace on EPiC is ready. Sign in to set up <strong>${organisationName}</strong> and invite your team.${alt}`,
+    messageHtml: `Your organisation workspace is ready. Sign in to set up <strong>${organisationName}</strong> and invite your team.${alt}`,
     bodyHtml: credentialsBlockHtml({ email, password, loginUrl, loginUrlLabel: "Workspace Login" }),
     ctaUrl: loginUrl,
     ctaLabel: `Sign in to ${organisationName}`,
@@ -83,9 +104,10 @@ export function generateOrganisationWelcomeTemplate({ organisationName, adminNam
   });
 }
 
-export function generateCaseworkerWelcomeTemplate({ name, email, password, loginUrl, mainLoginUrl }) {
+export function generateCaseworkerWelcomeTemplate({ name, email, password, loginUrl, mainLoginUrl, branding = {} }) {
   return wrapEpicEmail({
-    pageTitle: "EPiC — Caseworker Account",
+    branding,
+    pageTitle: `${brandName(branding)} — Caseworker Account`,
     badge: "Team Access",
     title: `Welcome, ${name}`,
     messageHtml: "Your caseworker account is ready. Log in to start managing cases and collaborating with your team.",
@@ -95,9 +117,10 @@ export function generateCaseworkerWelcomeTemplate({ name, email, password, login
   });
 }
 
-export function generateSponsorWelcomeTemplate({ name, email, password, loginUrl, mainLoginUrl }) {
+export function generateSponsorWelcomeTemplate({ name, email, password, loginUrl, mainLoginUrl, branding = {} }) {
   return wrapEpicEmail({
-    pageTitle: "EPiC — Sponsor Account",
+    branding,
+    pageTitle: `${brandName(branding)} — Sponsor Account`,
     badge: "Sponsor Access",
     title: `Welcome, ${name}`,
     messageHtml: "Your sponsor account has been created. Log in to manage your licences, compliance, and sponsored workers.",
@@ -107,46 +130,52 @@ export function generateSponsorWelcomeTemplate({ name, email, password, loginUrl
   });
 }
 
-export function generateCandidateWelcomeTemplate({ candidateName, email, password, loginUrl, mainLoginUrl }) {
+export function generateCandidateWelcomeTemplate({ candidateName, email, password, loginUrl, mainLoginUrl, branding = {} }) {
   return wrapEpicEmail({
-    pageTitle: "EPiC — Candidate Account",
+    branding,
+    pageTitle: `${brandName(branding)} — Candidate Account`,
     badge: "Client Enquiry",
     title: `Welcome, ${candidateName}`,
-    messageHtml: "Your EPiC account is ready. Sign in to submit your visa enquiry, upload documents, and track your case.",
+    messageHtml: "Your account is ready. Sign in to submit your visa enquiry, upload documents, and track your case.",
     bodyHtml: credentialsBlockHtml({ email, password, loginUrl, mainLoginUrl }),
     ctaUrl: loginUrl,
     ctaLabel: "Sign in & start visa enquiry",
   });
 }
 
-export function generateNotificationEmailTemplate({ recipientName = 'User', title, message, priority = 'medium', notificationType = 'info', actionUrl = null, metadata = {} }) {
-  const isAlert = priority.toLowerCase() === 'high' || notificationType.toLowerCase() === 'error';
+export function generateNotificationEmailTemplate({ recipientName = "User", title, message, priority = "medium", notificationType = "info", actionUrl = null, metadata = {}, branding = {} }) {
+  // Red alert block only for genuinely negative events (error/warning); positive
+  // and informational notices use the calmer info block regardless of priority.
+  const t = String(notificationType).toLowerCase();
+  const isAlert = t === "error" || t === "warning" || String(priority).toLowerCase() === "critical";
   const blockHtml = isAlert ? alertBlockHtml(message) : infoBlockHtml(message);
-  
+
   return wrapEpicEmail({
-    pageTitle: "EPiC — Notification",
-    badge: notificationType.toUpperCase(),
+    branding,
+    pageTitle: `${brandName(branding)} — ${title || "Notification"}`,
+    badge: String(notificationType).toUpperCase(),
     title: title || "New Notification",
     messageHtml: `Hi ${recipientName},`,
     bodyHtml: `
       ${blockHtml}
-      ${metadataBlockHtml({ Priority: priority, ...metadata })}
+      ${metadataBlockHtml(metadata)}
     `,
     ctaUrl: actionUrl,
-    ctaLabel: actionUrl ? "Open in EPiC" : "",
+    ctaLabel: actionUrl ? "Open in portal" : "",
   });
 }
 
-export function generateAppointmentTemplate({ title, date, time, platform, meetingUrl, candidateName, staffName, isStaffRecipient = false }) {
+export function generateAppointmentTemplate({ title, date, time, platform, meetingUrl, candidateName, staffName, isStaffRecipient = false, branding = {} }) {
   const greeting = isStaffRecipient ? `Hi ${staffName},` : `Hi ${candidateName},`;
-  const message = isStaffRecipient 
+  const message = isStaffRecipient
     ? `A new meeting has been scheduled with candidate <strong>${candidateName}</strong>.`
     : `Your meeting with <strong>${staffName}</strong> has been successfully scheduled.`;
 
-  const platformLabel = { teams: "Microsoft Teams", meet: "Google Meet", zoom: "Zoom", 'in-person': "In-person Meeting" }[platform] || platform;
+  const platformLabel = { teams: "Microsoft Teams", meet: "Google Meet", zoom: "Zoom", "in-person": "In-person Meeting" }[platform] || platform;
 
   return wrapEpicEmail({
-    pageTitle: "EPiC — Appointment",
+    branding,
+    pageTitle: `${brandName(branding)} — Appointment`,
     badge: "Meeting Scheduled",
     title: title,
     messageHtml: `${greeting}<br/><br/>${message}`,
@@ -156,14 +185,15 @@ export function generateAppointmentTemplate({ title, date, time, platform, meeti
   });
 }
 
-export function generateSubscriptionExpiryTemplate({ organisationName, daysRemaining, loginUrl, type = "trial" }) {
+export function generateSubscriptionExpiryTemplate({ organisationName, daysRemaining, loginUrl, type = "trial", branding = {} }) {
   const title = daysRemaining <= 0 ? "Subscription Expired" : "Subscription Expiring Soon";
   const message = daysRemaining <= 0
     ? `Your ${type} subscription for <strong>${organisationName}</strong> has expired. Access to premium features is currently restricted.`
     : `Your ${type} subscription for <strong>${organisationName}</strong> will expire in <strong>${daysRemaining} day(s)</strong>.`;
 
   return wrapEpicEmail({
-    pageTitle: "EPiC — Subscription",
+    branding,
+    pageTitle: `${brandName(branding)} — Subscription`,
     badge: "Billing Notice",
     title: title,
     messageHtml: message,
@@ -173,23 +203,26 @@ export function generateSubscriptionExpiryTemplate({ organisationName, daysRemai
   });
 }
 
-export function generateDiagnosticTemplate({ source, message }) {
+export function generateDiagnosticTemplate({ source, message, branding = {} }) {
+  const name = brandName(branding);
   return wrapEpicEmail({
-    pageTitle: "EPiC — System Diagnostic",
+    branding,
+    pageTitle: `${name} — System Diagnostic`,
     badge: "SMTP Test",
     title: "SMTP Connection Verified",
-    messageHtml: "This is a diagnostic test email dispatched from your EPiC platform.",
+    messageHtml: message || `This is a diagnostic test email dispatched from your ${name} platform.`,
     bodyHtml: metadataBlockHtml({ Status: "Success", TransportSource: source }),
     securityHtml: "This email was triggered manually by an administrator via the connectivity settings.",
   });
 }
 
-export function generateFailureNoticeTemplate({ reasonLabel, recipientSafe, subjectSafe, ctxSafe, errSafe }) {
+export function generateFailureNoticeTemplate({ reasonLabel, recipientSafe, subjectSafe, ctxSafe, errSafe, branding = {} }) {
   return wrapEpicEmail({
-    pageTitle: "EPiC — Delivery Failure",
+    branding,
+    pageTitle: `${brandName(branding)} — Delivery Failure`,
     badge: "Delivery Failed",
     title: "Message undeliverable",
-    messageHtml: "EPiC could not deliver a message to the intended recipient.",
+    messageHtml: `${brandName(branding)} could not deliver a message to the intended recipient.`,
     bodyHtml: `
       ${alertBlockHtml(`<strong>Error:</strong> ${errSafe}`)}
       ${metadataBlockHtml({ Reason: reasonLabel, Recipient: recipientSafe, Subject: subjectSafe, Context: ctxSafe || "None" })}
@@ -198,9 +231,10 @@ export function generateFailureNoticeTemplate({ reasonLabel, recipientSafe, subj
   });
 }
 
-export function generateDispatchReceiptTemplate({ recipient, subject, ctx, messageId, response }) {
+export function generateDispatchReceiptTemplate({ recipient, subject, ctx, messageId, response, branding = {} }) {
   return wrapEpicEmail({
-    pageTitle: "EPiC — Dispatch Receipt",
+    branding,
+    pageTitle: `${brandName(branding)} — Dispatch Receipt`,
     badge: "Dispatched",
     title: "Email accepted by SMTP",
     messageHtml: "Your SMTP server accepted this message for delivery.",

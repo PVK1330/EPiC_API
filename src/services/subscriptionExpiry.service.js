@@ -2,6 +2,7 @@ import { Op } from "sequelize";
 import platformDb from "../models/index.js";
 import { sendTransactionalEmail } from "./mail.service.js";
 import { generateSubscriptionExpiryTemplate } from "../utils/emailTemplates.js";
+import { getOrganisationEmailBranding } from "../utils/emailBranding.js";
 import logger from "../utils/logger.js";
 
 export async function checkAndExpireSubscriptions() {
@@ -31,15 +32,18 @@ export async function checkAndExpireSubscriptions() {
           { where: { id: subscription.organisation.id } }
         );
 
+        const branding = await getOrganisationEmailBranding(subscription.organisation.id);
+
         await sendTransactionalEmail({
           organisationId: subscription.organisation.id,
           to: subscription.organisation.primaryEmail,
-          subject: "EPiC - Subscription Expired",
+          subject: `${branding.orgName} — Subscription Expired`,
           html: generateSubscriptionExpiryTemplate({
             organisationName: subscription.organisation.name,
             daysRemaining: 0,
             loginUrl: process.env.FRONTEND_URL || "http://localhost:5173",
-            type: subscription.status
+            type: subscription.status,
+            branding,
           }),
         });
       }
@@ -69,15 +73,18 @@ export async function checkAndExpireSubscriptions() {
       if (subscription.organisation) {
         const daysLeft = Math.ceil((new Date(subscription.current_period_end) - now) / (1000 * 60 * 60 * 24));
 
+        const branding = await getOrganisationEmailBranding(subscription.organisation.id);
+
         await sendTransactionalEmail({
           organisationId: subscription.organisation.id,
           to: subscription.organisation.primaryEmail,
-          subject: `EPiC - Subscription Expiring in ${daysLeft} Days`,
+          subject: `${branding.orgName} — Subscription Expiring in ${daysLeft} Days`,
           html: generateSubscriptionExpiryTemplate({
             organisationName: subscription.organisation.name,
             daysRemaining: daysLeft,
             loginUrl: process.env.FRONTEND_URL || "http://localhost:5173",
-            type: subscription.status
+            type: subscription.status,
+            branding,
           }),
         });
       }
@@ -105,15 +112,18 @@ export async function checkAndExpireSubscriptions() {
 
     for (const subscription of expiringTomorrow) {
       if (subscription.organisation) {
+        const branding = await getOrganisationEmailBranding(subscription.organisation.id);
+
         await sendTransactionalEmail({
           organisationId: subscription.organisation.id,
           to: subscription.organisation.primaryEmail,
-          subject: "EPiC - Subscription Expires Tomorrow",
+          subject: `${branding.orgName} — Subscription Expires Tomorrow`,
           html: generateSubscriptionExpiryTemplate({
             organisationName: subscription.organisation.name,
             daysRemaining: 1,
             loginUrl: process.env.FRONTEND_URL || "http://localhost:5173",
-            type: subscription.status
+            type: subscription.status,
+            branding,
           }),
         });
       }

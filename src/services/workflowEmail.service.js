@@ -6,6 +6,7 @@ import {
   formatRequiredDocumentsText,
 } from "./dataCaptureSheet.service.js";
 import { wrapEpicEmail } from "../utils/epicEmailLayout.js";
+import { getOrganisationEmailBranding } from "../utils/emailBranding.js";
 import logger from "../utils/logger.js";
 
 /** Workflow stage → email_templates.template_key */
@@ -153,11 +154,15 @@ export async function sendWorkflowStageEmail({
       process.env.FRONTEND_URL?.split(",")[0]?.trim() || "http://localhost:5173";
     const portalRoot = portalBase.replace(/\/$/, "");
 
+    // Per-tenant branding: firm name + logo come from the sending organisation,
+    // never a hardcoded "VisaFlow".
+    const branding = await getOrganisationEmailBranding(organisationId);
+
     const vars = {
       client_name: fullName(candidate, "Client"),
       case_ref: caseRecord.caseId || String(caseRecord.id),
       visa_type: visaType?.name || "your application",
-      firm_name: process.env.FIRM_NAME || "VisaFlow",
+      firm_name: branding.orgName || process.env.FIRM_NAME || "your case team",
       biometrics_date: formatBiometricsDate(caseRecord),
       amount:
         caseRecord.totalAmount != null
@@ -256,6 +261,7 @@ export async function sendWorkflowStageEmail({
       subject,
       text: body,
       html: wrapEpicEmail({
+        branding,
         pageTitle: subject,
         badge:
           templateKey === "biometrics_confirmation"

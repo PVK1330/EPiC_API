@@ -7,6 +7,7 @@ import {
   generatePasswordResetOTPTemplate,
   generateSponsorWelcomeTemplate,
 } from "../utils/emailTemplates.js";
+import { getOrganisationEmailBranding } from "../utils/emailBranding.js";
 
 /**
  * Organisation-specific login URL (subdomain), e.g. http://acme.localhost:5173/login
@@ -35,20 +36,22 @@ async function sendCredentialsMail({ to, subject, html, organisationId = null })
 }
 
 export async function sendPasswordResetOtpEmail({ to, otp, organisationId = null }) {
+  const branding = await getOrganisationEmailBranding(organisationId);
   return sendTransactionalEmail({
     to,
-    subject: "EPiC — Password reset code",
-    html: generatePasswordResetOTPTemplate(otp),
+    subject: `${branding.orgName} — Password reset code`,
+    html: generatePasswordResetOTPTemplate(otp, branding),
     organisationId,
   });
 }
 
 export async function sendTenantAdminWelcomeEmail({ user, plainPassword, organisationId }) {
   const { loginUrl, mainLoginUrl } = await resolveOrganisationLoginUrls(organisationId);
-  const html = generateAdminCredentialsTemplate(user.email, plainPassword, loginUrl, mainLoginUrl);
+  const branding = await getOrganisationEmailBranding(organisationId);
+  const html = generateAdminCredentialsTemplate(user.email, plainPassword, loginUrl, mainLoginUrl, branding);
   const result = await sendCredentialsMail({
     to: user.email,
-    subject: "EPiC — Your admin account is ready",
+    subject: `${branding.orgName} — Your admin account is ready`,
     html,
     organisationId,
   });
@@ -62,16 +65,18 @@ export async function sendTenantCaseworkerWelcomeEmail({
   firstName,
 }) {
   const { loginUrl, mainLoginUrl } = await resolveOrganisationLoginUrls(organisationId);
+  const branding = await getOrganisationEmailBranding(organisationId);
   const html = generateCaseworkerWelcomeTemplate({
     name: firstName || user.first_name || "Caseworker",
     email: user.email,
     password: plainPassword,
     loginUrl,
     mainLoginUrl,
+    branding,
   });
   const result = await sendCredentialsMail({
     to: user.email,
-    subject: "EPiC — Your caseworker account is ready",
+    subject: `${branding.orgName} — Your caseworker account is ready`,
     html,
     organisationId,
   });
@@ -85,16 +90,18 @@ export async function sendTenantSponsorWelcomeEmail({
   firstName,
 }) {
   const { loginUrl, mainLoginUrl } = await resolveOrganisationLoginUrls(organisationId);
+  const branding = await getOrganisationEmailBranding(organisationId);
   const html = generateSponsorWelcomeTemplate({
     name: firstName || user.first_name || "Sponsor",
     email: user.email,
     password: plainPassword,
     loginUrl,
     mainLoginUrl,
+    branding,
   });
   const result = await sendCredentialsMail({
     to: user.email,
-    subject: "EPiC — Your sponsor account is ready",
+    subject: `${branding.orgName} — Your sponsor account is ready`,
     html,
     organisationId,
   });

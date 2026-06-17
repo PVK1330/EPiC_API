@@ -9,6 +9,7 @@ import {
   verifyMailTransport,
 } from "../../../services/mail.service.js";
 import { generateDiagnosticTemplate } from "../../../utils/emailTemplates.js";
+import { getOrganisationEmailBranding } from "../../../utils/emailBranding.js";
 
 function getOrganisationId(req) {
   const id = req.user?.organisation_id;
@@ -180,11 +181,13 @@ export async function testSmtpSettings(req, res) {
       });
     }
 
+    const branding = await getOrganisationEmailBranding(orgId);
+
     const result = await sendTransactionalEmail({
       organisationId: orgId,
       to,
-      subject: "EPiC — SMTP test",
-      html: generateDiagnosticTemplate({ source: verify.source, message: "This is a test email from your organisation mail settings." }),
+      subject: `${branding.orgName} — SMTP test`,
+      html: generateDiagnosticTemplate({ source: verify.source, message: "This is a test email from your organisation mail settings.", branding }),
       text: `SMTP test (${verify.source})`,
     });
 

@@ -8,6 +8,7 @@ import {
 } from "./notification.service.js";
 import { sendTransactionalEmail } from "./mail.service.js";
 import { generateNotificationEmailTemplate } from "../utils/emailTemplates.js";
+import { getOrganisationEmailBranding } from "../utils/emailBranding.js";
 
 /**
  * Centralized Sponsorship Notification Service.
@@ -97,6 +98,7 @@ export async function deliver({
         if ((!name || name === "there") && u?.first_name) name = u.first_name;
       }
       if (to) {
+        const branding = await getOrganisationEmailBranding(org);
         await sendTransactionalEmail({
           organisationId: org,
           to,
@@ -109,6 +111,7 @@ export async function deliver({
             notificationType: type,
             actionUrl: actionUrl ? `${frontend()}${actionUrl}` : undefined,
             metadata: { entityType, entityId },
+            branding,
           }),
         });
       }

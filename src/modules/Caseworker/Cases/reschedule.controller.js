@@ -1,6 +1,7 @@
 import logger from "../../../utils/logger.js";
 import { sendRescheduleEmail } from "../../../services/email.service.js";
 import { generateNotificationEmailTemplate } from "../../../utils/emailTemplates.js";
+import { getOrganisationEmailBranding } from "../../../utils/emailBranding.js";
 import { ROLES } from "../../../middlewares/role.middleware.js";
 
 // Reschedule case
@@ -177,6 +178,9 @@ export const rescheduleCase = async (req, res) => {
     const candidate = await req.tenantDb.User.findByPk(caseData.candidateId);
     const sponsor = await req.tenantDb.User.findByPk(caseData.sponsorId);
 
+    const organisationId = req.user?.organisation_id ?? null;
+    const branding = await getOrganisationEmailBranding(organisationId);
+
     // Send email to candidate
     if (candidate && candidate.email) {
       const emailHtml = generateNotificationEmailTemplate({
@@ -190,11 +194,12 @@ export const rescheduleCase = async (req, res) => {
             .map((c) => `${c.field}: ${c.oldValue || "None"} -> ${c.newValue}`)
             .join(" | "),
         },
+        branding,
       });
       await sendRescheduleEmail({
         to: candidate.email,
         html: emailHtml,
-        organisationId: req.user?.organisation_id ?? null,
+        organisationId,
       });
     }
 
@@ -211,11 +216,12 @@ export const rescheduleCase = async (req, res) => {
             .map((c) => `${c.field}: ${c.oldValue || "None"} -> ${c.newValue}`)
             .join(" | "),
         },
+        branding,
       });
       await sendRescheduleEmail({
         to: sponsor.email,
         html: emailHtml,
-        organisationId: req.user?.organisation_id ?? null,
+        organisationId,
       });
     }
 

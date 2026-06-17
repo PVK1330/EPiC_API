@@ -10,6 +10,7 @@ import {
 } from './notification.service.js';
 import { sendTransactionalEmail } from './mail.service.js';
 import { generateNotificationEmailTemplate } from '../utils/emailTemplates.js';
+import { getOrganisationEmailBranding } from '../utils/emailBranding.js';
 
 const ROLE_NAME_TO_ID = {
   candidate: ROLES.CANDIDATE,
@@ -133,10 +134,11 @@ export async function resolveUserIdsByTargetRoles(tenantDb, targetRoles, organis
  */
 export async function emailOrganisationPrimaryContact(org, title, message) {
   if (!org?.primaryEmail) return false;
+  const branding = await getOrganisationEmailBranding(org.id);
   const result = await sendTransactionalEmail({
     organisationId: org.id,
     to: org.primaryEmail,
-    subject: `EPiC Announcement: ${title}`,
+    subject: `${branding.orgName} Announcement: ${title}`,
     html: generateNotificationEmailTemplate({
       recipientName: org.name || 'Organisation Admin',
       title,
@@ -144,6 +146,7 @@ export async function emailOrganisationPrimaryContact(org, title, message) {
       priority: NotificationPriority.HIGH,
       notificationType: NotificationTypes.SYSTEM_MAINTENANCE,
       metadata: { source: 'platform_announcement' },
+      branding,
     }),
   });
   return result.sent === true;

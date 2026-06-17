@@ -1291,12 +1291,14 @@ export const bulkImportCaseworkers = async (req, res) => {
           ...profileData
         });
 
-        // Send welcome email
+        // Send welcome email via the already-branded tenant service so the
+        // tenant logo/name and reply-to are applied consistently.
         try {
-          const loginUrl = process.env.FRONTEND_URL || "http://localhost:3000";
-          await sendCaseworkerWelcomeEmail({
-            to: caseworker.email,
-            html: generateCaseworkerCredentialsTemplate(caseworker.email, generatedPassword, loginUrl),
+          await sendTenantCaseworkerWelcomeEmail({
+            user: caseworker,
+            plainPassword: generatedPassword,
+            organisationId: organisationIdFromRequest(req),
+            firstName: caseworker.first_name,
           });
         } catch (emailError) {
           logger.error({ err: emailError }, "Failed to send caseworker email");
