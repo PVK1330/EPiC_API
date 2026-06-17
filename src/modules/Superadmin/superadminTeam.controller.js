@@ -225,6 +225,37 @@ export const updateTeamMember = catchAsync(async (req, res) => {
   return ApiResponse.success(res, "Team member updated", { member: formatMember(refreshed) });
 });
 
+export const deleteTeamMember = catchAsync(async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const user = await User.findOne({
+    where: { id, organisation_id: { [Op.is]: null } },
+  });
+  if (!user) {
+    return ApiResponse.notFound(res, "Team member not found");
+  }
+
+  if (isPlatformSuperAdminRole(user.role_id)) {
+    return ApiResponse.badRequest(res, "Super Admin accounts cannot be deleted");
+  }
+  if (req.user.id === user.id) {
+    return ApiResponse.badRequest(res, "You cannot delete your own account");
+  }
+
+  const label = `${user.first_name} ${user.last_name} (${user.email})`;
+  await user.destroy();
+
+  await recordPlatformAuditLog({
+    category: "Authentication",
+    action: "Platform User Deleted",
+    user: req.user?.email || "superadmin@epic.com",
+    org: "Global System",
+    description: `Deleted platform team member ${label}.`,
+    status: "Success",
+  });
+
+  return ApiResponse.success(res, "Team member deleted");
+});
+
 export const listPlatformRoles = catchAsync(async (req, res) => {
   const roles = await Role.findAll({
     where: { scope: "platform" },
