@@ -78,11 +78,85 @@ const CONDITION_KEY_MAP = {
 
 /** Returns (or creates) the intake form for an application. */
 export async function getOrCreateIntakeForm(tenantDb, licenceApplicationId, organisationId) {
-  const [form] = await tenantDb.LicenceIntakeForm.findOrCreate({
+  const [form, created] = await tenantDb.LicenceIntakeForm.findOrCreate({
     where: { licenceApplicationId },
     defaults: { licenceApplicationId, organisationId },
   });
+  // On first creation, prefill from data the sponsor already provided in the
+  // wizard / profile so they don't have to re-type it. Best-effort: a prefill
+  // failure must never block the intake summary from loading.
+  if (created) {
+    try {
+      await prefillIntakeForm(tenantDb, licenceApplicationId, form);
+    } catch (err) {
+      logger.warn({ err, licenceApplicationId }, "getOrCreateIntakeForm: prefill skipped");
+    }
+  }
   return form;
+}
+
+/**
+ * Populate a freshly-created intake form from the sponsor profile + the licence
+ * application's wizard data (organisation info, CoS requirements, authorising
+ * officer). Only fills BLANK fields — never overwrites anything the sponsor has
+ * typed. NI number, total-employee counts and the conditional flags are genuinely
+ * new information not captured elsewhere, so they are deliberately left blank.
+ */
+async function prefillIntakeForm(tenantDb, licenceApplicationId, form) {
+  const application = await tenantDb.LicenceApplication.findByPk(licenceApplicationId);
+  if (!application) return;
+
+  const [profile, orgInfo, cosReqs, ao] = await Promise.all([
+    tenantDb.SponsorProfile.findOne({ where: { userId: application.userId } }).catch(() => null),
+    tenantDb.LicenceOrganisationInfo.findOne({ where: { licenceApplicationId } }).catch(() => null),
+    tenantDb.LicenceCosRequirement.findAll({ where: { licenceApplicationId } }).catch(() => []),
+    tenantDb.LicenceAuthorisingOfficer.findOne({ where: { licenceApplicationId } }).catch(() => null),
+  ]);
+
+  const aoName = ao
+    ? [ao.firstName, ao.lastName].filter(Boolean).join(" ").trim()
+    : null;
+
+  const jobTitles = (cosReqs || [])
+    .map((c) => c.roleTitle)
+    .filter((t) => t && String(t).trim());
+
+  const cosTotal = (cosReqs || []).reduce(
+    (sum, c) => sum + (Number(c.numberOfWorkers) || 0),
+    0,
+  );
+
+  const premisesAddress = profile
+    ? {
+        line1: profile.tradingAddress || profile.registeredAddress || "",
+        line2: "",
+        city: profile.city || "",
+        county: profile.state || "",
+        postcode: profile.postalCode || "",
+        country: profile.country || "",
+      }
+    : null;
+
+  // Only assign when the source has a usable value; setIfBlank guards against
+  // clobbering a value already on the (just-created, normally empty) form.
+  const setIfBlank = (field, value) => {
+    const cur = form[field];
+    const blank = cur === null || cur === undefined || cur === "" || (Array.isArray(cur) && cur.length === 0);
+    const hasValue = value !== null && value !== undefined && value !== "" && !(Array.isArray(value) && value.length === 0);
+    if (blank && hasValue) form[field] = value;
+  };
+
+  setIfBlank("tradingName", profile?.tradingName || profile?.companyName);
+  setIfBlank("owningLimitedCompany", profile?.companyName);
+  setIfBlank("namedPersonOnLicence", aoName || profile?.authorisingName);
+  setIfBlank("phoneNumber", profile?.authorisingPhone || profile?.keyContactPhone);
+  setIfBlank("emailAddress", profile?.authorisingEmail || profile?.keyContactEmail || application.contactEmail);
+  setIfBlank("companyWebsite", profile?.website);
+  setIfBlank("jobTitlesRequired", jobTitles);
+  setIfBlank("numberOfCosRequired", cosTotal > 0 ? cosTotal : null);
+  if (premisesAddress && premisesAddress.line1) setIfBlank("premisesAddress", premisesAddress);
+
+  await form.save();
 }
 
 /**
