@@ -28,6 +28,9 @@ export default (sequelize, DataTypes) => {
       convictionsDetails: { type: DataTypes.TEXT, allowNull: true, field: "convictions_details" },
       email: { type: DataTypes.STRING(255), allowNull: true },
       phone: { type: DataTypes.STRING(30), allowNull: true },
+      // Business Profile sync provenance (null = manually entered).
+      lastSyncedAt: { type: DataTypes.DATE, allowNull: true, field: "last_synced_at" },
+      lastSyncedByUserId: { type: DataTypes.INTEGER, allowNull: true, field: "last_synced_by_user_id" },
     },
     {
       tableName: "licence_authorising_officer",

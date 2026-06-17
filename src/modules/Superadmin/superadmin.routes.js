@@ -58,10 +58,12 @@ router.post('/subscriptions/:id/cancel', subscriptionController.cancelSubscripti
 router.post('/subscriptions/:id/renew', subscriptionController.renewSubscription);
 
 router.get('/invoices', invoiceController.getAllInvoices);
-router.get('/invoices/:id', invoiceController.getInvoiceById);
-router.patch('/invoices/:id/status', invoiceController.updateInvoiceStatus);
 router.get('/invoices/export/pdf', invoiceController.exportInvoicesPdf);
+router.get('/invoices/:id', invoiceController.getInvoiceById);
+router.get('/invoices/:id/download', invoiceController.downloadInvoicePdf);
+router.patch('/invoices/:id/status', invoiceController.updateInvoiceStatus);
 router.get('/financials/export', invoiceController.exportFinancials);
+
 
 import { validate } from '../../middlewares/validate.middleware.js';
 import { configureGatewaySchema } from '../../validations/superadminPayment.validation.js';
@@ -69,6 +71,7 @@ import { configureGatewaySchema } from '../../validations/superadminPayment.vali
 router.get('/transactions', paymentController.getAllTransactions);
 router.get('/transactions/export', paymentController.exportTransactions);
 router.get('/transactions/:id', paymentController.getTransactionById);
+router.get('/transactions/:id/receipt', paymentController.downloadTransactionReceipt);
 router.get('/payments/reconciliation', paymentController.getPaymentReconciliation);
 router.get('/gateway/status', paymentController.getGatewayStatus);
 router.post('/gateway/configure', validate(configureGatewaySchema), paymentController.configureGateway);

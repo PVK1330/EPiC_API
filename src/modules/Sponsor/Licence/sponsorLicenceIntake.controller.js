@@ -177,6 +177,10 @@ export async function deleteSponsorIntakeDocument(req, res) {
     doc.status = "pending";
     doc.uploadedAt = null;
     doc.uploadedByUserId = null;
+    doc.verifiedAt = null;
+    doc.verifiedByUserId = null;
+    doc.source = "manual";
+    doc.sourceAppendixDocumentId = null;
     doc.rejectionReason = null;
     doc.caseworkerNotes = null;
     await doc.save();

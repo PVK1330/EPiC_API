@@ -132,7 +132,19 @@ export const renewSubscription = catchAsync(async (req, res) => {
       current_period_end: newPeriodEnd,
     }, { transaction });
 
-    const invoiceNumber = `INV-${Date.now()}-${subscription.organisation_id}`;
+    const lastInvoice = await platformDb.Invoice.findOne({
+      order: [["id", "DESC"]],
+      transaction,
+    });
+    let nextNum = 10001;
+    if (lastInvoice && lastInvoice.invoice_number) {
+      const match = lastInvoice.invoice_number.match(/INV-(\d+)/);
+      if (match) {
+        nextNum = parseInt(match[1]) + 1;
+      }
+    }
+    const invoiceNumber = `INV-${nextNum}`;
+
     const dueDate = new Date(newPeriodEnd);
     dueDate.setDate(dueDate.getDate() - 7);
 

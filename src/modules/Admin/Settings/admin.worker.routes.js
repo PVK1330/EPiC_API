@@ -9,6 +9,8 @@ import {
   grantVisaAdmin,
   rejectVisaAdmin,
   assignCaseworkersAdmin,
+  deleteWorkerAdmin,
+  restoreWorkerAdmin,
   getWorkerAuditAdmin,
 } from "./adminWorker.controller.js";
 
@@ -20,6 +22,8 @@ router.use(checkRole(ADMIN_ROLES));
 router.get("/",                         getAllWorkers);
 router.post("/",                        createWorkerAdmin);
 router.get("/:id",                      getWorkerAdmin);
+router.delete("/:id",                   deleteWorkerAdmin);
+router.post("/:id/restore",             restoreWorkerAdmin);
 router.post("/:id/advance",             advanceWorkerAdmin);
 router.post("/:id/grant-visa",          grantVisaAdmin);
 router.post("/:id/reject-visa",         rejectVisaAdmin);

@@ -26,7 +26,7 @@ import {
 import { verifyTokenAndTenant } from '../../../middlewares/authStack.middleware.js';
 import { checkRole, ADMIN_ROLES } from '../../../middlewares/role.middleware.js';
 import { validate } from '../../../middlewares/validate.middleware.js';
-import { getLicenceStages, completeLicenceStageTask } from '../../Shared/Licence/licenceStage.controller.js';
+import { getLicenceStages, completeLicenceStageTask, getLicenceWorkflowTimeline } from '../../Shared/Licence/licenceStage.controller.js';
 import {
     createInfoRequestHandler,
     listInfoRequestsHandler,
@@ -55,6 +55,7 @@ router.get("/:id/documents/:index/download", downloadLicenceDocument);
 // Stages panel (per-stage, per-role tasks) — admin can view and complete any task.
 router.get("/:id/stages", getLicenceStages);
 router.post("/:id/stages/:stageKey/complete", completeLicenceStageTask);
+router.get("/:id/workflow-timeline", getLicenceWorkflowTimeline);
 router.patch("/update-status/:id", updateLicenceApplicationStatus);
 router.patch("/request-info/:id", requestAdditionalInformation);
 router.post("/assign-caseworker/:id", assignCaseworker);

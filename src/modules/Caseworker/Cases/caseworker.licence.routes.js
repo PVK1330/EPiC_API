@@ -26,7 +26,7 @@ import { verifyTokenAndTenant } from '../../../middlewares/authStack.middleware.
 import { checkRole, STAFF_ROLES } from '../../../middlewares/role.middleware.js';
 import { ensureAssignedCaseworker } from '../../../middlewares/ensureAssignedCaseworker.middleware.js';
 import { validate } from '../../../middlewares/validate.middleware.js';
-import { getLicenceStages, completeLicenceStageTask, downloadLicenceDocument } from '../../Shared/Licence/licenceStage.controller.js';
+import { getLicenceStages, completeLicenceStageTask, downloadLicenceDocument, getLicenceWorkflowTimeline } from '../../Shared/Licence/licenceStage.controller.js';
 import {
     createInfoRequestHandler,
     listInfoRequestsHandler,
@@ -58,6 +58,9 @@ router.get("/v2/:id", ensureAssignedCaseworker(), getLicenceApplicationV2Full);
 
 // Assignment history + reviewer actions for an application (same access guard).
 router.get("/:id/audit", ensureAssignedCaseworker(), getLicenceApplicationAudit);
+
+// Full cross-entity workflow timeline (licence + CoS + workers), assignment-guarded.
+router.get("/:id/workflow-timeline", ensureAssignedCaseworker(), getLicenceWorkflowTimeline);
 
 // Stages panel — assigned caseworker (or admin override) may view + complete tasks.
 router.get("/:id/stages", ensureAssignedCaseworker(), getLicenceStages);

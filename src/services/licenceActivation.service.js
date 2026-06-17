@@ -54,7 +54,8 @@ function generateLicenceNumber(profile, application) {
  *   5. notify the sponsor (portal notification + email)
  *
  * Idempotent and safe to call again on a renewal. Returns
- * { profile, licenceNumber, wasActive } or null when no profile exists.
+ * { profile, licenceNumber, wasActive }. Always succeeds — creates a
+ * SponsorProfile if one does not yet exist.
  */
 export async function activateSponsorLicence({
   tenantDb,
@@ -63,18 +64,15 @@ export async function activateSponsorLicence({
   req = null,
   transaction = null,
 }) {
-  const profile = await tenantDb.SponsorProfile.findOne({
+  // findOrCreate ensures a SponsorProfile row always exists before activation.
+  // Sponsors who registered before visiting account settings may not have a row;
+  // rather than silently returning null and leaving the licence inactive, we
+  // create a minimal profile so activation can proceed.
+  const [profile] = await tenantDb.SponsorProfile.findOrCreate({
     where: { userId: application.userId },
+    defaults: { userId: application.userId },
     ...(transaction && { transaction }),
   });
-
-  if (!profile) {
-    logger.warn(
-      { userId: application.userId, applicationId: application.id },
-      "activateSponsorLicence: no SponsorProfile found for approved application"
-    );
-    return null;
-  }
 
   const now = new Date();
   const issuedDate = now;

@@ -8,6 +8,8 @@ import {
   getSponsoredWorkerById,
   listAllWorkers,
   getWorkerAuditTrail,
+  softDeleteWorker,
+  restoreWorker,
 } from "../../../services/sponsoredWorker.service.js";
 
 const handle = (res, err, fallback) => {
@@ -16,13 +18,14 @@ const handle = (res, err, fallback) => {
   return res.status(code).json({ status: "error", message: err.message || fallback });
 };
 
-/** GET /workers — list all workers, optionally filtered by status or sponsorId. */
+/** GET /workers — list all workers, optionally filtered by status, sponsorId, or includeDeleted. */
 export const getAllWorkers = async (req, res) => {
   try {
-    const { status, sponsorId } = req.query;
+    const { status, sponsorId, includeDeleted } = req.query;
     const workers = await listAllWorkers(req.tenantDb, {
       status: status || undefined,
       sponsorId: sponsorId ? Number(sponsorId) : undefined,
+      includeDeleted: includeDeleted === "true",
     });
     res.status(200).json({ status: "success", data: workers });
   } catch (err) {
@@ -115,6 +118,26 @@ export const assignCaseworkersAdmin = async (req, res) => {
     res.status(200).json({ status: "success", message: "Caseworkers assigned", data: updated });
   } catch (err) {
     handle(res, err, "Failed to assign caseworkers");
+  }
+};
+
+/** DELETE /workers/:id — admin soft-deletes a worker (record preserved for compliance). */
+export const deleteWorkerAdmin = async (req, res) => {
+  try {
+    await softDeleteWorker(req.tenantDb, req.params.id, req.user.userId);
+    res.status(200).json({ status: "success", message: "Worker record archived" });
+  } catch (err) {
+    handle(res, err, "Failed to delete worker");
+  }
+};
+
+/** POST /workers/:id/restore — admin restores a previously soft-deleted worker. */
+export const restoreWorkerAdmin = async (req, res) => {
+  try {
+    const worker = await restoreWorker(req.tenantDb, req.params.id, req.user.userId);
+    res.status(200).json({ status: "success", message: "Worker record restored", data: worker });
+  } catch (err) {
+    handle(res, err, "Failed to restore worker");
   }
 };
 
