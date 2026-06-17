@@ -74,6 +74,108 @@ const CONDITION_KEY_MAP = {
   candidateNotIdentified:"candidate_not_identified",
 };
 
+/**
+ * Maps an intake checklist documentKey (Stage 10) → the Appendix A documentKey(s)
+ * uploaded during the licence application wizard (Stage 4) that satisfy the same
+ * evidence requirement. When a sponsor opens the intake checklist, any matching
+ * Stage 4 upload is auto-attached so they are not asked to upload it twice.
+ *
+ * Intake keys NOT listed here (id_proof_named_person, right_to_work_named_person,
+ * organisational_chart) have no Stage 4 equivalent and always require a fresh
+ * upload. The value is an ordered list of candidate appendix keys — the first one
+ * with an uploaded file wins.
+ *
+ * Keep in sync with docs/intake-document-mapping.md.
+ */
+export const INTAKE_TO_APPENDIX_MAP = {
+  employer_liability_insurance: ["employer_liability_insurance"],
+  certificate_of_incorporation: ["proof_of_registration"],
+  paye_hmrc_registration:       ["paye_hmrc_registration"],
+  business_bank_statement:      ["business_bank_statement"],
+  evidence_of_premises:         ["evidence_of_premises"],
+  vat_registration:             ["vat_registration"],
+  company_financials:           ["annual_accounts"],
+};
+
+/** Source values for an intake document slot. */
+export const INTAKE_DOC_SOURCE = Object.freeze({
+  MANUAL: "manual",
+  IMPORTED: "imported_from_application",
+});
+
+/** Filename from a stored path, tolerant of both / and \ separators. */
+function baseName(p) {
+  if (!p) return null;
+  return String(p).split(/[\\/]/).pop() || null;
+}
+
+/**
+ * Pure helper (unit-testable, no DB): given the intake checklist rows and the
+ * application's Appendix A documents, return the list of imports to apply.
+ *
+ * An intake doc is a candidate for import when it is still empty (status
+ * "pending", no filePath) and the sponsor hasn't already uploaded/replaced it.
+ * A matching appendix doc must have an actual uploaded file and must not be
+ * rejected. Returns [{ intakeDoc, appendixDoc }].
+ */
+export function planAppendixImports(intakeDocs, appendixDocs) {
+  const appendixByKey = new Map();
+  for (const a of appendixDocs || []) {
+    const usable = a && a.filePath && a.verificationStatus !== "Rejected";
+    if (usable && !appendixByKey.has(a.documentKey)) appendixByKey.set(a.documentKey, a);
+  }
+
+  const plan = [];
+  for (const intakeDoc of intakeDocs || []) {
+    // Skip slots the sponsor has already populated or that a caseworker has acted on.
+    if (intakeDoc.status !== "pending" || intakeDoc.filePath) continue;
+    const candidates = INTAKE_TO_APPENDIX_MAP[intakeDoc.documentKey];
+    if (!candidates) continue; // no Stage 4 equivalent — manual upload required
+    for (const appKey of candidates) {
+      const appendixDoc = appendixByKey.get(appKey);
+      if (appendixDoc) {
+        plan.push({ intakeDoc, appendixDoc });
+        break;
+      }
+    }
+  }
+  return plan;
+}
+
+/**
+ * Auto-attach matching Stage 4 (Appendix A) uploads onto empty Stage 10 intake
+ * checklist slots. Marks each as imported (source = imported_from_application)
+ * and links the originating appendix document. Idempotent and non-destructive:
+ * never touches a slot the sponsor has already uploaded/replaced, and the
+ * sponsor can still replace or remove an imported file afterwards.
+ *
+ * @returns {Promise<number>} how many slots were imported.
+ */
+export async function importMatchingAppendixDocuments(tenantDb, licenceApplicationId) {
+  if (!tenantDb?.LicenceIntakeDocument || !tenantDb?.LicenceAppendixDocument) return 0;
+
+  const [intakeDocs, appendixDocs] = await Promise.all([
+    tenantDb.LicenceIntakeDocument.findAll({ where: { licenceApplicationId } }),
+    tenantDb.LicenceAppendixDocument.findAll({ where: { licenceApplicationId } }),
+  ]);
+
+  const plan = planAppendixImports(intakeDocs, appendixDocs);
+  for (const { intakeDoc, appendixDoc } of plan) {
+    intakeDoc.filePath = appendixDoc.filePath;
+    intakeDoc.fileName = baseName(appendixDoc.filePath);
+    intakeDoc.fileMimeType = null;
+    intakeDoc.fileSizeBytes = null;
+    intakeDoc.status = "uploaded";
+    intakeDoc.uploadedAt = new Date();
+    intakeDoc.source = INTAKE_DOC_SOURCE.IMPORTED;
+    intakeDoc.sourceAppendixDocumentId = appendixDoc.id;
+    intakeDoc.rejectionReason = null;
+    intakeDoc.caseworkerNotes = null;
+    await intakeDoc.save();
+  }
+  return plan.length;
+}
+
 // ─── Intake form helpers ───────────────────────────────────────────────────────
 
 /** Returns (or creates) the intake form for an application. */
@@ -353,6 +455,9 @@ export async function recordDocumentUpload(tenantDb, licenceApplicationId, organ
   doc.status = "uploaded";
   doc.uploadedAt = new Date();
   doc.uploadedByUserId = userId;
+  // A direct sponsor upload supersedes any imported file — this is now their own.
+  doc.source = INTAKE_DOC_SOURCE.MANUAL;
+  doc.sourceAppendixDocumentId = null;
   // Clear previous rejection state on re-upload
   doc.rejectionReason = null;
   doc.caseworkerNotes = null;
@@ -626,6 +731,12 @@ export async function getIntakeSummary(tenantDb, licenceApplicationId, organisat
   await seedAllDocuments(tenantDb, licenceApplicationId, organisationId);
 
   const form = await getOrCreateIntakeForm(tenantDb, licenceApplicationId, organisationId);
+
+  // Auto-attach matching Stage 4 (Appendix A) uploads so the sponsor isn't asked
+  // to provide the same evidence twice. Best-effort — never block the summary.
+  await importMatchingAppendixDocuments(tenantDb, licenceApplicationId).catch((err) =>
+    logger.warn({ err, licenceApplicationId }, "getIntakeSummary: appendix import skipped"),
+  );
 
   const docs = await tenantDb.LicenceIntakeDocument.findAll({
     where: { licenceApplicationId },

@@ -80,6 +80,24 @@ export default function defineLicenceIntakeDocument(sequelize) {
         defaultValue: "pending",
       },
 
+      // ── Provenance ────────────────────────────────────────────────────────
+      // "manual" — sponsor uploaded the file directly.
+      // "imported_from_application" — auto-attached from a Stage 4 Appendix A
+      // upload so the sponsor isn't asked to provide the same evidence twice.
+      source: {
+        type: DataTypes.STRING(40),
+        allowNull: false,
+        defaultValue: "manual",
+      },
+
+      // When source = imported_from_application, the licence_appendix_documents.id
+      // the file was carried over from.
+      sourceAppendixDocumentId: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        field: "source_appendix_document_id",
+      },
+
       // ── Uploaded file metadata ────────────────────────────────────────────
       fileName: {
         type: DataTypes.STRING(500),
