@@ -739,8 +739,23 @@ async function seedNextInChain(tenantDb, application, stageDef, completedRole, c
     },
   );
 
-  // If the just-created task was immediately auto-completed, keep the chain moving.
+  // If the just-created task was immediately auto-completed, send notification and keep chain moving.
   if (result?.isNew && result.wasAutoCompleted) {
+    try {
+      await notifyStageTaskCompleted({
+        tenantDb,
+        application,
+        stageDef: next.stageDef,
+        role: next.role,
+        task: result.row,
+        actorUser: null,
+        req: ctx.req,
+      }).catch((err) =>
+        logger.warn({ err, stageKey: next.stageDef.key, role: next.role }, "seedNextInChain: notification failed"),
+      );
+    } catch (err) {
+      logger.warn({ err }, "seedNextInChain: notify wrapper error");
+    }
     await seedNextInChain(tenantDb, application, next.stageDef, next.role, ctx, depth + 1);
   }
 }
@@ -797,7 +812,7 @@ export async function ensureStageTasks(tenantDb, applicationOrId, { req = null, 
   // doesn't yet have a completed row in the DB.
   const existingRows = await tenantDb.LicenceStageTask.findAll({
     where: { licenceApplicationId: application.id },
-    attributes: ["stageKey", "role", "status"],
+    attributes: ["stageKey", "role", "status", "id"],
     order: [["stageOrder", "ASC"]],
   });
 
@@ -805,8 +820,37 @@ export async function ensureStageTasks(tenantDb, applicationOrId, { req = null, 
     existingRows.map((r) => [`${r.stageKey}:${r.role}`, r.status]),
   );
 
+  // Fix data/DB mismatch: auto-complete pending tasks for stages that are already complete
+  // in the data signal. This unblocks the chain when old applications have incomplete task
+  // rows but the data already satisfies the completion criteria.
+  const { Op } = tenantDb.Sequelize;
+  for (const stageKey of completed.keys()) {
+    const incompleteTasks = existingRows.filter(
+      (r) => r.stageKey === stageKey && r.status !== "completed"
+    );
+    if (incompleteTasks.length > 0) {
+      await tenantDb.LicenceStageTask.update(
+        { status: "completed", completedAt: new Date() },
+        { where: { id: { [Op.in]: incompleteTasks.map((t) => t.id) } } },
+      ).catch((err) =>
+        logger.warn({ err, stageKey, count: incompleteTasks.length }, "ensureStageTasks: auto-complete fix failed"),
+      );
+    }
+  }
+
+  // Re-fetch after potential updates
+  const freshRows = await tenantDb.LicenceStageTask.findAll({
+    where: { licenceApplicationId: application.id },
+    attributes: ["stageKey", "role", "status"],
+    order: [["stageOrder", "ASC"]],
+  });
+
+  const freshRowStatus = new Map(
+    freshRows.map((r) => [`${r.stageKey}:${r.role}`, r.status]),
+  );
+
   for (const { stageDef, role } of TASK_CHAIN) {
-    const status = rowStatus.get(`${stageDef.key}:${role}`);
+    const status = freshRowStatus.get(`${stageDef.key}:${role}`);
     if (status === "completed") continue; // chain has passed this node
 
     if (!status) {
@@ -1088,7 +1132,7 @@ async function notifyStageTaskCompleted({ tenantDb, application, stageDef, role,
   const org = application.organisationId ?? req?.user?.organisation_id ?? null;
   const actorId = actorUser?.userId ?? null;
   const company = application.companyName || `#LIC-${application.id}`;
-  const roleLabel = role.charAt(0).toUpperCase() + role.slice(1);
+  const roleLabel = (role.charAt(0).toUpperCase() + role.slice(1)) + (actorUser ? "" : " (auto-completed)");
 
   const targets = [];
   if (recipients.admin?.userId) targets.push({ ...recipients.admin, audience: "admin" });
