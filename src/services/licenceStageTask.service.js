@@ -499,10 +499,16 @@ function deriveStageCompletion(app) {
     return { completed, currentKey: null };
   }
 
+  // Completion is CONTIGUOUS: once the first incomplete stage is found, every
+  // later stage is "upcoming" even if its own data signal happens to be true.
+  // This prevents the timeline from jumping ahead (e.g. marking Submission done
+  // while the government stages are still pending) and keeps the backend in sync
+  // with the frontend tracker (deriveStageStatuses in constants/licenceStages.js).
   let currentKey = null;
   for (const s of LICENCE_STAGE_DEFINITIONS) {
+    if (currentKey) continue;          // a gap was already found — rest are upcoming
     if (signal[s.key]) completed.add(s.key);
-    else if (!currentKey) currentKey = s.key;
+    else currentKey = s.key;           // first incomplete stage = the active one
   }
   return { completed, currentKey };
 }
