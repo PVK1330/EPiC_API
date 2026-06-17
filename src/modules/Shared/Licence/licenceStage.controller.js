@@ -6,6 +6,7 @@ import {
   getStagesForApplication,
   completeStageTask,
 } from "../../../services/licenceStageTask.service.js";
+import { getWorkflowTimeline } from "../../../services/licenceWorkflowTimeline.service.js";
 import { resolveLicenceDocumentPaths } from "../../../utils/licenceDocuments.util.js";
 
 const PRIVATE_STORAGE_DIR = path.resolve(process.cwd(), "storage/private");
@@ -112,6 +113,28 @@ export const downloadLicenceDocument = async (req, res) => {
     const code = error?.statusCode || 500;
     if (code >= 500) logger.error({ err: error }, "downloadLicenceDocument (shared) failed");
     return res.status(code).json({ status: "error", message: error.message || "Failed to download document" });
+  }
+};
+
+/**
+ * GET .../:id/workflow-timeline — the full cross-entity workflow timeline
+ * (licence + CoS + sponsored workers) for one application, chronologically.
+ * Shared across admin, caseworker (assignment-guarded) and sponsor (owner-guarded).
+ */
+export const getLicenceWorkflowTimeline = async (req, res) => {
+  try {
+    const application = await loadAccessibleApplication(req);
+    if (!application) {
+      return res.status(404).json({ status: "error", message: "Licence application not found" });
+    }
+    assertScopeAccess(req, application);
+
+    const timeline = await getWorkflowTimeline(req.tenantDb, application);
+    return res.status(200).json({ status: "success", data: { applicationId: application.id, timeline } });
+  } catch (error) {
+    const code = error?.statusCode || 500;
+    if (code >= 500) logger.error({ err: error }, "getLicenceWorkflowTimeline failed");
+    return res.status(code).json({ status: "error", message: error.message || "Failed to load workflow timeline" });
   }
 };
 

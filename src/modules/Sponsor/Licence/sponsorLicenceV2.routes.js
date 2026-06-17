@@ -16,7 +16,7 @@ import {
   getApplicationAuditTrail,
   syncFromProfile,
 } from "./sponsorLicenceV2.controller.js";
-import { getLicenceStages, completeLicenceStageTask } from "../../Shared/Licence/licenceStage.controller.js";
+import { getLicenceStages, completeLicenceStageTask, getLicenceWorkflowTimeline } from "../../Shared/Licence/licenceStage.controller.js";
 import {
   listInfoRequestsHandler,
   getInfoRequestHandler,
@@ -45,6 +45,9 @@ router.post("/applications/:id/appendix-documents/:docId/file", upload.single("f
 
 // Audit trail — immutable event history for the Timeline tab.
 router.get("/applications/:id/audit-trail", getApplicationAuditTrail);
+
+// Full cross-entity workflow timeline (licence + CoS + workers) for the owner.
+router.get("/applications/:id/workflow-timeline", getLicenceWorkflowTimeline);
 
 // Stages panel — the owning sponsor views their lifecycle and completes their tasks.
 router.get("/applications/:id/stages", getLicenceStages);
