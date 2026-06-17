@@ -3,6 +3,337 @@ import platformDb from "../../models/index.js";
 import catchAsync from "../../utils/catchAsync.js";
 import ApiResponse from "../../utils/apiResponse.js";
 import { rowsToXlsxBuffer, sendXlsxDownload } from "../../utils/excelExport.util.js";
+import { generatePdfBufferFromDefinition } from "../../services/pdfGenerator.service.js";
+import { getSettingsByNamespace } from "../../services/settings.service.js";
+import path from "path";
+import fs from "fs";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// ─── PDF helpers ──────────────────────────────────────────────────────────────
+
+function resolveLogoDataUri(logoUrl) {
+  if (!logoUrl) return null;
+  try {
+    const basename = path.basename(String(logoUrl).split("?")[0]);
+    if (!basename) return null;
+    const searchDirs = [
+      path.join(__dirname, "../../../storage/private/organisations"),
+      path.join(__dirname, "../../../storage/private/platform"),
+      path.join(__dirname, "../../../storage/private/superadmin"),
+      path.join(__dirname, "../../../storage/private/avatars"),
+      path.join(__dirname, "../../../uploads"),
+    ];
+    for (const dir of searchDirs) {
+      const candidate = path.join(dir, basename);
+      if (fs.existsSync(candidate)) {
+        const buf = fs.readFileSync(candidate);
+        const ext = path.extname(basename).toLowerCase();
+        const mime = ext === ".jpg" || ext === ".jpeg" ? "image/jpeg"
+          : ext === ".gif" ? "image/gif" : "image/png";
+        return `data:${mime};base64,${buf.toString("base64")}`;
+      }
+    }
+  } catch { /* silent */ }
+  return null;
+}
+
+function formatGbp(amount) {
+  const n = parseFloat(amount || 0);
+  return `£${n.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function ukDate(d) {
+  if (!d) return "—";
+  return new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" });
+}
+
+function ukDateTime(d) {
+  if (!d) return "—";
+  return new Date(d).toLocaleString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+function formatLongString(str, maxLength = 25) {
+  if (!str) return "";
+  const s = String(str);
+  if (s.length <= maxLength) return s;
+  const keep = Math.floor((maxLength - 3) / 2);
+  return s.slice(0, keep) + "..." + s.slice(-keep);
+}
+
+async function buildUkReceiptDocDef(txn, platformSettings) {
+  const org = txn.organisation || {};
+  const invoice = txn.invoice || {};
+
+  const platformName = platformSettings["platform_name"] || "EPiC HRIS Platform";
+  const supportEmail = platformSettings["support_email"] || "support@elitepic.co.uk";
+  const platformLogoUrl = platformSettings["logo_url"] || null;
+
+  // Taxation — only apply if configured in Settings > Commerce > Taxation
+  const taxRateRaw = parseFloat(platformSettings["tax_rate"] || "0");
+  const taxRate = Number.isFinite(taxRateRaw) && taxRateRaw > 0 ? taxRateRaw / 100 : 0;
+  const taxId = platformSettings["tax_id"] || null;
+  const taxEnabled = taxRate > 0;
+
+  // Resolve platform logo
+  const platformLogoPath = path.join(__dirname, "../../assets/elitepic_logo.png");
+  let logoDataUri = null;
+  if (fs.existsSync(platformLogoPath)) {
+    const buf = fs.readFileSync(platformLogoPath);
+    logoDataUri = `data:image/png;base64,${buf.toString("base64")}`;
+  } else {
+    logoDataUri = resolveLogoDataUri(platformLogoUrl);
+  }
+
+  const orgLogoDataUri = resolveLogoDataUri(org.logoUrl);
+
+  const amountNet = parseFloat(txn.amount || 0);
+  const taxAmount = taxEnabled ? parseFloat((amountNet * taxRate).toFixed(2)) : 0;
+  const totalGross = parseFloat((amountNet + taxAmount).toFixed(2));
+
+  const statusColour = txn.status === "completed" ? "#16a34a"
+    : txn.status === "refunded" ? "#d97706"
+    : txn.status === "failed" ? "#dc2626" : "#475569";
+
+  const images = {};
+  if (logoDataUri) images.supplierLogo = logoDataUri;
+  if (orgLogoDataUri) images.clientLogo = orgLogoDataUri;
+
+  const content = [];
+
+  // ── Header: logo left, PAYMENT RECEIPT right ──
+  content.push({
+    columns: [
+      logoDataUri
+        ? { image: "supplierLogo", width: 120, alignment: "left" }
+        : { text: platformName, style: "supplierName" },
+      {
+        stack: [
+          { text: "PAYMENT RECEIPT", style: "receiptTitle", alignment: "right" },
+          { text: formatLongString(txn.reference || `TXN-${txn.id}`, 24), style: "receiptRef", alignment: "right" },
+        ],
+        width: "*",
+      },
+    ],
+    margin: [0, 0, 0, 16],
+  });
+
+  // ── Divider ──
+  content.push({
+    canvas: [{ type: "line", x1: 0, y1: 0, x2: 495, y2: 0, lineWidth: 1.5, lineColor: "#1d4ed8" }],
+    margin: [0, 0, 0, 14],
+  });
+
+  // ── Supplier / Recipient side by side (two equal columns) ──
+  const supplierBlock = [
+    { text: "SUPPLIER", style: "blockLabel" },
+    { text: platformName, style: "blockCompany" },
+    { text: "Elite PiC Ltd", style: "blockDetail" },
+    { text: "United Kingdom", style: "blockDetail" },
+    { text: supportEmail, style: "blockDetail" },
+    taxEnabled && taxId ? { text: `Tax No: ${taxId}`, style: "blockDetail" } : {},
+  ];
+
+  const recipientBlock = [
+    { text: "RECIPIENT", style: "blockLabel" },
+    { text: org.name || "—", style: "blockCompany" },
+    { text: org.primaryEmail || "—", style: "blockDetail" },
+    { text: org.country || "United Kingdom", style: "blockDetail" },
+  ];
+
+  const detailsBlock = [
+    { text: "RECEIPT DETAILS", style: "blockLabel" },
+    {
+      table: {
+        widths: ["auto", "*"],
+        body: [
+          [{ text: "Reference:", style: "metaKey" }, { text: formatLongString(txn.reference || "—", 24), style: "metaVal" }],
+          [{ text: "Date:", style: "metaKey" }, { text: ukDateTime(txn.createdAt), style: "metaVal" }],
+          [{ text: "Gateway:", style: "metaKey" }, { text: txn.gateway || "N/A", style: "metaVal" }],
+          [{ text: "Method:", style: "metaKey" }, { text: txn.payment_method || "N/A", style: "metaVal" }],
+          [{ text: "Status:", style: "metaKey" }, { text: (txn.status || "—").toUpperCase(), style: "metaVal", color: statusColour, bold: true }],
+          [{ text: "Currency:", style: "metaKey" }, { text: txn.currency || "GBP", style: "metaVal" }],
+        ],
+      },
+      layout: "noBorders",
+    },
+  ];
+
+  content.push({
+    columns: [
+      { stack: supplierBlock, width: 165 },
+      { stack: recipientBlock, width: 165 },
+      { stack: detailsBlock, width: 165 },
+    ],
+    columnGap: 0,
+    margin: [0, 0, 0, 20],
+  });
+
+  // ── Line items table ──
+  const tableColumns = taxEnabled
+    ? ["*", 90, 70, 70]          // desc | gateway-ref | tax | amount
+    : ["*", 120, 80];            // desc | gateway-ref | amount
+
+  const tableHeaderCells = taxEnabled
+    ? [
+        { text: "Description", style: "tableHeader" },
+        { text: "Gateway Ref", style: "tableHeader", alignment: "center" },
+        { text: `Tax (${taxRateRaw}%)`, style: "tableHeader", alignment: "right" },
+        { text: "Amount (ex. Tax)", style: "tableHeader", alignment: "right" },
+      ]
+    : [
+        { text: "Description", style: "tableHeader" },
+        { text: "Gateway Ref", style: "tableHeader", alignment: "center" },
+        { text: "Amount", style: "tableHeader", alignment: "right" },
+      ];
+
+  const tableDataCells = taxEnabled
+    ? [
+        {
+          stack: [
+            { text: `${platformName} — Subscription Payment`, style: "itemDesc" },
+            txn.invoice?.invoice_number ? { text: `Invoice: ${txn.invoice.invoice_number}`, style: "itemSubDesc" } : {},
+            txn.gateway_reference ? { text: `Ref: ${formatLongString(txn.gateway_reference, 28)}`, style: "itemSubDesc" } : {},
+          ],
+        },
+        { text: formatLongString(txn.gateway_reference || "N/A", 22), style: "itemCell", alignment: "center" },
+        { text: formatGbp(taxAmount), style: "itemCell", alignment: "right" },
+        { text: formatGbp(amountNet), style: "itemCell", alignment: "right", bold: true },
+      ]
+    : [
+        {
+          stack: [
+            { text: `${platformName} — Subscription Payment`, style: "itemDesc" },
+            txn.invoice?.invoice_number ? { text: `Invoice: ${txn.invoice.invoice_number}`, style: "itemSubDesc" } : {},
+            txn.gateway_reference ? { text: `Ref: ${formatLongString(txn.gateway_reference, 28)}`, style: "itemSubDesc" } : {},
+          ],
+        },
+        { text: formatLongString(txn.gateway_reference || "N/A", 22), style: "itemCell", alignment: "center" },
+        { text: formatGbp(amountNet), style: "itemCell", alignment: "right", bold: true },
+      ];
+
+  content.push({
+    table: {
+      headerRows: 1,
+      widths: tableColumns,
+      body: [tableHeaderCells, tableDataCells],
+    },
+    layout: {
+      hLineWidth: (i, node) => (i === 0 || i === 1 || i === node.table.body.length) ? 1 : 0.5,
+      vLineWidth: () => 0,
+      hLineColor: (i) => i <= 1 ? "#1d4ed8" : "#e2e8f0",
+      fillColor: (row) => row === 0 ? "#1d4ed8" : (row % 2 === 0 ? "#f8fafc" : null),
+      paddingLeft: () => 8,
+      paddingRight: () => 8,
+      paddingTop: () => 7,
+      paddingBottom: () => 7,
+    },
+    margin: [0, 0, 0, 14],
+  });
+
+  // ── Totals block (right-aligned, width-controlled) ──
+  const totalsRows = [];
+  if (taxEnabled) {
+    totalsRows.push(
+      [{ text: "Subtotal (ex. Tax)", style: "totalsLabel" }, { text: formatGbp(amountNet), style: "totalsVal" }],
+      [{ text: `Tax @ ${taxRateRaw}%${taxId ? ` (${taxId})` : ""}`, style: "totalsLabel" }, { text: formatGbp(taxAmount), style: "totalsVal" }],
+    );
+  }
+  totalsRows.push(
+    [{ text: taxEnabled ? "TOTAL CHARGED" : "AMOUNT CHARGED", style: "totalsFinalLabel" }, { text: formatGbp(totalGross), style: "totalsFinalVal" }],
+  );
+
+  content.push({
+    columns: [
+      { text: "", width: "*" },
+      {
+        table: { widths: [140, 80], body: totalsRows },
+        layout: {
+          hLineWidth: (i, node) => (i === 0 || i === node.table.body.length) ? 0 : 0.5,
+          vLineWidth: () => 0,
+          hLineColor: () => "#e2e8f0",
+          fillColor: (row, node) => row === node.table.body.length - 1 ? "#1d4ed8" : null,
+          paddingLeft: () => 8,
+          paddingRight: () => 8,
+          paddingTop: (i, node) => i === node.table.body.length - 1 ? 8 : 5,
+          paddingBottom: (i, node) => i === node.table.body.length - 1 ? 8 : 5,
+        },
+        width: "auto",
+      },
+    ],
+    margin: [0, 0, 0, 20],
+  });
+
+  // ── Status note ──
+  const noteText = txn.status === "completed"
+    ? `Payment of ${formatGbp(totalGross)} was successfully processed on ${ukDateTime(txn.createdAt)}.`
+    : txn.status === "refunded"
+    ? `This transaction was refunded. Original amount: ${formatGbp(totalGross)}.`
+    : txn.failure_reason
+    ? `Transaction failed: ${txn.failure_reason}`
+    : `Transaction status: ${txn.status}.`;
+
+  content.push({
+    stack: [
+      { text: txn.status === "completed" ? "✓ Payment Confirmed" : "Transaction Note", style: "notesTitle",
+        color: txn.status === "completed" ? "#16a34a" : "#d97706" },
+      { text: noteText, style: "notesBody" },
+    ],
+    margin: [0, 0, 0, 16],
+  });
+
+  // ── Footer ──
+  content.push({
+    canvas: [{ type: "line", x1: 0, y1: 0, x2: 495, y2: 0, lineWidth: 0.5, lineColor: "#cbd5e1" }],
+    margin: [0, 0, 0, 6],
+  });
+  content.push({
+    text: `${platformName} · ${supportEmail} · Computer-generated. No signature required.`,
+    style: "footerNote",
+    alignment: "center",
+  });
+
+  return {
+    pageSize: "A4",
+    pageMargins: [52, 52, 52, 60],
+    content,
+    images,
+    footer: (currentPage, pageCount) => ({
+      margin: [52, 8, 52, 0],
+      columns: [
+        { text: `${platformName} — Confidential`, style: "footerText", width: "*" },
+        { text: `Page ${currentPage} of ${pageCount}`, style: "footerText", alignment: "right", width: "auto" },
+      ],
+    }),
+    styles: {
+      receiptTitle:     { fontSize: 20, bold: true, color: "#1e293b" },
+      receiptRef:       { fontSize: 9, color: "#64748b", margin: [0, 3, 0, 0] },
+      supplierName:     { fontSize: 15, bold: true, color: "#1e293b" },
+      blockLabel:       { fontSize: 7, bold: true, color: "#94a3b8", margin: [0, 0, 0, 3] },
+      blockCompany:     { fontSize: 10, bold: true, color: "#1e293b", margin: [0, 0, 0, 1] },
+      blockDetail:      { fontSize: 8, color: "#475569", margin: [0, 1, 0, 0] },
+      metaKey:          { fontSize: 8, color: "#64748b", margin: [0, 1, 4, 1] },
+      metaVal:          { fontSize: 8, bold: true, color: "#1e293b", margin: [0, 1, 0, 1] },
+      tableHeader:      { fontSize: 8, bold: true, color: "#ffffff" },
+      itemDesc:         { fontSize: 9, bold: true, color: "#1e293b" },
+      itemSubDesc:      { fontSize: 7, color: "#64748b", margin: [0, 1, 0, 0] },
+      itemCell:         { fontSize: 9, color: "#1e293b" },
+      totalsLabel:      { fontSize: 9, color: "#475569" },
+      totalsVal:        { fontSize: 9, color: "#1e293b", alignment: "right" },
+      totalsFinalLabel: { fontSize: 10, bold: true, color: "#ffffff" },
+      totalsFinalVal:   { fontSize: 10, bold: true, color: "#ffffff", alignment: "right" },
+      notesTitle:       { fontSize: 8, bold: true, color: "#334155", margin: [0, 0, 0, 3] },
+      notesBody:        { fontSize: 7.5, color: "#64748b", lineHeight: 1.4 },
+      footerNote:       { fontSize: 7, color: "#94a3b8" },
+      footerText:       { fontSize: 7, color: "#94a3b8" },
+    },
+    defaultStyle: { font: "Helvetica", fontSize: 9, color: "#1e293b" },
+  };
+}
+
+
 
 export const getAllTransactions = catchAsync(async (req, res) => {
   const { status, gateway, type } = req.query;
@@ -99,7 +430,7 @@ export const getTransactionById = catchAsync(async (req, res) => {
       {
         model: platformDb.Organisation,
         as: "organisation",
-        attributes: ["id", "name", "slug", "primaryEmail"],
+        attributes: ["id", "name", "slug", "primaryEmail", "country", "logoUrl"],
       },
       {
         model: platformDb.Invoice,
@@ -115,6 +446,40 @@ export const getTransactionById = catchAsync(async (req, res) => {
 
   return ApiResponse.success(res, "Transaction retrieved successfully", { transaction });
 });
+
+export const downloadTransactionReceipt = catchAsync(async (req, res) => {
+  const { id } = req.params;
+
+  const txn = await platformDb.PaymentTransaction.findByPk(id, {
+    include: [
+      {
+        model: platformDb.Organisation,
+        as: "organisation",
+        attributes: ["id", "name", "slug", "primaryEmail", "country", "logoUrl"],
+      },
+      {
+        model: platformDb.Invoice,
+        as: "invoice",
+        attributes: ["id", "invoice_number", "amount", "status"],
+      },
+    ],
+  });
+
+  if (!txn) {
+    return ApiResponse.notFound(res, "Transaction not found");
+  }
+
+  const platformSettings = await getSettingsByNamespace(null);
+  const docDefinition = await buildUkReceiptDocDef(txn, platformSettings);
+  const buffer = await generatePdfBufferFromDefinition(docDefinition);
+
+  const safeRef = (txn.reference || `TXN_${id}`).replace(/[^a-zA-Z0-9_-]/g, "_");
+  const filename = `Receipt_${safeRef}.pdf`;
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  res.status(200).send(buffer);
+});
+
 
 export const getPaymentReconciliation = catchAsync(async (req, res) => {
   const { page = 1, limit = 50, status } = req.query;
@@ -154,7 +519,7 @@ export const getPaymentReconciliation = catchAsync(async (req, res) => {
 
 export const getGatewayStatus = catchAsync(async (req, res) => {
   const rows = await platformDb.PlatformSetting.findAll({
-    where: { key: ['stripe_publishable_key', 'stripe_secret_key', 'stripe_webhook_secret', 'stripe_currency', 'platform_fee'] },
+    where: { key: ['stripe_publishable_key', 'stripe_secret_key', 'stripe_webhook_secret', 'stripe_currency', 'platform_fee', 'tax_rate', 'tax_id'] },
   });
 
   const settings = {};
@@ -177,6 +542,8 @@ export const getGatewayStatus = catchAsync(async (req, res) => {
       currency: settings.stripe_currency || 'GBP',
       platform_fee: settings.platform_fee || '0',
       secret_key_set: !!settings.stripe_secret_key,
+      tax_rate: settings.tax_rate || '',
+      tax_id:   settings.tax_id   || '',
     },
   });
 });
@@ -184,13 +551,29 @@ export const getGatewayStatus = catchAsync(async (req, res) => {
 export const configureGateway = catchAsync(async (req, res) => {
   const { publishable_key, secret_key, webhook_secret, currency, platform_fee } = req.validated.body;
 
-  const upserts = [
-    { key: 'stripe_publishable_key', value: String(publishable_key).trim() },
-    { key: 'stripe_secret_key',      value: String(secret_key).trim() },
-    { key: 'stripe_webhook_secret',  value: webhook_secret ? String(webhook_secret).trim() : null },
-    { key: 'stripe_currency',        value: currency ? String(currency).trim().toUpperCase() : 'GBP' },
-    { key: 'platform_fee',           value: platform_fee != null ? String(platform_fee).trim() : '0' },
-  ];
+  // Read optional tax fields from body (not in validated schema — safe to read directly)
+  const tax_rate   = req.body?.tax_rate != null   ? String(req.body.tax_rate).trim()   : null;
+  const tax_id     = req.body?.tax_id   != null   ? String(req.body.tax_id).trim()     : null;
+
+  const upserts = [];
+  if (publishable_key !== undefined && publishable_key !== null) {
+    upserts.push({ key: 'stripe_publishable_key', value: String(publishable_key).trim() });
+  }
+  if (secret_key !== undefined && secret_key !== null) {
+    upserts.push({ key: 'stripe_secret_key', value: String(secret_key).trim() });
+  }
+  if (webhook_secret !== undefined) {
+    upserts.push({ key: 'stripe_webhook_secret', value: webhook_secret ? String(webhook_secret).trim() : null });
+  }
+  if (currency !== undefined && currency !== null) {
+    upserts.push({ key: 'stripe_currency', value: String(currency).trim().toUpperCase() });
+  }
+  if (platform_fee !== undefined && platform_fee !== null) {
+    upserts.push({ key: 'platform_fee', value: String(platform_fee).trim() });
+  }
+
+  if (tax_rate !== null) upserts.push({ key: 'tax_rate', value: tax_rate });
+  if (tax_id   !== null) upserts.push({ key: 'tax_id',   value: tax_id   });
 
   for (const item of upserts) {
     await platformDb.PlatformSetting.upsert(item, { conflictFields: ['key'] });

@@ -4,6 +4,7 @@ import {
   getSponsoredWorkerById,
   listSponsorWorkers,
   getWorkerAuditTrail,
+  softDeleteWorker,
 } from "../../../services/sponsoredWorker.service.js";
 
 const uid = (req) => {
@@ -74,6 +75,21 @@ export const registerWorker = async (req, res) => {
     res.status(201).json({ status: "success", message: "Worker registered", data: worker });
   } catch (err) {
     handle(res, err, "Failed to register worker");
+  }
+};
+
+/** DELETE /workers/:id — sponsor soft-deletes one of their own workers. */
+export const deleteMyWorker = async (req, res) => {
+  try {
+    const userId = uid(req);
+    if (!userId) return res.status(401).json({ status: "error", message: "Invalid session" });
+    const worker = await getSponsoredWorkerById(req.tenantDb, req.params.id);
+    if (!worker) return res.status(404).json({ status: "error", message: "Worker not found" });
+    if (worker.sponsorId !== userId) return res.status(403).json({ status: "error", message: "Forbidden" });
+    await softDeleteWorker(req.tenantDb, req.params.id, userId);
+    res.status(200).json({ status: "success", message: "Worker record archived" });
+  } catch (err) {
+    handle(res, err, "Failed to delete worker");
   }
 };
 

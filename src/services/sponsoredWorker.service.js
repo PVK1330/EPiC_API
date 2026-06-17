@@ -36,6 +36,8 @@ export const WORKER_AUDIT_ACTIONS = Object.freeze({
   VISA_DECISION:          "visa_decision",
   VISA_GRANTED:           "visa_granted",
   VISA_REJECTED:          "visa_rejected",
+  DELETED:                "worker_deleted",
+  RESTORED:               "worker_restored",
 });
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
@@ -430,14 +432,16 @@ export async function listCaseworkerWorkers(tenantDb, caseworkerId) {
   });
 }
 
-/** List all workers for admin, with optional status filter. */
-export async function listAllWorkers(tenantDb, { status, sponsorId } = {}) {
+/** List all workers for admin, with optional status filter.
+ *  Pass includeDeleted=true to surface soft-deleted records alongside live ones. */
+export async function listAllWorkers(tenantDb, { status, sponsorId, includeDeleted = false } = {}) {
   const where = {};
   if (status) where.status = status;
   if (sponsorId) where.sponsorId = sponsorId;
 
   return tenantDb.SponsoredWorker.findAll({
     where,
+    ...(includeDeleted ? { paranoid: false } : {}),
     include: baseIncludes(tenantDb),
     order: [["created_at", "DESC"]],
   });
@@ -452,6 +456,87 @@ export async function getWorkerAuditTrail(tenantDb, workerId) {
       : [],
     order: [["created_at", "ASC"]],
   });
+}
+
+/**
+ * Soft-delete a sponsored worker (paranoid destroy).
+ * The row is NOT physically removed — deleted_at is set so all standard queries
+ * exclude it automatically. The audit event is written in the same transaction.
+ */
+export async function softDeleteWorker(tenantDb, workerId, actorId) {
+  const t = await tenantDb.sequelize.transaction();
+  try {
+    const worker = await tenantDb.SponsoredWorker.findByPk(workerId, {
+      lock: true,
+      transaction: t,
+    });
+    if (!worker) {
+      const err = new Error("Sponsored worker not found.");
+      err.statusCode = 404;
+      throw err;
+    }
+
+    const prevStatus = worker.status;
+    await worker.destroy({ transaction: t });
+
+    await tenantDb.SponsoredWorkerAudit.create({
+      sponsoredWorkerId: worker.id,
+      action: WORKER_AUDIT_ACTIONS.DELETED,
+      fromStatus: prevStatus,
+      toStatus: null,
+      actorId: actorId ?? null,
+      notes: null,
+    }, { transaction: t });
+
+    await t.commit();
+    return worker;
+  } catch (err) {
+    await t.rollback();
+    throw err;
+  }
+}
+
+/**
+ * Restore a soft-deleted sponsored worker.
+ * Clears deleted_at and writes a worker_restored audit event in the same transaction.
+ * Throws 404 if the record doesn't exist, 409 if it was never deleted.
+ */
+export async function restoreWorker(tenantDb, workerId, actorId) {
+  const t = await tenantDb.sequelize.transaction();
+  try {
+    const worker = await tenantDb.SponsoredWorker.findByPk(workerId, {
+      paranoid: false,
+      lock: true,
+      transaction: t,
+    });
+    if (!worker) {
+      const err = new Error("Sponsored worker not found.");
+      err.statusCode = 404;
+      throw err;
+    }
+    if (!worker.deletedAt) {
+      const err = new Error("Worker is not deleted.");
+      err.statusCode = 409;
+      throw err;
+    }
+
+    await worker.restore({ transaction: t });
+
+    await tenantDb.SponsoredWorkerAudit.create({
+      sponsoredWorkerId: worker.id,
+      action: WORKER_AUDIT_ACTIONS.RESTORED,
+      fromStatus: null,
+      toStatus: worker.status,
+      actorId: actorId ?? null,
+      notes: null,
+    }, { transaction: t });
+
+    await t.commit();
+    return worker;
+  } catch (err) {
+    await t.rollback();
+    throw err;
+  }
 }
 
 /**

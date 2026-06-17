@@ -3,6 +3,7 @@ import {
   listMyWorkers,
   getMyWorker,
   registerWorker,
+  deleteMyWorker,
   getMyWorkerAudit,
 } from "./sponsorWorker.controller.js";
 import { requireActiveSponsorLicence } from "../../../middlewares/requireActiveSponsorLicence.middleware.js";
@@ -15,6 +16,7 @@ router.use(requireActiveSponsorLicence());
 router.get("/",              listMyWorkers);
 router.post("/",             registerWorker);
 router.get("/:id",           getMyWorker);
+router.delete("/:id",        deleteMyWorker);
 router.get("/:id/audit",     getMyWorkerAudit);
 
 export default router;

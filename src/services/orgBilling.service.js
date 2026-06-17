@@ -161,7 +161,19 @@ export async function activateOrgSubscriptionAfterPayment({
       await org.update({ status: "active" }, { transaction: tx });
     }
 
-    const invoiceNumber = `INV-${String(paymentRef).slice(-14)}-${organisationId}`;
+    const lastInvoice = await platformDb.Invoice.findOne({
+      order: [["id", "DESC"]],
+      transaction: tx,
+    });
+    let nextNum = 10001;
+    if (lastInvoice && lastInvoice.invoice_number) {
+      const match = lastInvoice.invoice_number.match(/INV-(\d+)/);
+      if (match) {
+        nextNum = parseInt(match[1]) + 1;
+      }
+    }
+    const invoiceNumber = `INV-${nextNum}`;
+
     const invoice = await platformDb.Invoice.create(
       {
         organisation_id: organisationId,

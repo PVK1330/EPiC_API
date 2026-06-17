@@ -75,7 +75,9 @@ function listOrderedSqlFiles(subDir, bootstrapOrder) {
 }
 
 function listPlatformSqlFiles() {
-  return listOrderedSqlFiles("superadmin", PLATFORM_BOOTSTRAP_ORDER);
+  const superadminFiles = listOrderedSqlFiles("superadmin", PLATFORM_BOOTSTRAP_ORDER);
+  const platformFiles = listSqlFiles("platform");
+  return [...superadminFiles, ...platformFiles];
 }
 
 function listTenantSqlFiles() {
