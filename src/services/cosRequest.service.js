@@ -328,8 +328,13 @@ export async function reviewCosRequest({ tenantDb, id, action, approvedAmount, r
     if (reviewNotes != null) request.reviewNotes = reviewNotes;
 
     if (action === "approve") {
-      request.approvedAmount =
-        approvedAmount != null ? toInt(approvedAmount, request.requestedAmount) : request.requestedAmount;
+      const finalAmount = approvedAmount != null ? toInt(approvedAmount, request.requestedAmount) : request.requestedAmount;
+      if (finalAmount > request.requestedAmount) {
+        const e = new Error("Approved amount cannot exceed requested amount");
+        e.statusCode = 400;
+        throw e;
+      }
+      request.approvedAmount = finalAmount;
 
       await request.save({ transaction: t });
 

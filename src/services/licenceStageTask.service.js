@@ -937,7 +937,9 @@ export async function ensureStageTasks(tenantDb, applicationOrId, { req = null, 
  */
 function roleAutoCompletes(role, dataComplete, appStatus) {
   if (appStatus === "Approved") return true;
-  if (dataComplete) return true; // Auto-complete all roles if stage data is fully complete
+  // Only sponsor/candidate tasks auto-complete from data signals.
+  // Caseworker and admin review tasks must always be completed by a human, even
+  // when the underlying data signal is satisfied — they represent mandatory QA steps.
   return role === "sponsor" || role === "candidate";
 }
 
@@ -1234,10 +1236,15 @@ async function notifyStageTaskCompleted({ tenantDb, application, stageDef, role,
       entityId: application.id,
       actionType: "licence_stage_task_completed",
       actionUrl: actionUrlForAudience(t.audience),
-      audit: null, // recorded once above
+      audit: null,
       req,
       organisationId: org,
-    });
+    }).catch((err) =>
+      logger.warn(
+        { err, applicationId: application.id, stageKey: stageDef.key, role, audience: t.audience },
+        "notifyStageTaskCompleted: deliver failed — task still complete, remaining recipients will still be notified",
+      ),
+    );
   }
 }
 

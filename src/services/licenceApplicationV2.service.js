@@ -421,6 +421,7 @@ export async function syncPersonnelFromProfile(tenantDb, applicationId, userId) 
         lastName,
         email: profile.authorisingEmail || null,
         phone: profile.authorisingPhone || null,
+        jobTitle: profile.authorisingJobTitle || null,
         ...syncStamp,
       };
       const existingAo = await tenantDb.LicenceAuthorisingOfficer.findOne({
