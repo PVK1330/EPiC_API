@@ -226,6 +226,45 @@ export const STAGE_PHASE_MAP = {
 };
 
 /**
+ * SLA (service-level agreement) days per stage.
+ * Clock starts when the task row is seeded (i.e. when the assignee's turn begins).
+ * dueDate = seedTime + SLA_DAYS stored on the task row.
+ */
+export const STAGE_SLA_DAYS = {
+  enquiry_onboarding:            3,
+  licence_routes:                5,
+  organisation_details:          5,
+  cos_requirements:              5,
+  supporting_documents:          7,
+  key_personnel:                 5,
+  declarations:                  3,
+  payment:                       5,
+  intake_information_form:       5,
+  intake_document_checklist:     7,
+  sponsor_information_provision: 5,
+  government_sms_registration:   7,
+  sponsor_portal_onboarding:     3,
+  government_portal_credentials: 5,
+  government_application_forms:  7,
+  government_submission:         3,
+  submission:                    5,
+  decision_activation:           60,
+};
+
+/**
+ * Derives SLA traffic-light status from a due date.
+ * Returns "red" (overdue), "amber" (due within 2 days), "green" (on track),
+ * or null when no due date is set or the task is complete.
+ */
+export function computeSlaStatus(dueDate) {
+  if (!dueDate) return null;
+  const daysLeft = (new Date(dueDate).getTime() - Date.now()) / 86_400_000;
+  if (daysLeft < 0) return "red";
+  if (daysLeft <= 2) return "amber";
+  return "green";
+}
+
+/**
  * Within-stage role execution order. A role may not complete its task until
  * every role listed before it in this array has completed theirs for the
  * same stage.
@@ -629,6 +668,9 @@ async function seedSingleTask(tenantDb, application, stage, role, ctx) {
   const assignee = pickAssignee(role, recipients);
   const autoComplete = roleAutoCompletes(role, completed.has(stage.key), application.status);
 
+  const slaDays = STAGE_SLA_DAYS[stage.key] ?? null;
+  const seedDueDate = slaDays && !autoComplete ? new Date(Date.now() + slaDays * 86_400_000) : null;
+
   const [row, isNew] = await tenantDb.LicenceStageTask.findOrCreate({
     where: { licenceApplicationId: application.id, stageKey: stage.key, role },
     defaults: {
@@ -642,6 +684,7 @@ async function seedSingleTask(tenantDb, application, stage, role, ctx) {
       assigneeEmail: assignee?.email ?? null,
       status: autoComplete ? "completed" : "pending",
       completedAt: autoComplete ? new Date() : null,
+      dueDate: seedDueDate,
       metadata: { govSection: stage.govSection },
     },
   });
@@ -947,6 +990,7 @@ export async function getStagesForApplication(tenantDb, applicationOrId, { req =
     const tasks = getChainSequence(def).map((role) => {
       const t = dbByRole.get(role);
       if (t) {
+        const active = t.status === "pending" || t.status === "in_progress";
         return {
           id: t.id,
           role: t.role,
@@ -957,6 +1001,8 @@ export async function getStagesForApplication(tenantDb, applicationOrId, { req =
           assignedToUserId: t.assignedToUserId,
           completedAt: t.completedAt,
           dueDate: t.dueDate,
+          waitingSince: active ? t.createdAt : null,
+          slaStatus: active ? computeSlaStatus(t.dueDate) : null,
         };
       }
       // No DB row yet — task is in the future, not yet created by the chain.
@@ -970,12 +1016,25 @@ export async function getStagesForApplication(tenantDb, applicationOrId, { req =
         assignedToUserId: null,
         completedAt: null,
         dueDate: null,
+        waitingSince: null,
+        slaStatus: null,
       };
     });
 
+    // Stage-level ownership: first task that is actively awaiting action.
+    const firstActive = tasks.find((t) => t.id !== null && (t.status === "pending" || t.status === "in_progress")) ?? null;
+
     let stageStatus = completed.has(def.key) ? "completed" : def.key === currentKey ? "in_progress" : "pending";
     if (rejected && def.key === "decision_activation") stageStatus = "rejected";
-    return { key: def.key, order: def.order, title: def.title, govSection: def.govSection, status: stageStatus, tasks };
+    return {
+      key: def.key, order: def.order, title: def.title, govSection: def.govSection, status: stageStatus, tasks,
+      // Ownership summary — displayed in the stage header / ownership panel.
+      currentOwner:        firstActive?.role        ?? null,
+      currentAssigneeName: firstActive?.assigneeName ?? null,
+      waitingSince:        firstActive?.waitingSince  ?? null,
+      dueDate:             firstActive?.dueDate       ?? null,
+      slaStatus:           firstActive?.slaStatus     ?? null,
+    };
   });
 
   return { applicationId: application.id, status: application.status, currentStageKey: currentKey, stages };
