@@ -30,6 +30,9 @@ export default (sequelize, DataTypes) => {
       regions: { type: DataTypes.ARRAY(DataTypes.TEXT), allowNull: true },
       accreditations: { type: DataTypes.ARRAY(DataTypes.TEXT), allowNull: true },
       previousTradingNames: { type: DataTypes.ARRAY(DataTypes.TEXT), allowNull: true, field: "previous_trading_names" },
+      // Business Profile sync provenance (null = manually entered).
+      lastSyncedAt: { type: DataTypes.DATE, allowNull: true, field: "last_synced_at" },
+      lastSyncedByUserId: { type: DataTypes.INTEGER, allowNull: true, field: "last_synced_by_user_id" },
     },
     {
       tableName: "licence_organisation_info",

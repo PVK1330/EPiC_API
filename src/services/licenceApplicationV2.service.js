@@ -379,6 +379,24 @@ export function splitFullName(name) {
   return { firstName, lastName };
 }
 
+/**
+ * Sync the licence application's Authorising Officer, Key Contact, Level 1 Users
+ * and Company registration FROM the sponsor's Business Profile, which is the
+ * primary source of record for this data.
+ *
+ * Provenance: every record touched is stamped with lastSyncedAt / lastSyncedByUserId
+ * so the wizard can show an "Imported From Business Profile" badge with an accurate
+ * timestamp.
+ *
+ * Non-destructive guarantees (so existing applications are never broken):
+ *   - AO / KC: only the profile-owned fields (name, email, phone, job title) are
+ *     written; compliance fields entered in the wizard (dob, nationality, NI
+ *     number, immigration status, convictions) are left untouched.
+ *   - Company info: only the registration number maps to companiesHouseNumber and
+ *     is filled ONLY when blank — the regulatory fields the profile cannot supply
+ *     (PAYE, VAT, SIC codes, etc.) are never cleared.
+ *   - Level 1 Users are a full replace (the profile is authoritative for the list).
+ */
 export async function syncPersonnelFromProfile(tenantDb, applicationId, userId) {
   const application = await tenantDb.LicenceApplication.findByPk(applicationId);
   if (!application) {
@@ -392,6 +410,9 @@ export async function syncPersonnelFromProfile(tenantDb, applicationId, userId) 
     return application;
   }
 
+  const syncedAt = new Date();
+  const syncStamp = { lastSyncedAt: syncedAt, lastSyncedByUserId: userId ?? null };
+
   await tenantDb.sequelize.transaction(async (t) => {
     if (profile.authorisingName) {
       const { firstName, lastName } = splitFullName(profile.authorisingName);
@@ -400,6 +421,7 @@ export async function syncPersonnelFromProfile(tenantDb, applicationId, userId) 
         lastName,
         email: profile.authorisingEmail || null,
         phone: profile.authorisingPhone || null,
+        ...syncStamp,
       };
       const existingAo = await tenantDb.LicenceAuthorisingOfficer.findOne({
         where: { licenceApplicationId: applicationId },
@@ -424,6 +446,7 @@ export async function syncPersonnelFromProfile(tenantDb, applicationId, userId) 
         email: profile.keyContactEmail || null,
         phone: profile.keyContactPhone || null,
         jobTitle: profile.keyContactDepartment || null,
+        ...syncStamp,
       };
       const existingKc = await tenantDb.LicenceKeyContact.findOne({
         where: { licenceApplicationId: applicationId },
@@ -456,15 +479,42 @@ export async function syncPersonnelFromProfile(tenantDb, applicationId, userId) 
           email: user.email || null,
           phone: user.phone || null,
           jobTitle: user.jobTitle || null,
+          ...syncStamp,
         };
       });
 
       await tenantDb.LicenceLevel1User.bulkCreate(toCreate, { transaction: t });
     }
+
+    // ── Company Information ──────────────────────────────────────────────────
+    // The Business Profile's company registration number maps to the wizard's
+    // Companies House number. Fill it only when blank (the wizard's regulatory
+    // fields — PAYE, VAT, SIC codes — have no profile equivalent and stay as-is).
+    if (profile.registrationNumber) {
+      const existingOrg = await tenantDb.LicenceOrganisationInfo.findOne({
+        where: { licenceApplicationId: applicationId },
+        transaction: t,
+      });
+      if (existingOrg) {
+        const patch = { ...syncStamp };
+        if (!existingOrg.companiesHouseNumber) patch.companiesHouseNumber = profile.registrationNumber;
+        await existingOrg.update(patch, { transaction: t });
+      } else {
+        await tenantDb.LicenceOrganisationInfo.create({
+          licenceApplicationId: applicationId,
+          organisationId: application.organisationId,
+          companiesHouseNumber: profile.registrationNumber,
+          ...syncStamp,
+        }, { transaction: t });
+      }
+    }
   });
 
   return loadFullApplication(tenantDb, applicationId, { ownerUserId: userId });
 }
+
+// Clearer alias — Business Profile is the primary source across personnel + company.
+export const syncFromBusinessProfile = syncPersonnelFromProfile;
 
 export default {
   APPLICATION_VERSION_V2,
