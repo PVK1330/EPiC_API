@@ -316,16 +316,25 @@ export const STAGE_STATUS_GATE = {
  * Asserts that all task rows in every stage BEFORE `stageDef` are completed.
  * Throws HTTP 409 if any incomplete predecessor tasks exist in the DB.
  */
-export async function checkSequentialOrder(tenantDb, applicationId, stageDef) {
+export async function checkSequentialOrder(tenantDb, applicationId, stageDef, role = null) {
   if (stageDef.order <= 1) return;
   const { Op } = tenantDb.Sequelize;
-  const incompletePrevious = await tenantDb.LicenceStageTask.count({
-    where: {
-      licenceApplicationId: applicationId,
-      stageOrder: { [Op.lt]: stageDef.order },
-      status: { [Op.ne]: "completed" },
-    },
-  });
+
+  // When a role is provided, only check that role's own earlier tasks are complete.
+  // This allows each role to advance through their chain independently:
+  //   - Sponsors fill in all wizard steps without waiting for caseworker/admin review.
+  //   - Caseworkers review stages in order once sponsor data is in.
+  //   - Admins approve in order once caseworker reviews are done.
+  // Within-stage ordering (sponsor must precede caseworker, etc.) is enforced
+  // separately by checkIntraStageOrder.
+  const where = {
+    licenceApplicationId: applicationId,
+    stageOrder: { [Op.lt]: stageDef.order },
+    status: { [Op.ne]: "completed" },
+  };
+  if (role) where.role = role;
+
+  const incompletePrevious = await tenantDb.LicenceStageTask.count({ where });
   if (incompletePrevious > 0) {
     const e = new Error(
       `Complete all tasks in earlier stages before advancing to "${stageDef.title}" (${incompletePrevious} task(s) remaining).`,
@@ -1109,9 +1118,11 @@ export async function completeStageTask(tenantDb, { applicationId, stageKey, rol
 
   if (task.status === "completed") return task; // idempotent
 
-  // Sequential enforcement: all tasks in every earlier stage must be completed
-  // before any task in this stage can be marked done.
-  await checkSequentialOrder(tenantDb, applicationId, stageDef);
+  // Sequential enforcement: all of this role's earlier-stage tasks must be
+  // completed before this task can be marked done. Other roles' tasks in
+  // earlier stages do not block — each role advances through their own chain
+  // independently. Within-stage ordering is handled by checkIntraStageOrder.
+  await checkSequentialOrder(tenantDb, applicationId, stageDef, role);
 
   // Within-stage role ordering: earlier roles in the execution sequence must
   // complete their task before later roles can complete theirs.

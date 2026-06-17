@@ -24,7 +24,7 @@
 -- the service catches and re-throws as HTTP 409 DUPLICATE_ACTIVE_APPLICATION.
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_active_v2_application_per_user
-  ON licence_applications (user_id)
+  ON licence_applications ("userId")
   WHERE
     application_version = 2
     AND status NOT IN ('Draft', 'Approved', 'Rejected', 'Licence Granted', 'Licence Rejected')

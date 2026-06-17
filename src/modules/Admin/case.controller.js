@@ -352,7 +352,7 @@ export const getCasesWithFilters = async (req, res) => {
 // Get All Cases with Statistics
 export const getAllCases = async (req, res) => {
   try {
-    const { page = 1, limit = 10, search, status, priority, visaType, visaTypeId } = req.query;
+    const { page = 1, limit = 10, search, status, priority, visaType, visaTypeId, caseStage } = req.query;
     const offset = (page - 1) * limit;
 
     const whereClause = {};
@@ -367,6 +367,13 @@ export const getAllCases = async (req, res) => {
 
     if (status) whereClause.status = status;
     if (priority) whereClause.priority = priority;
+    if (caseStage) {
+      if (caseStage === 'assigned') {
+        whereClause.caseStage = { [Op.notIn]: ['client_enquiry', 'case_closure'] };
+      } else {
+        whereClause.caseStage = caseStage;
+      }
+    }
     const visaFilter = visaTypeId || visaType;
     if (visaFilter) {
       const parsed = parseInt(visaFilter, 10);
@@ -380,6 +387,7 @@ export const getAllCases = async (req, res) => {
       order: [["created_at", "DESC"]],
       limit: parseInt(limit),
       offset: parseInt(offset),
+      subQuery: false,
       include: [
         {
           model: req.tenantDb.User,
@@ -1178,12 +1186,7 @@ export const assignCase = async (req, res) => {
     await caseData.update(updates);
     await caseData.reload();
 
-    if (nowHasCaseworker && hadNoCaseworker) {
-      await completePendingWorkflowTasks(req.tenantDb, {
-        caseId: caseData.id,
-        titlePattern: "%Review enquiry and assign caseworker%",
-      }).catch((err) => logger.error({ err }, "complete assign enquiry tasks"));
-
+    if (nowHasCaseworker && (hadNoCaseworker || caseData.caseStage === "client_enquiry")) {
       const currentStage = resolveCaseStage(caseData);
       if (currentStage === "client_enquiry") {
         try {

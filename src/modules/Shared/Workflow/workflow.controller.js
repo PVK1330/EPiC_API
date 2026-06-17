@@ -705,14 +705,54 @@ export const listCclFeePendingApprovals = async (req, res) => {
       });
     }
 
-    // Surface a case for admin review when EITHER signal says a proposal is
-    // awaiting approval:
-    //   • the CaseCclRecord is in `fee_proposed`, OR
-    //   • the case's legacy amountStatus is "Pending Approval".
-    // Relying on the CCL record alone hid cases whose proposal half-completed
-    // (e.g. an earlier stage-transition error left amountStatus set but the CCL
-    // status unset, or vice-versa) — admin then saw "No pending approvals"
-    // while the caseworker still showed "Pending Approval".
+    const { page = 1, limit = 10, search, tab = "pending" } = req.query;
+    const offset = (page - 1) * limit;
+
+    const andConditions = [];
+
+    if (search) {
+      andConditions.push({
+        [Op.or]: [
+          { caseId: { [Op.iLike]: `%${search}%` } },
+          { "$candidate.first_name$": { [Op.iLike]: `%${search}%` } },
+          { "$candidate.last_name$": { [Op.iLike]: `%${search}%` } }
+        ]
+      });
+    }
+
+    if (tab === "pending") {
+      andConditions.push({
+        [Op.or]: [
+          { "$cclRecord.status$": "fee_proposed" },
+          { amountStatus: "Pending Approval" }
+        ]
+      });
+    } else if (tab === "approved") {
+      andConditions.push({
+        [Op.or]: [
+          { "$cclRecord.status$": { [Op.in]: ["issued", "signed"] } },
+          { amountStatus: "Approved" }
+        ]
+      });
+    } else if (tab === "rejected") {
+      andConditions.push({
+        [Op.or]: [
+          { "$cclRecord.status$": "rejected" },
+          { amountStatus: "Rejected" }
+        ]
+      });
+    } else {
+      // "all" approvals: anything that has a CCL record or is in a ccl process status
+      andConditions.push({
+        [Op.or]: [
+          { "$cclRecord.id$": { [Op.ne]: null } },
+          { amountStatus: { [Op.in]: ["Pending Approval", "Approved", "Rejected"] } }
+        ]
+      });
+    }
+
+    const where = andConditions.length ? { [Op.and]: andConditions } : {};
+
     const include = [
       {
         model: req.tenantDb.User,
@@ -731,30 +771,28 @@ export const listCclFeePendingApprovals = async (req, res) => {
       },
     ];
 
-    const [proposedCases, pendingStatusCases] = await Promise.all([
-      req.tenantDb.Case.findAll({
-        include: include.map((inc) =>
-          inc.as === "cclRecord"
-            ? { ...inc, required: true, where: { status: "fee_proposed" } }
-            : inc,
-        ),
-        order: [["updated_at", "DESC"]],
-      }),
-      req.tenantDb.Case.findAll({
-        where: { amountStatus: "Pending Approval" },
-        include,
-        order: [["updated_at", "DESC"]],
-      }),
-    ]);
+    const { count, rows: cases } = await req.tenantDb.Case.findAndCountAll({
+      where,
+      include,
+      order: [["updated_at", "DESC"]],
+      limit: parseInt(limit),
+      offset: parseInt(offset),
+      subQuery: false,
+    });
 
-    // Merge, de-duplicating by case id (a case may match both queries).
-    const byId = new Map();
-    for (const c of [...proposedCases, ...pendingStatusCases]) {
-      if (!byId.has(c.id)) byId.set(c.id, c);
-    }
-    const cases = [...byId.values()];
-
-    res.status(200).json({ status: "success", data: { cases } });
+    res.status(200).json({
+      status: "success",
+      message: "CCL fee approvals retrieved successfully",
+      data: {
+        cases,
+        pagination: {
+          total: count,
+          pages: Math.ceil(count / limit),
+          page: parseInt(page),
+          limit: parseInt(limit),
+        }
+      }
+    });
   } catch (err) {
     logger.error({ err }, "listCclFeePendingApprovals");
     res.status(500).json({ status: "error", message: err.message, data: null });
