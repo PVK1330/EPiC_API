@@ -137,12 +137,15 @@ export async function grantLicence(
   const resolvedExpiry = expiryDate ?? activation?.profile?.licenceExpiryDate ?? null;
   const resolvedCos = cosAllocation ?? activation?.profile?.cosAllocation ?? null;
 
-  // ── Post-commit side-effects (best-effort) ────────────────────────────────
-  await ensureStageTasks(tenantDb, application).catch((err) =>
+  // ── Post-commit side-effects (fire-and-forget) ───────────────────────────
+  // Run these asynchronously so the HTTP response is not held pending SMTP or
+  // notification delivery — a slow mailer was causing the frontend 10 s timeout
+  // to fire before the response arrived, surfacing as "Action failed."
+  ensureStageTasks(tenantDb, application).catch((err) =>
     logger.warn({ err, applicationId }, "grantLicence: ensureStageTasks failed")
   );
 
-  await notifyLicenceGranted({
+  notifyLicenceGranted({
     tenantDb,
     application,
     licenceNumber,
@@ -152,7 +155,7 @@ export async function grantLicence(
 
   const cwIds = extractCaseworkerIds(application.assignedcaseworkerId);
   if (cwIds.length > 0) {
-    await licenceActivatedCaseworkers({
+    licenceActivatedCaseworkers({
       tenantDb,
       application,
       licenceNumber,

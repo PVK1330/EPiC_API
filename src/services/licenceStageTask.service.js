@@ -21,7 +21,7 @@ import { loadFullApplication, serializeApplication } from "./licenceApplicationV
  * the panel and the engine never drift.
  */
 
-export const STAGE_ROLE_KEYS = ["sponsor", "caseworker", "admin", "candidate"];
+export const STAGE_ROLE_KEYS = ["sponsor", "caseworker", "admin"];
 
 export const LICENCE_STAGE_DEFINITIONS = [
   {
@@ -30,7 +30,6 @@ export const LICENCE_STAGE_DEFINITIONS = [
       sponsor: "Submit a sponsor licence enquiry with basic business details.",
       caseworker: "Acknowledge the assignment and schedule an introductory call.",
       admin: "Triage the enquiry, open the application, and assign a caseworker.",
-      candidate: "Register interest as a prospective sponsored worker.",
     },
   },
   {
@@ -39,7 +38,6 @@ export const LICENCE_STAGE_DEFINITIONS = [
       sponsor: "Select the route(s) and declare any existing sponsor licence number (SLN).",
       caseworker: "Advise on the correct route and confirm eligibility.",
       admin: "Verify the selected routes are recorded against the application.",
-      candidate: "Confirm the role and route they would be sponsored under.",
     },
   },
   {
@@ -48,7 +46,6 @@ export const LICENCE_STAGE_DEFINITIONS = [
       sponsor: "Provide organisation details, trading names, Companies House number and HMRC/PAYE references.",
       caseworker: "Verify the details against Companies House and HMRC records.",
       admin: "QA the captured organisation profile for completeness.",
-      candidate: null,
     },
   },
   {
@@ -57,7 +54,6 @@ export const LICENCE_STAGE_DEFINITIONS = [
       sponsor: "State the number of CoS required and provide detailed justification.",
       caseworker: "Validate the SOC code, salary threshold and genuine vacancy.",
       admin: "Approve the requested CoS allocation.",
-      candidate: "Provide role/salary details and current immigration status (e.g. Graduate Route expiry).",
     },
   },
   {
@@ -66,7 +62,6 @@ export const LICENCE_STAGE_DEFINITIONS = [
       sponsor: "Upload the required Appendix A documents.",
       caseworker: "Review each document and request any missing evidence.",
       admin: "Sign off the document pack as complete.",
-      candidate: "Provide personal documents (passport, current visa / BRP).",
     },
   },
   {
@@ -75,7 +70,6 @@ export const LICENCE_STAGE_DEFINITIONS = [
       sponsor: "Nominate the Authorising Officer, Key Contact and Level 1 User; declare any convictions.",
       caseworker: "Verify personnel are UK-based, hold an NI number and have a clean record.",
       admin: "Approve the key personnel appointments.",
-      candidate: null,
     },
   },
   {
@@ -84,7 +78,6 @@ export const LICENCE_STAGE_DEFINITIONS = [
       sponsor: "Confirm the application is true and authorise the representative.",
       caseworker: "Complete the representative / OISC declaration.",
       admin: "Counter-sign and approve the declarations.",
-      candidate: null,
     },
   },
   {
@@ -93,7 +86,6 @@ export const LICENCE_STAGE_DEFINITIONS = [
       sponsor: "Pay the licence fee based on the sponsor size.",
       caseworker: "Verify the payment has cleared before submission.",
       admin: "Record the payment and issue a receipt.",
-      candidate: null,
     },
   },
   // ── Intake: dedicated information & document collection (orders 9-10) ──────
@@ -103,7 +95,6 @@ export const LICENCE_STAGE_DEFINITIONS = [
       sponsor: "Complete the 12-field Sponsor Information Form: trading name, premises address, named person on licence, NI number, employee counts, CoS required, and more.",
       caseworker: "Review the completed information form for accuracy and completeness before progressing to document verification.",
       admin: "Confirm the information form has been reviewed and approved by the caseworker.",
-      candidate: null,
     },
   },
   {
@@ -112,7 +103,6 @@ export const LICENCE_STAGE_DEFINITIONS = [
       sponsor: "Upload all mandatory documents (Employer's Liability Insurance, Certificate of Incorporation, PAYE registration, bank statements, premises evidence, and identity documents). Toggle additional document requirements if applicable (food/alcohol/care business, TUPE, candidate).",
       caseworker: "Verify each uploaded document meets the Home Office requirements. Reject or request further information where needed. All mandatory documents must reach 'Verified' status before Government Registration can proceed.",
       admin: "Confirm all mandatory documents have been verified and the intake stage is complete.",
-      candidate: null,
     },
   },
   // ── Phase 2: Government processing pipeline stages (orders 11-16) ─────────
@@ -122,7 +112,6 @@ export const LICENCE_STAGE_DEFINITIONS = [
       sponsor: "Confirm all organisational details, personnel, and documents are accurate and up-to-date before portal submission.",
       caseworker: "Validate completeness of the sponsor's information pack and confirm readiness for government portal entry.",
       admin: "Authorise the information pack for government portal submission.",
-      candidate: null,
     },
   },
   {
@@ -131,7 +120,6 @@ export const LICENCE_STAGE_DEFINITIONS = [
       sponsor: "Await confirmation that your organisation has been registered on the UKVI Sponsorship Management System (SMS).",
       caseworker: "Register the sponsor organisation on the SMS portal and obtain the SMS portal username and registration reference.",
       admin: "Verify the SMS registration details and record the reference number.",
-      candidate: null,
     },
   },
   {
@@ -140,7 +128,6 @@ export const LICENCE_STAGE_DEFINITIONS = [
       sponsor: "Log in to the UKVI Sponsor Management System using the credentials provided and confirm access.",
       caseworker: "Guide the sponsor through the SMS portal login and confirm the sponsor can access their account.",
       admin: "Record that the sponsor has been successfully onboarded to the SMS portal.",
-      candidate: null,
     },
   },
   {
@@ -149,7 +136,6 @@ export const LICENCE_STAGE_DEFINITIONS = [
       sponsor: "Receive and confirm receipt of the UKVI online application portal credentials.",
       caseworker: "Generate the UKVI online application portal user ID and password; share securely with the sponsor.",
       admin: "Confirm credentials have been generated and securely transmitted.",
-      candidate: null,
     },
   },
   {
@@ -158,7 +144,6 @@ export const LICENCE_STAGE_DEFINITIONS = [
       sponsor: "Log in to the UKVI portal and complete the online sponsor licence application forms.",
       caseworker: "Review and verify all form entries with the sponsor; ensure declarations and supporting data are correctly entered.",
       admin: "Carry out a final QA check of the completed government application forms before submission.",
-      candidate: null,
     },
   },
   {
@@ -167,7 +152,6 @@ export const LICENCE_STAGE_DEFINITIONS = [
       sponsor: "Confirm submission of the online application to UKVI and note the government submission reference number.",
       caseworker: "Submit the completed online application form to UKVI and record the submission reference and date.",
       admin: "Record the government submission reference, date, and fee payment confirmation.",
-      candidate: null,
     },
   },
   // ── Post-submission outcome stages (orders 17-18) ─────────────────────────
@@ -177,7 +161,6 @@ export const LICENCE_STAGE_DEFINITIONS = [
       sponsor: "Acknowledge that the application has been submitted.",
       caseworker: "Generate the submission sheet and submit to UKVI.",
       admin: "Carry out a final review and authorise submission.",
-      candidate: "Be notified that the application has been submitted.",
     },
   },
   {
@@ -186,7 +169,6 @@ export const LICENCE_STAGE_DEFINITIONS = [
       sponsor: "Receive the licence and begin assigning Certificates of Sponsorship.",
       caseworker: "Coordinate any UKVI requests for further information.",
       admin: "Record the decision and activate the licence (SLN, issue/expiry dates).",
-      candidate: "Receive a CoS and proceed to the visa application.",
     },
   },
 ];
@@ -284,7 +266,7 @@ const STAGE_ROLE_ORDER = {
   government_submission:         ["caseworker", "sponsor", "admin"],
 };
 
-const DEFAULT_ROLE_ORDER = ["sponsor", "caseworker", "admin", "candidate"];
+const DEFAULT_ROLE_ORDER = ["sponsor", "caseworker", "admin"];
 
 /** Returns the within-stage role execution order for the given stage key. */
 export function stageRoleOrder(stageKey) {
@@ -849,7 +831,7 @@ export async function ensureStageTasks(tenantDb, applicationOrId, { req = null, 
 
   const org = organisationId ?? application.organisationId ?? req?.user?.organisation_id ?? null;
   const appShape = await buildAppShape(tenantDb, application);
-  const { completed } = deriveStageCompletion(appShape);
+  const { completed, currentKey } = deriveStageCompletion(appShape);
   const recipients = await resolveRoleRecipients(tenantDb, application);
   const ctx = { org, completed, recipients, req };
 
@@ -884,7 +866,9 @@ export async function ensureStageTasks(tenantDb, applicationOrId, { req = null, 
   const { Op } = tenantDb.Sequelize;
   for (const stageKey of completed.keys()) {
     const incompleteTasks = existingRows.filter(
-      (r) => r.stageKey === stageKey && r.status !== "completed"
+      (r) => r.stageKey === stageKey &&
+             r.status !== "completed" &&
+             roleAutoCompletes(r.role, true, application.status)
     );
     if (incompleteTasks.length > 0) {
       await tenantDb.LicenceStageTask.update(
@@ -893,6 +877,134 @@ export async function ensureStageTasks(tenantDb, applicationOrId, { req = null, 
       ).catch((err) =>
         logger.warn({ err, stageKey, count: incompleteTasks.length }, "ensureStageTasks: auto-complete fix failed"),
       );
+    }
+  }
+
+  // Special case: intake_information_form tasks (sponsor + caseworker) auto-complete
+  // when the sponsor has submitted their intake form (form.isComplete = true), even if
+  // the application status hasn't yet advanced past "Pending". The data signal in
+  // deriveStageCompletion uses application status as a proxy, but the actual intake form
+  // lives in a separate table not included in the V2 serializer shape.
+  //
+  // Caseworker task: "review the information form" is an acknowledgement step —
+  // the caseworker's real manual work is document verification (stage 10). Auto-completing
+  // it unblocks checkSequentialOrder so the caseworker can proceed to stage 10.
+  const pendingIntakeInfoTasks = existingRows.filter(
+    (r) => r.stageKey === "intake_information_form" && r.status !== "completed"
+  );
+  if (pendingIntakeInfoTasks.length > 0 && tenantDb.LicenceIntakeForm) {
+    try {
+      const intakeForm = await tenantDb.LicenceIntakeForm.findOne({
+        where: { licenceApplicationId: application.id, isComplete: true },
+        attributes: ["id"],
+      });
+      if (intakeForm) {
+        await tenantDb.LicenceStageTask.update(
+          { status: "completed", completedAt: new Date() },
+          { where: { id: { [Op.in]: pendingIntakeInfoTasks.map((t) => t.id) } } }
+        );
+      }
+    } catch (err) {
+      logger.warn({ err }, "ensureStageTasks: intake_information_form auto-complete check failed");
+    }
+  }
+
+  // Government pipeline repair: auto-complete stage tasks whose corresponding
+  // real-world action has already been taken (evidenced by tracking data or
+  // application status) but whose task rows are still pending — typically because
+  // the earlier completeStageTask(.catch) call silently failed due to an upstream
+  // sequential-order violation that has since been resolved.
+  if (tenantDb.LicenceGovernmentTracking) {
+    try {
+      const appStatus = application.status;
+      const reviewStatuses = ["Under Review", "Information Requested", "Government Processing", "Decision Pending", "Approved"];
+      const govStatuses    = ["Government Processing", "Decision Pending", "Approved"];
+
+      const tracking = await tenantDb.LicenceGovernmentTracking.findOne({
+        where: { licenceApplicationId: application.id },
+        attributes: ["smsRegistrationRef", "credentialsGeneratedAt", "credentialsSentAt", "ukviCredentialsSubmittedAt"],
+      });
+
+      // Build a list of (stageKey, role) pairs that should be force-completed.
+      const toForce = [];
+      const isPending = (key, role) => {
+        const s = existingRows.find((r) => r.stageKey === key && r.role === role);
+        return s && s.status !== "completed";
+      };
+
+      // stage 11 — sponsor_information_provision
+      if (reviewStatuses.includes(appStatus)) {
+        if (isPending("sponsor_information_provision", "sponsor"))    toForce.push("sponsor_information_provision:sponsor");
+        if (isPending("sponsor_information_provision", "caseworker")) toForce.push("sponsor_information_provision:caseworker");
+      }
+      if (govStatuses.includes(appStatus)) {
+        if (isPending("sponsor_information_provision", "admin"))      toForce.push("sponsor_information_provision:admin");
+      }
+
+      // stage 12 — government_sms_registration
+      if (tracking?.smsRegistrationRef) {
+        if (isPending("government_sms_registration", "sponsor"))      toForce.push("government_sms_registration:sponsor");
+        if (isPending("government_sms_registration", "caseworker"))   toForce.push("government_sms_registration:caseworker");
+        if (isPending("government_sms_registration", "admin"))        toForce.push("government_sms_registration:admin");
+      }
+
+      // stage 13 — sponsor_portal_onboarding
+      if (tracking?.ukviCredentialsSubmittedAt) {
+        if (isPending("sponsor_portal_onboarding", "sponsor"))        toForce.push("sponsor_portal_onboarding:sponsor");
+        if (isPending("sponsor_portal_onboarding", "caseworker"))     toForce.push("sponsor_portal_onboarding:caseworker");
+        if (isPending("sponsor_portal_onboarding", "admin"))          toForce.push("sponsor_portal_onboarding:admin");
+      } else if (tracking?.credentialsSentAt) {
+        // Credentials sent but sponsor hasn't confirmed yet — caseworker/admin work is done.
+        if (isPending("sponsor_portal_onboarding", "caseworker"))     toForce.push("sponsor_portal_onboarding:caseworker");
+        if (isPending("sponsor_portal_onboarding", "admin"))          toForce.push("sponsor_portal_onboarding:admin");
+      }
+
+      // stage 14 — government_portal_credentials
+      if (tracking?.credentialsGeneratedAt) {
+        if (isPending("government_portal_credentials", "admin"))      toForce.push("government_portal_credentials:admin");
+      }
+      if (tracking?.credentialsSentAt) {
+        if (isPending("government_portal_credentials", "caseworker")) toForce.push("government_portal_credentials:caseworker");
+      }
+      if (tracking?.ukviCredentialsSubmittedAt) {
+        if (isPending("government_portal_credentials", "sponsor"))    toForce.push("government_portal_credentials:sponsor");
+      }
+
+      // stages 15-17 — once the application reaches Decision Pending, all three
+      // government-application and submission stage tasks are implicitly done.
+      // completeStageTask() calls in these stages often silently fail due to
+      // sequential-order violations that were resolved later; this repair catches them.
+      const decisionStatuses = ["Decision Pending", "Approved"];
+      if (decisionStatuses.includes(appStatus)) {
+        // stage 15 — government_application_forms
+        if (isPending("government_application_forms", "sponsor"))    toForce.push("government_application_forms:sponsor");
+        if (isPending("government_application_forms", "caseworker")) toForce.push("government_application_forms:caseworker");
+        if (isPending("government_application_forms", "admin"))      toForce.push("government_application_forms:admin");
+
+        // stage 16 — government_submission
+        if (isPending("government_submission", "sponsor"))    toForce.push("government_submission:sponsor");
+        if (isPending("government_submission", "caseworker")) toForce.push("government_submission:caseworker");
+        if (isPending("government_submission", "admin"))      toForce.push("government_submission:admin");
+
+        // stage 17 — submission (final submission acknowledgement)
+        if (isPending("submission", "sponsor"))    toForce.push("submission:sponsor");
+        if (isPending("submission", "caseworker")) toForce.push("submission:caseworker");
+        if (isPending("submission", "admin"))      toForce.push("submission:admin");
+      }
+
+      if (toForce.length > 0) {
+        const ids = existingRows
+          .filter((r) => toForce.includes(`${r.stageKey}:${r.role}`))
+          .map((r) => r.id);
+        if (ids.length > 0) {
+          await tenantDb.LicenceStageTask.update(
+            { status: "completed", completedAt: new Date() },
+            { where: { id: { [Op.in]: ids } } }
+          );
+        }
+      }
+    } catch (err) {
+      logger.warn({ err }, "ensureStageTasks: government pipeline repair failed");
     }
   }
 
@@ -924,8 +1036,12 @@ export async function ensureStageTasks(tenantDb, applicationOrId, { req = null, 
         await seedNextInChain(tenantDb, application, stageDef, role, ctx);
       }
     }
-    // Row is pending or was just seeded — frontier handled. Stop.
-    break;
+    // Row is pending or was just seeded. If this stage is the current active stage
+    // (or we have reached the active stage frontier), we stop.
+    const currentOrder = currentKey ? (STAGE_BY_KEY[currentKey]?.order ?? 0) : 0;
+    if (stageDef.order >= currentOrder) {
+      break;
+    }
   }
 
   return tenantDb.LicenceStageTask.findAll({
@@ -1128,7 +1244,23 @@ export async function completeStageTask(tenantDb, { applicationId, stageKey, rol
   // complete their task before later roles can complete theirs.
   await checkIntraStageOrder(tenantDb, applicationId, stageDef, role);
 
-  const actorId = actorUser?.userId ?? null;
+  // Ensure actor is mirrored in tenant DB to avoid foreign key constraint violations
+  if (actorUser && tenantDb) {
+    const actorIdForSync = actorUser.id ?? actorUser.userId;
+    if (actorIdForSync) {
+      try {
+        const exists = await tenantDb.User.findByPk(actorIdForSync, { attributes: ["id"] });
+        if (!exists) {
+          const { mirrorUserToTenant } = await import("./userSync.service.js");
+          await mirrorUserToTenant(tenantDb, actorUser);
+        }
+      } catch (err) {
+        logger.error({ err, actorId: actorIdForSync }, "completeStageTask: failed to mirror actor to tenant DB");
+      }
+    }
+  }
+
+  const actorId = actorUser?.userId ?? actorUser?.id ?? null;
   const org = application.organisationId ?? req?.user?.organisation_id ?? null;
 
   let ipAddress = null;

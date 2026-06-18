@@ -17,5 +17,5 @@ test("toPublicAssetUrl maps storage path to public images URL", () => {
   const result = toPublicAssetUrl(
     "storage/private/organisations/uuid_123.png",
   );
-  assert.equal(result, "http://localhost:5000/api/public/images/uuid_123.png");
+  assert.equal(result, "api/public/images/uuid_123.png");
 });

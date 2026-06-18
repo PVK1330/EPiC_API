@@ -198,6 +198,47 @@ export function generateFailureNoticeTemplate({ reasonLabel, recipientSafe, subj
   });
 }
 
+export function generateUKVIPortalCredentialsTemplate({ recipientName, companyName, ukviPortalUserId, ukviPortalPassword, licenceId, actionUrl }) {
+  const credBlock = credentialsBlockHtml({
+    email: ukviPortalUserId,
+    password: ukviPortalPassword,
+    loginUrlLabel: "UKVI Portal",
+    loginUrl: null,
+    mainLoginUrl: null,
+  });
+  return wrapEpicEmail({
+    pageTitle: "EPiC — UKVI Portal Credentials",
+    badge: "Government Portal",
+    title: "Your UKVI Portal Credentials",
+    messageHtml: `Hi ${recipientName},<br/><br/>Your UKVI Sponsorship Management System (SMS) portal login credentials for <strong>${companyName}</strong> are ready. Use these to access the UKVI online portal and complete your sponsor licence application.`,
+    bodyHtml: credBlock,
+    ctaUrl: actionUrl || null,
+    ctaLabel: actionUrl ? "Go to Licence Portal" : "",
+    securityHtml: "<strong>Keep these credentials confidential.</strong> Do not share your UKVI portal username or password with anyone. Once you have logged in, please change your password immediately. If you did not expect this email, contact your caseworker immediately.",
+  });
+}
+
+export function generateDocumentDispatchTemplate({ recipientName, companyName, senderName, senderRole, documentName, documentType, message, portalUrl }) {
+  const typeLabel = {
+    declaration_form: "Declaration Form",
+    credentials: "Credentials Document",
+    sponsor_licence: "Sponsor Licence",
+    supporting_document: "Supporting Document",
+    other: "Document",
+  }[documentType] || "Document";
+
+  return wrapEpicEmail({
+    pageTitle: `EPiC — ${typeLabel} from your caseworker`,
+    badge: "Document Received",
+    title: `A document has been sent to you`,
+    messageHtml: `Hi ${recipientName},<br/><br/>Your caseworker <strong>${senderName}</strong> has sent you a <strong>${typeLabel}</strong> for <strong>${companyName}</strong>.<br/><br/>Document: <strong>${documentName}</strong>${message ? `<br/><br/>Message from ${senderName}: <em>${message}</em>` : ""}`,
+    bodyHtml: infoBlockHtml(`The document is attached to this email. You can also view and download all documents sent to you from your EPiC sponsor portal.`),
+    ctaUrl: portalUrl || null,
+    ctaLabel: portalUrl ? "Open Sponsor Portal" : "",
+    securityHtml: "This document was sent by your assigned EPiC caseworker or administrator. If you were not expecting this, please contact your caseworker directly.",
+  });
+}
+
 export function generateDispatchReceiptTemplate({ recipient, subject, ctx, messageId, response }) {
   return wrapEpicEmail({
     pageTitle: "EPiC — Dispatch Receipt",

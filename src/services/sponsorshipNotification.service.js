@@ -7,7 +7,7 @@ import {
   NotificationPriority,
 } from "./notification.service.js";
 import { sendTransactionalEmail } from "./mail.service.js";
-import { generateNotificationEmailTemplate } from "../utils/emailTemplates.js";
+import { generateNotificationEmailTemplate, generateUKVIPortalCredentialsTemplate } from "../utils/emailTemplates.js";
 
 /**
  * Centralized Sponsorship Notification Service.
@@ -573,22 +573,27 @@ export async function credentialsGenerated({ tenantDb, application, caseworkerId
 
 /**
  * Event 18: Government Credentials Requested — credentials sent to sponsor for use.
- * Notifies sponsor that credentials are ready and how to access them.
+ * Sends the actual UKVI portal username + password to the sponsor via in-app notification
+ * and a dedicated credentials email. Credentials are only passed when available.
  * Audit: credentials_requested
  */
-export async function governmentCredentialsRequested({ tenantDb, application, req = null }) {
+export async function governmentCredentialsRequested({ tenantDb, application, ukviPortalUserId = null, ukviPortalPassword = null, req = null }) {
   const company = application.companyName || `#LIC-${application.id}`;
+  const org = orgFrom(req);
+
+  // In-app notification (no credentials in message — show them on the portal instead).
   await deliver({
     tenantDb,
     recipientUserId: application.userId,
     type: NotificationTypes.INFO,
     priority: NotificationPriority.HIGH,
     title: "UKVI Portal Credentials Ready",
-    message: `Your UKVI online application portal credentials for ${company} have been sent to you securely. Please confirm receipt via the portal.`,
+    message: `Your UKVI Sponsorship Management System (SMS) portal credentials for ${company} are ready. Check your email for the login details, then confirm receipt via the portal.`,
     entityType: "licence_application",
     entityId: application.id,
     actionType: "government_credentials_requested",
     actionUrl: "/business/licence-process",
+    email: false, // custom credentials email sent below
     audit: {
       actorId: req?.user?.userId ?? null,
       action: "LICENCE_CREDENTIALS_REQUESTED",
@@ -596,8 +601,32 @@ export async function governmentCredentialsRequested({ tenantDb, application, re
       details: { applicationId: application.id, company },
     },
     req,
-    organisationId: orgFrom(req),
+    organisationId: org,
   });
+
+  // Dedicated credentials email with actual UKVI username + password.
+  if (ukviPortalUserId) {
+    try {
+      const u = await tenantDb.User.findByPk(application.userId, { attributes: ["email", "first_name"] });
+      if (u?.email) {
+        await sendTransactionalEmail({
+          organisationId: org,
+          to: u.email,
+          subject: `Your UKVI Portal Credentials — ${company}`,
+          html: generateUKVIPortalCredentialsTemplate({
+            recipientName: u.first_name || "there",
+            companyName: company,
+            ukviPortalUserId,
+            ukviPortalPassword: ukviPortalPassword || "(see your caseworker)",
+            licenceId: application.id,
+            actionUrl: `${frontend()}/business/licence-process`,
+          }),
+        });
+      }
+    } catch (err) {
+      logger.error({ err }, "governmentCredentialsRequested: credentials email failed");
+    }
+  }
 }
 
 /**

@@ -41,6 +41,12 @@ import {
 } from '../../Shared/Licence/licenceGrant.controller.js';
 import { generateCredentialsSchema } from '../../../validations/licenceGovernment.validation.js';
 import { adminUpdateLicenceSchema } from '../../../validations/licenceApplication.validation.js';
+import {
+    dispatchDocumentHandler,
+    listDispatchDocumentsHandler,
+    downloadDispatchDocumentHandler,
+} from '../../Shared/Licence/licenceDispatch.controller.js';
+import { upload } from '../../../middlewares/upload.middleware.js';
 
 const router = express.Router();
 
@@ -88,5 +94,10 @@ router.patch("/:id/appendix-documents/:documentId/reject", rejectAdminAppendixDo
 // Government credential management (Phase 3).
 router.post("/:id/generate-credentials", validate(generateCredentialsSchema), generateLicenceCredentials);
 router.post("/:id/resend-credentials", resendLicenceCredentials);
+
+// Dispatch documents to sponsor (upload + email + portal).
+router.post("/:id/dispatch-document", upload.single("document"), dispatchDocumentHandler);
+router.get("/:id/dispatch-documents", listDispatchDocumentsHandler);
+router.get("/:id/dispatch-documents/:docId/download", downloadDispatchDocumentHandler);
 
 export default router;
