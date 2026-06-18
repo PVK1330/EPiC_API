@@ -37,8 +37,15 @@ function makeTenantDb({ workerRow = makeWorkerRow(), auditRows = [] } = {}) {
   return {
     sequelize: {
       transaction: async (fn) => {
-        const t = { LOCK: { UPDATE: "UPDATE" } };
-        return fn(t);
+        const t = {
+          LOCK: { UPDATE: "UPDATE" },
+          commit: async () => {},
+          rollback: async () => {},
+        };
+        if (typeof fn === "function") {
+          return fn(t);
+        }
+        return t;
       },
     },
     SponsoredWorker: {

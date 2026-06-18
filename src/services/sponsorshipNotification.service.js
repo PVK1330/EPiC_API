@@ -7,8 +7,10 @@ import {
   NotificationPriority,
 } from "./notification.service.js";
 import { sendTransactionalEmail } from "./mail.service.js";
-import { generateNotificationEmailTemplate } from "../utils/emailTemplates.js";
-import { getOrganisationEmailBranding } from "../utils/emailBranding.js";
+import {
+  generateNotificationEmailTemplate,
+  generateUKVIPortalCredentialsTemplate,
+} from "../utils/emailTemplates.js";
 
 /**
  * Centralized Sponsorship Notification Service.
@@ -37,7 +39,9 @@ import { getOrganisationEmailBranding } from "../utils/emailBranding.js";
 const frontend = () => process.env.FRONTEND_URL || "";
 
 const orgFrom = (req, fallback = null) =>
-  req?.user?.organisation_id != null ? Number(req.user.organisation_id) : fallback;
+  req?.user?.organisation_id != null
+    ? Number(req.user.organisation_id)
+    : fallback;
 
 /**
  * Emit one sponsorship event across in-app + email + audit. Each channel is
@@ -93,7 +97,9 @@ export async function deliver({
       let to = recipientEmail;
       let name = recipientName;
       if (!to && recipientUserId) {
-        const u = await tenantDb.User.findByPk(recipientUserId, { attributes: ["email", "first_name"] });
+        const u = await tenantDb.User.findByPk(recipientUserId, {
+          attributes: ["email", "first_name"],
+        });
         to = u?.email || null;
         if ((!name || name === "there") && u?.first_name) name = u.first_name;
       }
@@ -131,14 +137,21 @@ export async function deliver({
       details: JSON.stringify(audit.details || {}),
       req,
       organisationId: org,
-    }).catch((err) => logger.error({ err }, "sponsorship deliver: audit failed"));
+    }).catch((err) =>
+      logger.error({ err }, "sponsorship deliver: audit failed"),
+    );
   }
 }
 
 // ─── Event 1: Sponsor Created ────────────────────────────────────────────────
 // (The credentials/welcome email is sent by createSponsor; here we add the
 // sponsor's in-app welcome and the audit log.)
-export async function sponsorCreated({ tenantDb, sponsor, actorId = null, req = null }) {
+export async function sponsorCreated({
+  tenantDb,
+  sponsor,
+  actorId = null,
+  req = null,
+}) {
   await deliver({
     tenantDb,
     recipientUserId: sponsor.id,
@@ -153,7 +166,12 @@ export async function sponsorCreated({ tenantDb, sponsor, actorId = null, req = 
     actionType: "sponsor_created",
     actionUrl: "/business/licence",
     email: false, // credentials email already sent by createSponsor
-    audit: { actorId, action: "SPONSOR_CREATED", resource: "sponsor", details: { sponsorId: sponsor.id, email: sponsor.email } },
+    audit: {
+      actorId,
+      action: "SPONSOR_CREATED",
+      resource: "sponsor",
+      details: { sponsorId: sponsor.id, email: sponsor.email },
+    },
     req,
     organisationId: sponsor.organisation_id ?? orgFrom(req),
   });
@@ -173,7 +191,14 @@ export async function licenceSubmitted({ tenantDb, application, req = null }) {
     entityId: application.id,
     actionType: "licence_submitted",
     actionUrl: "/business/licence",
-    audit: { action: "LICENCE_SUBMITTED", resource: "licence_application", details: { applicationId: application.id, company: application.companyName } },
+    audit: {
+      action: "LICENCE_SUBMITTED",
+      resource: "licence_application",
+      details: {
+        applicationId: application.id,
+        company: application.companyName,
+      },
+    },
     req,
   });
   // Admins (in-app only — audit already recorded above).
@@ -194,7 +219,12 @@ export async function licenceSubmitted({ tenantDb, application, req = null }) {
 }
 
 // ─── Event 3: Licence Assigned ───────────────────────────────────────────────
-export async function licenceAssigned({ tenantDb, application, caseworkers = [], req = null }) {
+export async function licenceAssigned({
+  tenantDb,
+  application,
+  caseworkers = [],
+  req = null,
+}) {
   // Each assigned caseworker (in-app + email).
   for (const cw of caseworkers) {
     const cwId = typeof cw === "object" ? cw.id : cw;
@@ -232,7 +262,12 @@ export async function licenceAssigned({ tenantDb, application, caseworkers = [],
 }
 
 // ─── Event 4: Information Requested ───────────────────────────────────────────
-export async function informationRequested({ tenantDb, application, adminNotes = null, req = null }) {
+export async function informationRequested({
+  tenantDb,
+  application,
+  adminNotes = null,
+  req = null,
+}) {
   await deliver({
     tenantDb,
     recipientUserId: application.userId,
@@ -249,9 +284,17 @@ export async function informationRequested({ tenantDb, application, adminNotes =
 }
 
 // ─── Event 5a: Licence Granted ────────────────────────────────────────────────
-export async function licenceGranted({ tenantDb, application, licenceNumber = null, expiryDate = null, req = null }) {
+export async function licenceGranted({
+  tenantDb,
+  application,
+  licenceNumber = null,
+  expiryDate = null,
+  req = null,
+}) {
   const company = application.companyName || `#LIC-${application.id}`;
-  const expiryStr = expiryDate ? ` Expires: ${new Date(expiryDate).toLocaleDateString("en-GB")}.` : "";
+  const expiryStr = expiryDate
+    ? ` Expires: ${new Date(expiryDate).toLocaleDateString("en-GB")}.`
+    : "";
   await deliver({
     tenantDb,
     recipientUserId: application.userId,
@@ -270,7 +313,12 @@ export async function licenceGranted({ tenantDb, application, licenceNumber = nu
       actorId: req?.user?.userId ?? null,
       action: "LICENCE_GRANTED",
       resource: "licence_application",
-      details: { applicationId: application.id, company, licenceNumber, expiryDate },
+      details: {
+        applicationId: application.id,
+        company,
+        licenceNumber,
+        expiryDate,
+      },
     },
     req,
     organisationId: orgFrom(req),
@@ -278,7 +326,12 @@ export async function licenceGranted({ tenantDb, application, licenceNumber = nu
 }
 
 // ─── Event 6: Licence Rejected ───────────────────────────────────────────────
-export async function licenceRejected({ tenantDb, application, adminNotes = null, req = null }) {
+export async function licenceRejected({
+  tenantDb,
+  application,
+  adminNotes = null,
+  req = null,
+}) {
   await deliver({
     tenantDb,
     recipientUserId: application.userId,
@@ -302,7 +355,14 @@ export async function licenceRejected({ tenantDb, application, adminNotes = null
  * @param {string} [previousStatus] - Pass the status BEFORE the update so the
  *   router can detect re-submission (Information Requested → Under Review).
  */
-export async function licenceStatusChanged({ tenantDb, application, status, previousStatus = null, adminNotes = null, req = null }) {
+export async function licenceStatusChanged({
+  tenantDb,
+  application,
+  status,
+  previousStatus = null,
+  adminNotes = null,
+  req = null,
+}) {
   switch (status) {
     case "Approved":
       return; // handled by activateSponsorLicence (event 5)
@@ -376,7 +436,12 @@ export async function licenceStatusChanged({ tenantDb, application, status, prev
  * Notifies the sponsor (under review) and each assigned caseworker (new assignment).
  * Audit: review_started
  */
-export async function reviewStarted({ tenantDb, application, caseworkerIds = [], req = null }) {
+export async function reviewStarted({
+  tenantDb,
+  application,
+  caseworkerIds = [],
+  req = null,
+}) {
   const company = application.companyName || `#LIC-${application.id}`;
   // Notify sponsor
   await deliver({
@@ -425,7 +490,11 @@ export async function reviewStarted({ tenantDb, application, caseworkerIds = [],
  * Notifies caseworkers and admins so they can resume review.
  * Audit: information_received
  */
-export async function informationReceived({ tenantDb, application, req = null }) {
+export async function informationReceived({
+  tenantDb,
+  application,
+  req = null,
+}) {
   const company = application.companyName || `#LIC-${application.id}`;
   const actorId = req?.user?.userId ?? null;
   const org = orgFrom(req);
@@ -452,7 +521,7 @@ export async function informationReceived({ tenantDb, application, req = null })
     : [];
   let auditRecorded = false;
   for (const cwId of cwIds) {
-    const id = typeof cwId === "object" ? cwId.id ?? cwId.userId : cwId;
+    const id = typeof cwId === "object" ? (cwId.id ?? cwId.userId) : cwId;
     if (!id) continue;
     await deliver({
       tenantDb,
@@ -465,12 +534,14 @@ export async function informationReceived({ tenantDb, application, req = null })
       entityId: application.id,
       actionType: "licence_information_received",
       actionUrl: "/caseworker/licence-reviews",
-      audit: auditRecorded ? null : {
-        actorId: application.userId,
-        action: "LICENCE_INFORMATION_RECEIVED",
-        resource: "licence_application",
-        details: { applicationId: application.id, company },
-      },
+      audit: auditRecorded
+        ? null
+        : {
+            actorId: application.userId,
+            action: "LICENCE_INFORMATION_RECEIVED",
+            resource: "licence_application",
+            details: { applicationId: application.id, company },
+          },
       req,
       organisationId: org,
     });
@@ -483,7 +554,11 @@ export async function informationReceived({ tenantDb, application, req = null })
  * Notifies sponsor (for awareness) and records audit.
  * Audit: government_registration_started
  */
-export async function governmentRegistrationStarted({ tenantDb, application, req = null }) {
+export async function governmentRegistrationStarted({
+  tenantDb,
+  application,
+  req = null,
+}) {
   const company = application.companyName || `#LIC-${application.id}`;
   await deliver({
     tenantDb,
@@ -512,7 +587,12 @@ export async function governmentRegistrationStarted({ tenantDb, application, req
  * Notifies sponsor with the SMS reference number.
  * Audit: government_registration_completed
  */
-export async function governmentRegistrationCompleted({ tenantDb, application, smsRef = null, req = null }) {
+export async function governmentRegistrationCompleted({
+  tenantDb,
+  application,
+  smsRef = null,
+  req = null,
+}) {
   const company = application.companyName || `#LIC-${application.id}`;
   await deliver({
     tenantDb,
@@ -541,14 +621,19 @@ export async function governmentRegistrationCompleted({ tenantDb, application, s
  * Notifies caseworker (prompt to send) and records audit.
  * Audit: credentials_generated
  */
-export async function credentialsGenerated({ tenantDb, application, caseworkerIds = [], req = null }) {
+export async function credentialsGenerated({
+  tenantDb,
+  application,
+  caseworkerIds = [],
+  req = null,
+}) {
   const company = application.companyName || `#LIC-${application.id}`;
   const actorId = req?.user?.userId ?? null;
   const org = orgFrom(req);
   let auditRecorded = false;
 
   for (const cwId of caseworkerIds) {
-    const id = typeof cwId === "object" ? cwId.id ?? cwId.userId : cwId;
+    const id = typeof cwId === "object" ? (cwId.id ?? cwId.userId) : cwId;
     if (!id) continue;
     await deliver({
       tenantDb,
@@ -561,12 +646,14 @@ export async function credentialsGenerated({ tenantDb, application, caseworkerId
       entityId: application.id,
       actionType: "credentials_generated",
       actionUrl: "/caseworker/licence-reviews",
-      audit: auditRecorded ? null : {
-        actorId,
-        action: "LICENCE_CREDENTIALS_GENERATED",
-        resource: "licence_application",
-        details: { applicationId: application.id, company },
-      },
+      audit: auditRecorded
+        ? null
+        : {
+            actorId,
+            action: "LICENCE_CREDENTIALS_GENERATED",
+            resource: "licence_application",
+            details: { applicationId: application.id, company },
+          },
       req,
       organisationId: org,
     });
@@ -576,22 +663,33 @@ export async function credentialsGenerated({ tenantDb, application, caseworkerId
 
 /**
  * Event 18: Government Credentials Requested — credentials sent to sponsor for use.
- * Notifies sponsor that credentials are ready and how to access them.
+ * Sends the actual UKVI portal username + password to the sponsor via in-app notification
+ * and a dedicated credentials email. Credentials are only passed when available.
  * Audit: credentials_requested
  */
-export async function governmentCredentialsRequested({ tenantDb, application, req = null }) {
+export async function governmentCredentialsRequested({
+  tenantDb,
+  application,
+  ukviPortalUserId = null,
+  ukviPortalPassword = null,
+  req = null,
+}) {
   const company = application.companyName || `#LIC-${application.id}`;
+  const org = orgFrom(req);
+
+  // In-app notification (no credentials in message — show them on the portal instead).
   await deliver({
     tenantDb,
     recipientUserId: application.userId,
     type: NotificationTypes.INFO,
     priority: NotificationPriority.HIGH,
     title: "UKVI Portal Credentials Ready",
-    message: `Your UKVI online application portal credentials for ${company} have been sent to you securely. Please confirm receipt via the portal.`,
+    message: `Your UKVI Sponsorship Management System (SMS) portal credentials for ${company} are ready. Check your email for the login details, then confirm receipt via the portal.`,
     entityType: "licence_application",
     entityId: application.id,
     actionType: "government_credentials_requested",
     actionUrl: "/business/licence-process",
+    email: false, // custom credentials email sent below
     audit: {
       actorId: req?.user?.userId ?? null,
       action: "LICENCE_CREDENTIALS_REQUESTED",
@@ -599,8 +697,37 @@ export async function governmentCredentialsRequested({ tenantDb, application, re
       details: { applicationId: application.id, company },
     },
     req,
-    organisationId: orgFrom(req),
+    organisationId: org,
   });
+
+  // Dedicated credentials email with actual UKVI username + password.
+  if (ukviPortalUserId) {
+    try {
+      const u = await tenantDb.User.findByPk(application.userId, {
+        attributes: ["email", "first_name"],
+      });
+      if (u?.email) {
+        await sendTransactionalEmail({
+          organisationId: org,
+          to: u.email,
+          subject: `Your UKVI Portal Credentials — ${company}`,
+          html: generateUKVIPortalCredentialsTemplate({
+            recipientName: u.first_name || "there",
+            companyName: company,
+            ukviPortalUserId,
+            ukviPortalPassword: ukviPortalPassword || "(see your caseworker)",
+            licenceId: application.id,
+            actionUrl: `${frontend()}/business/licence-process`,
+          }),
+        });
+      }
+    } catch (err) {
+      logger.error(
+        { err },
+        "governmentCredentialsRequested: credentials email failed",
+      );
+    }
+  }
 }
 
 /**
@@ -608,7 +735,11 @@ export async function governmentCredentialsRequested({ tenantDb, application, re
  * Notifies caseworkers and admins so they can proceed to form completion.
  * Audit: credentials_received
  */
-export async function governmentCredentialsReceived({ tenantDb, application, req = null }) {
+export async function governmentCredentialsReceived({
+  tenantDb,
+  application,
+  req = null,
+}) {
   const company = application.companyName || `#LIC-${application.id}`;
   const actorId = req?.user?.userId ?? null;
   const org = orgFrom(req);
@@ -635,7 +766,7 @@ export async function governmentCredentialsReceived({ tenantDb, application, req
     : [];
   let auditRecorded = false;
   for (const cwId of cwIds) {
-    const id = typeof cwId === "object" ? cwId.id ?? cwId.userId : cwId;
+    const id = typeof cwId === "object" ? (cwId.id ?? cwId.userId) : cwId;
     if (!id) continue;
     await deliver({
       tenantDb,
@@ -648,12 +779,14 @@ export async function governmentCredentialsReceived({ tenantDb, application, req
       entityId: application.id,
       actionType: "government_credentials_received",
       actionUrl: "/caseworker/licence-reviews",
-      audit: auditRecorded ? null : {
-        actorId,
-        action: "LICENCE_CREDENTIALS_RECEIVED",
-        resource: "licence_application",
-        details: { applicationId: application.id, company },
-      },
+      audit: auditRecorded
+        ? null
+        : {
+            actorId,
+            action: "LICENCE_CREDENTIALS_RECEIVED",
+            resource: "licence_application",
+            details: { applicationId: application.id, company },
+          },
       req,
       organisationId: org,
     });
@@ -666,7 +799,12 @@ export async function governmentCredentialsReceived({ tenantDb, application, req
  * Notifies sponsor (confirmation) and caseworkers (submitted — now awaiting decision).
  * Audit: government_submitted
  */
-export async function governmentApplicationSubmitted({ tenantDb, application, submissionRef = null, req = null }) {
+export async function governmentApplicationSubmitted({
+  tenantDb,
+  application,
+  submissionRef = null,
+  req = null,
+}) {
   const company = application.companyName || `#LIC-${application.id}`;
   const actorId = req?.user?.userId ?? null;
   const org = orgFrom(req);
@@ -698,7 +836,7 @@ export async function governmentApplicationSubmitted({ tenantDb, application, su
     ? application.assignedcaseworkerId
     : [];
   for (const cwId of cwIds) {
-    const id = typeof cwId === "object" ? cwId.id ?? cwId.userId : cwId;
+    const id = typeof cwId === "object" ? (cwId.id ?? cwId.userId) : cwId;
     if (!id) continue;
     await deliver({
       tenantDb,
@@ -720,7 +858,13 @@ export async function governmentApplicationSubmitted({ tenantDb, application, su
 // ─── Event 9: Worker Added ───────────────────────────────────────────────────
 // (Worker credentials email + admin notify happen in addSponsoredWorker; here we
 // add the sponsor's confirmation and the audit log.)
-export async function workerAdded({ tenantDb, sponsorId, workerName, caseId, req = null }) {
+export async function workerAdded({
+  tenantDb,
+  sponsorId,
+  workerName,
+  caseId,
+  req = null,
+}) {
   await deliver({
     tenantDb,
     recipientUserId: sponsorId,
@@ -732,7 +876,11 @@ export async function workerAdded({ tenantDb, sponsorId, workerName, caseId, req
     entityId: null,
     actionType: "worker_added",
     actionUrl: "/business/workers",
-    audit: { action: "WORKER_ADDED", resource: "sponsored_worker", details: { sponsorId, workerName, caseId } },
+    audit: {
+      action: "WORKER_ADDED",
+      resource: "sponsored_worker",
+      details: { sponsorId, workerName, caseId },
+    },
     req,
   });
 }
@@ -740,13 +888,18 @@ export async function workerAdded({ tenantDb, sponsorId, workerName, caseId, req
 // ─── Intake: Information Form & Document Checklist ───────────────────────────
 
 /** Sponsor submitted the 12-field information form — notify caseworkers. */
-export async function intakeFormSubmitted({ tenantDb, application, caseworkerIds = [], req = null }) {
+export async function intakeFormSubmitted({
+  tenantDb,
+  application,
+  caseworkerIds = [],
+  req = null,
+}) {
   if (!application) return;
   const company = application.companyName || `#LIC-${application.id}`;
   const org = orgFrom(req);
 
   for (const cwId of caseworkerIds) {
-    const id = typeof cwId === "object" ? cwId.id ?? cwId.userId : cwId;
+    const id = typeof cwId === "object" ? (cwId.id ?? cwId.userId) : cwId;
     if (!id) continue;
     await deliver({
       tenantDb,
@@ -766,13 +919,19 @@ export async function intakeFormSubmitted({ tenantDb, application, caseworkerIds
 }
 
 /** Sponsor uploaded a document — notify caseworkers. */
-export async function intakeDocumentUploaded({ tenantDb, application, documentName, caseworkerIds = [], req = null }) {
+export async function intakeDocumentUploaded({
+  tenantDb,
+  application,
+  documentName,
+  caseworkerIds = [],
+  req = null,
+}) {
   if (!application) return;
   const company = application.companyName || `#LIC-${application.id}`;
   const org = orgFrom(req);
 
   for (const cwId of caseworkerIds) {
-    const id = typeof cwId === "object" ? cwId.id ?? cwId.userId : cwId;
+    const id = typeof cwId === "object" ? (cwId.id ?? cwId.userId) : cwId;
     if (!id) continue;
     await deliver({
       tenantDb,
@@ -792,7 +951,12 @@ export async function intakeDocumentUploaded({ tenantDb, application, documentNa
 }
 
 /** Caseworker verified a document — notify sponsor. */
-export async function intakeDocumentVerified({ tenantDb, application, documentName, req = null }) {
+export async function intakeDocumentVerified({
+  tenantDb,
+  application,
+  documentName,
+  req = null,
+}) {
   if (!application) return;
   const org = orgFrom(req);
 
@@ -813,7 +977,13 @@ export async function intakeDocumentVerified({ tenantDb, application, documentNa
 }
 
 /** Caseworker rejected a document — notify sponsor with reason. */
-export async function intakeDocumentRejected({ tenantDb, application, documentName, reason, req = null }) {
+export async function intakeDocumentRejected({
+  tenantDb,
+  application,
+  documentName,
+  reason,
+  req = null,
+}) {
   if (!application) return;
   const org = orgFrom(req);
 
@@ -834,7 +1004,13 @@ export async function intakeDocumentRejected({ tenantDb, application, documentNa
 }
 
 /** Caseworker requested more information on a document — notify sponsor. */
-export async function intakeDocumentInfoRequired({ tenantDb, application, documentName, notes, req = null }) {
+export async function intakeDocumentInfoRequired({
+  tenantDb,
+  application,
+  documentName,
+  notes,
+  req = null,
+}) {
   if (!application) return;
   const org = orgFrom(req);
 
@@ -855,13 +1031,18 @@ export async function intakeDocumentInfoRequired({ tenantDb, application, docume
 }
 
 /** All mandatory intake documents verified — ready for Government Registration. */
-export async function intakeReadyForGovernmentRegistration({ tenantDb, application, caseworkerIds = [], req = null }) {
+export async function intakeReadyForGovernmentRegistration({
+  tenantDb,
+  application,
+  caseworkerIds = [],
+  req = null,
+}) {
   if (!application) return;
   const company = application.companyName || `#LIC-${application.id}`;
   const org = orgFrom(req);
 
   for (const cwId of caseworkerIds) {
-    const id = typeof cwId === "object" ? cwId.id ?? cwId.userId : cwId;
+    const id = typeof cwId === "object" ? (cwId.id ?? cwId.userId) : cwId;
     if (!id) continue;
     await deliver({
       tenantDb,
@@ -905,7 +1086,7 @@ export async function licenceActivatedCaseworkers({
   const org = orgFrom(req);
 
   for (const cwId of caseworkerIds) {
-    const id = typeof cwId === "object" ? cwId.id ?? cwId.userId : cwId;
+    const id = typeof cwId === "object" ? (cwId.id ?? cwId.userId) : cwId;
     if (!id) continue;
     await deliver({
       tenantDb,

@@ -64,18 +64,30 @@ export const getMyCases = async (req, res) => {
     } = req.query;
     const offset = (page - 1) * limit;
 
-    // Build where clause - filter by assigned caseworker
-    const whereClause = buildCaseworkerWhereClause(req, userId);
+    // Build where clause - filter by assigned caseworker.
+    // The auth clause uses Op.or internally, so we must NOT overwrite Op.or with
+    // the search conditions (BUG-078) — that would drop the caseworker restriction
+    // and expose ALL cases. Instead, merge auth AND search under Op.and so both hold.
+    const caseworkerAuthClause = buildCaseworkerWhereClause(req, userId);
+    const whereClause = {};
 
     // Add search filter
     if (search) {
-      whereClause[Op.or] = [
-        { caseId: { [Op.iLike]: `%${search}%` } },
-        { '$candidate.first_name$': { [Op.iLike]: `%${search}%` } },
-        { '$candidate.last_name$': { [Op.iLike]: `%${search}%` } },
-        { '$sponsor.first_name$': { [Op.iLike]: `%${search}%` } },
-        { '$sponsor.last_name$': { [Op.iLike]: `%${search}%` } }
+      whereClause[Op.and] = [
+        caseworkerAuthClause,
+        {
+          [Op.or]: [
+            { caseId: { [Op.iLike]: `%${search}%` } },
+            { '$candidate.first_name$': { [Op.iLike]: `%${search}%` } },
+            { '$candidate.last_name$': { [Op.iLike]: `%${search}%` } },
+            { '$sponsor.first_name$': { [Op.iLike]: `%${search}%` } },
+            { '$sponsor.last_name$': { [Op.iLike]: `%${search}%` } }
+          ],
+        },
       ];
+    } else {
+      // No search: the auth clause is the whole filter.
+      Object.assign(whereClause, caseworkerAuthClause);
     }
 
     // Add status filter
@@ -1077,18 +1089,30 @@ export const exportMyCases = catchAsync(async (req, res) => {
 
     const { search, status, priority, visaTypeId } = req.query;
 
-    // Build where clause - filter by assigned caseworker
-    const whereClause = buildCaseworkerWhereClause(req, userId);
+    // Build where clause - filter by assigned caseworker.
+    // The auth clause uses Op.or internally, so we must NOT overwrite Op.or with
+    // the search conditions (BUG-078) — that would drop the caseworker restriction
+    // and expose ALL cases. Instead, merge auth AND search under Op.and so both hold.
+    const caseworkerAuthClause = buildCaseworkerWhereClause(req, userId);
+    const whereClause = {};
 
     // Add search filter
     if (search) {
-      whereClause[Op.or] = [
-        { caseId: { [Op.iLike]: `%${search}%` } },
-        { '$candidate.first_name$': { [Op.iLike]: `%${search}%` } },
-        { '$candidate.last_name$': { [Op.iLike]: `%${search}%` } },
-        { '$sponsor.first_name$': { [Op.iLike]: `%${search}%` } },
-        { '$sponsor.last_name$': { [Op.iLike]: `%${search}%` } }
+      whereClause[Op.and] = [
+        caseworkerAuthClause,
+        {
+          [Op.or]: [
+            { caseId: { [Op.iLike]: `%${search}%` } },
+            { '$candidate.first_name$': { [Op.iLike]: `%${search}%` } },
+            { '$candidate.last_name$': { [Op.iLike]: `%${search}%` } },
+            { '$sponsor.first_name$': { [Op.iLike]: `%${search}%` } },
+            { '$sponsor.last_name$': { [Op.iLike]: `%${search}%` } }
+          ],
+        },
       ];
+    } else {
+      // No search: the auth clause is the whole filter.
+      Object.assign(whereClause, caseworkerAuthClause);
     }
 
     // Add status filter

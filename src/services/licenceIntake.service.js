@@ -329,6 +329,28 @@ export async function submitIntakeForm(tenantDb, licenceApplicationId, organisat
   const application = await tenantDb.LicenceApplication.findByPk(licenceApplicationId);
   const caseworkerIds = extractCaseworkerIds(application?.assignedcaseworkerId);
 
+  // Complete the sponsor + caseworker intake_information_form stage tasks so the
+  // chain is unblocked. Without this, both roles get a 409 when trying to mark
+  // intake_document_checklist complete (checkSequentialOrder sees a pending row).
+  // Caseworker "review form" is an acknowledgement step — their real work is
+  // document verification at stage 10.
+  try {
+    const { Op } = tenantDb.Sequelize;
+    await tenantDb.LicenceStageTask.update(
+      { status: "completed", completedAt: new Date() },
+      {
+        where: {
+          licenceApplicationId,
+          stageKey: "intake_information_form",
+          role: { [Op.in]: ["sponsor", "caseworker", "admin"] },
+          status: { [Op.ne]: "completed" },
+        },
+      }
+    );
+  } catch (err) {
+    logger.warn({ err }, "submitIntakeForm: failed to auto-complete intake_information_form stage tasks");
+  }
+
   await recordAuditLog({
     tenantDb,
     userId,
@@ -635,6 +657,37 @@ export async function verifyAppendixDocument(tenantDb, licenceApplicationId, doc
   return doc;
 }
 
+/**
+ * Verify several appendix (Appendix A) documents in one request. Reuses the
+ * single-document verify path (so audit logging + idempotency are preserved) and
+ * returns a per-document result so one bad/already-handled id never fails the batch.
+ */
+export async function bulkVerifyAppendixDocuments(tenantDb, licenceApplicationId, documentIds, userId, notes, req) {
+  if (!Array.isArray(documentIds) || documentIds.length === 0) {
+    const err = new Error("documentIds must be a non-empty array");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const results = [];
+  for (const rawId of documentIds) {
+    const documentId = Number(rawId);
+    if (!Number.isInteger(documentId) || documentId <= 0) {
+      results.push({ documentId: rawId, status: "failed", message: "Invalid document id" });
+      continue;
+    }
+    try {
+      const doc = await verifyAppendixDocument(tenantDb, licenceApplicationId, documentId, userId, notes, req);
+      results.push({ documentId, status: "verified", documentName: doc.documentName });
+    } catch (err) {
+      results.push({ documentId, status: "failed", message: err.message });
+    }
+  }
+
+  const verifiedCount = results.filter((r) => r.status === "verified").length;
+  return { verifiedCount, failedCount: results.length - verifiedCount, results };
+}
+
 /** Caseworker rejects an appendix document and notifies the sponsor to re-upload. */
 export async function rejectAppendixDocument(tenantDb, licenceApplicationId, documentId, reason, caseworkerId, req) {
   const doc = await tenantDb.LicenceAppendixDocument.findOne({
@@ -716,6 +769,22 @@ export async function checkIntakeReadiness(tenantDb, licenceApplicationId) {
       const names = notVerified.map((d) => d.documentName).slice(0, 3);
       const extra = notVerified.length > 3 ? ` (+${notVerified.length - 3} more)` : "";
       reasons.push(`${notVerified.length} mandatory document(s) not yet verified: ${names.join(", ")}${extra}`);
+    }
+  }
+
+  // 3. Ensure all tasks in earlier stages (Stages 1-8) are completed
+  if (tenantDb.LicenceStageTask) {
+    const { Op } = tenantDb.Sequelize;
+    const incompletePrevious = await tenantDb.LicenceStageTask.count({
+      where: {
+        licenceApplicationId,
+        stageOrder: { [Op.lt]: 9 },
+        status: { [Op.ne]: "completed" },
+      },
+    });
+
+    if (incompletePrevious > 0) {
+      reasons.push(`${incompletePrevious} task(s) in earlier wizard stages (Stages 1-8) are not yet completed`);
     }
   }
 

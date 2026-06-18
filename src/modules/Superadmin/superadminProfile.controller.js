@@ -31,6 +31,7 @@ function buildProfileResponse(user) {
     two_factor_enabled: user.two_factor_enabled,
     role_id: user.role_id,
     status: user.status,
+    organisation_id: user.organisation_id ?? null,
   };
 }
 

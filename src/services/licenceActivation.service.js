@@ -177,8 +177,9 @@ export async function activateSponsorLicence({
     logger.error({ err, applicationId: application.id, sponsorUserId: application.userId }, "Failed to record licence timeline entry")
   );
 
-  // 5) Notify the sponsor (portal + email).
-  await notifySponsorLicenceActivated({
+  // 5) Notify the sponsor (portal + email) — fire-and-forget so slow SMTP
+  // doesn't hold the outer transaction open past the client timeout.
+  notifySponsorLicenceActivated({
     tenantDb,
     profile,
     application,
@@ -186,7 +187,7 @@ export async function activateSponsorLicence({
     issuedDate,
     expiryDate,
     isRenewal,
-  });
+  }).catch((err) => logger.error({ err, applicationId: application.id }, "notifySponsorLicenceActivated failed"));
 
   // 6) Notify assigned caseworkers (in-app).
   const cwIds = extractCaseworkerIds(application.assignedcaseworkerId);

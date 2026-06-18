@@ -218,8 +218,16 @@ export async function requestGovernmentCredentials(tenantDb, application, actorU
     req,
   });
 
+  // Decrypt password so the notification service can embed it in the credentials email.
+  let plainPassword = null;
+  try {
+    plainPassword = decryptCredentialPassword(tracking.ukviPortalPasswordEncrypted);
+  } catch (err) {
+    logger.warn({ err }, "requestGovernmentCredentials: password decryption failed — email will omit password");
+  }
+
   notify
-    .governmentCredentialsRequested({ tenantDb, application, req })
+    .governmentCredentialsRequested({ tenantDb, application, ukviPortalUserId: tracking.ukviPortalUserId, ukviPortalPassword: plainPassword, req })
     .catch((err) => logger.error({ err }, "requestGovernmentCredentials: notification failed"));
 
   completeStageTask(tenantDb, {

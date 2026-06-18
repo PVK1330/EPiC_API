@@ -20,6 +20,7 @@ import {
     rejectCaseworkerDocument,
     requestCaseworkerDocumentInfo,
     verifyCaseworkerAppendixDocument,
+    bulkVerifyCaseworkerAppendixDocuments,
     rejectCaseworkerAppendixDocument,
 } from './caseworkerLicenceIntake.controller.js';
 import { verifyTokenAndTenant } from '../../../middlewares/authStack.middleware.js';
@@ -35,6 +36,12 @@ import {
     closeInfoRequestHandler,
 } from '../../Shared/Licence/licenceInformationRequest.controller.js';
 import { getGrantRecordHandler } from '../../Shared/Licence/licenceGrant.controller.js';
+import {
+    dispatchDocumentHandler,
+    listDispatchDocumentsHandler,
+    downloadDispatchDocumentHandler,
+} from '../../Shared/Licence/licenceDispatch.controller.js';
+import { upload } from '../../../middlewares/upload.middleware.js';
 import {
     completeRegistrationSchema,
     governmentSubmissionSchema,
@@ -78,6 +85,7 @@ router.patch("/:id/intake/documents/:documentKey/request-info", ensureAssignedCa
 
 // Appendix A documents (V2 wizard uploads) — caseworker verify / reject.
 router.patch("/:id/appendix-documents/:documentId/verify", ensureAssignedCaseworker(), verifyCaseworkerAppendixDocument);
+router.post("/:id/appendix-documents/bulk-verify", ensureAssignedCaseworker(), bulkVerifyCaseworkerAppendixDocuments);
 router.patch("/:id/appendix-documents/:documentId/reject", ensureAssignedCaseworker(), rejectCaseworkerAppendixDocument);
 
 // Licence Grant — caseworker may view the grant record (read-only).
@@ -89,6 +97,11 @@ router.get("/:id/info-requests",                            ensureAssignedCasewo
 router.get("/:id/info-requests/:requestId",                 ensureAssignedCaseworker(), getInfoRequestHandler);
 router.post("/:id/info-requests/:requestId/comments",       ensureAssignedCaseworker(), addCommentHandler);
 router.patch("/:id/info-requests/:requestId/close",         ensureAssignedCaseworker(), closeInfoRequestHandler);
+
+// Dispatch documents to sponsor (upload + email + portal).
+router.post("/:id/dispatch-document", ensureAssignedCaseworker(), upload.single("document"), dispatchDocumentHandler);
+router.get("/:id/dispatch-documents", ensureAssignedCaseworker(), listDispatchDocumentsHandler);
+router.get("/:id/dispatch-documents/:docId/download", ensureAssignedCaseworker(), downloadDispatchDocumentHandler);
 
 // Government processing pipeline (Phase 3).
 router.post("/:id/start-review", ensureAssignedCaseworker(), startLicenceReview);

@@ -17,6 +17,7 @@ import {
     getLicenceApplicationV2,
     downloadLicenceDocument,
     verifyAdminAppendixDocument,
+    bulkVerifyAdminAppendixDocuments,
     rejectAdminAppendixDocument,
 } from './licenceManagement.controller.js';
 import {
@@ -41,6 +42,12 @@ import {
 } from '../../Shared/Licence/licenceGrant.controller.js';
 import { generateCredentialsSchema } from '../../../validations/licenceGovernment.validation.js';
 import { adminUpdateLicenceSchema } from '../../../validations/licenceApplication.validation.js';
+import {
+    dispatchDocumentHandler,
+    listDispatchDocumentsHandler,
+    downloadDispatchDocumentHandler,
+} from '../../Shared/Licence/licenceDispatch.controller.js';
+import { upload } from '../../../middlewares/upload.middleware.js';
 
 const router = express.Router();
 
@@ -83,10 +90,16 @@ router.get("/:id/grant-record",  getGrantRecordHandler);
 
 // Appendix A documents — admin verify / reject (same as caseworker but admin-gated).
 router.patch("/:id/appendix-documents/:documentId/verify", verifyAdminAppendixDocument);
+router.post("/:id/appendix-documents/bulk-verify", bulkVerifyAdminAppendixDocuments);
 router.patch("/:id/appendix-documents/:documentId/reject", rejectAdminAppendixDocument);
 
 // Government credential management (Phase 3).
 router.post("/:id/generate-credentials", validate(generateCredentialsSchema), generateLicenceCredentials);
 router.post("/:id/resend-credentials", resendLicenceCredentials);
+
+// Dispatch documents to sponsor (upload + email + portal).
+router.post("/:id/dispatch-document", upload.single("document"), dispatchDocumentHandler);
+router.get("/:id/dispatch-documents", listDispatchDocumentsHandler);
+router.get("/:id/dispatch-documents/:docId/download", downloadDispatchDocumentHandler);
 
 export default router;

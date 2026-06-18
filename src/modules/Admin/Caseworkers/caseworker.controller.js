@@ -162,14 +162,16 @@ export const updateDepartment = async (req, res) => {
       });
     }
 
-    // Update the department name
-    await department.update({ name: newName.trim() });
-
-    // Update all caseworker profiles with the old department name
-    const updated = await req.tenantDb.CaseworkerProfile.update(
-      { department: newName.trim() },
-      { where: { department: oldName.trim() } }
-    );
+    // BUG-064: rename the department AND re-point caseworker profiles atomically.
+    // Previously these were two separate writes — a failure after the first left
+    // the department renamed but profiles still referencing the old name.
+    const updated = await req.tenantDb.sequelize.transaction(async (t) => {
+      await department.update({ name: newName.trim() }, { transaction: t });
+      return req.tenantDb.CaseworkerProfile.update(
+        { department: newName.trim() },
+        { where: { department: oldName.trim() }, transaction: t }
+      );
+    });
 
     res.status(200).json({
       status: "success",

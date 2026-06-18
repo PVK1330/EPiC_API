@@ -3,7 +3,7 @@
 
 import * as microsoftOauth from "./microsoft.oauth.js";
 import * as microsoftService from "./microsoft.service.js";
-import { createOAuthState } from "../../../../services/oauthState.service.js";
+import { createOAuthState, consumeOAuthState } from "../../../../services/oauthState.service.js";
 import logger from "../../../../utils/logger.js";
 
 /**
@@ -53,7 +53,7 @@ export const getMicrosoftAuthUrl = async (req, res) => {
  * Handles Microsoft redirect callbacks, exchanges tokens, and links account.
  */
 export const getMicrosoftCallback = async (req, res) => {
-  const { code } = req.query;
+  const { code, state } = req.query;
   const frontendUrl = (process.env.FRONTEND_URL?.split(",")[0]?.trim() || "http://localhost:5173").replace(/\/$/, "");
 
   if (!req.user) {
@@ -64,6 +64,17 @@ export const getMicrosoftCallback = async (req, res) => {
   if (!code) {
     logger.warn("Microsoft callback triggered without auth code");
     return res.redirect(`${frontendUrl}/${req.user?.role || 'caseworker'}/settings/integrations?sync=microsoft_error`);
+  }
+
+  // BUG-007: validate the OAuth `state` (CSRF nonce) before processing the code.
+  // The nonce is single-use, expiry-checked, and bound to the user who started
+  // the flow — reject if it is missing, unknown/replayed/expired, or belongs to a
+  // different user. Without this an attacker could trick a logged-in user into
+  // linking an attacker-controlled Microsoft account.
+  const consumed = await consumeOAuthState(state, "microsoft");
+  if (!consumed || Number(consumed.userId) !== Number(req.user.id)) {
+    logger.warn({ userId: req.user.id }, "Microsoft callback failed OAuth state validation (possible CSRF)");
+    return res.redirect(`${frontendUrl}/${req.user?.role || 'caseworker'}/settings/integrations?sync=microsoft_invalid_state`);
   }
 
   try {

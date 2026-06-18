@@ -443,12 +443,36 @@ export const getLicenceDocuments = async (req, res) => {
         for (const app of applications) {
             const docPaths = await resolveLicenceDocumentPaths(req.tenantDb, app);
 
-            const docStatus = app.status === 'Approved' ? 'Verified' :
-                              app.status === 'Rejected' ? 'Rejected' :
-                              app.status === 'Information Requested' ? 'Action Required' : 'Pending';
+            let appendixDocs = [];
+            if (req.tenantDb.LicenceAppendixDocument) {
+                appendixDocs = await req.tenantDb.LicenceAppendixDocument.findAll({
+                    where: { licenceApplicationId: app.id }
+                });
+            }
 
             for (const docPath of docPaths) {
                 const filename = docPath.split('\\').pop().split('/').pop();
+                
+                const normalizedPath = docPath.replace(/\\/g, '/').toLowerCase();
+                const matchedAppDoc = appendixDocs.find(ad => 
+                    ad.filePath && ad.filePath.replace(/\\/g, '/').toLowerCase() === normalizedPath
+                );
+
+                let docStatus = 'Pending';
+                if (matchedAppDoc) {
+                    if (matchedAppDoc.verificationStatus === 'Verified') {
+                        docStatus = 'Verified';
+                    } else if (matchedAppDoc.verificationStatus === 'Rejected') {
+                        docStatus = 'Rejected';
+                    } else {
+                        docStatus = 'Pending';
+                    }
+                } else {
+                    docStatus = app.status === 'Approved' ? 'Verified' :
+                                app.status === 'Rejected' ? 'Rejected' :
+                                app.status === 'Information Requested' ? 'Action Required' : 'Pending';
+                }
+
                 allDocuments.push({
                     id: docIdCounter++,
                     name: filename || 'Unnamed Document',

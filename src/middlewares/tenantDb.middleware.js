@@ -41,18 +41,6 @@ export async function attachTenantDb(req, res, next) {
     // token somehow omits organisation_id does not silently inherit the
     // platform-staff bypass — they hit Path B instead.
     if (isPlatformStaffUser(req.user)) {
-      if (!isSuperAdminRole(req.user?.role_id)) {
-        logger.warn(
-          { userId: req.user?.id, role_id: req.user?.role_id },
-          "attachTenantDb: non-superadmin token missing organisation_id — rejected",
-        );
-        return res.status(403).json({
-          status: "error",
-          message:
-            "Token does not contain an organisation identifier. Re-authenticate and try again.",
-          data: null,
-        });
-      }
       req.tenantDb = null;
       return next();
     }
@@ -119,6 +107,18 @@ export async function attachTenantDb(req, res, next) {
     }
 
     req.tenantDb = getTenantDb(orgData.database_name);
+
+    if (req.user) {
+      try {
+        const exists = await req.tenantDb.User.findByPk(req.user.id, { attributes: ["id"] });
+        if (!exists) {
+          const { mirrorUserToTenant } = await import("../services/userSync.service.js");
+          await mirrorUserToTenant(req.tenantDb, req.user);
+        }
+      } catch (mirrorErr) {
+        logger.error({ err: mirrorErr, userId: req.user.id }, "Failed to mirror user to tenant DB in middleware");
+      }
+    }
 
     // ── Permissions ───────────────────────────────────────────────────────────
     try {

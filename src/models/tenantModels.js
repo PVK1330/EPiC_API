@@ -82,6 +82,7 @@ import LicenceIntakeDocumentModel from "./tenant/licenceIntakeDocument.model.js"
 import LicenceInformationRequestModel from "./tenant/licenceInformationRequest.model.js";
 import LicenceInformationRequestCommentModel from "./tenant/licenceInformationRequestComment.model.js";
 import LicenceGrantRecordModel from "./tenant/licenceGrantRecord.model.js";
+import LicenceDispatchDocumentModel from "./tenant/licenceDispatchDocument.model.js";
 import CosAllocationRecordModel from "./tenant/cosAllocationRecord.model.js";
 import SponsoredWorkerModel from "./tenant/sponsoredWorker.model.js";
 import SponsoredWorkerAuditModel from "./tenant/sponsoredWorkerAudit.model.js";
@@ -174,6 +175,7 @@ export function buildDb(sequelize) {
   db.LicenceInformationRequest = LicenceInformationRequestModel(sequelize, Sequelize.DataTypes);
   db.LicenceInformationRequestComment = LicenceInformationRequestCommentModel(sequelize, Sequelize.DataTypes);
   db.LicenceGrantRecord = LicenceGrantRecordModel(sequelize, Sequelize.DataTypes);
+  db.LicenceDispatchDocument = LicenceDispatchDocumentModel(sequelize, Sequelize.DataTypes);
   db.CosAllocationRecord = CosAllocationRecordModel(sequelize, Sequelize.DataTypes);
   db.SponsoredWorker = SponsoredWorkerModel(sequelize, Sequelize.DataTypes);
   db.SponsoredWorkerAudit = SponsoredWorkerAuditModel(sequelize, Sequelize.DataTypes);
@@ -429,6 +431,11 @@ export function buildDb(sequelize) {
   db.LicenceApplication.hasOne(db.LicenceGrantRecord, { foreignKey: "licenceApplicationId", as: "grantRecord" });
   db.LicenceGrantRecord.belongsTo(db.LicenceApplication, { foreignKey: "licenceApplicationId", as: "application" });
   db.LicenceGrantRecord.belongsTo(db.User, { foreignKey: "approvedById", as: "approvedBy" });
+
+  // Dispatch Documents — files sent from admin/caseworker to sponsor.
+  db.LicenceApplication.hasMany(db.LicenceDispatchDocument, { foreignKey: "licenceApplicationId", as: "dispatchDocuments" });
+  db.LicenceDispatchDocument.belongsTo(db.LicenceApplication, { foreignKey: "licenceApplicationId", as: "application" });
+  db.LicenceDispatchDocument.belongsTo(db.User, { foreignKey: "senderUserId", as: "sender" });
 
   // Information Request workflow (1:M application → requests; 1:M request → comments).
   db.LicenceApplication.hasMany(db.LicenceInformationRequest, { foreignKey: "licenceApplicationId", as: "infoRequests" });
