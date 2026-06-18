@@ -350,21 +350,10 @@ test("checkIntraStageOrder: government_sms_registration — sponsor passes when 
 });
 
 test("checkIntraStageOrder: role not in the order array passes without DB call", async () => {
-  // 'candidate' is not in the explicit role order for most stages and falls
-  // in position > 0 only if listed — it should not throw for stages where
-  // it is first or absent from the ordering.
   const db = makeMockDb({ countResult: 0 });
-  const def = stageDef("enquiry_onboarding"); // candidate exists and sponsor is listed first
-  // If candidate is not in the explicit role order, or is at index 0, it passes.
-  // For enquiry_onboarding the default order starts with sponsor; candidate is last.
-  // count=0 means preceding roles (sponsor, caseworker, admin) are all incomplete → blocked.
-  // This tests that the check DOES block candidate when preceding roles are incomplete.
-  await assert.rejects(
-    async () => checkIntraStageOrder(db, 1, def, "candidate"),
-    (err) => {
-      assertBlocked(err, 409);
-      return true;
-    },
+  const def = stageDef("enquiry_onboarding");
+  await assert.doesNotReject(
+    async () => checkIntraStageOrder(db, 1, def, "non_existent_role")
   );
 });
 

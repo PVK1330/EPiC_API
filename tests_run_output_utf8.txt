@@ -1,0 +1,322 @@
+TAP version 13
+# Subtest: TASK_CHAIN: covers all 18 stage definitions
+ok 1 - TASK_CHAIN: covers all 18 stage definitions
+  ---
+  duration_ms: 1.7559
+  type: 'test'
+  ...
+# Subtest: TASK_CHAIN: is frozen (immutable constant)
+ok 2 - TASK_CHAIN: is frozen (immutable constant)
+  ---
+  duration_ms: 0.219
+  type: 'test'
+  ...
+# Subtest: TASK_CHAIN: every node has stageDef and role properties
+ok 3 - TASK_CHAIN: every node has stageDef and role properties
+  ---
+  duration_ms: 0.245
+  type: 'test'
+  ...
+# Subtest: TASK_CHAIN: total node count equals sum of chain sequences across all stages
+ok 4 - TASK_CHAIN: total node count equals sum of chain sequences across all stages
+  ---
+  duration_ms: 0.2412
+  type: 'test'
+  ...
+# Subtest: TASK_CHAIN: stages appear in ascending stageOrder
+ok 5 - TASK_CHAIN: stages appear in ascending stageOrder
+  ---
+  duration_ms: 0.2364
+  type: 'test'
+  ...
+# Subtest: TASK_CHAIN: first node is sponsor task of enquiry_onboarding
+ok 6 - TASK_CHAIN: first node is sponsor task of enquiry_onboarding
+  ---
+  duration_ms: 0.1351
+  type: 'test'
+  ...
+# Subtest: TASK_CHAIN: last node is decision_activation
+ok 7 - TASK_CHAIN: last node is decision_activation
+  ---
+  duration_ms: 0.1279
+  type: 'test'
+  ...
+# Subtest: getChainSequence: returns only roles with non-null tasks
+ok 8 - getChainSequence: returns only roles with non-null tasks
+  ---
+  duration_ms: 0.4334
+  type: 'test'
+  ...
+# Subtest: getChainSequence: organisation_details has no candidate
+ok 9 - getChainSequence: organisation_details has no candidate
+  ---
+  duration_ms: 0.5318
+  type: 'test'
+  ...
+# Subtest: getChainSequence: enquiry_onboarding includes all 4 roles (all tasks non-null)
+ok 10 - getChainSequence: enquiry_onboarding includes all 4 roles (all tasks non-null)
+  ---
+  duration_ms: 0.6489
+  type: 'test'
+  ...
+# Subtest: getChainSequence: key_personnel excludes candidate (null task)
+ok 11 - getChainSequence: key_personnel excludes candidate (null task)
+  ---
+  duration_ms: 0.233
+  type: 'test'
+  ...
+# Subtest: getChainSequence: government_sms_registration starts with caseworker
+ok 12 - getChainSequence: government_sms_registration starts with caseworker
+  ---
+  duration_ms: 0.1861
+  type: 'test'
+  ...
+# Subtest: getChainSequence: government_portal_credentials starts with caseworker
+ok 13 - getChainSequence: government_portal_credentials starts with caseworker
+  ---
+  duration_ms: 0.1469
+  type: 'test'
+  ...
+# Subtest: nextChainNode: after enquiry_onboarding/sponsor returns enquiry_onboarding/caseworker
+ok 14 - nextChainNode: after enquiry_onboarding/sponsor returns enquiry_onboarding/caseworker
+  ---
+  duration_ms: 0.206
+  type: 'test'
+  ...
+# Subtest: nextChainNode: after enquiry_onboarding/caseworker returns enquiry_onboarding/admin
+ok 15 - nextChainNode: after enquiry_onboarding/caseworker returns enquiry_onboarding/admin
+  ---
+  duration_ms: 0.1698
+  type: 'test'
+  ...
+# Subtest: nextChainNode: last role in stage → first role of next stage
+ok 16 - nextChainNode: last role in stage → first role of next stage
+  ---
+  duration_ms: 0.2268
+  type: 'test'
+  ...
+# Subtest: nextChainNode: last node in the entire chain returns null
+ok 17 - nextChainNode: last node in the entire chain returns null
+  ---
+  duration_ms: 0.1598
+  type: 'test'
+  ...
+# Subtest: nextChainNode: unknown stageKey returns null
+ok 18 - nextChainNode: unknown stageKey returns null
+  ---
+  duration_ms: 0.1469
+  type: 'test'
+  ...
+# Subtest: nextChainNode: unknown role for a known stage returns null
+ok 19 - nextChainNode: unknown role for a known stage returns null
+  ---
+  duration_ms: 0.1541
+  type: 'test'
+  ...
+# Subtest: nextChainNode: stage 10 last role → stage 11 first role (phase 2 → phase 3 boundary)
+ok 20 - nextChainNode: stage 10 last role → stage 11 first role (phase 2 → phase 3 boundary)
+  ---
+  duration_ms: 0.1985
+  type: 'test'
+  ...
+# Subtest: chain ordering: for data-entry stages, sponsor always precedes caseworker
+ok 21 - chain ordering: for data-entry stages, sponsor always precedes caseworker
+  ---
+  duration_ms: 0.2634
+  type: 'test'
+  ...
+# Subtest: chain ordering: for data-entry stages, caseworker always precedes admin
+ok 22 - chain ordering: for data-entry stages, caseworker always precedes admin
+  ---
+  duration_ms: 0.2593
+  type: 'test'
+  ...
+# Subtest: chain ordering: government_sms_registration has caseworker before sponsor before admin
+ok 23 - chain ordering: government_sms_registration has caseworker before sponsor before admin
+  ---
+  duration_ms: 0.1366
+  type: 'test'
+  ...
+# Subtest: chain ordering: government_portal_credentials has caseworker before sponsor before admin
+ok 24 - chain ordering: government_portal_credentials has caseworker before sponsor before admin
+  ---
+  duration_ms: 0.1474
+  type: 'test'
+  ...
+# Subtest: chain ordering: no stage has a duplicate role in its sequence
+ok 25 - chain ordering: no stage has a duplicate role in its sequence
+  ---
+  duration_ms: 0.1845
+  type: 'test'
+  ...
+# Subtest: chain ordering: TASK_CHAIN has no duplicate (stageKey, role) pairs
+ok 26 - chain ordering: TASK_CHAIN has no duplicate (stageKey, role) pairs
+  ---
+  duration_ms: 0.3245
+  type: 'test'
+  ...
+# Subtest: ensureStageTasks: seeds only the first chain node for a fresh application
+not ok 27 - ensureStageTasks: seeds only the first chain node for a fresh application
+  ---
+  duration_ms: 5.0346
+  type: 'test'
+  location: 'C:\\Users\\pkk22\\OneDrive\\Desktop\\TECHNOWEB\\CMS_Admin\\EPiC_API\\Server\\tests\\licenceTaskChain.test.js:331:1'
+  failureType: 'testCodeFailure'
+  error: 'Expected exactly 6 tasks created for fresh app, got 2'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 6
+  actual: 2
+  operator: '=='
+  stack: |-
+    TestContext.<anonymous> (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/tests/licenceTaskChain.test.js:351:10)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: ensureStageTasks: is idempotent — calling twice creates no additional rows
+not ok 28 - ensureStageTasks: is idempotent — calling twice creates no additional rows
+  ---
+  duration_ms: 3.4876
+  type: 'test'
+  location: 'C:\\Users\\pkk22\\OneDrive\\Desktop\\TECHNOWEB\\CMS_Admin\\EPiC_API\\Server\\tests\\licenceTaskChain.test.js:360:1'
+  failureType: 'testCodeFailure'
+  error: 'tenantDb.LicenceStageTask.update is not a function'
+  code: 'ERR_TEST_FAILURE'
+  name: 'TypeError'
+  stack: |-
+    ensureStageTasks (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/src/services/licenceStageTask.service.js:890:39)
+    async TestContext.<anonymous> (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/tests/licenceTaskChain.test.js:379:3)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: ensureStageTasks: when stage 1 sponsor is complete, seeds caseworker task
+not ok 29 - ensureStageTasks: when stage 1 sponsor is complete, seeds caseworker task
+  ---
+  duration_ms: 1.7332
+  type: 'test'
+  location: 'C:\\Users\\pkk22\\OneDrive\\Desktop\\TECHNOWEB\\CMS_Admin\\EPiC_API\\Server\\tests\\licenceTaskChain.test.js:387:1'
+  failureType: 'testCodeFailure'
+  error: 'Expected stage 2 caseworker task to be seeded'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  operator: '=='
+  stack: |-
+    TestContext.<anonymous> (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/tests/licenceTaskChain.test.js:426:10)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: ensureStageTasks: terminal status (Approved) seeds every chain node
+ok 30 - ensureStageTasks: terminal status (Approved) seeds every chain node
+  ---
+  duration_ms: 5.5017
+  type: 'test'
+  ...
+# Subtest: nextChainNode: all intermediate nodes have a successor
+ok 31 - nextChainNode: all intermediate nodes have a successor
+  ---
+  duration_ms: 0.9859
+  type: 'test'
+  ...
+# Subtest: nextChainNode: successor stageOrder never decreases
+ok 32 - nextChainNode: successor stageOrder never decreases
+  ---
+  duration_ms: 0.3481
+  type: 'test'
+  ...
+# Subtest: nextChainNode: within same stage, role index strictly increases
+ok 33 - nextChainNode: within same stage, role index strictly increases
+  ---
+  duration_ms: 0.4276
+  type: 'test'
+  ...
+# [2026-06-18 12:58:16.152] [31mERROR[39m: [36m licenceStageTask: loadFullApplication failed; using plain shape[39m
+#     err: {
+#       "type": "TypeError",
+#       "message": "tenantDb.LicenceApplication.findOne is not a function",
+#       "stack":
+#           TypeError: tenantDb.LicenceApplication.findOne is not a function
+#               at loadFullApplication (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/src/services/licenceApplicationV2.service.js:108:38)
+#               at buildAppShape (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/src/services/licenceStageTask.service.js:567:24)
+#               at ensureStageTasks (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/src/services/licenceStageTask.service.js:851:26)
+#               at TestContext.<anonymous> (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/tests/licenceTaskChain.test.js:347:9)
+#               at Test.runInAsyncScope (node:async_hooks:214:14)
+#               at Test.run (node:internal/test_runner/test:1047:25)
+#               at Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+#               at Test.postRun (node:internal/test_runner/test:1173:19)
+#               at Test.run (node:internal/test_runner/test:1101:12)
+#               at async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+#     }
+# [2026-06-18 12:58:16.156] [31mERROR[39m: [36m licenceStageTask: loadFullApplication failed; using plain shape[39m
+#     err: {
+#       "type": "TypeError",
+#       "message": "tenantDb.LicenceApplication.findOne is not a function",
+#       "stack":
+#           TypeError: tenantDb.LicenceApplication.findOne is not a function
+#               at loadFullApplication (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/src/services/licenceApplicationV2.service.js:108:38)
+#               at buildAppShape (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/src/services/licenceStageTask.service.js:567:24)
+#               at ensureStageTasks (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/src/services/licenceStageTask.service.js:851:26)
+#               at TestContext.<anonymous> (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/tests/licenceTaskChain.test.js:376:9)
+#               at Test.runInAsyncScope (node:async_hooks:214:14)
+#               at Test.run (node:internal/test_runner/test:1047:25)
+#               at Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+#               at Test.postRun (node:internal/test_runner/test:1173:19)
+#               at Test.run (node:internal/test_runner/test:1101:12)
+#               at async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+#     }
+# [2026-06-18 12:58:16.158] [31mERROR[39m: [36m licenceStageTask: loadFullApplication failed; using plain shape[39m
+#     err: {
+#       "type": "TypeError",
+#       "message": "tenantDb.LicenceApplication.findOne is not a function",
+#       "stack":
+#           TypeError: tenantDb.LicenceApplication.findOne is not a function
+#               at loadFullApplication (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/src/services/licenceApplicationV2.service.js:108:38)
+#               at buildAppShape (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/src/services/licenceStageTask.service.js:567:24)
+#               at ensureStageTasks (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/src/services/licenceStageTask.service.js:851:26)
+#               at TestContext.<anonymous> (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/tests/licenceTaskChain.test.js:379:9)
+#               at async Test.run (node:internal/test_runner/test:1054:7)
+#               at async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+#     }
+# [2026-06-18 12:58:16.160] [31mERROR[39m: [36m licenceStageTask: loadFullApplication failed; using plain shape[39m
+#     err: {
+#       "type": "TypeError",
+#       "message": "tenantDb.LicenceApplication.findOne is not a function",
+#       "stack":
+#           TypeError: tenantDb.LicenceApplication.findOne is not a function
+#               at loadFullApplication (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/src/services/licenceApplicationV2.service.js:108:38)
+#               at buildAppShape (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/src/services/licenceStageTask.service.js:567:24)
+#               at ensureStageTasks (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/src/services/licenceStageTask.service.js:851:26)
+#               at TestContext.<anonymous> (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/tests/licenceTaskChain.test.js:414:9)
+#               at Test.runInAsyncScope (node:async_hooks:214:14)
+#               at Test.run (node:internal/test_runner/test:1047:25)
+#               at Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+#               at Test.postRun (node:internal/test_runner/test:1173:19)
+#               at Test.run (node:internal/test_runner/test:1101:12)
+#               at async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+#     }
+# [2026-06-18 12:58:16.162] [31mERROR[39m: [36m licenceStageTask: loadFullApplication failed; using plain shape[39m
+#     err: {
+#       "type": "TypeError",
+#       "message": "tenantDb.LicenceApplication.findOne is not a function",
+#       "stack":
+#           TypeError: tenantDb.LicenceApplication.findOne is not a function
+#               at loadFullApplication (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/src/services/licenceApplicationV2.service.js:108:38)
+#               at buildAppShape (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/src/services/licenceStageTask.service.js:567:24)
+#               at ensureStageTasks (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/src/services/licenceStageTask.service.js:851:26)
+#               at TestContext.<anonymous> (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/tests/licenceTaskChain.test.js:446:9)
+#               at Test.runInAsyncScope (node:async_hooks:214:14)
+#               at Test.run (node:internal/test_runner/test:1047:25)
+#               at Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+#               at Test.postRun (node:internal/test_runner/test:1173:19)
+#               at Test.run (node:internal/test_runner/test:1101:12)
+#               at async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+#     }
+1..33
+# tests 33
+# suites 0
+# pass 30
+# fail 3
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1683.405

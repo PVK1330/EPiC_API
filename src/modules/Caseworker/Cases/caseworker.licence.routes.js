@@ -36,6 +36,12 @@ import {
 } from '../../Shared/Licence/licenceInformationRequest.controller.js';
 import { getGrantRecordHandler } from '../../Shared/Licence/licenceGrant.controller.js';
 import {
+    dispatchDocumentHandler,
+    listDispatchDocumentsHandler,
+    downloadDispatchDocumentHandler,
+} from '../../Shared/Licence/licenceDispatch.controller.js';
+import { upload } from '../../../middlewares/upload.middleware.js';
+import {
     completeRegistrationSchema,
     governmentSubmissionSchema,
 } from '../../../validations/licenceGovernment.validation.js';
@@ -89,6 +95,11 @@ router.get("/:id/info-requests",                            ensureAssignedCasewo
 router.get("/:id/info-requests/:requestId",                 ensureAssignedCaseworker(), getInfoRequestHandler);
 router.post("/:id/info-requests/:requestId/comments",       ensureAssignedCaseworker(), addCommentHandler);
 router.patch("/:id/info-requests/:requestId/close",         ensureAssignedCaseworker(), closeInfoRequestHandler);
+
+// Dispatch documents to sponsor (upload + email + portal).
+router.post("/:id/dispatch-document", ensureAssignedCaseworker(), upload.single("document"), dispatchDocumentHandler);
+router.get("/:id/dispatch-documents", ensureAssignedCaseworker(), listDispatchDocumentsHandler);
+router.get("/:id/dispatch-documents/:docId/download", ensureAssignedCaseworker(), downloadDispatchDocumentHandler);
 
 // Government processing pipeline (Phase 3).
 router.post("/:id/start-review", ensureAssignedCaseworker(), startLicenceReview);

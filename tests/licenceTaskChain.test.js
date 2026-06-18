@@ -81,6 +81,15 @@ function makeChainDb(preloadedRows = []) {
         const k = `${where.stageKey}:${where.role}`;
         return rows[k] ?? null;
       },
+      update: async (values, options) => {
+        const ids = options?.where?.id?.[Op.in] || [];
+        for (const r of Object.values(rows)) {
+          if (ids.includes(r.id)) {
+            Object.assign(r, values);
+          }
+        }
+        return [ids.length];
+      },
       count: async () => 0,
     },
     AuditLog: { create: async () => ({}) },
@@ -180,23 +189,20 @@ test("getChainSequence: returns only roles with non-null tasks", () => {
   }
 });
 
-test("getChainSequence: organisation_details has no candidate", () => {
-  const seq = getChainSequence(stageDef("organisation_details"));
-  assert.ok(!seq.includes("candidate"), "organisation_details has candidate: null — should be excluded");
-});
-
-test("getChainSequence: enquiry_onboarding includes all 4 roles (all tasks non-null)", () => {
+test("getChainSequence: enquiry_onboarding includes all 3 roles (all tasks non-null)", () => {
   const def = stageDef("enquiry_onboarding");
   const seq = getChainSequence(def);
   assert.ok(seq.includes("sponsor"),    "Missing sponsor");
   assert.ok(seq.includes("caseworker"), "Missing caseworker");
   assert.ok(seq.includes("admin"),      "Missing admin");
-  assert.ok(seq.includes("candidate"),  "Missing candidate");
+  assert.equal(seq.length, 3, "Should have exactly 3 roles");
 });
 
-test("getChainSequence: key_personnel excludes candidate (null task)", () => {
-  const seq = getChainSequence(stageDef("key_personnel"));
-  assert.ok(!seq.includes("candidate"), "key_personnel.candidate is null — must be excluded");
+test("getChainSequence: no stage contains candidate role", () => {
+  for (const def of LICENCE_STAGE_DEFINITIONS) {
+    const seq = getChainSequence(def);
+    assert.ok(!seq.includes("candidate"), `Stage ${def.key} contains candidate role`);
+  }
 });
 
 test("getChainSequence: government_sms_registration starts with caseworker", () => {
@@ -347,11 +353,11 @@ test("ensureStageTasks: seeds only the first chain node for a fresh application"
   await ensureStageTasks(db, fakeApp, {});
 
   // Since stage 1 is data-complete, all its roles auto-complete.
-  // Then stage 2 sponsor auto-completes, leaving stage 2 caseworker pending (total 6 tasks).
+  // Then stage 2 sponsor auto-completes, leaving stage 2 caseworker pending (total 5 tasks).
   assert.equal(
     db._createdCalls.length,
-    6,
-    `Expected exactly 6 tasks created for fresh app, got ${db._createdCalls.length}`,
+    5,
+    `Expected exactly 5 tasks created for fresh app, got ${db._createdCalls.length}`,
   );
   assert.equal(db._createdCalls[0].stageKey, "enquiry_onboarding");
   assert.equal(db._createdCalls[0].role, "sponsor");
@@ -418,7 +424,7 @@ test("ensureStageTasks: when stage 1 sponsor is complete, seeds caseworker task"
     created.some((c) => c.stageKey === "enquiry_onboarding" && c.role === "caseworker"),
     `Expected caseworker task to be seeded; got: ${JSON.stringify(created)}`,
   );
-  // It should have created caseworker, admin, candidate for stage 1 (all completed),
+  // It should have created caseworker, admin for stage 1 (all completed),
   // and sponsor (completed) + caseworker (pending) for stage 2.
   const stage2Caseworker = created.find(
     (c) => c.stageKey === "licence_routes" && c.role === "caseworker"

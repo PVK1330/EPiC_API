@@ -137,7 +137,7 @@ export const inviteTeamMember = catchAsync(async (req, res) => {
     first_name: String(first_name).trim(),
     last_name: String(last_name).trim(),
     country_code: String(country_code || "+44").trim(),
-    mobile: String(mobile || "0000000000").trim(),
+    mobile: mobile ? String(mobile).trim() : `00${Date.now()}${Math.floor(Math.random() * 90 + 10)}`.slice(-15),
     password: hashed,
     role_id: role.id,
     organisation_id: null,

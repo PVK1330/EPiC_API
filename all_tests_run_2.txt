@@ -1,0 +1,5043 @@
+
+> epic_api@1.0.0 test
+> node --test --test-concurrency=1 --experimental-test-module-mocks tests/*.test.js
+
+TAP version 13
+# Subtest: Auth Validation
+    # Subtest: Login Schema
+        # Subtest: valid payload passes
+        ok 1 - valid payload passes
+          ---
+          duration_ms: 2.1386
+          type: 'test'
+          ...
+        # Subtest: invalid email fails
+        ok 2 - invalid email fails
+          ---
+          duration_ms: 1.4949
+          type: 'test'
+          ...
+        # Subtest: unknown field is rejected
+        ok 3 - unknown field is rejected
+          ---
+          duration_ms: 0.7619
+          type: 'test'
+          ...
+        1..3
+    ok 1 - Login Schema
+      ---
+      duration_ms: 5.5247
+      type: 'suite'
+      ...
+    # Subtest: Register Schema
+        # Subtest: valid payload passes
+        ok 1 - valid payload passes
+          ---
+          duration_ms: 0.7057
+          type: 'test'
+          ...
+        1..1
+    ok 2 - Register Schema
+      ---
+      duration_ms: 0.8286
+      type: 'suite'
+      ...
+    1..2
+ok 1 - Auth Validation
+  ---
+  duration_ms: 6.9446
+  type: 'suite'
+  ...
+# Subtest: syncFromBusinessProfile is an alias of syncPersonnelFromProfile
+ok 2 - syncFromBusinessProfile is an alias of syncPersonnelFromProfile
+  ---
+  duration_ms: 0.9864
+  type: 'test'
+  ...
+# Subtest: stamps lastSyncedAt + lastSyncedByUserId on AO, KC and Level 1 rows
+ok 3 - stamps lastSyncedAt + lastSyncedByUserId on AO, KC and Level 1 rows
+  ---
+  duration_ms: 1.5694
+  type: 'test'
+  ...
+# Subtest: splits full names into first/last when importing
+ok 4 - splits full names into first/last when importing
+  ---
+  duration_ms: 0.5346
+  type: 'test'
+  ...
+# Subtest: imports company registration number into a new org-info row
+ok 5 - imports company registration number into a new org-info row
+  ---
+  duration_ms: 0.3441
+  type: 'test'
+  ...
+# Subtest: does NOT overwrite an existing Companies House number (non-destructive)
+ok 6 - does NOT overwrite an existing Companies House number (non-destructive)
+  ---
+  duration_ms: 0.4173
+  type: 'test'
+  ...
+# Subtest: no Business Profile → no writes (existing applications untouched)
+ok 7 - no Business Profile → no writes (existing applications untouched)
+  ---
+  duration_ms: 0.1888
+  type: 'test'
+  ...
+# Subtest: checkRole: admin is allowed on staff-only candidate routes
+ok 8 - checkRole: admin is allowed on staff-only candidate routes
+  ---
+  duration_ms: 1.1883
+  type: 'test'
+  ...
+# Subtest: ensureSelfOrRole: admin may access any candidate application
+ok 9 - ensureSelfOrRole: admin may access any candidate application
+  ---
+  duration_ms: 0.3094
+  type: 'test'
+  ...
+# Subtest: checkRole: caseworker is allowed on staff-only candidate routes
+ok 10 - checkRole: caseworker is allowed on staff-only candidate routes
+  ---
+  duration_ms: 0.1552
+  type: 'test'
+  ...
+# Subtest: ensureSelfOrRole: caseworker may access any candidate application
+ok 11 - ensureSelfOrRole: caseworker may access any candidate application
+  ---
+  duration_ms: 0.1493
+  type: 'test'
+  ...
+# Subtest: ensureSelfOrRole: candidate may access their OWN application
+ok 12 - ensureSelfOrRole: candidate may access their OWN application
+  ---
+  duration_ms: 0.1637
+  type: 'test'
+  ...
+# Subtest: ensureSelfOrRole: candidate is DENIED access to another candidate (403)
+ok 13 - ensureSelfOrRole: candidate is DENIED access to another candidate (403)
+  ---
+  duration_ms: 1.1346
+  type: 'test'
+  ...
+# Subtest: checkRole: candidate is DENIED on staff-only routes (view/edit/delete/reset)
+ok 14 - checkRole: candidate is DENIED on staff-only routes (view/edit/delete/reset)
+  ---
+  duration_ms: 0.3075
+  type: 'test'
+  ...
+# Subtest: ensureSelfOrRole: unauthenticated request is rejected (401)
+ok 15 - ensureSelfOrRole: unauthenticated request is rejected (401)
+  ---
+  duration_ms: 0.1755
+  type: 'test'
+  ...
+# Subtest: ensureSelfOrRole: denied access is recorded in the audit log
+ok 16 - ensureSelfOrRole: denied access is recorded in the audit log
+  ---
+  duration_ms: 9.6102
+  type: 'test'
+  ...
+# [2026-06-18 13:11:02.995] [33mWARN[39m: [36m Denied unauthorized access attempt[39m
+#     userId: "8"
+#     actor: 7
+#     reason: "Unauthorized cross-account access attempt (IDOR)"
+#     method: "PUT"
+#     path: "/api/candidates/8/application"
+#     targetId: "8"
+#     roleId: 1
+# [2026-06-18 13:11:02.996] [33mWARN[39m: [36m Denied unauthorized access attempt[39m
+#     userId: "8"
+#     actor: 7
+#     reason: "Unauthorized cross-account access attempt (IDOR)"
+#     method: "PUT"
+#     path: "/api/candidates/8/application"
+#     targetId: "8"
+#     roleId: 1
+# Subtest: partition: whitelisted profile fields pass through
+ok 17 - partition: whitelisted profile fields pass through
+  ---
+  duration_ms: 6.0188
+  type: 'test'
+  ...
+# Subtest: partition: protected fields are collected, never in updateData
+ok 18 - partition: protected fields are collected, never in updateData
+  ---
+  duration_ms: 0.3388
+  type: 'test'
+  ...
+# Subtest: partition: unknown fields are rejected (dropped), application ignored
+ok 19 - partition: unknown fields are rejected (dropped), application ignored
+  ---
+  duration_ms: 0.1732
+  type: 'test'
+  ...
+# Subtest: whitelist and protected sets do not overlap
+ok 20 - whitelist and protected sets do not overlap
+  ---
+  duration_ms: 0.1911
+  type: 'test'
+  ...
+# Subtest: updateCandidate REJECTS protected fields (throws + logs), never writes
+ok 21 - updateCandidate REJECTS protected fields (throws + logs), never writes
+  ---
+  duration_ms: 8.1378
+  type: 'test'
+  ...
+# Subtest: updateCandidate writes ONLY whitelisted fields and drops unknowns (logged)
+ok 22 - updateCandidate writes ONLY whitelisted fields and drops unknowns (logged)
+  ---
+  duration_ms: 0.71
+  type: 'test'
+  ...
+# Subtest: updateCandidate persists whitelisted email/mobile (regression: they were dropped before)
+ok 23 - updateCandidate persists whitelisted email/mobile (regression: they were dropped before)
+  ---
+  duration_ms: 0.4098
+  type: 'test'
+  ...
+# Subtest: reset stores a bcrypt hash, never the plaintext password
+ok 24 - reset stores a bcrypt hash, never the plaintext password
+  ---
+  duration_ms: 344.275
+  type: 'test'
+  ...
+# Subtest: login works after reset (bcrypt.compare succeeds for the new password)
+ok 25 - login works after reset (bcrypt.compare succeeds for the new password)
+  ---
+  duration_ms: 1080.4824
+  type: 'test'
+  ...
+# Subtest: transaction rolls back the tenant password when platform sync fails
+ok 26 - transaction rolls back the tenant password when platform sync fails
+  ---
+  duration_ms: 334.7201
+  type: 'test'
+  ...
+# Subtest: reset throws for an unknown candidate
+ok 27 - reset throws for an unknown candidate
+  ---
+  duration_ms: 0.5494
+  type: 'test'
+  ...
+# Subtest: strong-password policy: min length 12 + complexity is enforced
+ok 28 - strong-password policy: min length 12 + complexity is enforced
+  ---
+  duration_ms: 7.081
+  type: 'test'
+  ...
+# Subtest: tag registry exposes grouped tags
+ok 29 - tag registry exposes grouped tags
+  ---
+  duration_ms: 2.8773
+  type: 'test'
+  ...
+# Subtest: interpolation fills known tags and drops unknown ones
+ok 30 - interpolation fills known tags and drops unknown ones
+  ---
+  duration_ms: 0.741
+  type: 'test'
+  ...
+# Subtest: amountToWords handles pounds and pence
+ok 31 - amountToWords handles pounds and pence
+  ---
+  duration_ms: 0.4237
+  type: 'test'
+  ...
+# Subtest: formatGbp formats currency
+ok 32 - formatGbp formats currency
+  ---
+  duration_ms: 86.0942
+  type: 'test'
+  ...
+# Subtest: installment table renders rows
+ok 33 - installment table renders rows
+  ---
+  duration_ms: 16.8195
+  type: 'test'
+  ...
+# Subtest: checklist data: 9 groups and sensible required/category parsing
+ok 34 - checklist data: 9 groups and sensible required/category parsing
+  ---
+  duration_ms: 0.6702
+  type: 'test'
+  ...
+# Subtest: generateCclHtmlForCase: per-case draft takes precedence
+ok 35 - generateCclHtmlForCase: per-case draft takes precedence
+  ---
+  duration_ms: 2.4979
+  type: 'test'
+  ...
+# Subtest: generateCclHtmlForCase: no template → null (caller falls back)
+ok 36 - generateCclHtmlForCase: no template → null (caller falls back)
+  ---
+  duration_ms: 0.4311
+  type: 'test'
+  ...
+# Subtest: renderCclPdfBuffer produces a valid PDF
+ok 37 - renderCclPdfBuffer produces a valid PDF
+  ---
+  duration_ms: 105.0488
+  type: 'test'
+  ...
+# Subtest: renderCclPdfBuffer survives ragged .docx tables (no _calcWidth crash)
+ok 38 - renderCclPdfBuffer survives ragged .docx tables (no _calcWidth crash)
+  ---
+  duration_ms: 92.239
+  type: 'test'
+  ...
+# [2026-06-18 13:11:16.876] [34mDEBUG[39m: [36m [PDF Generator] Creating PDF printer...[39m
+# [2026-06-18 13:11:16.877] [34mDEBUG[39m: [36m [PDF Generator] Creating PDF document...[39m
+# [2026-06-18 13:11:16.927] [34mDEBUG[39m: [36m [PDF Generator] Ending PDF document...[39m
+# [2026-06-18 13:11:16.941] [34mDEBUG[39m: [36m [PDF Generator] PDF generation completed[39m
+#     chunks: 87
+# [2026-06-18 13:11:16.976] [34mDEBUG[39m: [36m [PDF Generator] Creating PDF printer...[39m
+# [2026-06-18 13:11:16.976] [34mDEBUG[39m: [36m [PDF Generator] Creating PDF document...[39m
+# [2026-06-18 13:11:17.019] [34mDEBUG[39m: [36m [PDF Generator] Ending PDF document...[39m
+# [2026-06-18 13:11:17.034] [34mDEBUG[39m: [36m [PDF Generator] PDF generation completed[39m
+#     chunks: 87
+# Subtest: COS_STATUS constants
+    # Subtest: COS_PENDING maps to Pending
+    ok 1 - COS_PENDING maps to Pending
+      ---
+      duration_ms: 1.1421
+      type: 'test'
+      ...
+    # Subtest: COS_APPROVED maps to Allocated (the final approved+allocated state)
+    ok 2 - COS_APPROVED maps to Allocated (the final approved+allocated state)
+      ---
+      duration_ms: 0.2439
+      type: 'test'
+      ...
+    # Subtest: COS_REJECTED maps to Rejected
+    ok 3 - COS_REJECTED maps to Rejected
+      ---
+      duration_ms: 0.1657
+      type: 'test'
+      ...
+    1..3
+ok 39 - COS_STATUS constants
+  ---
+  duration_ms: 2.9164
+  type: 'suite'
+  ...
+# Subtest: buildAllocationNumber
+    # Subtest: generates EPIC-COS-{year}-{6-digit-id} format
+    ok 1 - generates EPIC-COS-{year}-{6-digit-id} format
+      ---
+      duration_ms: 4.3937
+      type: 'test'
+      ...
+    # Subtest: zero-pads IDs shorter than 6 digits
+    ok 2 - zero-pads IDs shorter than 6 digits
+      ---
+      duration_ms: 0.2553
+      type: 'test'
+      ...
+    # Subtest: handles large IDs without truncation
+    ok 3 - handles large IDs without truncation
+      ---
+      duration_ms: 0.1972
+      type: 'test'
+      ...
+    # Subtest: uses the year of the allocatedAt date
+    ok 4 - uses the year of the allocatedAt date
+      ---
+      duration_ms: 0.4177
+      type: 'test'
+      ...
+    1..4
+ok 40 - buildAllocationNumber
+  ---
+  duration_ms: 6.1502
+  type: 'suite'
+  ...
+# Subtest: CoS approval (COS_APPROVED)
+    # Subtest: transitions status to Allocated on approval
+    ok 1 - transitions status to Allocated on approval
+      ---
+      duration_ms: 1.1628
+      type: 'test'
+      ...
+    # Subtest: increments SponsorProfile.cosAllocation by the approved amount
+    ok 2 - increments SponsorProfile.cosAllocation by the approved amount
+      ---
+      duration_ms: 0.3516
+      type: 'test'
+      ...
+    # Subtest: uses approvedAmount when provided (partial approval)
+    ok 3 - uses approvedAmount when provided (partial approval)
+      ---
+      duration_ms: 1.4702
+      type: 'test'
+      ...
+    # Subtest: defaults to requestedAmount when approvedAmount is not given
+    ok 4 - defaults to requestedAmount when approvedAmount is not given
+      ---
+      duration_ms: 0.2462
+      type: 'test'
+      ...
+    # Subtest: creates an allocation record with the correct fields
+    ok 5 - creates an allocation record with the correct fields
+      ---
+      duration_ms: 0.4223
+      type: 'test'
+      ...
+    # Subtest: allocation record allocationNumber is derived from request id
+    ok 6 - allocation record allocationNumber is derived from request id
+      ---
+      duration_ms: 0.3559
+      type: 'test'
+      ...
+    # Subtest: sets expiryDate from the SponsorProfile licence expiry
+    ok 7 - sets expiryDate from the SponsorProfile licence expiry
+      ---
+      duration_ms: 0.3297
+      type: 'test'
+      ...
+    # Subtest: throws 404 when the request does not exist
+    ok 8 - throws 404 when the request does not exist
+      ---
+      duration_ms: 0.9881
+      type: 'test'
+      ...
+    # Subtest: throws 409 when the request is already Allocated
+    ok 9 - throws 409 when the request is already Allocated
+      ---
+      duration_ms: 0.5026
+      type: 'test'
+      ...
+    # Subtest: throws 409 when the request is already Rejected
+    ok 10 - throws 409 when the request is already Rejected
+      ---
+      duration_ms: 0.4201
+      type: 'test'
+      ...
+    # Subtest: also approves a request in Under Review status
+    ok 11 - also approves a request in Under Review status
+      ---
+      duration_ms: 0.3705
+      type: 'test'
+      ...
+    1..11
+ok 41 - CoS approval (COS_APPROVED)
+  ---
+  duration_ms: 7.1951
+  type: 'suite'
+  ...
+# Subtest: CoS rejection (COS_REJECTED)
+    # Subtest: transitions status to Rejected
+    ok 1 - transitions status to Rejected
+      ---
+      duration_ms: 0.4421
+      type: 'test'
+      ...
+    # Subtest: stores the review notes on rejection
+    ok 2 - stores the review notes on rejection
+      ---
+      duration_ms: 0.1776
+      type: 'test'
+      ...
+    # Subtest: does NOT create an allocation record on rejection
+    ok 3 - does NOT create an allocation record on rejection
+      ---
+      duration_ms: 0.1386
+      type: 'test'
+      ...
+    # Subtest: throws 404 when request does not exist
+    ok 4 - throws 404 when request does not exist
+      ---
+      duration_ms: 0.3023
+      type: 'test'
+      ...
+    # Subtest: throws 409 when request is already Allocated
+    ok 5 - throws 409 when request is already Allocated
+      ---
+      duration_ms: 0.2627
+      type: 'test'
+      ...
+    1..5
+ok 42 - CoS rejection (COS_REJECTED)
+  ---
+  duration_ms: 1.6009
+  type: 'suite'
+  ...
+# Subtest: getCosAllocationRecord
+    # Subtest: returns the record when it exists
+    ok 1 - returns the record when it exists
+      ---
+      duration_ms: 0.4367
+      type: 'test'
+      ...
+    # Subtest: returns null when no record exists for the request
+    ok 2 - returns null when no record exists for the request
+      ---
+      duration_ms: 0.1746
+      type: 'test'
+      ...
+    1..2
+ok 43 - getCosAllocationRecord
+  ---
+  duration_ms: 0.8976
+  type: 'suite'
+  ...
+# Subtest: reviewCosRequest — outer transaction (ISSUE-004)
+    # Subtest: successful approval commits the transaction
+    ok 1 - successful approval commits the transaction
+      ---
+      duration_ms: 4.3089
+      type: 'test'
+      ...
+    # Subtest: successful approval sets status to Allocated
+    ok 2 - successful approval sets status to Allocated
+      ---
+      duration_ms: 0.9332
+      type: 'test'
+      ...
+    # Subtest: successful rejection commits the transaction
+    ok 3 - successful rejection commits the transaction
+      ---
+      duration_ms: 0.4418
+      type: 'test'
+      ...
+    # Subtest: rejection does NOT create a CosAllocationRecord
+    ok 4 - rejection does NOT create a CosAllocationRecord
+      ---
+      duration_ms: 0.4043
+      type: 'test'
+      ...
+    # Subtest: rejection sets status to Rejected
+    ok 5 - rejection sets status to Rejected
+      ---
+      duration_ms: 0.3642
+      type: 'test'
+      ...
+    # Subtest: request.save() is called inside the transaction (not bare)
+    ok 6 - request.save() is called inside the transaction (not bare)
+      ---
+      duration_ms: 0.5681
+      type: 'test'
+      ...
+    1..6
+ok 44 - reviewCosRequest — outer transaction (ISSUE-004)
+  ---
+  duration_ms: 9.3414
+  type: 'suite'
+  ...
+# Subtest: reviewCosRequest — UniqueConstraintError → 409 (ISSUE-004)
+    # Subtest: returns 409 when CosAllocationRecord.create throws UniqueConstraintError
+    ok 1 - returns 409 when CosAllocationRecord.create throws UniqueConstraintError
+      ---
+      duration_ms: 2.0728
+      type: 'test'
+      ...
+    # Subtest: error message mentions duplicate / already allocated
+    ok 2 - error message mentions duplicate / already allocated
+      ---
+      duration_ms: 1.2511
+      type: 'test'
+      ...
+    # Subtest: transaction is rolled back when UniqueConstraintError is thrown
+    ok 3 - transaction is rolled back when UniqueConstraintError is thrown
+      ---
+      duration_ms: 0.9716
+      type: 'test'
+      ...
+    # Subtest: non-constraint errors propagate unchanged (not masked as 409)
+    ok 4 - non-constraint errors propagate unchanged (not masked as 409)
+      ---
+      duration_ms: 0.9025
+      type: 'test'
+      ...
+    1..4
+ok 45 - reviewCosRequest — UniqueConstraintError → 409 (ISSUE-004)
+  ---
+  duration_ms: 5.9817
+  type: 'suite'
+  ...
+# Subtest: reviewCosRequest — concurrent approval simulation (ISSUE-004)
+    # Subtest: first concurrent approval succeeds; second gets 409 (DUPLICATE_ALLOCATION)
+    ok 1 - first concurrent approval succeeds; second gets 409 (DUPLICATE_ALLOCATION)
+      ---
+      duration_ms: 0.9583
+      type: 'test'
+      ...
+    # Subtest: winning approval commits; losing approval rolls back
+    ok 2 - winning approval commits; losing approval rolls back
+      ---
+      duration_ms: 0.6792
+      type: 'test'
+      ...
+    # Subtest: FSM blocks an already-Allocated request from being approved a second time
+    ok 3 - FSM blocks an already-Allocated request from being approved a second time
+      ---
+      duration_ms: 0.4375
+      type: 'test'
+      ...
+    1..3
+ok 46 - reviewCosRequest — concurrent approval simulation (ISSUE-004)
+  ---
+  duration_ms: 2.2907
+  type: 'suite'
+  ...
+# Subtest: CRIT-001 — cosAllocationRecord ownership (IDOR prevention)
+    # Subtest: throws 403 ALLOCATION_OWNERSHIP_VIOLATION when allocation belongs to a different sponsor
+    ok 1 - throws 403 ALLOCATION_OWNERSHIP_VIOLATION when allocation belongs to a different sponsor
+      ---
+      duration_ms: 2.6944
+      type: 'test'
+      ...
+    # Subtest: error message mentions 'does not belong to this sponsor'
+    ok 2 - error message mentions 'does not belong to this sponsor'
+      ---
+      duration_ms: 0.8687
+      type: 'test'
+      ...
+    # Subtest: throws 404 when cosAllocationRecord does not exist
+    ok 3 - throws 404 when cosAllocationRecord does not exist
+      ---
+      duration_ms: 0.5441
+      type: 'test'
+      ...
+    # Subtest: passes when allocation.sponsorId matches the calling sponsorId
+    ok 4 - passes when allocation.sponsorId matches the calling sponsorId
+      ---
+      duration_ms: 0.5523
+      type: 'test'
+      ...
+    # Subtest: does not run when cosAllocationRecordId is null
+    ok 5 - does not run when cosAllocationRecordId is null
+      ---
+      duration_ms: 0.3864
+      type: 'test'
+      ...
+    # Subtest: does not run when cosAllocationRecordId is undefined
+    ok 6 - does not run when cosAllocationRecordId is undefined
+      ---
+      duration_ms: 0.4155
+      type: 'test'
+      ...
+    # Subtest: ownership check runs before the over-allocation guard (IDOR blocked first)
+    ok 7 - ownership check runs before the over-allocation guard (IDOR blocked first)
+      ---
+      duration_ms: 0.6676
+      type: 'test'
+      ...
+    # Subtest: over-allocation guard fires after ownership passes
+    ok 8 - over-allocation guard fires after ownership passes
+      ---
+      duration_ms: 0.5963
+      type: 'test'
+      ...
+    1..8
+ok 47 - CRIT-001 — cosAllocationRecord ownership (IDOR prevention)
+  ---
+  duration_ms: 9.4169
+  type: 'suite'
+  ...
+# Subtest: CRIT-001 — cosRequest ownership (IDOR prevention)
+    # Subtest: throws 403 REQUEST_OWNERSHIP_VIOLATION when cosRequest belongs to a different sponsor
+    ok 1 - throws 403 REQUEST_OWNERSHIP_VIOLATION when cosRequest belongs to a different sponsor
+      ---
+      duration_ms: 0.922
+      type: 'test'
+      ...
+    # Subtest: error message mentions 'does not belong to this sponsor'
+    ok 2 - error message mentions 'does not belong to this sponsor'
+      ---
+      duration_ms: 0.8753
+      type: 'test'
+      ...
+    # Subtest: throws 404 when cosRequest does not exist
+    ok 3 - throws 404 when cosRequest does not exist
+      ---
+      duration_ms: 0.4631
+      type: 'test'
+      ...
+    # Subtest: passes when cosRequest.sponsorId matches the calling sponsorId
+    ok 4 - passes when cosRequest.sponsorId matches the calling sponsorId
+      ---
+      duration_ms: 0.2648
+      type: 'test'
+      ...
+    # Subtest: does not run when cosRequestId is null
+    ok 5 - does not run when cosRequestId is null
+      ---
+      duration_ms: 0.5522
+      type: 'test'
+      ...
+    # Subtest: cosRequest check runs before cosAllocationRecord check
+    ok 6 - cosRequest check runs before cosAllocationRecord check
+      ---
+      duration_ms: 0.5983
+      type: 'test'
+      ...
+    1..6
+ok 48 - CRIT-001 — cosRequest ownership (IDOR prevention)
+  ---
+  duration_ms: 6.0165
+  type: 'suite'
+  ...
+# Subtest: CRIT-001 — no IDs provided, ownership guard fully skipped
+    # Subtest: resolves without error when both cosRequestId and cosAllocationRecordId are null
+    ok 1 - resolves without error when both cosRequestId and cosAllocationRecordId are null
+      ---
+      duration_ms: 0.3452
+      type: 'test'
+      ...
+    # Subtest: resolves without error when both are undefined
+    ok 2 - resolves without error when both are undefined
+      ---
+      duration_ms: 0.2972
+      type: 'test'
+      ...
+    1..2
+ok 49 - CRIT-001 — no IDs provided, ownership guard fully skipped
+  ---
+  duration_ms: 0.8314
+  type: 'suite'
+  ...
+# Subtest: CRIT-001 — sponsorId coercion
+    # Subtest: correctly compares string sponsorId '10' against numeric allocation.sponsorId 10
+    ok 1 - correctly compares string sponsorId '10' against numeric allocation.sponsorId 10
+      ---
+      duration_ms: 0.481
+      type: 'test'
+      ...
+    # Subtest: blocks when string sponsorId '10' is compared against allocation.sponsorId 20
+    ok 2 - blocks when string sponsorId '10' is compared against allocation.sponsorId 20
+      ---
+      duration_ms: 0.398
+      type: 'test'
+      ...
+    1..2
+ok 50 - CRIT-001 — sponsorId coercion
+  ---
+  duration_ms: 1.2816
+  type: 'suite'
+  ...
+# Subtest: CRIT-002 — sequential duplicate active application (blocking check)
+    # Subtest: throws 409 ACTIVE_APPLICATION_EXISTS when a non-terminal application exists
+    ok 1 - throws 409 ACTIVE_APPLICATION_EXISTS when a non-terminal application exists
+      ---
+      duration_ms: 1.9279
+      type: 'test'
+      ...
+    # Subtest: error message mentions the blocking application status
+    ok 2 - error message mentions the blocking application status
+      ---
+      duration_ms: 0.9071
+      type: 'test'
+      ...
+    # Subtest: resolves when no blocking application exists
+    ok 3 - resolves when no blocking application exists
+      ---
+      duration_ms: 0.9172
+      type: 'test'
+      ...
+    # Subtest: resolves after a Licence Granted application (re-apply path)
+    ok 4 - resolves after a Licence Granted application (re-apply path)
+      ---
+      duration_ms: 0.4961
+      type: 'test'
+      ...
+    # Subtest: resolves after a Licence Rejected application
+    ok 5 - resolves after a Licence Rejected application
+      ---
+      duration_ms: 0.8237
+      type: 'test'
+      ...
+    1..5
+ok 51 - CRIT-002 — sequential duplicate active application (blocking check)
+  ---
+  duration_ms: 7.3593
+  type: 'suite'
+  ...
+# Subtest: CRIT-002 — UniqueConstraintError → HTTP 409 (concurrent path)
+    # Subtest: catches UniqueConstraintError from create() and returns 409 DUPLICATE_ACTIVE_APPLICATION
+    ok 1 - catches UniqueConstraintError from create() and returns 409 DUPLICATE_ACTIVE_APPLICATION
+      ---
+      duration_ms: 1.0462
+      type: 'test'
+      ...
+    # Subtest: error message mentions 'duplicate' or 'active application'
+    ok 2 - error message mentions 'duplicate' or 'active application'
+      ---
+      duration_ms: 0.6718
+      type: 'test'
+      ...
+    # Subtest: non-UniqueConstraintError propagates unchanged (not masked as 409)
+    ok 3 - non-UniqueConstraintError propagates unchanged (not masked as 409)
+      ---
+      duration_ms: 0.9938
+      type: 'test'
+      ...
+    # Subtest: 409 error carries DUPLICATE_ACTIVE_APPLICATION code (not ACTIVE_APPLICATION_EXISTS)
+    ok 4 - 409 error carries DUPLICATE_ACTIVE_APPLICATION code (not ACTIVE_APPLICATION_EXISTS)
+      ---
+      duration_ms: 0.9473
+      type: 'test'
+      ...
+    1..4
+ok 52 - CRIT-002 — UniqueConstraintError → HTTP 409 (concurrent path)
+  ---
+  duration_ms: 4.473
+  type: 'suite'
+  ...
+# Subtest: CRIT-002 — concurrent creation simulation (TOCTOU fix)
+    # Subtest: exactly one creation succeeds when two concurrent requests race
+    ok 1 - exactly one creation succeeds when two concurrent requests race
+      ---
+      duration_ms: 0.9361
+      type: 'test'
+      ...
+    # Subtest: second concurrent request gets 409, not 500
+    ok 2 - second concurrent request gets 409, not 500
+      ---
+      duration_ms: 0.4284
+      type: 'test'
+      ...
+    # Subtest: winner receives a valid Draft application object
+    ok 3 - winner receives a valid Draft application object
+      ---
+      duration_ms: 0.3776
+      type: 'test'
+      ...
+    1..3
+ok 53 - CRIT-002 — concurrent creation simulation (TOCTOU fix)
+  ---
+  duration_ms: 1.9815
+  type: 'suite'
+  ...
+# Subtest: CRIT-002 — partial unique index contract
+    # Subtest: FakeUniqueConstraintError is instanceof UniqueConstraintError (validates test infrastructure)
+    ok 1 - FakeUniqueConstraintError is instanceof UniqueConstraintError (validates test infrastructure)
+      ---
+      duration_ms: 0.2407
+      type: 'test'
+      ...
+    # Subtest: DUPLICATE_ACTIVE_APPLICATION is distinct from ACTIVE_APPLICATION_EXISTS
+    ok 2 - DUPLICATE_ACTIVE_APPLICATION is distinct from ACTIVE_APPLICATION_EXISTS
+      ---
+      duration_ms: 0.1216
+      type: 'test'
+      ...
+    1..2
+ok 54 - CRIT-002 — partial unique index contract
+  ---
+  duration_ms: 0.4793
+  type: 'suite'
+  ...
+# Subtest: testPdfGeneration returns a valid PDF response
+ok 55 - testPdfGeneration returns a valid PDF response
+  ---
+  duration_ms: 45.6357
+  type: 'test'
+  ...
+# Subtest: exportDashboardPDF returns 401 when user is not authenticated
+ok 56 - exportDashboardPDF returns 401 when user is not authenticated
+  ---
+  duration_ms: 1.2907
+  type: 'test'
+  ...
+# Subtest: exportDashboardPDF returns 500 when tenant database is missing
+ok 57 - exportDashboardPDF returns 500 when tenant database is missing
+  ---
+  duration_ms: 0.3327
+  type: 'test'
+  ...
+# Subtest: exportDashboardPDF generates PDF when tenantDb is provided
+ok 58 - exportDashboardPDF generates PDF when tenantDb is provided
+  ---
+  duration_ms: 58.8355
+  type: 'test'
+  ...
+# [2026-06-18 13:11:20.167] [32mINFO[39m: [36m [Test PDF] Starting simple PDF test...[39m
+# [2026-06-18 13:11:20.167] [32mINFO[39m: [36m [Test PDF] Generating buffer...[39m
+# [2026-06-18 13:11:20.167] [34mDEBUG[39m: [36m [PDF Generator] Creating PDF printer...[39m
+# [2026-06-18 13:11:20.167] [34mDEBUG[39m: [36m [PDF Generator] Creating PDF document...[39m
+# [2026-06-18 13:11:20.206] [34mDEBUG[39m: [36m [PDF Generator] Ending PDF document...[39m
+# [2026-06-18 13:11:20.210] [34mDEBUG[39m: [36m [PDF Generator] PDF generation completed[39m
+#     chunks: 69
+# [2026-06-18 13:11:20.210] [32mINFO[39m: [36m [Test PDF] Buffer generated[39m
+#     bufferSize: 1814
+# [2026-06-18 13:11:20.210] [32mINFO[39m: [36m [Test PDF] PDF sent successfully[39m
+# [2026-06-18 13:11:20.212] [32mINFO[39m: [36m [PDF Export] Starting dashboard PDF generation...[39m
+# [2026-06-18 13:11:20.213] [31mERROR[39m: [36m [PDF Export] No user ID found[39m
+# [2026-06-18 13:11:20.213] [32mINFO[39m: [36m [PDF Export] Starting dashboard PDF generation...[39m
+# [2026-06-18 13:11:20.213] [32mINFO[39m: [36m [PDF Export] User authenticated[39m
+#     userId: 1
+# [2026-06-18 13:11:20.213] [31mERROR[39m: [36m [PDF Export] No tenant database found[39m
+# [2026-06-18 13:11:20.214] [32mINFO[39m: [36m [PDF Export] Starting dashboard PDF generation...[39m
+# [2026-06-18 13:11:20.214] [32mINFO[39m: [36m [PDF Export] User authenticated[39m
+#     userId: 1
+# [2026-06-18 13:11:20.214] [32mINFO[39m: [36m [PDF Export] Fetching dashboard data...[39m
+# [2026-06-18 13:11:20.214] [32mINFO[39m: [36m [PDF Export] Case stats[39m
+#     totalCases: 1
+#     activeCases: 1
+#     completedCases: 1
+# [2026-06-18 13:11:20.214] [32mINFO[39m: [36m [PDF Export] Case status breakdown[39m
+#     caseStatusBreakdown: [
+#       {
+#         "status": "Pending",
+#         "count": 1
+#       }
+#     ]
+# [2026-06-18 13:11:20.214] [32mINFO[39m: [36m [PDF Export] Escalations count[39m
+#     escalationsCount: 1
+# [2026-06-18 13:11:20.214] [32mINFO[39m: [36m [PDF Export] Caseworkers count[39m
+#     caseworkersCount: 1
+# [2026-06-18 13:11:20.215] [32mINFO[39m: [36m [PDF Export] Team workload calculated[39m
+# [2026-06-18 13:11:20.215] [32mINFO[39m: [36m [PDF Export] Building PDF document definition...[39m
+# [2026-06-18 13:11:20.237] [32mINFO[39m: [36m [PDF Export] Generating PDF buffer...[39m
+# [2026-06-18 13:11:20.237] [34mDEBUG[39m: [36m [PDF Generator] Creating PDF printer...[39m
+# [2026-06-18 13:11:20.237] [34mDEBUG[39m: [36m [PDF Generator] Creating PDF document...[39m
+# [2026-06-18 13:11:20.270] [34mDEBUG[39m: [36m [PDF Generator] Ending PDF document...[39m
+# [2026-06-18 13:11:20.272] [34mDEBUG[39m: [36m [PDF Generator] PDF generation completed[39m
+#     chunks: 77
+# [2026-06-18 13:11:20.272] [32mINFO[39m: [36m [PDF Export] PDF buffer generated successfully[39m
+#     bufferSize: 3089
+# [2026-06-18 13:11:20.272] [32mINFO[39m: [36m [PDF Export] Sending PDF response...[39m
+# [2026-06-18 13:11:20.272] [32mINFO[39m: [36m [PDF Export] PDF sent successfully[39m
+# Subtest: ensureAssignedCaseworker — unauthenticated (ISSUE-014)
+    # Subtest: no req.user → 401
+    ok 1 - no req.user → 401
+      ---
+      duration_ms: 1.1104
+      type: 'test'
+      ...
+    # Subtest: no req.user — DB is never queried
+    ok 2 - no req.user — DB is never queried
+      ---
+      duration_ms: 0.2823
+      type: 'test'
+      ...
+    1..2
+ok 59 - ensureAssignedCaseworker — unauthenticated (ISSUE-014)
+  ---
+  duration_ms: 2.4947
+  type: 'suite'
+  ...
+# Subtest: ensureAssignedCaseworker — ADMIN bypass (ISSUE-014)
+    # Subtest: ADMIN (role 3) → next() called
+    ok 1 - ADMIN (role 3) → next() called
+      ---
+      duration_ms: 0.4563
+      type: 'test'
+      ...
+    # Subtest: ADMIN — DB is never queried (no row load needed)
+    ok 2 - ADMIN — DB is never queried (no row load needed)
+      ---
+      duration_ms: 0.1712
+      type: 'test'
+      ...
+    # Subtest: SUPERADMIN (role 5) → next() called
+    ok 3 - SUPERADMIN (role 5) → next() called
+      ---
+      duration_ms: 0.1694
+      type: 'test'
+      ...
+    # Subtest: SUPERADMIN — DB is never queried
+    ok 4 - SUPERADMIN — DB is never queried
+      ---
+      duration_ms: 0.2989
+      type: 'test'
+      ...
+    # Subtest: req.cosRequest is NOT set for admin bypass (no row was loaded)
+    ok 5 - req.cosRequest is NOT set for admin bypass (no row was loaded)
+      ---
+      duration_ms: 0.2877
+      type: 'test'
+      ...
+    1..5
+ok 60 - ensureAssignedCaseworker — ADMIN bypass (ISSUE-014)
+  ---
+  duration_ms: 1.8584
+  type: 'suite'
+  ...
+# Subtest: ensureAssignedCaseworker — unassigned caseworker blocked (ISSUE-014)
+    # Subtest: caseworker not in assignedCaseworkerIds → 403
+    ok 1 - caseworker not in assignedCaseworkerIds → 403
+      ---
+      duration_ms: 0.4847
+      type: 'test'
+      ...
+    # Subtest: error message says 'not assigned'
+    ok 2 - error message says 'not assigned'
+      ---
+      duration_ms: 0.4686
+      type: 'test'
+      ...
+    # Subtest: null assignedCaseworkerIds → 403 (empty list, nobody is assigned)
+    ok 3 - null assignedCaseworkerIds → 403 (empty list, nobody is assigned)
+      ---
+      duration_ms: 0.4818
+      type: 'test'
+      ...
+    # Subtest: empty assignedCaseworkerIds array → 403
+    ok 4 - empty assignedCaseworkerIds array → 403
+      ---
+      duration_ms: 0.2462
+      type: 'test'
+      ...
+    # Subtest: CosRequest row not found → 404
+    ok 5 - CosRequest row not found → 404
+      ---
+      duration_ms: 0.4365
+      type: 'test'
+      ...
+    1..5
+ok 61 - ensureAssignedCaseworker — unassigned caseworker blocked (ISSUE-014)
+  ---
+  duration_ms: 4.2241
+  type: 'suite'
+  ...
+# Subtest: ensureAssignedCaseworker — assigned caseworker allowed (ISSUE-014)
+    # Subtest: caseworker in assignedCaseworkerIds (numeric) → next() called
+    ok 1 - caseworker in assignedCaseworkerIds (numeric) → next() called
+      ---
+      duration_ms: 0.4502
+      type: 'test'
+      ...
+    # Subtest: caseworker id as string in JSONB ('7') → next() called
+    ok 2 - caseworker id as string in JSONB ('7') → next() called
+      ---
+      duration_ms: 0.2464
+      type: 'test'
+      ...
+    # Subtest: caseworker id as object {id: 7} in JSONB → next() called
+    ok 3 - caseworker id as object {id: 7} in JSONB → next() called
+      ---
+      duration_ms: 0.387
+      type: 'test'
+      ...
+    # Subtest: single assigned caseworker (not an array) → next() called
+    ok 4 - single assigned caseworker (not an array) → next() called
+      ---
+      duration_ms: 0.2284
+      type: 'test'
+      ...
+    # Subtest: req.cosRequest is set to the loaded row on success
+    ok 5 - req.cosRequest is set to the loaded row on success
+      ---
+      duration_ms: 0.3594
+      type: 'test'
+      ...
+    # Subtest: no error body written on success
+    ok 6 - no error body written on success
+      ---
+      duration_ms: 0.1967
+      type: 'test'
+      ...
+    1..6
+ok 62 - ensureAssignedCaseworker — assigned caseworker allowed (ISSUE-014)
+  ---
+  duration_ms: 2.1977
+  type: 'suite'
+  ...
+# Subtest: ensureAssignedCaseworker — DB error propagation (ISSUE-014)
+    # Subtest: DB throws → error forwarded to next(err), no response sent
+    ok 1 - DB throws → error forwarded to next(err), no response sent
+      ---
+      duration_ms: 0.4479
+      type: 'test'
+      ...
+    1..1
+ok 63 - ensureAssignedCaseworker — DB error propagation (ISSUE-014)
+  ---
+  duration_ms: 0.5759
+  type: 'suite'
+  ...
+# Subtest: ensureAssignedCaseworker — route guard ordering (ISSUE-014)
+    # Subtest: approve — unassigned caseworker never reaches handler
+    ok 1 - approve — unassigned caseworker never reaches handler
+      ---
+      duration_ms: 0.3949
+      type: 'test'
+      ...
+    # Subtest: reject — assigned caseworker reaches handler
+    ok 2 - reject — assigned caseworker reaches handler
+      ---
+      duration_ms: 0.303
+      type: 'test'
+      ...
+    # Subtest: request-info — unassigned caseworker gets 403 before handler
+    ok 3 - request-info — unassigned caseworker gets 403 before handler
+      ---
+      duration_ms: 0.4749
+      type: 'test'
+      ...
+    1..3
+ok 64 - ensureAssignedCaseworker — route guard ordering (ISSUE-014)
+  ---
+  duration_ms: 1.3633
+  type: 'suite'
+  ...
+# Subtest: resolveGoogleOAuthConfig uses env when tenant block is empty
+ok 65 - resolveGoogleOAuthConfig uses env when tenant block is empty
+  ---
+  duration_ms: 1.8674
+  type: 'test'
+  ...
+# Subtest: resolveGoogleOAuthConfig fills missing tenant fields from env
+ok 66 - resolveGoogleOAuthConfig fills missing tenant fields from env
+  ---
+  duration_ms: 0.3527
+  type: 'test'
+  ...
+# Subtest: submitApplication: Draft -> Pending succeeds
+ok 67 - submitApplication: Draft -> Pending succeeds
+  ---
+  duration_ms: 3.2476
+  type: 'test'
+  ...
+# Subtest: submitApplication: Under Review -> Pending is blocked (422)
+ok 68 - submitApplication: Under Review -> Pending is blocked (422)
+  ---
+  duration_ms: 0.8725
+  type: 'test'
+  ...
+# Subtest: submitApplication: Licence Granted -> Pending is blocked (422)
+ok 69 - submitApplication: Licence Granted -> Pending is blocked (422)
+  ---
+  duration_ms: 0.2848
+  type: 'test'
+  ...
+# Subtest: HIGH-002 — rejectLicence atomic commit
+    # Subtest: commits status update and audit in the same transaction
+    ok 1 - commits status update and audit in the same transaction
+      ---
+      duration_ms: 4.3119
+      type: 'test'
+      ...
+    # Subtest: sets application status to 'Licence Rejected'
+    ok 2 - sets application status to 'Licence Rejected'
+      ---
+      duration_ms: 0.8313
+      type: 'test'
+      ...
+    # Subtest: trims and stores rejectionReason
+    ok 3 - trims and stores rejectionReason
+      ---
+      duration_ms: 0.4199
+      type: 'test'
+      ...
+    1..3
+ok 70 - HIGH-002 — rejectLicence atomic commit
+  ---
+  duration_ms: 7.4266
+  type: 'suite'
+  ...
+# Subtest: HIGH-002 — rejectLicence rollback on audit failure
+    # Subtest: rolls back when audit write throws
+    ok 1 - rolls back when audit write throws
+      ---
+      duration_ms: 1.1521
+      type: 'test'
+      ...
+    # Subtest: re-throws the original audit error
+    ok 2 - re-throws the original audit error
+      ---
+      duration_ms: 0.88
+      type: 'test'
+      ...
+    1..2
+ok 71 - HIGH-002 — rejectLicence rollback on audit failure
+  ---
+  duration_ms: 2.6842
+  type: 'suite'
+  ...
+# Subtest: HIGH-002 — rejectLicence validation
+    # Subtest: throws 400 when rejectionReason is empty
+    ok 1 - throws 400 when rejectionReason is empty
+      ---
+      duration_ms: 0.6512
+      type: 'test'
+      ...
+    # Subtest: throws 404 when application not found
+    ok 2 - throws 404 when application not found
+      ---
+      duration_ms: 0.5833
+      type: 'test'
+      ...
+    # Subtest: throws 422 when FSM transition is invalid
+    ok 3 - throws 422 when FSM transition is invalid
+      ---
+      duration_ms: 0.4751
+      type: 'test'
+      ...
+    # Subtest: rolls back and rethrows on 422 FSM error (no partial write)
+    ok 4 - rolls back and rethrows on 422 FSM error (no partial write)
+      ---
+      duration_ms: 0.536
+      type: 'test'
+      ...
+    1..4
+ok 72 - HIGH-002 — rejectLicence validation
+  ---
+  duration_ms: 2.8691
+  type: 'suite'
+  ...
+# Subtest: HIGH-002 — concurrent grant vs reject race
+    # Subtest: exactly one wins when two concurrent calls race on Decision Pending
+    ok 1 - exactly one wins when two concurrent calls race on Decision Pending
+      ---
+      duration_ms: 0.6473
+      type: 'test'
+      ...
+    1..1
+ok 73 - HIGH-002 — concurrent grant vs reject race
+  ---
+  duration_ms: 2.288
+  type: 'suite'
+  ...
+# Subtest: HIGH-002 — double reject prevention
+    # Subtest: second reject on already-rejected application returns 422
+    ok 1 - second reject on already-rejected application returns 422
+      ---
+      duration_ms: 0.6408
+      type: 'test'
+      ...
+    # Subtest: double reject rolls back without touching the DB
+    ok 2 - double reject rolls back without touching the DB
+      ---
+      duration_ms: 0.3407
+      type: 'test'
+      ...
+    1..2
+ok 74 - HIGH-002 — double reject prevention
+  ---
+  duration_ms: 1.338
+  type: 'suite'
+  ...
+# Subtest: HIGH-003 — advanceWorkerStage atomic commit
+    # Subtest: commits status update and audit in the same transaction
+    ok 1 - commits status update and audit in the same transaction
+      ---
+      duration_ms: 2.0492
+      type: 'test'
+      ...
+    # Subtest: updates worker status to nextStatus
+    ok 2 - updates worker status to nextStatus
+      ---
+      duration_ms: 0.3288
+      type: 'test'
+      ...
+    # Subtest: returns 422 for invalid FSM transition
+    ok 3 - returns 422 for invalid FSM transition
+      ---
+      duration_ms: 0.7689
+      type: 'test'
+      ...
+    # Subtest: returns 404 when worker not found
+    ok 4 - returns 404 when worker not found
+      ---
+      duration_ms: 0.265
+      type: 'test'
+      ...
+    1..4
+ok 75 - HIGH-003 — advanceWorkerStage atomic commit
+  ---
+  duration_ms: 4.6165
+  type: 'suite'
+  ...
+# Subtest: HIGH-003 — advanceWorkerStage audit failure rollback
+    # Subtest: rolls back status update when audit write fails
+    ok 1 - rolls back status update when audit write fails
+      ---
+      duration_ms: 0.4357
+      type: 'test'
+      ...
+    # Subtest: re-throws the original audit error
+    ok 2 - re-throws the original audit error
+      ---
+      duration_ms: 0.6511
+      type: 'test'
+      ...
+    # Subtest: worker status is not persisted when audit fails (rollback)
+    ok 3 - worker status is not persisted when audit fails (rollback)
+      ---
+      duration_ms: 0.3763
+      type: 'test'
+      ...
+    1..3
+ok 76 - HIGH-003 — advanceWorkerStage audit failure rollback
+  ---
+  duration_ms: 2.0295
+  type: 'suite'
+  ...
+# Subtest: HIGH-003 — concurrent stage update simulation
+    # Subtest: exactly one concurrent advance succeeds, the other gets 422
+    ok 1 - exactly one concurrent advance succeeds, the other gets 422
+      ---
+      duration_ms: 0.45
+      type: 'test'
+      ...
+    1..1
+ok 77 - HIGH-003 — concurrent stage update simulation
+  ---
+  duration_ms: 0.6128
+  type: 'suite'
+  ...
+# Subtest: HIGH-003 — rejectWorkerVisa atomic commit
+    # Subtest: commits status and audit in the same transaction
+    ok 1 - commits status and audit in the same transaction
+      ---
+      duration_ms: 0.4809
+      type: 'test'
+      ...
+    # Subtest: sets status to Visa Rejected
+    ok 2 - sets status to Visa Rejected
+      ---
+      duration_ms: 1.5139
+      type: 'test'
+      ...
+    # Subtest: stores trimmed rejectionReason on the worker row
+    ok 3 - stores trimmed rejectionReason on the worker row
+      ---
+      duration_ms: 0.2299
+      type: 'test'
+      ...
+    # Subtest: throws 400 when rejectionReason is missing
+    ok 4 - throws 400 when rejectionReason is missing
+      ---
+      duration_ms: 0.3116
+      type: 'test'
+      ...
+    # Subtest: rolls back when audit write fails
+    ok 5 - rolls back when audit write fails
+      ---
+      duration_ms: 0.3331
+      type: 'test'
+      ...
+    # Subtest: rejectWorkerVisa from any stage succeeds
+    ok 6 - rejectWorkerVisa from any stage succeeds
+      ---
+      duration_ms: 0.462
+      type: 'test'
+      ...
+    1..6
+ok 78 - HIGH-003 — rejectWorkerVisa atomic commit
+  ---
+  duration_ms: 3.6096
+  type: 'suite'
+  ...
+# Subtest: createWorkerHandler: Admin bypasses ownership and succeeds
+ok 79 - createWorkerHandler: Admin bypasses ownership and succeeds
+  ---
+  duration_ms: 2.5506
+  type: 'test'
+  ...
+# Subtest: createWorkerHandler: Assigned caseworker (on LicenceApplication) succeeds
+ok 80 - createWorkerHandler: Assigned caseworker (on LicenceApplication) succeeds
+  ---
+  duration_ms: 0.6049
+  type: 'test'
+  ...
+# Subtest: createWorkerHandler: Assigned caseworker (on CosRequest) succeeds
+ok 81 - createWorkerHandler: Assigned caseworker (on CosRequest) succeeds
+  ---
+  duration_ms: 0.3899
+  type: 'test'
+  ...
+# Subtest: createWorkerHandler: Unrelated caseworker is blocked (403)
+ok 82 - createWorkerHandler: Unrelated caseworker is blocked (403)
+  ---
+  duration_ms: 0.5992
+  type: 'test'
+  ...
+# Subtest: HIGH-005 — createInfoRequest atomic commit
+    # Subtest: commits info request creation, app update, and audit together
+    ok 1 - commits info request creation, app update, and audit together
+      ---
+      duration_ms: 2.9583
+      type: 'test'
+      ...
+    # Subtest: transitions app status to Information Requested
+    ok 2 - transitions app status to Information Requested
+      ---
+      duration_ms: 0.4692
+      type: 'test'
+      ...
+    # Subtest: skips FSM check when already in Information Requested (stacking)
+    ok 3 - skips FSM check when already in Information Requested (stacking)
+      ---
+      duration_ms: 0.6037
+      type: 'test'
+      ...
+    # Subtest: returns 404 when application not found
+    ok 4 - returns 404 when application not found
+      ---
+      duration_ms: 0.5779
+      type: 'test'
+      ...
+    # Subtest: returns 409 when FSM rejects the transition
+    ok 5 - returns 409 when FSM rejects the transition
+      ---
+      duration_ms: 0.2833
+      type: 'test'
+      ...
+    1..5
+ok 83 - HIGH-005 — createInfoRequest atomic commit
+  ---
+  duration_ms: 6.6433
+  type: 'suite'
+  ...
+# Subtest: HIGH-005 — createInfoRequest rollback scenarios
+    # Subtest: rolls back when infoRequest creation fails
+    ok 1 - rolls back when infoRequest creation fails
+      ---
+      duration_ms: 0.3904
+      type: 'test'
+      ...
+    # Subtest: rolls back when application update fails (no orphan infoRequest)
+    ok 2 - rolls back when application update fails (no orphan infoRequest)
+      ---
+      duration_ms: 0.3602
+      type: 'test'
+      ...
+    # Subtest: rolls back when audit write fails
+    ok 3 - rolls back when audit write fails
+      ---
+      duration_ms: 0.4114
+      type: 'test'
+      ...
+    1..3
+ok 84 - HIGH-005 — createInfoRequest rollback scenarios
+  ---
+  duration_ms: 1.4828
+  type: 'suite'
+  ...
+# Subtest: MED-004 — closeInfoRequest atomic commit (no restart)
+    # Subtest: commits close and audit in one transaction when requests remain open
+    ok 1 - commits close and audit in one transaction when requests remain open
+      ---
+      duration_ms: 1.0814
+      type: 'test'
+      ...
+    # Subtest: does NOT update application status when other requests remain
+    ok 2 - does NOT update application status when other requests remain
+      ---
+      duration_ms: 1.2592
+      type: 'test'
+      ...
+    # Subtest: returns 409 when request is already closed (pre-flight)
+    ok 3 - returns 409 when request is already closed (pre-flight)
+      ---
+      duration_ms: 0.4355
+      type: 'test'
+      ...
+    1..3
+ok 85 - MED-004 — closeInfoRequest atomic commit (no restart)
+  ---
+  duration_ms: 3.1605
+  type: 'suite'
+  ...
+# Subtest: MED-004 — closeInfoRequest atomic restart
+    # Subtest: commits close + restart + both audits atomically when last request closes
+    ok 1 - commits close + restart + both audits atomically when last request closes
+      ---
+      duration_ms: 0.5157
+      type: 'test'
+      ...
+    # Subtest: transitions app to Under Review when last request is closed
+    ok 2 - transitions app to Under Review when last request is closed
+      ---
+      duration_ms: 0.2879
+      type: 'test'
+      ...
+    # Subtest: does NOT restart when application is not in Information Requested
+    ok 3 - does NOT restart when application is not in Information Requested
+      ---
+      duration_ms: 0.2882
+      type: 'test'
+      ...
+    1..3
+ok 86 - MED-004 — closeInfoRequest atomic restart
+  ---
+  duration_ms: 1.2999
+  type: 'suite'
+  ...
+# Subtest: MED-004 — closeInfoRequest rollback scenarios
+    # Subtest: rolls back everything when audit write fails after close
+    ok 1 - rolls back everything when audit write fails after close
+      ---
+      duration_ms: 0.2652
+      type: 'test'
+      ...
+    # Subtest: info request close is rolled back when audit fails (no orphan close)
+    ok 2 - info request close is rolled back when audit fails (no orphan close)
+      ---
+      duration_ms: 0.2421
+      type: 'test'
+      ...
+    1..2
+ok 87 - MED-004 — closeInfoRequest rollback scenarios
+  ---
+  duration_ms: 0.7191
+  type: 'suite'
+  ...
+# Subtest: 16-step immigration flow is defined with sequential order
+ok 88 - 16-step immigration flow is defined with sequential order
+  ---
+  duration_ms: 1.6207
+  type: 'test'
+  ...
+# Subtest: legacy CCL stage ids normalise to the canonical client_care_letter
+ok 89 - legacy CCL stage ids normalise to the canonical client_care_letter
+  ---
+  duration_ms: 0.1894
+  type: 'test'
+  ...
+# Subtest: isValidCaseStage accepts known stages and rejects unknown
+ok 90 - isValidCaseStage accepts known stages and rejects unknown
+  ---
+  duration_ms: 0.2282
+  type: 'test'
+  ...
+# Subtest: getStepById returns the step with its order
+ok 91 - getStepById returns the step with its order
+  ---
+  duration_ms: 0.1558
+  type: 'test'
+  ...
+# Subtest: resolveCaseStage prefers caseStage, falls back to legacy status, then default
+ok 92 - resolveCaseStage prefers caseStage, falls back to legacy status, then default
+  ---
+  duration_ms: 0.1939
+  type: 'test'
+  ...
+# Subtest: isAtOrPastSubmissionStage gates everything from application_submitted onward
+ok 93 - isAtOrPastSubmissionStage gates everything from application_submitted onward
+  ---
+  duration_ms: 0.2558
+  type: 'test'
+  ...
+# Subtest: getNextStageId walks the flow and stops at the end
+ok 94 - getNextStageId walks the flow and stops at the end
+  ---
+  duration_ms: 0.2404
+  type: 'test'
+  ...
+# Subtest: isCaseFeeSatisfied recognises approved/paid/partial and amounts
+ok 95 - isCaseFeeSatisfied recognises approved/paid/partial and amounts
+  ---
+  duration_ms: 0.2485
+  type: 'test'
+  ...
+# Subtest: assertSubmissionGate passes for pre-submission stages without checks
+ok 96 - assertSubmissionGate passes for pre-submission stages without checks
+  ---
+  duration_ms: 0.6762
+  type: 'test'
+  ...
+# Subtest: assertSubmissionGate blocks submission until CCL signed AND fee paid
+ok 97 - assertSubmissionGate blocks submission until CCL signed AND fee paid
+  ---
+  duration_ms: 1.1254
+  type: 'test'
+  ...
+# Subtest: buildEmptyPipeline / assignCasesToPipeline bucket cases by resolved stage
+ok 98 - buildEmptyPipeline / assignCasesToPipeline bucket cases by resolved stage
+  ---
+  duration_ms: 1.308
+  type: 'test'
+  ...
+# Subtest: legacy status ⇄ stage maps are consistent for key stages
+ok 99 - legacy status ⇄ stage maps are consistent for key stages
+  ---
+  duration_ms: 0.2476
+  type: 'test'
+  ...
+# Subtest: getCandidateStageActions returns calm guidance while awaiting decision
+ok 100 - getCandidateStageActions returns calm guidance while awaiting decision
+  ---
+  duration_ms: 0.3214
+  type: 'test'
+  ...
+# Subtest: intake document findAll uses licenceApplicationId as the where key
+ok 101 - intake document findAll uses licenceApplicationId as the where key
+  ---
+  duration_ms: 1.4381
+  type: 'test'
+  ...
+# Subtest: readiness check: blocked when at least one required document is not verified
+ok 102 - readiness check: blocked when at least one required document is not verified
+  ---
+  duration_ms: 0.256
+  type: 'test'
+  ...
+# Subtest: readiness check: passes when all required documents are verified
+ok 103 - readiness check: passes when all required documents are verified
+  ---
+  duration_ms: 0.2093
+  type: 'test'
+  ...
+# Subtest: readiness check: passes when there are no required documents (edge case)
+ok 104 - readiness check: passes when there are no required documents (edge case)
+  ---
+  duration_ms: 0.2
+  type: 'test'
+  ...
+# Subtest: intake documents eager load uses the "intakeDocuments" alias
+ok 105 - intake documents eager load uses the "intakeDocuments" alias
+  ---
+  duration_ms: 1.6591
+  type: 'test'
+  ...
+# Subtest: every mapped intake key is a real mandatory intake document
+ok 106 - every mapped intake key is a real mandatory intake document
+  ---
+  duration_ms: 1.4566
+  type: 'test'
+  ...
+# Subtest: documents with no Stage 4 equivalent are intentionally unmapped (manual upload)
+ok 107 - documents with no Stage 4 equivalent are intentionally unmapped (manual upload)
+  ---
+  duration_ms: 0.2239
+  type: 'test'
+  ...
+# Subtest: certificate_of_incorporation maps to the appendix proof_of_registration key
+ok 108 - certificate_of_incorporation maps to the appendix proof_of_registration key
+  ---
+  duration_ms: 0.7969
+  type: 'test'
+  ...
+# Subtest: imports a pending intake slot when a usable appendix upload exists
+ok 109 - imports a pending intake slot when a usable appendix upload exists
+  ---
+  duration_ms: 0.2781
+  type: 'test'
+  ...
+# Subtest: maps across differing keys (certificate_of_incorporation ← proof_of_registration)
+ok 110 - maps across differing keys (certificate_of_incorporation ← proof_of_registration)
+  ---
+  duration_ms: 0.2488
+  type: 'test'
+  ...
+# Subtest: skips when the appendix document has no uploaded file
+ok 111 - skips when the appendix document has no uploaded file
+  ---
+  duration_ms: 0.1765
+  type: 'test'
+  ...
+# Subtest: skips when the appendix document was rejected
+ok 112 - skips when the appendix document was rejected
+  ---
+  duration_ms: 0.2279
+  type: 'test'
+  ...
+# Subtest: never touches an intake slot the sponsor already populated
+ok 113 - never touches an intake slot the sponsor already populated
+  ---
+  duration_ms: 0.2473
+  type: 'test'
+  ...
+# Subtest: skips intake documents that have no Stage 4 mapping
+ok 114 - skips intake documents that have no Stage 4 mapping
+  ---
+  duration_ms: 0.4069
+  type: 'test'
+  ...
+# Subtest: import marks the slot uploaded + imported and links the appendix id
+ok 115 - import marks the slot uploaded + imported and links the appendix id
+  ---
+  duration_ms: 1.0207
+  type: 'test'
+  ...
+# Subtest: import is a no-op when models are missing (defensive)
+ok 116 - import is a no-op when models are missing (defensive)
+  ---
+  duration_ms: 0.1389
+  type: 'test'
+  ...
+# Subtest: intake form findOrCreate uses licenceApplicationId as the where key
+ok 117 - intake form findOrCreate uses licenceApplicationId as the where key
+  ---
+  duration_ms: 2.1254
+  type: 'test'
+  ...
+# Subtest: intake form findOrCreate returns existing record without creating on second call
+ok 118 - intake form findOrCreate returns existing record without creating on second call
+  ---
+  duration_ms: 0.3478
+  type: 'test'
+  ...
+# Subtest: intake form eager load uses the "intakeForm" alias
+ok 119 - intake form eager load uses the "intakeForm" alias
+  ---
+  duration_ms: 0.4122
+  type: 'test'
+  ...
+# Subtest: C-5 fix: resolves to null when LicenceIntakeForm is undefined
+ok 120 - C-5 fix: resolves to null when LicenceIntakeForm is undefined
+  ---
+  duration_ms: 2.1554
+  type: 'test'
+  ...
+# Subtest: C-5 fix: resolves to null when findOne rejects
+ok 121 - C-5 fix: resolves to null when findOne rejects
+  ---
+  duration_ms: 0.3338
+  type: 'test'
+  ...
+# Subtest: C-5 fix: returns form data when model exists and findOne resolves
+ok 122 - C-5 fix: returns form data when model exists and findOne resolves
+  ---
+  duration_ms: 0.6899
+  type: 'test'
+  ...
+# Subtest: C-5 regression: the broken pattern throws TypeError when model is undefined
+ok 123 - C-5 regression: the broken pattern throws TypeError when model is undefined
+  ---
+  duration_ms: 0.2911
+  type: 'test'
+  ...
+# Subtest: C-5 fix: cosPoolSize falls back to application.cosAllocation when form is null
+ok 124 - C-5 fix: cosPoolSize falls back to application.cosAllocation when form is null
+  ---
+  duration_ms: 0.3716
+  type: 'test'
+  ...
+# Subtest: C-5 fix: cosPoolSize falls back to 5 when both form and application allocation are absent
+ok 125 - C-5 fix: cosPoolSize falls back to 5 when both form and application allocation are absent
+  ---
+  duration_ms: 0.1527
+  type: 'test'
+  ...
+# Subtest: activateSponsorLicence — idempotency guard (ISSUE-006)
+    # Subtest: returns early when profile is already Active (New application)
+    ok 1 - returns early when profile is already Active (New application)
+      ---
+      duration_ms: 0.391
+      type: 'test'
+      ...
+    # Subtest: does NOT return early for a Renewal even when already Active
+    ok 2 - does NOT return early for a Renewal even when already Active
+      ---
+      duration_ms: 0.3148
+      type: 'test'
+      ...
+    # Subtest: does NOT return early when profile is Pending (first activation)
+    ok 3 - does NOT return early when profile is Pending (first activation)
+      ---
+      duration_ms: 0.4818
+      type: 'test'
+      ...
+    # Subtest: does NOT return early when profile is Active but has no licence number yet
+    ok 4 - does NOT return early when profile is Active but has no licence number yet
+      ---
+      duration_ms: 0.7378
+      type: 'test'
+      ...
+    # Subtest: does NOT return early when profile has a licence number but status is not Active
+    ok 5 - does NOT return early when profile has a licence number but status is not Active
+      ---
+      duration_ms: 0.229
+      type: 'test'
+      ...
+    # Subtest: preserves the existing licence number on early return (no regeneration)
+    ok 6 - preserves the existing licence number on early return (no regeneration)
+      ---
+      duration_ms: 0.1747
+      type: 'test'
+      ...
+    1..6
+ok 126 - activateSponsorLicence — idempotency guard (ISSUE-006)
+  ---
+  duration_ms: 3.3525
+  type: 'suite'
+  ...
+# Subtest: activateSponsorLicence — early-return does not persist changes
+    # Subtest: save() is NOT called on early return
+    ok 1 - save() is NOT called on early return
+      ---
+      duration_ms: 0.3535
+      type: 'test'
+      ...
+    # Subtest: save() IS called on first activation (profile not yet Active)
+    ok 2 - save() IS called on first activation (profile not yet Active)
+      ---
+      duration_ms: 0.1375
+      type: 'test'
+      ...
+    # Subtest: wasActive is true on early return
+    ok 3 - wasActive is true on early return
+      ---
+      duration_ms: 0.1373
+      type: 'test'
+      ...
+    # Subtest: a second concurrent call returns the same licenceNumber without overwriting it
+    ok 4 - a second concurrent call returns the same licenceNumber without overwriting it
+      ---
+      duration_ms: 0.1835
+      type: 'test'
+      ...
+    1..4
+ok 127 - activateSponsorLicence — early-return does not persist changes
+  ---
+  duration_ms: 1.0119
+  type: 'suite'
+  ...
+# Subtest: matrix: Draft → Pending is allowed
+ok 128 - matrix: Draft → Pending is allowed
+  ---
+  duration_ms: 1.319
+  type: 'test'
+  ...
+# Subtest: matrix: Pending → Under Review is allowed
+ok 129 - matrix: Pending → Under Review is allowed
+  ---
+  duration_ms: 0.1336
+  type: 'test'
+  ...
+# Subtest: matrix: Under Review → Government Processing is allowed
+ok 130 - matrix: Under Review → Government Processing is allowed
+  ---
+  duration_ms: 0.1224
+  type: 'test'
+  ...
+# Subtest: matrix: Under Review → Information Requested is allowed
+ok 131 - matrix: Under Review → Information Requested is allowed
+  ---
+  duration_ms: 0.1036
+  type: 'test'
+  ...
+# Subtest: matrix: Under Review → Rejected is allowed
+ok 132 - matrix: Under Review → Rejected is allowed
+  ---
+  duration_ms: 0.1725
+  type: 'test'
+  ...
+# Subtest: matrix: Under Review → Approved is BLOCKED (government processing bypass removed)
+ok 133 - matrix: Under Review → Approved is BLOCKED (government processing bypass removed)
+  ---
+  duration_ms: 0.2678
+  type: 'test'
+  ...
+# Subtest: matrix: Government Processing → Decision Pending is allowed
+ok 134 - matrix: Government Processing → Decision Pending is allowed
+  ---
+  duration_ms: 0.1901
+  type: 'test'
+  ...
+# Subtest: matrix: Government Processing → Information Requested is allowed
+ok 135 - matrix: Government Processing → Information Requested is allowed
+  ---
+  duration_ms: 0.1095
+  type: 'test'
+  ...
+# Subtest: matrix: Government Processing → Rejected is allowed
+ok 136 - matrix: Government Processing → Rejected is allowed
+  ---
+  duration_ms: 0.3171
+  type: 'test'
+  ...
+# Subtest: matrix: Decision Pending → Approved is allowed by matrix
+ok 137 - matrix: Decision Pending → Approved is allowed by matrix
+  ---
+  duration_ms: 0.3795
+  type: 'test'
+  ...
+# Subtest: matrix: Decision Pending → Rejected is allowed
+ok 138 - matrix: Decision Pending → Rejected is allowed
+  ---
+  duration_ms: 0.1079
+  type: 'test'
+  ...
+# Subtest: matrix: Approved → Expired is allowed
+ok 139 - matrix: Approved → Expired is allowed
+  ---
+  duration_ms: 0.0954
+  type: 'test'
+  ...
+# Subtest: matrix: Approved → Under Review is BLOCKED (terminal state)
+ok 140 - matrix: Approved → Under Review is BLOCKED (terminal state)
+  ---
+  duration_ms: 0.0971
+  type: 'test'
+  ...
+# Subtest: matrix: Rejected → Approved is BLOCKED (Rejected is terminal)
+ok 141 - matrix: Rejected → Approved is BLOCKED (Rejected is terminal)
+  ---
+  duration_ms: 0.0926
+  type: 'test'
+  ...
+# Subtest: matrix: Rejected → Under Review is BLOCKED (Rejected is terminal)
+ok 142 - matrix: Rejected → Under Review is BLOCKED (Rejected is terminal)
+  ---
+  duration_ms: 0.0772
+  type: 'test'
+  ...
+# Subtest: matrix: Expired → Under Review is BLOCKED (Expired is terminal)
+ok 143 - matrix: Expired → Under Review is BLOCKED (Expired is terminal)
+  ---
+  duration_ms: 0.0736
+  type: 'test'
+  ...
+# Subtest: matrix: Information Requested → Under Review is allowed
+ok 144 - matrix: Information Requested → Under Review is allowed
+  ---
+  duration_ms: 0.0972
+  type: 'test'
+  ...
+# Subtest: matrix: nonsense transition Draft → Approved is BLOCKED
+ok 145 - matrix: nonsense transition Draft → Approved is BLOCKED
+  ---
+  duration_ms: 0.0818
+  type: 'test'
+  ...
+# Subtest: null-bypass: unknown workflowType is BLOCKED (no longer valid:true)
+ok 146 - null-bypass: unknown workflowType is BLOCKED (no longer valid:true)
+  ---
+  duration_ms: 0.1008
+  type: 'test'
+  ...
+# Subtest: null-bypass: null currentState is BLOCKED (no longer valid:true)
+ok 147 - null-bypass: null currentState is BLOCKED (no longer valid:true)
+  ---
+  duration_ms: 0.0915
+  type: 'test'
+  ...
+# Subtest: null-bypass: undefined currentState is BLOCKED
+ok 148 - null-bypass: undefined currentState is BLOCKED
+  ---
+  duration_ms: 0.0808
+  type: 'test'
+  ...
+# Subtest: null-bypass: empty-string currentState is BLOCKED
+ok 149 - null-bypass: empty-string currentState is BLOCKED
+  ---
+  duration_ms: 0.078
+  type: 'test'
+  ...
+# Subtest: role-guard: CASEWORKER cannot approve from Decision Pending
+ok 150 - role-guard: CASEWORKER cannot approve from Decision Pending
+  ---
+  duration_ms: 0.1089
+  type: 'test'
+  ...
+# Subtest: role-guard: CASEWORKER (string "2" from JWT) cannot approve from Decision Pending
+ok 151 - role-guard: CASEWORKER (string "2" from JWT) cannot approve from Decision Pending
+  ---
+  duration_ms: 0.1028
+  type: 'test'
+  ...
+# Subtest: role-guard: ADMIN can approve from Decision Pending
+ok 152 - role-guard: ADMIN can approve from Decision Pending
+  ---
+  duration_ms: 0.0951
+  type: 'test'
+  ...
+# Subtest: role-guard: ADMIN (string "3" from JWT) can approve from Decision Pending
+ok 153 - role-guard: ADMIN (string "3" from JWT) can approve from Decision Pending
+  ---
+  duration_ms: 0.0921
+  type: 'test'
+  ...
+# Subtest: role-guard: SUPERADMIN can approve from Decision Pending
+ok 154 - role-guard: SUPERADMIN can approve from Decision Pending
+  ---
+  duration_ms: 0.0812
+  type: 'test'
+  ...
+# Subtest: role-guard: SUPERADMIN (string "5" from JWT) can approve from Decision Pending
+ok 155 - role-guard: SUPERADMIN (string "5" from JWT) can approve from Decision Pending
+  ---
+  duration_ms: 0.0816
+  type: 'test'
+  ...
+# Subtest: role-guard: CASEWORKER CAN reject from Decision Pending (rejection is not admin-only)
+ok 156 - role-guard: CASEWORKER CAN reject from Decision Pending (rejection is not admin-only)
+  ---
+  duration_ms: 0.0845
+  type: 'test'
+  ...
+# Subtest: role-guard: no roleId in options skips role check (backward-compat for callers without roleId)
+ok 157 - role-guard: no roleId in options skips role check (backward-compat for callers without roleId)
+  ---
+  duration_ms: 0.0755
+  type: 'test'
+  ...
+# Subtest: role-guard: CASEWORKER blocked from Pending → Approved (matrix also blocks Under Review→Approved)
+ok 158 - role-guard: CASEWORKER blocked from Pending → Approved (matrix also blocks Under Review→Approved)
+  ---
+  duration_ms: 0.079
+  type: 'test'
+  ...
+# Subtest: role-guard: ADMIN can approve from Pending (fast-track)
+ok 159 - role-guard: ADMIN can approve from Pending (fast-track)
+  ---
+  duration_ms: 0.0782
+  type: 'test'
+  ...
+# Subtest: Transition matrix — Licence Granted / Licence Rejected
+    # Subtest: allows Decision Pending → Licence Granted for admin (roleId=3)
+    ok 1 - allows Decision Pending → Licence Granted for admin (roleId=3)
+      ---
+      duration_ms: 0.8527
+      type: 'test'
+      ...
+    # Subtest: allows Decision Pending → Licence Granted for superadmin (roleId=5)
+    ok 2 - allows Decision Pending → Licence Granted for superadmin (roleId=5)
+      ---
+      duration_ms: 0.1455
+      type: 'test'
+      ...
+    # Subtest: blocks Decision Pending → Licence Granted for caseworker (roleId=2)
+    ok 3 - blocks Decision Pending → Licence Granted for caseworker (roleId=2)
+      ---
+      duration_ms: 0.3751
+      type: 'test'
+      ...
+    # Subtest: allows Decision Pending → Licence Rejected (no role constraint)
+    ok 4 - allows Decision Pending → Licence Rejected (no role constraint)
+      ---
+      duration_ms: 0.1413
+      type: 'test'
+      ...
+    # Subtest: blocks Under Review → Licence Granted (must go through Decision Pending)
+    ok 5 - blocks Under Review → Licence Granted (must go through Decision Pending)
+      ---
+      duration_ms: 0.1448
+      type: 'test'
+      ...
+    # Subtest: blocks Licence Granted → any status except Expired
+    ok 6 - blocks Licence Granted → any status except Expired
+      ---
+      duration_ms: 0.1328
+      type: 'test'
+      ...
+    # Subtest: Licence Rejected is a terminal state — no valid successors
+    ok 7 - Licence Rejected is a terminal state — no valid successors
+      ---
+      duration_ms: 0.1371
+      type: 'test'
+      ...
+    1..7
+ok 160 - Transition matrix — Licence Granted / Licence Rejected
+  ---
+  duration_ms: 3.1984
+  type: 'suite'
+  ...
+# Subtest: grantLicence
+    # Subtest: grants the licence for a valid admin transition
+    ok 1 - grants the licence for a valid admin transition
+      ---
+      duration_ms: 0.7065
+      type: 'test'
+      ...
+    # Subtest: throws 404 when application does not exist
+    ok 2 - throws 404 when application does not exist
+      ---
+      duration_ms: 0.715
+      type: 'test'
+      ...
+    # Subtest: throws 422 when a caseworker tries to grant
+    ok 3 - throws 422 when a caseworker tries to grant
+      ---
+      duration_ms: 1.0268
+      type: 'test'
+      ...
+    # Subtest: throws 422 when current status does not allow grant (e.g. Under Review)
+    ok 4 - throws 422 when current status does not allow grant (e.g. Under Review)
+      ---
+      duration_ms: 0.2213
+      type: 'test'
+      ...
+    # Subtest: creates a grant record with the correct licence number
+    ok 5 - creates a grant record with the correct licence number
+      ---
+      duration_ms: 0.203
+      type: 'test'
+      ...
+    1..5
+ok 161 - grantLicence
+  ---
+  duration_ms: 3.2734
+  type: 'suite'
+  ...
+# Subtest: rejectLicence
+    # Subtest: rejects the application and stores the reason
+    ok 1 - rejects the application and stores the reason
+      ---
+      duration_ms: 0.303
+      type: 'test'
+      ...
+    # Subtest: rejects from Under Review (also a valid predecessor for Licence Rejected)
+    ok 2 - rejects from Under Review (also a valid predecessor for Licence Rejected)
+      ---
+      duration_ms: 0.1869
+      type: 'test'
+      ...
+    # Subtest: throws 400 when rejectionReason is missing
+    ok 3 - throws 400 when rejectionReason is missing
+      ---
+      duration_ms: 0.1776
+      type: 'test'
+      ...
+    # Subtest: throws 400 when rejectionReason is whitespace only
+    ok 4 - throws 400 when rejectionReason is whitespace only
+      ---
+      duration_ms: 0.1746
+      type: 'test'
+      ...
+    # Subtest: throws 404 when application does not exist
+    ok 5 - throws 404 when application does not exist
+      ---
+      duration_ms: 0.177
+      type: 'test'
+      ...
+    # Subtest: throws 422 when already in a terminal state (Licence Rejected)
+    ok 6 - throws 422 when already in a terminal state (Licence Rejected)
+      ---
+      duration_ms: 0.2592
+      type: 'test'
+      ...
+    # Subtest: stores optional admin notes alongside the rejection reason
+    ok 7 - stores optional admin notes alongside the rejection reason
+      ---
+      duration_ms: 0.1548
+      type: 'test'
+      ...
+    1..7
+ok 162 - rejectLicence
+  ---
+  duration_ms: 1.6251
+  type: 'suite'
+  ...
+# Subtest: getGrantRecord
+    # Subtest: returns the grant record when one exists
+    ok 1 - returns the grant record when one exists
+      ---
+      duration_ms: 0.1676
+      type: 'test'
+      ...
+    # Subtest: returns null when no grant record exists
+    ok 2 - returns null when no grant record exists
+      ---
+      duration_ms: 0.1209
+      type: 'test'
+      ...
+    1..2
+ok 163 - getGrantRecord
+  ---
+  duration_ms: 0.3711
+  type: 'suite'
+  ...
+# Subtest: duplicate grant — ISSUE-001/003/008
+    # Subtest: throws 409 when LicenceGrantRecord.create raises UniqueConstraintError
+    ok 1 - throws 409 when LicenceGrantRecord.create raises UniqueConstraintError
+      ---
+      duration_ms: 0.6004
+      type: 'test'
+      ...
+    # Subtest: 409 error message explicitly names the duplicate constraint
+    ok 2 - 409 error message explicitly names the duplicate constraint
+      ---
+      duration_ms: 0.4048
+      type: 'test'
+      ...
+    # Subtest: transaction is rolled back on UniqueConstraintError
+    ok 3 - transaction is rolled back on UniqueConstraintError
+      ---
+      duration_ms: 0.2988
+      type: 'test'
+      ...
+    # Subtest: simulates two concurrent grants: first succeeds, second returns 409
+    ok 4 - simulates two concurrent grants: first succeeds, second returns 409
+      ---
+      duration_ms: 0.3684
+      type: 'test'
+      ...
+    # Subtest: non-constraint DB errors propagate unchanged (not masked as 409)
+    ok 5 - non-constraint DB errors propagate unchanged (not masked as 409)
+      ---
+      duration_ms: 0.38
+      type: 'test'
+      ...
+    1..5
+ok 164 - duplicate grant — ISSUE-001/003/008
+  ---
+  duration_ms: 2.2253
+  type: 'suite'
+  ...
+# Subtest: validatePhaseGate — Licence Granted
+    # Subtest: phases 4 and 5 are accessible when status is Licence Granted
+    ok 1 - phases 4 and 5 are accessible when status is Licence Granted
+      ---
+      duration_ms: 0.1846
+      type: 'test'
+      ...
+    # Subtest: phases 4 and 5 are NOT accessible when status is Licence Rejected
+    ok 2 - phases 4 and 5 are NOT accessible when status is Licence Rejected
+      ---
+      duration_ms: 0.09
+      type: 'test'
+      ...
+    # Subtest: phase 3 is accessible from Licence Rejected (for audit/review read)
+    ok 3 - phase 3 is accessible from Licence Rejected (for audit/review read)
+      ---
+      duration_ms: 0.0828
+      type: 'test'
+      ...
+    # Subtest: phases 1 and 2 are always accessible
+    ok 4 - phases 1 and 2 are always accessible
+      ---
+      duration_ms: 0.0812
+      type: 'test'
+      ...
+    1..4
+ok 165 - validatePhaseGate — Licence Granted
+  ---
+  duration_ms: 0.5606
+  type: 'suite'
+  ...
+# Subtest: STAGE_PHASE_MAP: all 18 stage keys have a phase entry
+ok 166 - STAGE_PHASE_MAP: all 18 stage keys have a phase entry
+  ---
+  duration_ms: 1.6589
+  type: 'test'
+  ...
+# Subtest: STAGE_PHASE_MAP: stages 1–10 map to phase 2 (Application)
+ok 167 - STAGE_PHASE_MAP: stages 1–10 map to phase 2 (Application)
+  ---
+  duration_ms: 0.3148
+  type: 'test'
+  ...
+# Subtest: STAGE_PHASE_MAP: stages 11–18 map to phase 3 (Review & Approval)
+ok 168 - STAGE_PHASE_MAP: stages 11–18 map to phase 3 (Review & Approval)
+  ---
+  duration_ms: 0.1415
+  type: 'test'
+  ...
+# Subtest: STAGE_PHASE_MAP: no stage maps to phase 1, 4, or 5 (those phases are outside the pipeline)
+ok 169 - STAGE_PHASE_MAP: no stage maps to phase 1, 4, or 5 (those phases are outside the pipeline)
+  ---
+  duration_ms: 0.2389
+  type: 'test'
+  ...
+# Subtest: stageRoleOrder: data-entry stages use the default sponsor-first order
+ok 170 - stageRoleOrder: data-entry stages use the default sponsor-first order
+  ---
+  duration_ms: 0.2
+  type: 'test'
+  ...
+# Subtest: stageRoleOrder: government_sms_registration uses caseworker-first order
+ok 171 - stageRoleOrder: government_sms_registration uses caseworker-first order
+  ---
+  duration_ms: 0.119
+  type: 'test'
+  ...
+# Subtest: stageRoleOrder: government_portal_credentials uses caseworker-first order
+ok 172 - stageRoleOrder: government_portal_credentials uses caseworker-first order
+  ---
+  duration_ms: 0.1899
+  type: 'test'
+  ...
+# Subtest: stageRoleOrder: unknown stage key falls back to default order
+ok 173 - stageRoleOrder: unknown stage key falls back to default order
+  ---
+  duration_ms: 0.1808
+  type: 'test'
+  ...
+# Subtest: checkStatusGate: government_sms_registration blocked when status is Pending
+ok 174 - checkStatusGate: government_sms_registration blocked when status is Pending
+  ---
+  duration_ms: 0.7963
+  type: 'test'
+  ...
+# Subtest: checkStatusGate: government_sms_registration blocked when status is Under Review
+ok 175 - checkStatusGate: government_sms_registration blocked when status is Under Review
+  ---
+  duration_ms: 0.6868
+  type: 'test'
+  ...
+# Subtest: checkStatusGate: government_sms_registration allowed when status is Government Processing
+ok 176 - checkStatusGate: government_sms_registration allowed when status is Government Processing
+  ---
+  duration_ms: 0.2545
+  type: 'test'
+  ...
+# Subtest: checkStatusGate: government_sms_registration allowed when status is Decision Pending
+ok 177 - checkStatusGate: government_sms_registration allowed when status is Decision Pending
+  ---
+  duration_ms: 0.1553
+  type: 'test'
+  ...
+# Subtest: checkStatusGate: decision_activation blocked when status is Government Processing
+ok 178 - checkStatusGate: decision_activation blocked when status is Government Processing
+  ---
+  duration_ms: 0.1961
+  type: 'test'
+  ...
+# Subtest: checkStatusGate: decision_activation allowed when status is Decision Pending
+ok 179 - checkStatusGate: decision_activation allowed when status is Decision Pending
+  ---
+  duration_ms: 0.1216
+  type: 'test'
+  ...
+# Subtest: checkStatusGate: sponsor_information_provision allowed when status is Under Review
+ok 180 - checkStatusGate: sponsor_information_provision allowed when status is Under Review
+  ---
+  duration_ms: 0.1014
+  type: 'test'
+  ...
+# Subtest: checkStatusGate: sponsor_information_provision blocked when status is Pending
+ok 181 - checkStatusGate: sponsor_information_provision blocked when status is Pending
+  ---
+  duration_ms: 0.1299
+  type: 'test'
+  ...
+# Subtest: checkStatusGate: data-entry stages have no status gate (always pass)
+ok 182 - checkStatusGate: data-entry stages have no status gate (always pass)
+  ---
+  duration_ms: 0.1428
+  type: 'test'
+  ...
+# Subtest: checkSequentialOrder: stage 1 (enquiry_onboarding) always passes — no predecessors
+ok 183 - checkSequentialOrder: stage 1 (enquiry_onboarding) always passes — no predecessors
+  ---
+  duration_ms: 0.3323
+  type: 'test'
+  ...
+# Subtest: checkSequentialOrder: stage 2 passes when stage 1 has no incomplete tasks
+ok 184 - checkSequentialOrder: stage 2 passes when stage 1 has no incomplete tasks
+  ---
+  duration_ms: 0.2882
+  type: 'test'
+  ...
+# Subtest: checkSequentialOrder: stage 2 is blocked when stage 1 has 2 incomplete tasks
+ok 185 - checkSequentialOrder: stage 2 is blocked when stage 1 has 2 incomplete tasks
+  ---
+  duration_ms: 0.2551
+  type: 'test'
+  ...
+# Subtest: checkSequentialOrder: stage 11 is blocked when earlier stages have 1 incomplete task
+ok 186 - checkSequentialOrder: stage 11 is blocked when earlier stages have 1 incomplete task
+  ---
+  duration_ms: 0.2087
+  type: 'test'
+  ...
+# Subtest: checkSequentialOrder: stage 18 (decision_activation) passes when no earlier tasks are incomplete
+ok 187 - checkSequentialOrder: stage 18 (decision_activation) passes when no earlier tasks are incomplete
+  ---
+  duration_ms: 0.2161
+  type: 'test'
+  ...
+# Subtest: checkSequentialOrder: error message includes the target stage title
+ok 188 - checkSequentialOrder: error message includes the target stage title
+  ---
+  duration_ms: 0.3366
+  type: 'test'
+  ...
+# Subtest: checkIntraStageOrder: sponsor task (first in order) always passes — no predecessors
+ok 189 - checkIntraStageOrder: sponsor task (first in order) always passes — no predecessors
+  ---
+  duration_ms: 0.2145
+  type: 'test'
+  ...
+# Subtest: checkIntraStageOrder: caseworker task passes when sponsor task is complete (count=1)
+ok 190 - checkIntraStageOrder: caseworker task passes when sponsor task is complete (count=1)
+  ---
+  duration_ms: 0.1702
+  type: 'test'
+  ...
+# Subtest: checkIntraStageOrder: caseworker task is blocked when sponsor task is not complete (count=0)
+ok 191 - checkIntraStageOrder: caseworker task is blocked when sponsor task is not complete (count=0)
+  ---
+  duration_ms: 0.2419
+  type: 'test'
+  ...
+# Subtest: checkIntraStageOrder: admin task is blocked when caseworker task is not complete
+ok 192 - checkIntraStageOrder: admin task is blocked when caseworker task is not complete
+  ---
+  duration_ms: 0.38
+  type: 'test'
+  ...
+# Subtest: checkIntraStageOrder: admin task passes when both sponsor and caseworker are done (count=2)
+ok 193 - checkIntraStageOrder: admin task passes when both sponsor and caseworker are done (count=2)
+  ---
+  duration_ms: 0.2437
+  type: 'test'
+  ...
+# Subtest: checkIntraStageOrder: government_sms_registration — caseworker is first, always passes
+ok 194 - checkIntraStageOrder: government_sms_registration — caseworker is first, always passes
+  ---
+  duration_ms: 0.1413
+  type: 'test'
+  ...
+# Subtest: checkIntraStageOrder: government_sms_registration — sponsor blocked if caseworker task not done (count=0)
+ok 195 - checkIntraStageOrder: government_sms_registration — sponsor blocked if caseworker task not done (count=0)
+  ---
+  duration_ms: 0.2738
+  type: 'test'
+  ...
+# Subtest: checkIntraStageOrder: government_sms_registration — sponsor passes when caseworker done (count=1)
+ok 196 - checkIntraStageOrder: government_sms_registration — sponsor passes when caseworker done (count=1)
+  ---
+  duration_ms: 0.194
+  type: 'test'
+  ...
+# Subtest: checkIntraStageOrder: role not in the order array passes without DB call
+ok 197 - checkIntraStageOrder: role not in the order array passes without DB call
+  ---
+  duration_ms: 0.2979
+  type: 'test'
+  ...
+# Subtest: getActiveStageKey: returns first stage key when no rows exist
+ok 198 - getActiveStageKey: returns first stage key when no rows exist
+  ---
+  duration_ms: 0.2549
+  type: 'test'
+  ...
+# Subtest: getActiveStageKey: returns stage with first incomplete task
+ok 199 - getActiveStageKey: returns stage with first incomplete task
+  ---
+  duration_ms: 0.1666
+  type: 'test'
+  ...
+# Subtest: getActiveStageKey: skips fully-completed stages
+ok 200 - getActiveStageKey: skips fully-completed stages
+  ---
+  duration_ms: 0.2149
+  type: 'test'
+  ...
+# Subtest: getActiveStageKey: returns null when all seeded stages are complete
+ok 201 - getActiveStageKey: returns null when all seeded stages are complete
+  ---
+  duration_ms: 0.1723
+  type: 'test'
+  ...
+# Subtest: getActiveStageKey: uses stageOrder not insertion order to determine sequence
+ok 202 - getActiveStageKey: uses stageOrder not insertion order to determine sequence
+  ---
+  duration_ms: 0.2251
+  type: 'test'
+  ...
+# Subtest: validatePhaseGate: null applicationStatus is blocked
+ok 203 - validatePhaseGate: null applicationStatus is blocked
+  ---
+  duration_ms: 0.1612
+  type: 'test'
+  ...
+# Subtest: validatePhaseGate: phase 1 is always accessible
+ok 204 - validatePhaseGate: phase 1 is always accessible
+  ---
+  duration_ms: 0.126
+  type: 'test'
+  ...
+# Subtest: validatePhaseGate: phase 2 is always accessible for any status
+ok 205 - validatePhaseGate: phase 2 is always accessible for any status
+  ---
+  duration_ms: 0.1274
+  type: 'test'
+  ...
+# Subtest: validatePhaseGate: phase 3 is accessible when Under Review
+ok 206 - validatePhaseGate: phase 3 is accessible when Under Review
+  ---
+  duration_ms: 0.1257
+  type: 'test'
+  ...
+# Subtest: validatePhaseGate: phase 3 is accessible when Government Processing
+ok 207 - validatePhaseGate: phase 3 is accessible when Government Processing
+  ---
+  duration_ms: 0.1197
+  type: 'test'
+  ...
+# Subtest: validatePhaseGate: phase 3 is accessible when Decision Pending
+ok 208 - validatePhaseGate: phase 3 is accessible when Decision Pending
+  ---
+  duration_ms: 0.1606
+  type: 'test'
+  ...
+# Subtest: validatePhaseGate: phase 3 is accessible when Approved
+ok 209 - validatePhaseGate: phase 3 is accessible when Approved
+  ---
+  duration_ms: 0.5671
+  type: 'test'
+  ...
+# Subtest: validatePhaseGate: phase 3 is blocked when Draft
+ok 210 - validatePhaseGate: phase 3 is blocked when Draft
+  ---
+  duration_ms: 0.1441
+  type: 'test'
+  ...
+# Subtest: validatePhaseGate: phase 3 is blocked when Pending
+ok 211 - validatePhaseGate: phase 3 is blocked when Pending
+  ---
+  duration_ms: 0.1155
+  type: 'test'
+  ...
+# Subtest: validatePhaseGate: phase 3 is blocked when Information Requested
+ok 212 - validatePhaseGate: phase 3 is blocked when Information Requested
+  ---
+  duration_ms: 0.0951
+  type: 'test'
+  ...
+# Subtest: validatePhaseGate: phase 4 is blocked unless application is Approved
+ok 213 - validatePhaseGate: phase 4 is blocked unless application is Approved
+  ---
+  duration_ms: 0.1326
+  type: 'test'
+  ...
+# Subtest: validatePhaseGate: phase 4 is accessible when application is Approved
+ok 214 - validatePhaseGate: phase 4 is accessible when application is Approved
+  ---
+  duration_ms: 0.1624
+  type: 'test'
+  ...
+# Subtest: validatePhaseGate: phase 5 is blocked unless application is Approved
+ok 215 - validatePhaseGate: phase 5 is blocked unless application is Approved
+  ---
+  duration_ms: 0.1551
+  type: 'test'
+  ...
+# Subtest: validatePhaseGate: phase 5 is accessible when application is Approved
+ok 216 - validatePhaseGate: phase 5 is accessible when application is Approved
+  ---
+  duration_ms: 0.1042
+  type: 'test'
+  ...
+# Subtest: validatePhaseGate: unknown phase number returns blocked
+ok 217 - validatePhaseGate: unknown phase number returns blocked
+  ---
+  duration_ms: 0.136
+  type: 'test'
+  ...
+# Subtest: validatePhaseGate: string phase number is coerced correctly
+ok 218 - validatePhaseGate: string phase number is coerced correctly
+  ---
+  duration_ms: 0.1514
+  type: 'test'
+  ...
+# Subtest: STAGE_STATUS_GATE: all 8 government-pipeline stage keys are gated
+ok 219 - STAGE_STATUS_GATE: all 8 government-pipeline stage keys are gated
+  ---
+  duration_ms: 0.2682
+  type: 'test'
+  ...
+# Subtest: STAGE_STATUS_GATE: data-entry stages (1–10) are NOT in the gate
+ok 220 - STAGE_STATUS_GATE: data-entry stages (1–10) are NOT in the gate
+  ---
+  duration_ms: 0.1332
+  type: 'test'
+  ...
+# Subtest: TASK_CHAIN: covers all 18 stage definitions
+ok 221 - TASK_CHAIN: covers all 18 stage definitions
+  ---
+  duration_ms: 1.6253
+  type: 'test'
+  ...
+# Subtest: TASK_CHAIN: is frozen (immutable constant)
+ok 222 - TASK_CHAIN: is frozen (immutable constant)
+  ---
+  duration_ms: 0.1626
+  type: 'test'
+  ...
+# Subtest: TASK_CHAIN: every node has stageDef and role properties
+ok 223 - TASK_CHAIN: every node has stageDef and role properties
+  ---
+  duration_ms: 0.2161
+  type: 'test'
+  ...
+# Subtest: TASK_CHAIN: total node count equals sum of chain sequences across all stages
+ok 224 - TASK_CHAIN: total node count equals sum of chain sequences across all stages
+  ---
+  duration_ms: 0.2079
+  type: 'test'
+  ...
+# Subtest: TASK_CHAIN: stages appear in ascending stageOrder
+ok 225 - TASK_CHAIN: stages appear in ascending stageOrder
+  ---
+  duration_ms: 0.2176
+  type: 'test'
+  ...
+# Subtest: TASK_CHAIN: first node is sponsor task of enquiry_onboarding
+ok 226 - TASK_CHAIN: first node is sponsor task of enquiry_onboarding
+  ---
+  duration_ms: 0.1321
+  type: 'test'
+  ...
+# Subtest: TASK_CHAIN: last node is decision_activation
+ok 227 - TASK_CHAIN: last node is decision_activation
+  ---
+  duration_ms: 0.1145
+  type: 'test'
+  ...
+# Subtest: getChainSequence: returns only roles with non-null tasks
+ok 228 - getChainSequence: returns only roles with non-null tasks
+  ---
+  duration_ms: 0.3252
+  type: 'test'
+  ...
+# Subtest: getChainSequence: organisation_details has no candidate
+ok 229 - getChainSequence: organisation_details has no candidate
+  ---
+  duration_ms: 0.4241
+  type: 'test'
+  ...
+# Subtest: getChainSequence: enquiry_onboarding includes all 4 roles (all tasks non-null)
+ok 230 - getChainSequence: enquiry_onboarding includes all 4 roles (all tasks non-null)
+  ---
+  duration_ms: 0.4428
+  type: 'test'
+  ...
+# Subtest: getChainSequence: key_personnel excludes candidate (null task)
+ok 231 - getChainSequence: key_personnel excludes candidate (null task)
+  ---
+  duration_ms: 0.1422
+  type: 'test'
+  ...
+# Subtest: getChainSequence: government_sms_registration starts with caseworker
+ok 232 - getChainSequence: government_sms_registration starts with caseworker
+  ---
+  duration_ms: 0.1283
+  type: 'test'
+  ...
+# Subtest: getChainSequence: government_portal_credentials starts with caseworker
+ok 233 - getChainSequence: government_portal_credentials starts with caseworker
+  ---
+  duration_ms: 0.0961
+  type: 'test'
+  ...
+# Subtest: nextChainNode: after enquiry_onboarding/sponsor returns enquiry_onboarding/caseworker
+ok 234 - nextChainNode: after enquiry_onboarding/sponsor returns enquiry_onboarding/caseworker
+  ---
+  duration_ms: 0.1181
+  type: 'test'
+  ...
+# Subtest: nextChainNode: after enquiry_onboarding/caseworker returns enquiry_onboarding/admin
+ok 235 - nextChainNode: after enquiry_onboarding/caseworker returns enquiry_onboarding/admin
+  ---
+  duration_ms: 0.1542
+  type: 'test'
+  ...
+# Subtest: nextChainNode: last role in stage → first role of next stage
+ok 236 - nextChainNode: last role in stage → first role of next stage
+  ---
+  duration_ms: 0.1359
+  type: 'test'
+  ...
+# Subtest: nextChainNode: last node in the entire chain returns null
+ok 237 - nextChainNode: last node in the entire chain returns null
+  ---
+  duration_ms: 0.0952
+  type: 'test'
+  ...
+# Subtest: nextChainNode: unknown stageKey returns null
+ok 238 - nextChainNode: unknown stageKey returns null
+  ---
+  duration_ms: 0.078
+  type: 'test'
+  ...
+# Subtest: nextChainNode: unknown role for a known stage returns null
+ok 239 - nextChainNode: unknown role for a known stage returns null
+  ---
+  duration_ms: 0.1089
+  type: 'test'
+  ...
+# Subtest: nextChainNode: stage 10 last role → stage 11 first role (phase 2 → phase 3 boundary)
+ok 240 - nextChainNode: stage 10 last role → stage 11 first role (phase 2 → phase 3 boundary)
+  ---
+  duration_ms: 0.128
+  type: 'test'
+  ...
+# Subtest: chain ordering: for data-entry stages, sponsor always precedes caseworker
+ok 241 - chain ordering: for data-entry stages, sponsor always precedes caseworker
+  ---
+  duration_ms: 0.2318
+  type: 'test'
+  ...
+# Subtest: chain ordering: for data-entry stages, caseworker always precedes admin
+ok 242 - chain ordering: for data-entry stages, caseworker always precedes admin
+  ---
+  duration_ms: 0.1478
+  type: 'test'
+  ...
+# Subtest: chain ordering: government_sms_registration has caseworker before sponsor before admin
+ok 243 - chain ordering: government_sms_registration has caseworker before sponsor before admin
+  ---
+  duration_ms: 0.115
+  type: 'test'
+  ...
+# Subtest: chain ordering: government_portal_credentials has caseworker before sponsor before admin
+ok 244 - chain ordering: government_portal_credentials has caseworker before sponsor before admin
+  ---
+  duration_ms: 0.1351
+  type: 'test'
+  ...
+# Subtest: chain ordering: no stage has a duplicate role in its sequence
+ok 245 - chain ordering: no stage has a duplicate role in its sequence
+  ---
+  duration_ms: 0.2051
+  type: 'test'
+  ...
+# Subtest: chain ordering: TASK_CHAIN has no duplicate (stageKey, role) pairs
+ok 246 - chain ordering: TASK_CHAIN has no duplicate (stageKey, role) pairs
+  ---
+  duration_ms: 0.386
+  type: 'test'
+  ...
+# Subtest: ensureStageTasks: seeds only the first chain node for a fresh application
+ok 247 - ensureStageTasks: seeds only the first chain node for a fresh application
+  ---
+  duration_ms: 3.2311
+  type: 'test'
+  ...
+# Subtest: ensureStageTasks: is idempotent — calling twice creates no additional rows
+ok 248 - ensureStageTasks: is idempotent — calling twice creates no additional rows
+  ---
+  duration_ms: 1.1508
+  type: 'test'
+  ...
+# Subtest: ensureStageTasks: when stage 1 sponsor is complete, seeds caseworker task
+ok 249 - ensureStageTasks: when stage 1 sponsor is complete, seeds caseworker task
+  ---
+  duration_ms: 0.6476
+  type: 'test'
+  ...
+# Subtest: ensureStageTasks: terminal status (Approved) seeds every chain node
+ok 250 - ensureStageTasks: terminal status (Approved) seeds every chain node
+  ---
+  duration_ms: 3.0643
+  type: 'test'
+  ...
+# Subtest: nextChainNode: all intermediate nodes have a successor
+ok 251 - nextChainNode: all intermediate nodes have a successor
+  ---
+  duration_ms: 0.2887
+  type: 'test'
+  ...
+# Subtest: nextChainNode: successor stageOrder never decreases
+ok 252 - nextChainNode: successor stageOrder never decreases
+  ---
+  duration_ms: 0.1932
+  type: 'test'
+  ...
+# Subtest: nextChainNode: within same stage, role index strictly increases
+ok 253 - nextChainNode: within same stage, role index strictly increases
+  ---
+  duration_ms: 0.2753
+  type: 'test'
+  ...
+# [2026-06-18 13:11:29.683] [31mERROR[39m: [36m licenceStageTask: loadFullApplication failed; using plain shape[39m
+#     err: {
+#       "type": "TypeError",
+#       "message": "tenantDb.LicenceApplication.findOne is not a function",
+#       "stack":
+#           TypeError: tenantDb.LicenceApplication.findOne is not a function
+#               at loadFullApplication (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/src/services/licenceApplicationV2.service.js:108:38)
+#               at buildAppShape (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/src/services/licenceStageTask.service.js:567:24)
+#               at ensureStageTasks (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/src/services/licenceStageTask.service.js:851:26)
+#               at TestContext.<anonymous> (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/tests/licenceTaskChain.test.js:356:9)
+#               at Test.runInAsyncScope (node:async_hooks:214:14)
+#               at Test.run (node:internal/test_runner/test:1047:25)
+#               at Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+#               at Test.postRun (node:internal/test_runner/test:1173:19)
+#               at Test.run (node:internal/test_runner/test:1101:12)
+#               at async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+#     }
+# [2026-06-18 13:11:29.686] [31mERROR[39m: [36m licenceStageTask: loadFullApplication failed; using plain shape[39m
+#     err: {
+#       "type": "TypeError",
+#       "message": "tenantDb.LicenceApplication.findOne is not a function",
+#       "stack":
+#           TypeError: tenantDb.LicenceApplication.findOne is not a function
+#               at loadFullApplication (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/src/services/licenceApplicationV2.service.js:108:38)
+#               at buildAppShape (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/src/services/licenceStageTask.service.js:567:24)
+#               at ensureStageTasks (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/src/services/licenceStageTask.service.js:851:26)
+#               at TestContext.<anonymous> (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/tests/licenceTaskChain.test.js:385:9)
+#               at Test.runInAsyncScope (node:async_hooks:214:14)
+#               at Test.run (node:internal/test_runner/test:1047:25)
+#               at Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+#               at Test.postRun (node:internal/test_runner/test:1173:19)
+#               at Test.run (node:internal/test_runner/test:1101:12)
+#               at async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+#     }
+# [2026-06-18 13:11:29.686] [31mERROR[39m: [36m licenceStageTask: loadFullApplication failed; using plain shape[39m
+#     err: {
+#       "type": "TypeError",
+#       "message": "tenantDb.LicenceApplication.findOne is not a function",
+#       "stack":
+#           TypeError: tenantDb.LicenceApplication.findOne is not a function
+#               at loadFullApplication (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/src/services/licenceApplicationV2.service.js:108:38)
+#               at buildAppShape (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/src/services/licenceStageTask.service.js:567:24)
+#               at ensureStageTasks (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/src/services/licenceStageTask.service.js:851:26)
+#               at TestContext.<anonymous> (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/tests/licenceTaskChain.test.js:388:9)
+#               at async Test.run (node:internal/test_runner/test:1054:7)
+#               at async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+#     }
+# [2026-06-18 13:11:29.687] [31mERROR[39m: [36m licenceStageTask: loadFullApplication failed; using plain shape[39m
+#     err: {
+#       "type": "TypeError",
+#       "message": "tenantDb.LicenceApplication.findOne is not a function",
+#       "stack":
+#           TypeError: tenantDb.LicenceApplication.findOne is not a function
+#               at loadFullApplication (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/src/services/licenceApplicationV2.service.js:108:38)
+#               at buildAppShape (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/src/services/licenceStageTask.service.js:567:24)
+#               at ensureStageTasks (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/src/services/licenceStageTask.service.js:851:26)
+#               at TestContext.<anonymous> (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/tests/licenceTaskChain.test.js:423:9)
+#               at Test.runInAsyncScope (node:async_hooks:214:14)
+#               at Test.run (node:internal/test_runner/test:1047:25)
+#               at Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+#               at Test.postRun (node:internal/test_runner/test:1173:19)
+#               at Test.run (node:internal/test_runner/test:1101:12)
+#               at async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+#     }
+# [2026-06-18 13:11:29.688] [31mERROR[39m: [36m licenceStageTask: loadFullApplication failed; using plain shape[39m
+#     err: {
+#       "type": "TypeError",
+#       "message": "tenantDb.LicenceApplication.findOne is not a function",
+#       "stack":
+#           TypeError: tenantDb.LicenceApplication.findOne is not a function
+#               at loadFullApplication (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/src/services/licenceApplicationV2.service.js:108:38)
+#               at buildAppShape (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/src/services/licenceStageTask.service.js:567:24)
+#               at ensureStageTasks (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/src/services/licenceStageTask.service.js:851:26)
+#               at TestContext.<anonymous> (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/tests/licenceTaskChain.test.js:449:9)
+#               at Test.runInAsyncScope (node:async_hooks:214:14)
+#               at Test.run (node:internal/test_runner/test:1047:25)
+#               at Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+#               at Test.postRun (node:internal/test_runner/test:1173:19)
+#               at Test.run (node:internal/test_runner/test:1101:12)
+#               at async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+#     }
+# Subtest: loadFullApplication: ownerUserId=null throws 401
+ok 254 - loadFullApplication: ownerUserId=null throws 401
+  ---
+  duration_ms: 2.4704
+  type: 'test'
+  ...
+# Subtest: loadFullApplication: ownerUserId=0 throws 401
+ok 255 - loadFullApplication: ownerUserId=0 throws 401
+  ---
+  duration_ms: 0.4849
+  type: 'test'
+  ...
+# Subtest: loadFullApplication: ownerUserId=-1 throws 401
+ok 256 - loadFullApplication: ownerUserId=-1 throws 401
+  ---
+  duration_ms: 0.5506
+  type: 'test'
+  ...
+# Subtest: loadFullApplication: ownerUserId=NaN throws 401
+ok 257 - loadFullApplication: ownerUserId=NaN throws 401
+  ---
+  duration_ms: 0.4777
+  type: 'test'
+  ...
+# Subtest: loadFullApplication: ownerUserId='3' (string from JWT) throws 401
+ok 258 - loadFullApplication: ownerUserId='3' (string from JWT) throws 401
+  ---
+  duration_ms: 0.6326
+  type: 'test'
+  ...
+# Subtest: loadFullApplication: ownerUserId=undefined skips filter (admin path)
+ok 259 - loadFullApplication: ownerUserId=undefined skips filter (admin path)
+  ---
+  duration_ms: 0.5392
+  type: 'test'
+  ...
+# Subtest: loadFullApplication: ownerUserId=1 adds userId to WHERE
+ok 260 - loadFullApplication: ownerUserId=1 adds userId to WHERE
+  ---
+  duration_ms: 0.4541
+  type: 'test'
+  ...
+# Subtest: loadFullApplication: explicit {} options skips filter (admin path)
+ok 261 - loadFullApplication: explicit {} options skips filter (admin path)
+  ---
+  duration_ms: 0.3935
+  type: 'test'
+  ...
+# Subtest: getApplication: null user → 401, no DB call
+ok 262 - getApplication: null user → 401, no DB call
+  ---
+  duration_ms: 1.0531
+  type: 'test'
+  ...
+# Subtest: submitApplication: null user → 401, no DB call
+ok 263 - submitApplication: null user → 401, no DB call
+  ---
+  duration_ms: 1.1921
+  type: 'test'
+  ...
+# Subtest: saveDraft: null user → 401, no DB call
+ok 264 - saveDraft: null user → 401, no DB call
+  ---
+  duration_ms: 0.4548
+  type: 'test'
+  ...
+# Subtest: uploadAppendixDocument: null user → 401, no DB call
+ok 265 - uploadAppendixDocument: null user → 401, no DB call
+  ---
+  duration_ms: 0.4493
+  type: 'test'
+  ...
+# Subtest: deleteDraft: null user → 401, no DB call
+ok 266 - deleteDraft: null user → 401, no DB call
+  ---
+  duration_ms: 0.3446
+  type: 'test'
+  ...
+# Subtest: getApplication: missing userId field → 401, no DB call
+ok 267 - getApplication: missing userId field → 401, no DB call
+  ---
+  duration_ms: 0.2003
+  type: 'test'
+  ...
+# Subtest: submitApplication: missing userId field → 401, no DB call
+ok 268 - submitApplication: missing userId field → 401, no DB call
+  ---
+  duration_ms: 0.2321
+  type: 'test'
+  ...
+# Subtest: saveDraft: missing userId field → 401, no DB call
+ok 269 - saveDraft: missing userId field → 401, no DB call
+  ---
+  duration_ms: 0.1654
+  type: 'test'
+  ...
+# Subtest: uploadAppendixDocument: missing userId field → 401, no DB call
+ok 270 - uploadAppendixDocument: missing userId field → 401, no DB call
+  ---
+  duration_ms: 0.1789
+  type: 'test'
+  ...
+# Subtest: deleteDraft: missing userId field → 401, no DB call
+ok 271 - deleteDraft: missing userId field → 401, no DB call
+  ---
+  duration_ms: 0.1675
+  type: 'test'
+  ...
+# Subtest: getApplication: userId = 0 → 401, no DB call
+ok 272 - getApplication: userId = 0 → 401, no DB call
+  ---
+  duration_ms: 0.1733
+  type: 'test'
+  ...
+# Subtest: submitApplication: userId = 0 → 401, no DB call
+ok 273 - submitApplication: userId = 0 → 401, no DB call
+  ---
+  duration_ms: 0.1192
+  type: 'test'
+  ...
+# Subtest: saveDraft: userId = 0 → 401, no DB call
+ok 274 - saveDraft: userId = 0 → 401, no DB call
+  ---
+  duration_ms: 0.2005
+  type: 'test'
+  ...
+# Subtest: uploadAppendixDocument: userId = 0 → 401, no DB call
+ok 275 - uploadAppendixDocument: userId = 0 → 401, no DB call
+  ---
+  duration_ms: 0.1386
+  type: 'test'
+  ...
+# Subtest: deleteDraft: userId = 0 → 401, no DB call
+ok 276 - deleteDraft: userId = 0 → 401, no DB call
+  ---
+  duration_ms: 0.1849
+  type: 'test'
+  ...
+# Subtest: getApplication: userId = -1 → 401, no DB call
+ok 277 - getApplication: userId = -1 → 401, no DB call
+  ---
+  duration_ms: 0.1459
+  type: 'test'
+  ...
+# Subtest: submitApplication: userId = -1 → 401, no DB call
+ok 278 - submitApplication: userId = -1 → 401, no DB call
+  ---
+  duration_ms: 0.0814
+  type: 'test'
+  ...
+# Subtest: saveDraft: userId = -1 → 401, no DB call
+ok 279 - saveDraft: userId = -1 → 401, no DB call
+  ---
+  duration_ms: 0.1394
+  type: 'test'
+  ...
+# Subtest: uploadAppendixDocument: userId = -1 → 401, no DB call
+ok 280 - uploadAppendixDocument: userId = -1 → 401, no DB call
+  ---
+  duration_ms: 0.0882
+  type: 'test'
+  ...
+# Subtest: deleteDraft: userId = -1 → 401, no DB call
+ok 281 - deleteDraft: userId = -1 → 401, no DB call
+  ---
+  duration_ms: 0.1039
+  type: 'test'
+  ...
+# Subtest: getApplication: userId = NaN → 401, no DB call
+ok 282 - getApplication: userId = NaN → 401, no DB call
+  ---
+  duration_ms: 0.0929
+  type: 'test'
+  ...
+# Subtest: submitApplication: userId = NaN → 401, no DB call
+ok 283 - submitApplication: userId = NaN → 401, no DB call
+  ---
+  duration_ms: 0.0832
+  type: 'test'
+  ...
+# Subtest: saveDraft: userId = NaN → 401, no DB call
+ok 284 - saveDraft: userId = NaN → 401, no DB call
+  ---
+  duration_ms: 0.0996
+  type: 'test'
+  ...
+# Subtest: uploadAppendixDocument: userId = NaN → 401, no DB call
+ok 285 - uploadAppendixDocument: userId = NaN → 401, no DB call
+  ---
+  duration_ms: 0.1449
+  type: 'test'
+  ...
+# Subtest: deleteDraft: userId = NaN → 401, no DB call
+ok 286 - deleteDraft: userId = NaN → 401, no DB call
+  ---
+  duration_ms: 0.0762
+  type: 'test'
+  ...
+# Subtest: getApplication: userId = 'abc' (string) → 401, no DB call
+ok 287 - getApplication: userId = 'abc' (string) → 401, no DB call
+  ---
+  duration_ms: 0.0889
+  type: 'test'
+  ...
+# Subtest: submitApplication: userId = 'abc' (string) → 401, no DB call
+ok 288 - submitApplication: userId = 'abc' (string) → 401, no DB call
+  ---
+  duration_ms: 0.2591
+  type: 'test'
+  ...
+# Subtest: saveDraft: userId = 'abc' (string) → 401, no DB call
+ok 289 - saveDraft: userId = 'abc' (string) → 401, no DB call
+  ---
+  duration_ms: 0.1086
+  type: 'test'
+  ...
+# Subtest: uploadAppendixDocument: userId = 'abc' (string) → 401, no DB call
+ok 290 - uploadAppendixDocument: userId = 'abc' (string) → 401, no DB call
+  ---
+  duration_ms: 0.1384
+  type: 'test'
+  ...
+# Subtest: deleteDraft: userId = 'abc' (string) → 401, no DB call
+ok 291 - deleteDraft: userId = 'abc' (string) → 401, no DB call
+  ---
+  duration_ms: 0.0949
+  type: 'test'
+  ...
+# Subtest: getApplication: userId = null → 401, no DB call
+ok 292 - getApplication: userId = null → 401, no DB call
+  ---
+  duration_ms: 0.0689
+  type: 'test'
+  ...
+# Subtest: submitApplication: userId = null → 401, no DB call
+ok 293 - submitApplication: userId = null → 401, no DB call
+  ---
+  duration_ms: 0.1145
+  type: 'test'
+  ...
+# Subtest: saveDraft: userId = null → 401, no DB call
+ok 294 - saveDraft: userId = null → 401, no DB call
+  ---
+  duration_ms: 0.0718
+  type: 'test'
+  ...
+# Subtest: uploadAppendixDocument: userId = null → 401, no DB call
+ok 295 - uploadAppendixDocument: userId = null → 401, no DB call
+  ---
+  duration_ms: 0.0702
+  type: 'test'
+  ...
+# Subtest: deleteDraft: userId = null → 401, no DB call
+ok 296 - deleteDraft: userId = null → 401, no DB call
+  ---
+  duration_ms: 0.1315
+  type: 'test'
+  ...
+# Subtest: getApplication: valid userId passes guard and reaches DB
+ok 297 - getApplication: valid userId passes guard and reaches DB
+  ---
+  duration_ms: 0.4095
+  type: 'test'
+  ...
+# Subtest: saveDraft: valid userId passes guard and reaches DB
+ok 298 - saveDraft: valid userId passes guard and reaches DB
+  ---
+  duration_ms: 0.1807
+  type: 'test'
+  ...
+# Subtest: emits all 9 required workflow events
+ok 299 - emits all 9 required workflow events
+  ---
+  duration_ms: 1.3874
+  type: 'test'
+  ...
+# Subtest: ignores unrecognised worker audit actions (only milestones surface)
+ok 300 - ignores unrecognised worker audit actions (only milestones surface)
+  ---
+  duration_ms: 0.8837
+  type: 'test'
+  ...
+# Subtest: orders events chronologically (oldest first)
+ok 301 - orders events chronologically (oldest first)
+  ---
+  duration_ms: 1.0484
+  type: 'test'
+  ...
+# Subtest: assigns each event to the correct actor swim-lane
+ok 302 - assigns each event to the correct actor swim-lane
+  ---
+  duration_ms: 0.2675
+  type: 'test'
+  ...
+# Subtest: carries actor name, status and comment onto each event
+ok 303 - carries actor name, status and comment onto each event
+  ---
+  duration_ms: 0.3558
+  type: 'test'
+  ...
+# Subtest: unknown licence actions fall back to a humanised label rather than being dropped
+ok 304 - unknown licence actions fall back to a humanised label rather than being dropped
+  ---
+  duration_ms: 0.2722
+  type: 'test'
+  ...
+# Subtest: empty input yields an empty timeline (no application yet)
+ok 305 - empty input yields an empty timeline (no application yet)
+  ---
+  duration_ms: 0.2071
+  type: 'test'
+  ...
+# Subtest: no org context: active sponsor is returned, not the inactive org-null duplicate
+ok 306 - no org context: active sponsor is returned, not the inactive org-null duplicate
+  ---
+  duration_ms: 1.2302
+  type: 'test'
+  ...
+# Subtest: org-scoped (subdomain) login returns the exact org record
+ok 307 - org-scoped (subdomain) login returns the exact org record
+  ---
+  duration_ms: 0.2261
+  type: 'test'
+  ...
+# Subtest: genuinely inactive sole account is still returned (correct error preserved)
+ok 308 - genuinely inactive sole account is still returned (correct error preserved)
+  ---
+  duration_ms: 0.1751
+  type: 'test'
+  ...
+# Subtest: superadmin takes precedence
+ok 309 - superadmin takes precedence
+  ---
+  duration_ms: 0.2155
+  type: 'test'
+  ...
+# Subtest: active platform-staff (org null) preferred over inactive platform-staff
+ok 310 - active platform-staff (org null) preferred over inactive platform-staff
+  ---
+  duration_ms: 0.1806
+  type: 'test'
+  ...
+# Subtest: createSponsoredWorker email validation: valid email succeeds
+ok 311 - createSponsoredWorker email validation: valid email succeeds
+  ---
+  duration_ms: 1.6247
+  type: 'test'
+  ...
+# Subtest: createSponsoredWorker email validation: invalid email format throws 400
+ok 312 - createSponsoredWorker email validation: invalid email format throws 400
+  ---
+  duration_ms: 0.7766
+  type: 'test'
+  ...
+# Subtest: createSponsoredWorker email validation: null/undefined/empty email is skipped and succeeds
+ok 313 - createSponsoredWorker email validation: null/undefined/empty email is skipped and succeeds
+  ---
+  duration_ms: 0.2723
+  type: 'test'
+  ...
+# Subtest: getProfile: uses findOrCreate to fetch/create profile and preference when missing
+ok 314 - getProfile: uses findOrCreate to fetch/create profile and preference when missing
+  ---
+  duration_ms: 2.2198
+  type: 'test'
+  ...
+# [2026-06-18 13:11:32.913] [32mINFO[39m: [36m getProfile[39m
+#     userId: 42
+# Subtest: assignCosRequest: successfully assigns when status is Pending
+ok 315 - assignCosRequest: successfully assigns when status is Pending
+  ---
+  duration_ms: 2.7619
+  type: 'test'
+  ...
+# Subtest: assignCosRequest: blocks and rolls back when status is not Pending (FSM validation inside lock)
+ok 316 - assignCosRequest: blocks and rolls back when status is not Pending (FSM validation inside lock)
+  ---
+  duration_ms: 0.7161
+  type: 'test'
+  ...
+# Subtest: ensureAssignedWorkerCaseworker: Admin bypasses guard and succeeds
+ok 317 - ensureAssignedWorkerCaseworker: Admin bypasses guard and succeeds
+  ---
+  duration_ms: 1.3559
+  type: 'test'
+  ...
+# Subtest: ensureAssignedWorkerCaseworker: Assigned caseworker is allowed and succeeds
+ok 318 - ensureAssignedWorkerCaseworker: Assigned caseworker is allowed and succeeds
+  ---
+  duration_ms: 0.3188
+  type: 'test'
+  ...
+# Subtest: ensureAssignedWorkerCaseworker: Unassigned caseworker is denied (403)
+ok 319 - ensureAssignedWorkerCaseworker: Unassigned caseworker is denied (403)
+  ---
+  duration_ms: 0.5129
+  type: 'test'
+  ...
+# Subtest: ensureAssignedWorkerCaseworker: Worker not found returns 404
+ok 320 - ensureAssignedWorkerCaseworker: Worker not found returns 404
+  ---
+  duration_ms: 0.2752
+  type: 'test'
+  ...
+# (node:14936) ExperimentalWarning: Module mocking is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: Microsoft Integration Controller
+    # Subtest: GET /auth-url returns a valid auth URL
+    ok 1 - GET /auth-url returns a valid auth URL
+      ---
+      duration_ms: 32.9009
+      type: 'test'
+      ...
+    # Subtest: GET /callback redirects to error when no code is provided
+    ok 2 - GET /callback redirects to error when no code is provided
+      ---
+      duration_ms: 6.7525
+      type: 'test'
+      ...
+    # Subtest: GET /callback saves the connection on success
+    ok 3 - GET /callback saves the connection on success
+      ---
+      duration_ms: 4.8182
+      type: 'test'
+      ...
+    # Subtest: POST /disconnect disconnects and returns success
+    ok 4 - POST /disconnect disconnects and returns success
+      ---
+      duration_ms: 5.489
+      type: 'test'
+      ...
+    # Subtest: POST /disconnect returns 404 when not connected
+    ok 5 - POST /disconnect returns 404 when not connected
+      ---
+      duration_ms: 5.3943
+      type: 'test'
+      ...
+    1..5
+ok 321 - Microsoft Integration Controller
+  ---
+  duration_ms: 56.827
+  type: 'suite'
+  ...
+# [2026-06-18 13:11:35.548] [33mWARN[39m: [36m Microsoft callback triggered without auth code[39m
+# [2026-06-18 13:11:35.554] [32mINFO[39m: [36m Successfully connected Microsoft Teams Calendar integration[39m
+#     userId: 1
+# Subtest: informationReceived fires when previousStatus is "Information Requested" and status is "Under Review"
+ok 322 - informationReceived fires when previousStatus is "Information Requested" and status is "Under Review"
+  ---
+  duration_ms: 1.036
+  type: 'test'
+  ...
+# Subtest: informationReceived does NOT fire when previousStatus is null (the pre-fix bug)
+ok 323 - informationReceived does NOT fire when previousStatus is null (the pre-fix bug)
+  ---
+  duration_ms: 0.2292
+  type: 'test'
+  ...
+# Subtest: informationReceived does NOT fire when previousStatus is "Pending"
+ok 324 - informationReceived does NOT fire when previousStatus is "Pending"
+  ---
+  duration_ms: 0.1653
+  type: 'test'
+  ...
+# Subtest: informationReceived does NOT fire when status is "Information Requested" (status not Under Review)
+ok 325 - informationReceived does NOT fire when status is "Information Requested" (status not Under Review)
+  ---
+  duration_ms: 0.1576
+  type: 'test'
+  ...
+# Subtest: onDeliver is always called regardless of previousStatus
+ok 326 - onDeliver is always called regardless of previousStatus
+  ---
+  duration_ms: 0.2798
+  type: 'test'
+  ...
+# Subtest: getAllNotifications: DB failure → logs + standardized 500, never throws
+ok 327 - getAllNotifications: DB failure → logs + standardized 500, never throws
+  ---
+  duration_ms: 1.9614
+  type: 'test'
+  ...
+# Subtest: getNotifications: DB failure → logs + standardized 500, never throws
+ok 328 - getNotifications: DB failure → logs + standardized 500, never throws
+  ---
+  duration_ms: 0.3632
+  type: 'test'
+  ...
+# Subtest: getUnreadNotificationCount: DB failure → logs + standardized 500, never throws
+ok 329 - getUnreadNotificationCount: DB failure → logs + standardized 500, never throws
+  ---
+  duration_ms: 0.2502
+  type: 'test'
+  ...
+# Subtest: markNotificationAsRead: DB failure → logs + standardized 500, never throws
+ok 330 - markNotificationAsRead: DB failure → logs + standardized 500, never throws
+  ---
+  duration_ms: 0.2478
+  type: 'test'
+  ...
+# Subtest: markAllNotificationsAsRead: DB failure → logs + standardized 500, never throws
+ok 331 - markAllNotificationsAsRead: DB failure → logs + standardized 500, never throws
+  ---
+  duration_ms: 0.251
+  type: 'test'
+  ...
+# Subtest: deleteNotificationById: DB failure → logs + standardized 500, never throws
+ok 332 - deleteNotificationById: DB failure → logs + standardized 500, never throws
+  ---
+  duration_ms: 0.2062
+  type: 'test'
+  ...
+# Subtest: getNotificationStats: DB failure → logs + standardized 500, never throws
+ok 333 - getNotificationStats: DB failure → logs + standardized 500, never throws
+  ---
+  duration_ms: 0.3056
+  type: 'test'
+  ...
+# Subtest: deleteExpired: DB failure → logs + standardized 500, never throws
+ok 334 - deleteExpired: DB failure → logs + standardized 500, never throws
+  ---
+  duration_ms: 0.8334
+  type: 'test'
+  ...
+# Subtest: catch block does not crash when logger.error itself throws
+ok 335 - catch block does not crash when logger.error itself throws
+  ---
+  duration_ms: 0.6355
+  type: 'test'
+  ...
+# Subtest: notifyUser delivers notification:new + notification:count to the user socket
+ok 336 - notifyUser delivers notification:new + notification:count to the user socket
+  ---
+  duration_ms: 60.1528
+  type: 'test'
+  ...
+# Subtest: a notification for a different user is NOT delivered to this socket
+ok 337 - a notification for a different user is NOT delivered to this socket
+  ---
+  duration_ms: 271.8174
+  type: 'test'
+  ...
+# Subtest: model maps recipient to canonical userId / roleId columns
+ok 338 - model maps recipient to canonical userId / roleId columns
+  ---
+  duration_ms: 0.9857
+  type: 'test'
+  ...
+# Subtest: model uses canonical column names for every field
+ok 339 - model uses canonical column names for every field
+  ---
+  duration_ms: 0.3595
+  type: 'test'
+  ...
+# Subtest: model timestamps are camelCase createdAt / updatedAt (match table)
+ok 340 - model timestamps are camelCase createdAt / updatedAt (match table)
+  ---
+  duration_ms: 0.1226
+  type: 'test'
+  ...
+# Subtest: drifted columns are GONE from the model
+ok 341 - drifted columns are GONE from the model
+  ---
+  duration_ms: 0.1668
+  type: 'test'
+  ...
+# Subtest: create → fetch → unread → mark read → mark all → archive
+ok 342 - create → fetch → unread → mark read → mark all → archive
+  ---
+  duration_ms: 1.4415
+  type: 'test'
+  ...
+# Subtest: unread count is scoped per user (userId isolation)
+ok 343 - unread count is scoped per user (userId isolation)
+  ---
+  duration_ms: 0.2446
+  type: 'test'
+  ...
+# Subtest: generateOAuthStateValue: 256-bit hex nonce, unique per call
+ok 344 - generateOAuthStateValue: 256-bit hex nonce, unique per call
+  ---
+  duration_ms: 1.4592
+  type: 'test'
+  ...
+# Subtest: the random state never equals/contains the session token (no JWT in state)
+ok 345 - the random state never equals/contains the session token (no JWT in state)
+  ---
+  duration_ms: 0.8258
+  type: 'test'
+  ...
+# Subtest: VALID state: consumes successfully and returns the bound session
+ok 346 - VALID state: consumes successfully and returns the bound session
+  ---
+  duration_ms: 0.2922
+  type: 'test'
+  ...
+# Subtest: INVALID state: unknown nonce is rejected
+ok 347 - INVALID state: unknown nonce is rejected
+  ---
+  duration_ms: 0.1666
+  type: 'test'
+  ...
+# Subtest: REPLAYED state: a second consume of the same nonce is rejected (single use)
+ok 348 - REPLAYED state: a second consume of the same nonce is rejected (single use)
+  ---
+  duration_ms: 0.2543
+  type: 'test'
+  ...
+# Subtest: EXPIRED state: nonce older than the TTL is rejected (and still consumed)
+ok 349 - EXPIRED state: nonce older than the TTL is rejected (and still consumed)
+  ---
+  duration_ms: 0.2139
+  type: 'test'
+  ...
+# Subtest: state is valid right up to the TTL boundary
+ok 350 - state is valid right up to the TTL boundary
+  ---
+  duration_ms: 0.2279
+  type: 'test'
+  ...
+# Subtest: PROVIDER isolation: a google nonce cannot be consumed as microsoft
+ok 351 - PROVIDER isolation: a google nonce cannot be consumed as microsoft
+  ---
+  duration_ms: 0.2624
+  type: 'test'
+  ...
+# Subtest: createOAuthState rejects unsupported providers and missing userId
+ok 352 - createOAuthState rejects unsupported providers and missing userId
+  ---
+  duration_ms: 0.8668
+  type: 'test'
+  ...
+# Subtest: generatePdfBufferFromDefinition returns a valid PDF buffer
+ok 353 - generatePdfBufferFromDefinition returns a valid PDF buffer
+  ---
+  duration_ms: 24.548
+  type: 'test'
+  ...
+# Subtest: buildBrandedPdfDocDefinition includes footer and generated date
+ok 354 - buildBrandedPdfDocDefinition includes footer and generated date
+  ---
+  duration_ms: 64.1285
+  type: 'test'
+  ...
+# [2026-06-18 13:11:38.846] [34mDEBUG[39m: [36m [PDF Generator] Creating PDF printer...[39m
+# [2026-06-18 13:11:38.847] [34mDEBUG[39m: [36m [PDF Generator] Creating PDF document...[39m
+# [2026-06-18 13:11:38.864] [34mDEBUG[39m: [36m [PDF Generator] Ending PDF document...[39m
+# [2026-06-18 13:11:38.869] [34mDEBUG[39m: [36m [PDF Generator] PDF generation completed[39m
+#     chunks: 65
+# Subtest: hasFullAccessRole: numeric ADMIN (3) → true
+ok 355 - hasFullAccessRole: numeric ADMIN (3) → true
+  ---
+  duration_ms: 1.6901
+  type: 'test'
+  ...
+# Subtest: hasFullAccessRole: numeric SUPERADMIN (5) → true
+ok 356 - hasFullAccessRole: numeric SUPERADMIN (5) → true
+  ---
+  duration_ms: 0.2613
+  type: 'test'
+  ...
+# Subtest: hasFullAccessRole: string "3" (ADMIN from JWT) → true
+ok 357 - hasFullAccessRole: string "3" (ADMIN from JWT) → true
+  ---
+  duration_ms: 0.1168
+  type: 'test'
+  ...
+# Subtest: hasFullAccessRole: string "5" (SUPERADMIN from JWT) → true
+ok 358 - hasFullAccessRole: string "5" (SUPERADMIN from JWT) → true
+  ---
+  duration_ms: 0.1064
+  type: 'test'
+  ...
+# Subtest: hasFullAccessRole: string "2" (CASEWORKER) → false
+ok 359 - hasFullAccessRole: string "2" (CASEWORKER) → false
+  ---
+  duration_ms: 0.1165
+  type: 'test'
+  ...
+# Subtest: hasFullAccessRole: null → false
+ok 360 - hasFullAccessRole: null → false
+  ---
+  duration_ms: 0.1106
+  type: 'test'
+  ...
+# Subtest: hasFullAccessRole: undefined → false
+ok 361 - hasFullAccessRole: undefined → false
+  ---
+  duration_ms: 0.0997
+  type: 'test'
+  ...
+# Subtest: hasFullAccessRole: non-numeric string "admin" → false
+ok 362 - hasFullAccessRole: non-numeric string "admin" → false
+  ---
+  duration_ms: 0.0946
+  type: 'test'
+  ...
+# Subtest: checkRole: string "3" (ADMIN from JWT) passes when ROLES.ADMIN is allowed
+ok 363 - checkRole: string "3" (ADMIN from JWT) passes when ROLES.ADMIN is allowed
+  ---
+  duration_ms: 0.542
+  type: 'test'
+  ...
+# Subtest: checkRole: string "2" (CASEWORKER from JWT) passes when ROLES.CASEWORKER is allowed
+ok 364 - checkRole: string "2" (CASEWORKER from JWT) passes when ROLES.CASEWORKER is allowed
+  ---
+  duration_ms: 0.48
+  type: 'test'
+  ...
+# Subtest: checkRole: string "4" (BUSINESS from JWT) passes when ROLES.BUSINESS is allowed
+ok 365 - checkRole: string "4" (BUSINESS from JWT) passes when ROLES.BUSINESS is allowed
+  ---
+  duration_ms: 0.225
+  type: 'test'
+  ...
+# Subtest: checkRole: string "5" (SUPERADMIN from JWT) passes when ROLES.SUPERADMIN is allowed
+ok 366 - checkRole: string "5" (SUPERADMIN from JWT) passes when ROLES.SUPERADMIN is allowed
+  ---
+  duration_ms: 0.1429
+  type: 'test'
+  ...
+# Subtest: checkRole: numeric role_id still works after fix (regression)
+ok 367 - checkRole: numeric role_id still works after fix (regression)
+  ---
+  duration_ms: 0.1684
+  type: 'test'
+  ...
+# Subtest: checkRole: string "1" (CANDIDATE) denied on STAFF-only route
+ok 368 - checkRole: string "1" (CANDIDATE) denied on STAFF-only route
+  ---
+  duration_ms: 0.2706
+  type: 'test'
+  ...
+# Subtest: checkRole: null role_id → 403 with invalid-role message
+ok 369 - checkRole: null role_id → 403 with invalid-role message
+  ---
+  duration_ms: 0.2754
+  type: 'test'
+  ...
+# Subtest: checkRole: undefined role_id → 403 with invalid-role message
+ok 370 - checkRole: undefined role_id → 403 with invalid-role message
+  ---
+  duration_ms: 0.1148
+  type: 'test'
+  ...
+# Subtest: checkRole: non-numeric str role_id → 403 with invalid-role message
+ok 371 - checkRole: non-numeric str role_id → 403 with invalid-role message
+  ---
+  duration_ms: 0.1173
+  type: 'test'
+  ...
+# Subtest: checkRole: empty string role_id → 403 with invalid-role message
+ok 372 - checkRole: empty string role_id → 403 with invalid-role message
+  ---
+  duration_ms: 0.0893
+  type: 'test'
+  ...
+# Subtest: checkRole: zero role_id → 403 with invalid-role message
+ok 373 - checkRole: zero role_id → 403 with invalid-role message
+  ---
+  duration_ms: 0.0878
+  type: 'test'
+  ...
+# Subtest: checkRole: negative number role_id → 403 with invalid-role message
+ok 374 - checkRole: negative number role_id → 403 with invalid-role message
+  ---
+  duration_ms: 0.1033
+  type: 'test'
+  ...
+# Subtest: checkRole: Infinity role_id → 403 with invalid-role message
+ok 375 - checkRole: Infinity role_id → 403 with invalid-role message
+  ---
+  duration_ms: 0.0738
+  type: 'test'
+  ...
+# Subtest: checkRole: missing req.user → 401 (unauthenticated)
+ok 376 - checkRole: missing req.user → 401 (unauthenticated)
+  ---
+  duration_ms: 0.1741
+  type: 'test'
+  ...
+# Subtest: ensureSelfOrRole: string "3" (ADMIN from JWT) passes privileged path
+ok 377 - ensureSelfOrRole: string "3" (ADMIN from JWT) passes privileged path
+  ---
+  duration_ms: 0.2727
+  type: 'test'
+  ...
+# Subtest: ensureSelfOrRole: string "2" (CASEWORKER from JWT) passes privileged path
+ok 378 - ensureSelfOrRole: string "2" (CASEWORKER from JWT) passes privileged path
+  ---
+  duration_ms: 0.1169
+  type: 'test'
+  ...
+# Subtest: ensureSelfOrRole: numeric roles still work after fix (regression)
+ok 379 - ensureSelfOrRole: numeric roles still work after fix (regression)
+  ---
+  duration_ms: 0.1736
+  type: 'test'
+  ...
+# Subtest: ensureSelfOrRole: NaN role_id falls through to self-access (must not hard-block)
+ok 380 - ensureSelfOrRole: NaN role_id falls through to self-access (must not hard-block)
+  ---
+  duration_ms: 0.134
+  type: 'test'
+  ...
+# Subtest: ensureSelfOrRole: NaN role_id + cross-user access → 403 (not a hard NaN block)
+ok 381 - ensureSelfOrRole: NaN role_id + cross-user access → 403 (not a hard NaN block)
+  ---
+  duration_ms: 1.3759
+  type: 'test'
+  ...
+# Subtest: ensureSelfOrRole: CANDIDATE may access their OWN resource (regression)
+ok 382 - ensureSelfOrRole: CANDIDATE may access their OWN resource (regression)
+  ---
+  duration_ms: 0.1612
+  type: 'test'
+  ...
+# Subtest: ensureSelfOrRole: CANDIDATE denied access to another user (IDOR regression)
+ok 383 - ensureSelfOrRole: CANDIDATE denied access to another user (IDOR regression)
+  ---
+  duration_ms: 0.2339
+  type: 'test'
+  ...
+# Subtest: ensureSelfOrRole: string CANDIDATE "1" + self-access → allowed (string role_id)
+ok 384 - ensureSelfOrRole: string CANDIDATE "1" + self-access → allowed (string role_id)
+  ---
+  duration_ms: 0.1343
+  type: 'test'
+  ...
+# Subtest: ensureSelfOrRole: missing req.user → 401
+ok 385 - ensureSelfOrRole: missing req.user → 401
+  ---
+  duration_ms: 0.1239
+  type: 'test'
+  ...
+# Subtest: ensureSelfOrRole: denied access is recorded in the audit log
+ok 386 - ensureSelfOrRole: denied access is recorded in the audit log
+  ---
+  duration_ms: 15.2848
+  type: 'test'
+  ...
+# [2026-06-18 13:11:39.099] [33mWARN[39m: [36m Denied unauthorized access attempt[39m
+#     userId: "8"
+#     actor: 7
+#     reason: "Unauthorized cross-account access attempt (IDOR)"
+#     method: "GET"
+#     path: "/api/test"
+#     targetId: "8"
+#     roleId: "notarole"
+# [2026-06-18 13:11:39.100] [33mWARN[39m: [36m Denied unauthorized access attempt[39m
+#     userId: "8"
+#     actor: 7
+#     reason: "Unauthorized cross-account access attempt (IDOR)"
+#     method: "GET"
+#     path: "/api/test"
+#     targetId: "8"
+#     roleId: 1
+# [2026-06-18 13:11:39.101] [33mWARN[39m: [36m Denied unauthorized access attempt[39m
+#     userId: "8"
+#     actor: 7
+#     reason: "Unauthorized cross-account access attempt (IDOR)"
+#     method: "GET"
+#     path: "/api/test"
+#     targetId: "8"
+#     roleId: 1
+# Subtest: sponsorSubmitLicenceSchema — mass assignment protection
+    # Subtest: strips status from submission body
+    ok 1 - strips status from submission body
+      ---
+      duration_ms: 2.0376
+      type: 'test'
+      ...
+    # Subtest: strips assignedcaseworkerId from submission body
+    ok 2 - strips assignedcaseworkerId from submission body
+      ---
+      duration_ms: 0.3018
+      type: 'test'
+      ...
+    # Subtest: strips userId from submission body
+    ok 3 - strips userId from submission body
+      ---
+      duration_ms: 0.203
+      type: 'test'
+      ...
+    # Subtest: strips cosAllocation from submission body
+    ok 4 - strips cosAllocation from submission body
+      ---
+      duration_ms: 0.368
+      type: 'test'
+      ...
+    # Subtest: strips licenceNumber from submission body
+    ok 5 - strips licenceNumber from submission body
+      ---
+      duration_ms: 0.2481
+      type: 'test'
+      ...
+    # Subtest: strips adminNotes from submission body
+    ok 6 - strips adminNotes from submission body
+      ---
+      duration_ms: 0.1826
+      type: 'test'
+      ...
+    # Subtest: strips requestedDocuments from submission body
+    ok 7 - strips requestedDocuments from submission body
+      ---
+      duration_ms: 0.2159
+      type: 'test'
+      ...
+    # Subtest: allows legitimate sponsor fields through
+    ok 8 - allows legitimate sponsor fields through
+      ---
+      duration_ms: 0.5743
+      type: 'test'
+      ...
+    # Subtest: normalises empty proposedStartDate to null
+    ok 9 - normalises empty proposedStartDate to null
+      ---
+      duration_ms: 0.444
+      type: 'test'
+      ...
+    # Subtest: normalises "Invalid date" proposedStartDate to null
+    ok 10 - normalises "Invalid date" proposedStartDate to null
+      ---
+      duration_ms: 0.4581
+      type: 'test'
+      ...
+    1..10
+ok 387 - sponsorSubmitLicenceSchema — mass assignment protection
+  ---
+  duration_ms: 6.512
+  type: 'suite'
+  ...
+# Subtest: sponsorUpdateLicenceSchema — mass assignment protection
+    # Subtest: strips status from update body
+    ok 1 - strips status from update body
+      ---
+      duration_ms: 0.4936
+      type: 'test'
+      ...
+    # Subtest: strips assignedcaseworkerId from update body
+    ok 2 - strips assignedcaseworkerId from update body
+      ---
+      duration_ms: 0.1706
+      type: 'test'
+      ...
+    # Subtest: strips organisationId from update body
+    ok 3 - strips organisationId from update body
+      ---
+      duration_ms: 0.1532
+      type: 'test'
+      ...
+    # Subtest: strips applicationVersion from update body
+    ok 4 - strips applicationVersion from update body
+      ---
+      duration_ms: 0.1488
+      type: 'test'
+      ...
+    # Subtest: strips type from update body
+    ok 5 - strips type from update body
+      ---
+      duration_ms: 0.1353
+      type: 'test'
+      ...
+    # Subtest: strips licenceIssueDate and licenceExpiryDate from update body
+    ok 6 - strips licenceIssueDate and licenceExpiryDate from update body
+      ---
+      duration_ms: 0.1386
+      type: 'test'
+      ...
+    # Subtest: strips documents from update body (file-upload endpoint only)
+    ok 7 - strips documents from update body (file-upload endpoint only)
+      ---
+      duration_ms: 0.1356
+      type: 'test'
+      ...
+    # Subtest: strips adminNotes from sponsor update body
+    ok 8 - strips adminNotes from sponsor update body
+      ---
+      duration_ms: 0.1355
+      type: 'test'
+      ...
+    # Subtest: coerces valid application id from string to number in params
+    ok 9 - coerces valid application id from string to number in params
+      ---
+      duration_ms: 0.2069
+      type: 'test'
+      ...
+    # Subtest: rejects non-numeric application id
+    ok 10 - rejects non-numeric application id
+      ---
+      duration_ms: 0.9366
+      type: 'test'
+      ...
+    # Subtest: allows legitimate sponsor update fields
+    ok 11 - allows legitimate sponsor update fields
+      ---
+      duration_ms: 0.3003
+      type: 'test'
+      ...
+    1..11
+ok 388 - sponsorUpdateLicenceSchema — mass assignment protection
+  ---
+  duration_ms: 3.2687
+  type: 'suite'
+  ...
+# Subtest: adminUpdateLicenceSchema — admin-specific field rules
+    # Subtest: allows adminNotes for admin updates
+    ok 1 - allows adminNotes for admin updates
+      ---
+      duration_ms: 0.3996
+      type: 'test'
+      ...
+    # Subtest: allows requestedDocuments for admin updates
+    ok 2 - allows requestedDocuments for admin updates
+      ---
+      duration_ms: 0.8922
+      type: 'test'
+      ...
+    # Subtest: strips status from admin update body
+    ok 3 - strips status from admin update body
+      ---
+      duration_ms: 0.1525
+      type: 'test'
+      ...
+    # Subtest: strips assignedcaseworkerId from admin update body
+    ok 4 - strips assignedcaseworkerId from admin update body
+      ---
+      duration_ms: 0.1509
+      type: 'test'
+      ...
+    # Subtest: strips userId from admin update body
+    ok 5 - strips userId from admin update body
+      ---
+      duration_ms: 0.141
+      type: 'test'
+      ...
+    # Subtest: strips cosAllocation from admin update body
+    ok 6 - strips cosAllocation from admin update body
+      ---
+      duration_ms: 0.1416
+      type: 'test'
+      ...
+    # Subtest: strips licenceNumber from admin update body
+    ok 7 - strips licenceNumber from admin update body
+      ---
+      duration_ms: 0.1419
+      type: 'test'
+      ...
+    # Subtest: strips documents from admin update body
+    ok 8 - strips documents from admin update body
+      ---
+      duration_ms: 0.1539
+      type: 'test'
+      ...
+    # Subtest: rejects requestedDocuments exceeding 20 items
+    ok 9 - rejects requestedDocuments exceeding 20 items
+      ---
+      duration_ms: 0.5289
+      type: 'test'
+      ...
+    # Subtest: allows all base sponsor fields alongside admin-only fields
+    ok 10 - allows all base sponsor fields alongside admin-only fields
+      ---
+      duration_ms: 0.1744
+      type: 'test'
+      ...
+    1..10
+ok 389 - adminUpdateLicenceSchema — admin-specific field rules
+  ---
+  duration_ms: 3.196
+  type: 'suite'
+  ...
+# Subtest: M-6: validation error responses do not expose raw error objects
+    # Subtest: invalid email triggers a structured validation error (no error.message leak)
+    ok 1 - invalid email triggers a structured validation error (no error.message leak)
+      ---
+      duration_ms: 0.3616
+      type: 'test'
+      ...
+    1..1
+ok 390 - M-6: validation error responses do not expose raw error objects
+  ---
+  duration_ms: 0.434
+  type: 'suite'
+  ...
+# Subtest: visa checklist data: 9 groups, sensible required/category parsing
+ok 391 - visa checklist data: 9 groups, sensible required/category parsing
+  ---
+  duration_ms: 1.3178
+  type: 'test'
+  ...
+# Subtest: documentChecklist seeder: matches/creates visa types, idempotent
+ok 392 - documentChecklist seeder: matches/creates visa types, idempotent
+  ---
+  duration_ms: 7.8171
+  type: 'test'
+  ...
+# Subtest: email template seeder: seeds full bodies, upgrades legacy, preserves custom
+ok 393 - email template seeder: seeds full bodies, upgrades legacy, preserves custom
+  ---
+  duration_ms: 2.8615
+  type: 'test'
+  ...
+# Subtest: default CCL template seeder: creates one org default, idempotent
+ok 394 - default CCL template seeder: creates one org default, idempotent
+  ---
+  duration_ms: 0.4509
+  type: 'test'
+  ...
+# [2026-06-18 13:11:39.900] [32mINFO[39m: [36m seedDocumentChecklists: created checklist items[39m
+#     createdCount: 134
+# Subtest: docx CCL importer: imports 10 letters, one active per visa slot
+ok 395 - docx CCL importer: imports 10 letters, one active per visa slot
+  ---
+  duration_ms: 663.3794
+  type: 'test'
+  ...
+# [2026-06-18 13:11:40.570] [32mINFO[39m: [36m seedCclTemplatesFromDocx: imported/upgraded CCL templates[39m
+#     created: 10
+#     refreshed: 0
+# Subtest: encrypt/decrypt round-trips under the dedicated key
+ok 396 - encrypt/decrypt round-trips under the dedicated key
+  ---
+  duration_ms: 6.4198
+  type: 'test'
+  ...
+# Subtest: NO fallback to JWT_SECRET: encryption fails when the dedicated key is unset
+ok 397 - NO fallback to JWT_SECRET: encryption fails when the dedicated key is unset
+  ---
+  duration_ms: 0.8105
+  type: 'test'
+  ...
+# Subtest: malformed key (not 64 hex) is rejected at encryption time
+ok 398 - malformed key (not 64 hex) is rejected at encryption time
+  ---
+  duration_ms: 0.3247
+  type: 'test'
+  ...
+# Subtest: a value encrypted with key A cannot be decrypted with key B
+ok 399 - a value encrypted with key A cannot be decrypted with key B
+  ---
+  duration_ms: 1.2352
+  type: 'test'
+  ...
+# Subtest: startup validation passes with a valid, distinct dedicated key
+ok 400 - startup validation passes with a valid, distinct dedicated key
+  ---
+  duration_ms: 1.4171
+  type: 'test'
+  ...
+# Subtest: startup validation rejects a key equal to JWT_SECRET
+ok 401 - startup validation rejects a key equal to JWT_SECRET
+  ---
+  duration_ms: 0.7257
+  type: 'test'
+  ...
+# [2026-06-18 13:11:41.125] [32mINFO[39m: [36m ✔ Environment validation passed[39m
+# [2026-06-18 13:11:41.126] [31mERROR[39m: [36m [39m
+# [2026-06-18 13:11:41.126] [31mERROR[39m: [36m ╔══════════════════════════════════════════════════════════╗[39m
+# [2026-06-18 13:11:41.126] [31mERROR[39m: [36m ║  FATAL: Required environment variable(s) missing/weak   ║[39m
+# [2026-06-18 13:11:41.126] [31mERROR[39m: [36m ╠══════════════════════════════════════════════════════════╣[39m
+# [2026-06-18 13:11:41.126] [31mERROR[39m: [36m ║  • SETTINGS_ENCRYPTION_KEY                          ║[39m
+# [2026-06-18 13:11:41.126] [31mERROR[39m: [36m ║    SETTINGS_ENCRYPTION_KEY must NOT be the same value as JWT_SECRET.  ║[39m
+# [2026-06-18 13:11:41.126] [31mERROR[39m: [36m ║                                                        ║[39m
+# [2026-06-18 13:11:41.126] [31mERROR[39m: [36m ║  Server startup ABORTED. Set the variable(s) above      ║[39m
+# [2026-06-18 13:11:41.126] [31mERROR[39m: [36m ║  in your .env file and restart.                        ║[39m
+# [2026-06-18 13:11:41.126] [31mERROR[39m: [36m ╚══════════════════════════════════════════════════════════╝[39m
+# [2026-06-18 13:11:41.126] [31mERROR[39m: [36m [39m
+# Subtest: sponsorLicenceV2 — unauthenticated access blocked (ISSUE-012)
+    # Subtest: no Authorization header → 401
+    ok 1 - no Authorization header → 401
+      ---
+      duration_ms: 1.032
+      type: 'test'
+      ...
+    # Subtest: Authorization header present but not Bearer → 401
+    ok 2 - Authorization header present but not Bearer → 401
+      ---
+      duration_ms: 0.2054
+      type: 'test'
+      ...
+    # Subtest: Bearer token present but req.user not populated (invalid/expired JWT) → 401
+    ok 3 - Bearer token present but req.user not populated (invalid/expired JWT) → 401
+      ---
+      duration_ms: 0.3661
+      type: 'test'
+      ...
+    # Subtest: missing headers object entirely → 401
+    ok 4 - missing headers object entirely → 401
+      ---
+      duration_ms: 0.157
+      type: 'test'
+      ...
+    1..4
+ok 402 - sponsorLicenceV2 — unauthenticated access blocked (ISSUE-012)
+  ---
+  duration_ms: 2.9401
+  type: 'suite'
+  ...
+# Subtest: sponsorLicenceV2 — wrong role blocked (ISSUE-012)
+    # Subtest: CANDIDATE (role 1) → 403
+    ok 1 - CANDIDATE (role 1) → 403
+      ---
+      duration_ms: 0.3574
+      type: 'test'
+      ...
+    # Subtest: CASEWORKER (role 2) → 403
+    ok 2 - CASEWORKER (role 2) → 403
+      ---
+      duration_ms: 0.1398
+      type: 'test'
+      ...
+    # Subtest: ADMIN (role 3) → 403 (must not bypass — admin has own portal)
+    ok 3 - ADMIN (role 3) → 403 (must not bypass — admin has own portal)
+      ---
+      duration_ms: 0.2571
+      type: 'test'
+      ...
+    # Subtest: SUPERADMIN (role 5) → 403 (must not bypass)
+    ok 4 - SUPERADMIN (role 5) → 403 (must not bypass)
+      ---
+      duration_ms: 0.302
+      type: 'test'
+      ...
+    # Subtest: invalid role string ('admin') → 403
+    ok 5 - invalid role string ('admin') → 403
+      ---
+      duration_ms: 0.3562
+      type: 'test'
+      ...
+    # Subtest: role_id 0 (invalid) → 403
+    ok 6 - role_id 0 (invalid) → 403
+      ---
+      duration_ms: 0.3179
+      type: 'test'
+      ...
+    # Subtest: negative role_id → 403
+    ok 7 - negative role_id → 403
+      ---
+      duration_ms: 0.1484
+      type: 'test'
+      ...
+    1..7
+ok 403 - sponsorLicenceV2 — wrong role blocked (ISSUE-012)
+  ---
+  duration_ms: 2.4392
+  type: 'suite'
+  ...
+# Subtest: sponsorLicenceV2 — BUSINESS role allowed (ISSUE-012)
+    # Subtest: BUSINESS (role 4) → next() called
+    ok 1 - BUSINESS (role 4) → next() called
+      ---
+      duration_ms: 0.1993
+      type: 'test'
+      ...
+    # Subtest: SPONSOR alias (also role 4) → next() called
+    ok 2 - SPONSOR alias (also role 4) → next() called
+      ---
+      duration_ms: 0.1079
+      type: 'test'
+      ...
+    # Subtest: role_id supplied as string '4' (JWT serialisation quirk) → next() called
+    ok 3 - role_id supplied as string '4' (JWT serialisation quirk) → next() called
+      ---
+      duration_ms: 0.1102
+      type: 'test'
+      ...
+    # Subtest: no error body is written when BUSINESS role is allowed
+    ok 4 - no error body is written when BUSINESS role is allowed
+      ---
+      duration_ms: 0.103
+      type: 'test'
+      ...
+    1..4
+ok 404 - sponsorLicenceV2 — BUSINESS role allowed (ISSUE-012)
+  ---
+  duration_ms: 0.6979
+  type: 'suite'
+  ...
+# Subtest: sponsorLicenceV2 — guard ordering (ISSUE-012)
+    # Subtest: verifyTokenAndTenant blocks before checkRole can run (no token)
+    ok 1 - verifyTokenAndTenant blocks before checkRole can run (no token)
+      ---
+      duration_ms: 1.0842
+      type: 'test'
+      ...
+    # Subtest: checkRole only runs after verifyTokenAndTenant passes
+    ok 2 - checkRole only runs after verifyTokenAndTenant passes
+      ---
+      duration_ms: 0.1289
+      type: 'test'
+      ...
+    1..2
+ok 405 - sponsorLicenceV2 — guard ordering (ISSUE-012)
+  ---
+  duration_ms: 1.3622
+  type: 'suite'
+  ...
+# Subtest: splitFullName: splits names correctly
+ok 406 - splitFullName: splits names correctly
+  ---
+  duration_ms: 1.239
+  type: 'test'
+  ...
+# Subtest: syncPersonnelFromProfile: copies personnel fields from SponsorProfile to application child tables
+ok 407 - syncPersonnelFromProfile: copies personnel fields from SponsorProfile to application child tables
+  ---
+  duration_ms: 1.7607
+  type: 'test'
+  ...
+# Subtest: WORKER_STATUS constants
+    # Subtest: VISA_PENDING maps to 'CoS Assigned'
+    ok 1 - VISA_PENDING maps to 'CoS Assigned'
+      ---
+      duration_ms: 0.9497
+      type: 'test'
+      ...
+    # Subtest: VISA_GRANTED maps to 'Visa Granted'
+    ok 2 - VISA_GRANTED maps to 'Visa Granted'
+      ---
+      duration_ms: 0.1974
+      type: 'test'
+      ...
+    # Subtest: VISA_REJECTED maps to 'Visa Rejected'
+    ok 3 - VISA_REJECTED maps to 'Visa Rejected'
+      ---
+      duration_ms: 0.1387
+      type: 'test'
+      ...
+    # Subtest: COS_ASSIGNED is an alias for VISA_PENDING
+    ok 4 - COS_ASSIGNED is an alias for VISA_PENDING
+      ---
+      duration_ms: 0.1544
+      type: 'test'
+      ...
+    1..4
+ok 408 - WORKER_STATUS constants
+  ---
+  duration_ms: 2.9614
+  type: 'suite'
+  ...
+# Subtest: WORKER_TRANSITIONS matrix
+    # Subtest: CoS Assigned → Immigration Assessment is valid
+    ok 1 - CoS Assigned → Immigration Assessment is valid
+      ---
+      duration_ms: 1.5889
+      type: 'test'
+      ...
+    # Subtest: CoS Assigned → Visa Rejected is valid (early rejection)
+    ok 2 - CoS Assigned → Visa Rejected is valid (early rejection)
+      ---
+      duration_ms: 0.1489
+      type: 'test'
+      ...
+    # Subtest: CoS Assigned → Visa Preparation is invalid (must go through Immigration Assessment first)
+    ok 3 - CoS Assigned → Visa Preparation is invalid (must go through Immigration Assessment first)
+      ---
+      duration_ms: 0.2601
+      type: 'test'
+      ...
+    # Subtest: full forward path: CoS Assigned → IM → VP → CR → VD → Visa Granted
+    ok 4 - full forward path: CoS Assigned → IM → VP → CR → VD → Visa Granted
+      ---
+      duration_ms: 0.3332
+      type: 'test'
+      ...
+    # Subtest: Visa Rejected → any is invalid (terminal state)
+    ok 5 - Visa Rejected → any is invalid (terminal state)
+      ---
+      duration_ms: 0.3078
+      type: 'test'
+      ...
+    # Subtest: Visa Granted → any is invalid (terminal state)
+    ok 6 - Visa Granted → any is invalid (terminal state)
+      ---
+      duration_ms: 0.2656
+      type: 'test'
+      ...
+    # Subtest: Visa Decision is the only valid predecessor for Visa Granted
+    ok 7 - Visa Decision is the only valid predecessor for Visa Granted
+      ---
+      duration_ms: 1.298
+      type: 'test'
+      ...
+    1..7
+ok 409 - WORKER_TRANSITIONS matrix
+  ---
+  duration_ms: 4.7257
+  type: 'suite'
+  ...
+# Subtest: createSponsoredWorker
+    # Subtest: creates a worker in CoS Assigned status
+    ok 1 - creates a worker in CoS Assigned status
+      ---
+      duration_ms: 0.5175
+      type: 'test'
+      ...
+    # Subtest: trims whitespace from names
+    ok 2 - trims whitespace from names
+      ---
+      duration_ms: 0.1547
+      type: 'test'
+      ...
+    # Subtest: writes a 'created' audit row on creation
+    ok 3 - writes a 'created' audit row on creation
+      ---
+      duration_ms: 0.1477
+      type: 'test'
+      ...
+    # Subtest: throws 400 when first name is missing
+    ok 4 - throws 400 when first name is missing
+      ---
+      duration_ms: 0.7579
+      type: 'test'
+      ...
+    # Subtest: throws 400 when sponsorId is missing
+    ok 5 - throws 400 when sponsorId is missing
+      ---
+      duration_ms: 0.2073
+      type: 'test'
+      ...
+    1..5
+ok 410 - createSponsoredWorker
+  ---
+  duration_ms: 1.9852
+  type: 'suite'
+  ...
+# Subtest: advanceWorkerStage
+    # Subtest: advances from CoS Assigned to Immigration Assessment
+    ok 1 - advances from CoS Assigned to Immigration Assessment
+      ---
+      duration_ms: 0.3386
+      type: 'test'
+      ...
+    # Subtest: advances through the full pipeline sequentially
+    ok 2 - advances through the full pipeline sequentially
+      ---
+      duration_ms: 0.2754
+      type: 'test'
+      ...
+    # Subtest: stores notes on the worker when provided
+    ok 3 - stores notes on the worker when provided
+      ---
+      duration_ms: 0.1838
+      type: 'test'
+      ...
+    # Subtest: writes an audit row for each stage advance
+    ok 4 - writes an audit row for each stage advance
+      ---
+      duration_ms: 0.1447
+      type: 'test'
+      ...
+    # Subtest: throws 404 when worker does not exist
+    ok 5 - throws 404 when worker does not exist
+      ---
+      duration_ms: 0.3373
+      type: 'test'
+      ...
+    # Subtest: throws 422 for an invalid transition (skipping a stage)
+    ok 6 - throws 422 for an invalid transition (skipping a stage)
+      ---
+      duration_ms: 0.2345
+      type: 'test'
+      ...
+    # Subtest: throws 422 when trying to advance a terminal state
+    ok 7 - throws 422 when trying to advance a terminal state
+      ---
+      duration_ms: 0.1964
+      type: 'test'
+      ...
+    1..7
+ok 411 - advanceWorkerStage
+  ---
+  duration_ms: 1.9324
+  type: 'suite'
+  ...
+# Subtest: grantWorkerVisa
+    # Subtest: transitions from Visa Decision to Visa Granted
+    ok 1 - transitions from Visa Decision to Visa Granted
+      ---
+      duration_ms: 0.2319
+      type: 'test'
+      ...
+    # Subtest: throws 422 when not at Visa Decision stage
+    ok 2 - throws 422 when not at Visa Decision stage
+      ---
+      duration_ms: 0.2121
+      type: 'test'
+      ...
+    # Subtest: throws 404 when worker does not exist
+    ok 3 - throws 404 when worker does not exist
+      ---
+      duration_ms: 0.1984
+      type: 'test'
+      ...
+    1..3
+ok 412 - grantWorkerVisa
+  ---
+  duration_ms: 0.7542
+  type: 'suite'
+  ...
+# Subtest: rejectWorkerVisa
+    # Subtest: transitions to Visa Rejected from any pipeline stage
+    ok 1 - transitions to Visa Rejected from any pipeline stage
+      ---
+      duration_ms: 1.1296
+      type: 'test'
+      ...
+    # Subtest: stores the rejection reason on the worker
+    ok 2 - stores the rejection reason on the worker
+      ---
+      duration_ms: 0.1668
+      type: 'test'
+      ...
+    # Subtest: trims whitespace from rejectionReason
+    ok 3 - trims whitespace from rejectionReason
+      ---
+      duration_ms: 0.1335
+      type: 'test'
+      ...
+    # Subtest: writes a visa_rejected audit row
+    ok 4 - writes a visa_rejected audit row
+      ---
+      duration_ms: 0.1891
+      type: 'test'
+      ...
+    # Subtest: throws 400 when rejectionReason is empty
+    ok 5 - throws 400 when rejectionReason is empty
+      ---
+      duration_ms: 0.5323
+      type: 'test'
+      ...
+    # Subtest: throws 400 when rejectionReason is omitted
+    ok 6 - throws 400 when rejectionReason is omitted
+      ---
+      duration_ms: 0.2976
+      type: 'test'
+      ...
+    # Subtest: throws 404 when worker does not exist
+    ok 7 - throws 404 when worker does not exist
+      ---
+      duration_ms: 0.2586
+      type: 'test'
+      ...
+    # Subtest: throws 422 when already Visa Rejected (terminal)
+    ok 8 - throws 422 when already Visa Rejected (terminal)
+      ---
+      duration_ms: 0.1888
+      type: 'test'
+      ...
+    1..8
+ok 413 - rejectWorkerVisa
+  ---
+  duration_ms: 3.154
+  type: 'suite'
+  ...
+# Subtest: assignWorkerCaseworkers
+    # Subtest: stores the caseworker IDs on the worker
+    ok 1 - stores the caseworker IDs on the worker
+      ---
+      duration_ms: 0.4029
+      type: 'test'
+      ...
+    # Subtest: replaces existing caseworker IDs
+    ok 2 - replaces existing caseworker IDs
+      ---
+      duration_ms: 0.1548
+      type: 'test'
+      ...
+    # Subtest: writes a caseworker_assigned audit row
+    ok 3 - writes a caseworker_assigned audit row
+      ---
+      duration_ms: 0.145
+      type: 'test'
+      ...
+    # Subtest: throws 404 when worker does not exist
+    ok 4 - throws 404 when worker does not exist
+      ---
+      duration_ms: 0.256
+      type: 'test'
+      ...
+    1..4
+ok 414 - assignWorkerCaseworkers
+  ---
+  duration_ms: 1.1201
+  type: 'suite'
+  ...
+# Subtest: audit trail
+    # Subtest: accumulates one row per state change
+    ok 1 - accumulates one row per state change
+      ---
+      duration_ms: 0.2314
+      type: 'test'
+      ...
+    # Subtest: each audit row captures fromStatus and toStatus correctly
+    ok 2 - each audit row captures fromStatus and toStatus correctly
+      ---
+      duration_ms: 0.133
+      type: 'test'
+      ...
+    1..2
+ok 415 - audit trail
+  ---
+  duration_ms: 0.4615
+  type: 'suite'
+  ...
+# Subtest: listCaseworkerWorkers — Op.contains (ISSUE-002)
+    # Subtest: returns only workers assigned to the given caseworker
+    ok 1 - returns only workers assigned to the given caseworker
+      ---
+      duration_ms: 0.5082
+      type: 'test'
+      ...
+    # Subtest: returns an empty array when no workers are assigned to the caseworker
+    ok 2 - returns an empty array when no workers are assigned to the caseworker
+      ---
+      duration_ms: 0.1479
+      type: 'test'
+      ...
+    # Subtest: returns all workers assigned to the caseworker when they are the only assignee
+    ok 3 - returns all workers assigned to the caseworker when they are the only assignee
+      ---
+      duration_ms: 0.1403
+      type: 'test'
+      ...
+    # Subtest: coerces string caseworkerId to number before querying
+    ok 4 - coerces string caseworkerId to number before querying
+      ---
+      duration_ms: 0.1732
+      type: 'test'
+      ...
+    # Subtest: does not return workers with an empty assignedCaseworkerIds array
+    ok 5 - does not return workers with an empty assignedCaseworkerIds array
+      ---
+      duration_ms: 0.1529
+      type: 'test'
+      ...
+    # Subtest: query uses Op.contains not a raw literal — no sequelize.fn or sequelize.literal call
+    ok 6 - query uses Op.contains not a raw literal — no sequelize.fn or sequelize.literal call
+      ---
+      duration_ms: 0.1304
+      type: 'test'
+      ...
+    1..6
+ok 416 - listCaseworkerWorkers — Op.contains (ISSUE-002)
+  ---
+  duration_ms: 1.4626
+  type: 'suite'
+  ...
+# Subtest: createSponsoredWorker — over-allocation guard (ISSUE-009)
+    # Subtest: first 5 workers succeed, 6th is rejected with 409
+    ok 1 - first 5 workers succeed, 6th is rejected with 409
+      ---
+      duration_ms: 1.7595
+      type: 'test'
+      ...
+    # Subtest: after 5 successes the worker count equals the allocation limit
+    ok 2 - after 5 successes the worker count equals the allocation limit
+      ---
+      duration_ms: 0.5725
+      type: 'test'
+      ...
+    # Subtest: 7th attempt after allocation 5 is also rejected (guard persists)
+    ok 3 - 7th attempt after allocation 5 is also rejected (guard persists)
+      ---
+      duration_ms: 1.1582
+      type: 'test'
+      ...
+    1..3
+ok 417 - createSponsoredWorker — over-allocation guard (ISSUE-009)
+  ---
+  duration_ms: 5.0131
+  type: 'suite'
+  ...
+# Subtest: createSponsoredWorker — 409 error shape (ISSUE-009)
+    # Subtest: error code is ALLOCATION_EXCEEDED
+    ok 1 - error code is ALLOCATION_EXCEEDED
+      ---
+      duration_ms: 0.5749
+      type: 'test'
+      ...
+    # Subtest: error message contains the allocatedAmount
+    ok 2 - error message contains the allocatedAmount
+      ---
+      duration_ms: 0.4561
+      type: 'test'
+      ...
+    # Subtest: error message contains the current used count
+    ok 3 - error message contains the current used count
+      ---
+      duration_ms: 0.4543
+      type: 'test'
+      ...
+    # Subtest: statusCode is 409 (not 400 or 422)
+    ok 4 - statusCode is 409 (not 400 or 422)
+      ---
+      duration_ms: 0.4142
+      type: 'test'
+      ...
+    1..4
+ok 418 - createSponsoredWorker — 409 error shape (ISSUE-009)
+  ---
+  duration_ms: 2.5663
+  type: 'suite'
+  ...
+# Subtest: createSponsoredWorker — guard skipped without allocation (ISSUE-009)
+    # Subtest: cosAllocationRecordId = null → guard does not run
+    ok 1 - cosAllocationRecordId = null → guard does not run
+      ---
+      duration_ms: 0.5836
+      type: 'test'
+      ...
+    # Subtest: cosAllocationRecordId = undefined → guard does not run
+    ok 2 - cosAllocationRecordId = undefined → guard does not run
+      ---
+      duration_ms: 1.1421
+      type: 'test'
+      ...
+    1..2
+ok 419 - createSponsoredWorker — guard skipped without allocation (ISSUE-009)
+  ---
+  duration_ms: 2.0687
+  type: 'suite'
+  ...
+# Subtest: createSponsoredWorker — allocation record not found (ISSUE-009)
+    # Subtest: unknown cosAllocationRecordId → 404
+    ok 1 - unknown cosAllocationRecordId → 404
+      ---
+      duration_ms: 0.3301
+      type: 'test'
+      ...
+    1..1
+ok 420 - createSponsoredWorker — allocation record not found (ISSUE-009)
+  ---
+  duration_ms: 0.4539
+  type: 'suite'
+  ...
+# Subtest: createSponsoredWorker — allocation edge cases (ISSUE-009)
+    # Subtest: allocation of 0 → first attempt immediately rejected with 409
+    ok 1 - allocation of 0 → first attempt immediately rejected with 409
+      ---
+      duration_ms: 0.2525
+      type: 'test'
+      ...
+    # Subtest: count exactly equals allocatedAmount → 409 (boundary: = not just >)
+    ok 2 - count exactly equals allocatedAmount → 409 (boundary: = not just >)
+      ---
+      duration_ms: 0.2693
+      type: 'test'
+      ...
+    # Subtest: count one below limit (count = allocatedAmount - 1) → succeeds
+    ok 3 - count one below limit (count = allocatedAmount - 1) → succeeds
+      ---
+      duration_ms: 0.1516
+      type: 'test'
+      ...
+    # Subtest: allocation of 1 → first worker succeeds, second is rejected
+    ok 4 - allocation of 1 → first worker succeeds, second is rejected
+      ---
+      duration_ms: 0.2147
+      type: 'test'
+      ...
+    # Subtest: large allocation (100) — 99th worker succeeds, 100th succeeds, 101st fails
+    ok 5 - large allocation (100) — 99th worker succeeds, 100th succeeds, 101st fails
+      ---
+      duration_ms: 0.2246
+      type: 'test'
+      ...
+    1..5
+ok 421 - createSponsoredWorker — allocation edge cases (ISSUE-009)
+  ---
+  duration_ms: 1.3391
+  type: 'suite'
+  ...
+# Subtest: normalizeStorageRelativePath strips absolute Windows paths
+ok 422 - normalizeStorageRelativePath strips absolute Windows paths
+  ---
+  duration_ms: 1.122
+  type: 'test'
+  ...
+# Subtest: toPublicAssetUrl maps storage path to public images URL
+ok 423 - toPublicAssetUrl maps storage path to public images URL
+  ---
+  duration_ms: 0.3325
+  type: 'test'
+  ...
+# (node:29524) ExperimentalWarning: Module mocking is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: Stripe Webhook Controller
+    # Subtest: returns 400 if signature verification fails
+    ok 1 - returns 400 if signature verification fails
+      ---
+      duration_ms: 37.9748
+      type: 'test'
+      ...
+    # Subtest: ignores duplicate webhooks for idempotency
+    ok 2 - ignores duplicate webhooks for idempotency
+      ---
+      duration_ms: 8.9337
+      type: 'test'
+      ...
+    # Subtest: pushes to the retry queue if processing fails (always 200 to Stripe)
+    ok 3 - pushes to the retry queue if processing fails (always 200 to Stripe)
+      ---
+      duration_ms: 7.9826
+      type: 'test'
+      ...
+    1..3
+ok 424 - Stripe Webhook Controller
+  ---
+  duration_ms: 57.3806
+  type: 'suite'
+  ...
+# [2026-06-18 13:11:48.856] [33mWARN[39m: [36m Webhook signature verification failed[39m
+#     errMessage: "Invalid signature"
+# [2026-06-18 13:11:48.879] [31mERROR[39m: [36m Webhook processing failed, pushing to retry queue[39m
+#     eventId: "evt_fail456"
+#     err: {
+#       "type": "Error",
+#       "message": "DB Connection Failed",
+#       "stack":
+#           Error: DB Connection Failed
+#               at Object.<anonymous> (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/tests/stripepayment.test.js:86:56)
+#               at Object.apply (node:internal/test_runner/mock/mock:765:20)
+#               at processStripeWebhookEvent (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/src/modules/Candidate/Payments/stripepayment.controller.js:973:33)
+#               at async handleWebhook (file:///C:/Users/pkk22/OneDrive/Desktop/TECHNOWEB/CMS_Admin/EPiC_API/Server/src/modules/Candidate/Payments/stripepayment.controller.js:792:5)
+#     }
+# Subtest: acquires FOR UPDATE lock on CosAllocationRecord inside transaction
+ok 425 - acquires FOR UPDATE lock on CosAllocationRecord inside transaction
+  ---
+  duration_ms: 1.8435
+  type: 'test'
+  ...
+# Subtest: count query carries the transaction context
+ok 426 - count query carries the transaction context
+  ---
+  duration_ms: 0.2249
+  type: 'test'
+  ...
+# Subtest: SponsoredWorker.create carries the transaction context
+ok 427 - SponsoredWorker.create carries the transaction context
+  ---
+  duration_ms: 0.2512
+  type: 'test'
+  ...
+# Subtest: SponsoredWorkerAudit.create carries the transaction context
+ok 428 - SponsoredWorkerAudit.create carries the transaction context
+  ---
+  duration_ms: 0.2693
+  type: 'test'
+  ...
+# Subtest: creation succeeds when exactly one slot remains (usedCount = allocatedAmount - 1)
+ok 429 - creation succeeds when exactly one slot remains (usedCount = allocatedAmount - 1)
+  ---
+  duration_ms: 0.2992
+  type: 'test'
+  ...
+# Subtest: throws ALLOCATION_EXCEEDED (HTTP 409) when usedCount >= allocatedAmount
+ok 430 - throws ALLOCATION_EXCEEDED (HTTP 409) when usedCount >= allocatedAmount
+  ---
+  duration_ms: 0.8613
+  type: 'test'
+  ...
+# Subtest: throws ALLOCATION_OWNERSHIP_VIOLATION when allocation belongs to a different sponsor
+ok 431 - throws ALLOCATION_OWNERSHIP_VIOLATION when allocation belongs to a different sponsor
+  ---
+  duration_ms: 0.4248
+  type: 'test'
+  ...
+# Subtest: throws 404 when CosAllocationRecord does not exist
+ok 432 - throws 404 when CosAllocationRecord does not exist
+  ---
+  duration_ms: 0.2295
+  type: 'test'
+  ...
+# Subtest: concurrent simulation: only one request succeeds when final slot remains
+ok 433 - concurrent simulation: only one request succeeds when final slot remains
+  ---
+  duration_ms: 0.7741
+  type: 'test'
+  ...
+# Subtest: worker created successfully when no cosAllocationRecordId is provided
+ok 434 - worker created successfully when no cosAllocationRecordId is provided
+  ---
+  duration_ms: 0.6074
+  type: 'test'
+  ...
+# Subtest: softDeleteWorker: worker is excluded from standard queries after deletion
+ok 435 - softDeleteWorker: worker is excluded from standard queries after deletion
+  ---
+  duration_ms: 2.3126
+  type: 'test'
+  ...
+# Subtest: restoreWorker: worker reappears in standard queries after restore
+ok 436 - restoreWorker: worker reappears in standard queries after restore
+  ---
+  duration_ms: 0.3572
+  type: 'test'
+  ...
+# Subtest: softDeleteWorker and restoreWorker each write an audit row
+ok 437 - softDeleteWorker and restoreWorker each write an audit row
+  ---
+  duration_ms: 0.3039
+  type: 'test'
+  ...
+# Subtest: listAllWorkers excludes deleted by default and includes them with includeDeleted=true
+ok 438 - listAllWorkers excludes deleted by default and includes them with includeDeleted=true
+  ---
+  duration_ms: 0.3669
+  type: 'test'
+  ...
+# Subtest: COS_REQUEST_TRANSITIONS matrix — valid paths
+    # Subtest: Pending → Under Review (assignment)
+    ok 1 - Pending → Under Review (assignment)
+      ---
+      duration_ms: 1.3179
+      type: 'test'
+      ...
+    # Subtest: Pending → Approved (direct approve without caseworker)
+    ok 2 - Pending → Approved (direct approve without caseworker)
+      ---
+      duration_ms: 0.1389
+      type: 'test'
+      ...
+    # Subtest: Pending → Rejected
+    ok 3 - Pending → Rejected
+      ---
+      duration_ms: 0.1107
+      type: 'test'
+      ...
+    # Subtest: Under Review → Approved
+    ok 4 - Under Review → Approved
+      ---
+      duration_ms: 0.6227
+      type: 'test'
+      ...
+    # Subtest: Under Review → Rejected
+    ok 5 - Under Review → Rejected
+      ---
+      duration_ms: 0.1422
+      type: 'test'
+      ...
+    # Subtest: Approved → Allocated (post-approval allocation step)
+    ok 6 - Approved → Allocated (post-approval allocation step)
+      ---
+      duration_ms: 0.1166
+      type: 'test'
+      ...
+    # Subtest: Allocated → Used
+    ok 7 - Allocated → Used
+      ---
+      duration_ms: 0.1047
+      type: 'test'
+      ...
+    # Subtest: Allocated → Expired
+    ok 8 - Allocated → Expired
+      ---
+      duration_ms: 0.2378
+      type: 'test'
+      ...
+    # Subtest: Allocated → Revoked
+    ok 9 - Allocated → Revoked
+      ---
+      duration_ms: 0.3084
+      type: 'test'
+      ...
+    1..9
+ok 439 - COS_REQUEST_TRANSITIONS matrix — valid paths
+  ---
+  duration_ms: 5.6803
+  type: 'suite'
+  ...
+# Subtest: COS_REQUEST_TRANSITIONS matrix — blocked paths
+    # Subtest: Pending → Allocated (skips Approved step)
+    ok 1 - Pending → Allocated (skips Approved step)
+      ---
+      duration_ms: 1.3197
+      type: 'test'
+      ...
+    # Subtest: Allocated → Approved (terminal state cannot go backwards)
+    ok 2 - Allocated → Approved (terminal state cannot go backwards)
+      ---
+      duration_ms: 0.3545
+      type: 'test'
+      ...
+    # Subtest: Rejected → Approved (terminal state)
+    ok 3 - Rejected → Approved (terminal state)
+      ---
+      duration_ms: 0.2125
+      type: 'test'
+      ...
+    # Subtest: Rejected → Under Review (terminal state)
+    ok 4 - Rejected → Under Review (terminal state)
+      ---
+      duration_ms: 0.1655
+      type: 'test'
+      ...
+    # Subtest: Used → Pending (terminal state)
+    ok 5 - Used → Pending (terminal state)
+      ---
+      duration_ms: 0.4114
+      type: 'test'
+      ...
+    # Subtest: Revoked → Pending (terminal state)
+    ok 6 - Revoked → Pending (terminal state)
+      ---
+      duration_ms: 0.1645
+      type: 'test'
+      ...
+    # Subtest: Under Review → Pending (backwards step not in matrix)
+    ok 7 - Under Review → Pending (backwards step not in matrix)
+      ---
+      duration_ms: 0.1562
+      type: 'test'
+      ...
+    # Subtest: Approved → Pending (backwards step)
+    ok 8 - Approved → Pending (backwards step)
+      ---
+      duration_ms: 0.1898
+      type: 'test'
+      ...
+    # Subtest: unknown currentState is blocked
+    ok 9 - unknown currentState is blocked
+      ---
+      duration_ms: 1.0455
+      type: 'test'
+      ...
+    1..9
+ok 440 - COS_REQUEST_TRANSITIONS matrix — blocked paths
+  ---
+  duration_ms: 5.0472
+  type: 'suite'
+  ...
+# Subtest: assignCosRequest — FSM routing (ISSUE-005)
+    # Subtest: Pending → Under Review succeeds
+    ok 1 - Pending → Under Review succeeds
+      ---
+      duration_ms: 0.838
+      type: 'test'
+      ...
+    # Subtest: throws 409 when request is already Under Review
+    ok 2 - throws 409 when request is already Under Review
+      ---
+      duration_ms: 1.2222
+      type: 'test'
+      ...
+    # Subtest: throws 409 when request is Approved (can't re-assign)
+    ok 3 - throws 409 when request is Approved (can't re-assign)
+      ---
+      duration_ms: 0.349
+      type: 'test'
+      ...
+    # Subtest: throws 409 when request is Allocated (terminal)
+    ok 4 - throws 409 when request is Allocated (terminal)
+      ---
+      duration_ms: 0.3653
+      type: 'test'
+      ...
+    1..4
+ok 441 - assignCosRequest — FSM routing (ISSUE-005)
+  ---
+  duration_ms: 3.177
+  type: 'suite'
+  ...
+# Subtest: reviewCosRequest — FSM routing (ISSUE-005)
+    # Subtest: Pending → approve succeeds
+    ok 1 - Pending → approve succeeds
+      ---
+      duration_ms: 0.4542
+      type: 'test'
+      ...
+    # Subtest: Pending → reject succeeds
+    ok 2 - Pending → reject succeeds
+      ---
+      duration_ms: 0.2054
+      type: 'test'
+      ...
+    # Subtest: Under Review → approve succeeds
+    ok 3 - Under Review → approve succeeds
+      ---
+      duration_ms: 0.1752
+      type: 'test'
+      ...
+    # Subtest: Under Review → reject succeeds
+    ok 4 - Under Review → reject succeeds
+      ---
+      duration_ms: 0.382
+      type: 'test'
+      ...
+    # Subtest: Allocated → approve throws 409 (terminal state)
+    ok 5 - Allocated → approve throws 409 (terminal state)
+      ---
+      duration_ms: 0.3119
+      type: 'test'
+      ...
+    # Subtest: Rejected → approve throws 409 (terminal state)
+    ok 6 - Rejected → approve throws 409 (terminal state)
+      ---
+      duration_ms: 0.2855
+      type: 'test'
+      ...
+    # Subtest: Approved → reject throws 409 (already decided)
+    ok 7 - Approved → reject throws 409 (already decided)
+      ---
+      duration_ms: 0.1956
+      type: 'test'
+      ...
+    # Subtest: error message names the illegal transition
+    ok 8 - error message names the illegal transition
+      ---
+      duration_ms: 0.2008
+      type: 'test'
+      ...
+    1..8
+ok 442 - reviewCosRequest — FSM routing (ISSUE-005)
+  ---
+  duration_ms: 2.5968
+  type: 'suite'
+  ...
+# Subtest: requestInfoCosRequest — FSM routing (ISSUE-005)
+    # Subtest: Pending → advances to Under Review
+    ok 1 - Pending → advances to Under Review
+      ---
+      duration_ms: 0.2897
+      type: 'test'
+      ...
+    # Subtest: Under Review → status unchanged (already in review)
+    ok 2 - Under Review → status unchanged (already in review)
+      ---
+      duration_ms: 0.1618
+      type: 'test'
+      ...
+    # Subtest: Approved → throws 409
+    ok 3 - Approved → throws 409
+      ---
+      duration_ms: 0.2609
+      type: 'test'
+      ...
+    # Subtest: Allocated → throws 409 (terminal state)
+    ok 4 - Allocated → throws 409 (terminal state)
+      ---
+      duration_ms: 0.4216
+      type: 'test'
+      ...
+    # Subtest: Rejected → throws 409 (terminal state)
+    ok 5 - Rejected → throws 409 (terminal state)
+      ---
+      duration_ms: 0.3164
+      type: 'test'
+      ...
+    1..5
+ok 443 - requestInfoCosRequest — FSM routing (ISSUE-005)
+  ---
+  duration_ms: 1.6682
+  type: 'suite'
+  ...
+# Subtest: LICENCE FSM — sponsor status mutation guard (ISSUE-007)
+    # Subtest: Information Requested → Pending is NOT in the matrix (the old bug)
+    ok 1 - Information Requested → Pending is NOT in the matrix (the old bug)
+      ---
+      duration_ms: 0.2331
+      type: 'test'
+      ...
+    # Subtest: Information Requested → Under Review IS valid (the correct fix)
+    ok 2 - Information Requested → Under Review IS valid (the correct fix)
+      ---
+      duration_ms: 0.1261
+      type: 'test'
+      ...
+    # Subtest: sponsor cannot set any status to Licence Granted (role guard)
+    ok 3 - sponsor cannot set any status to Licence Granted (role guard)
+      ---
+      duration_ms: 0.2413
+      type: 'test'
+      ...
+    # Subtest: sponsor update stub — applies Under Review via FSM, not Pending
+    ok 4 - sponsor update stub — applies Under Review via FSM, not Pending
+      ---
+      duration_ms: 0.1765
+      type: 'test'
+      ...
+    # Subtest: sponsor update on non-Information-Requested status does not change status
+    ok 5 - sponsor update on non-Information-Requested status does not change status
+      ---
+      duration_ms: 0.1475
+      type: 'test'
+      ...
+    1..5
+ok 444 - LICENCE FSM — sponsor status mutation guard (ISSUE-007)
+  ---
+  duration_ms: 1.0948
+  type: 'suite'
+  ...
+# Subtest: licenceInformationRequest — closeInfoRequest FSM guard (ISSUE-015)
+    # Subtest: restarts review via FSM when all requests closed and status is Information Requested
+    ok 1 - restarts review via FSM when all requests closed and status is Information Requested
+      ---
+      duration_ms: 0.3124
+      type: 'test'
+      ...
+    # Subtest: does NOT restart when there are still open requests
+    ok 2 - does NOT restart when there are still open requests
+      ---
+      duration_ms: 0.1821
+      type: 'test'
+      ...
+    # Subtest: does NOT restart when application status is not Information Requested
+    ok 3 - does NOT restart when application status is not Information Requested
+      ---
+      duration_ms: 0.0961
+      type: 'test'
+      ...
+    # Subtest: FSM validation for Information Requested → Under Review passes (no error path hit)
+    ok 4 - FSM validation for Information Requested → Under Review passes (no error path hit)
+      ---
+      duration_ms: 0.1342
+      type: 'test'
+      ...
+    # Subtest: Information Requested → Under Review is confirmed valid by the engine (direct check)
+    ok 5 - Information Requested → Under Review is confirmed valid by the engine (direct check)
+      ---
+      duration_ms: 0.1666
+      type: 'test'
+      ...
+    1..5
+ok 445 - licenceInformationRequest — closeInfoRequest FSM guard (ISSUE-015)
+  ---
+  duration_ms: 1.1033
+  type: 'suite'
+  ...
+1..445
+# tests 710
+# suites 78
+# pass 710
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 52600.6205

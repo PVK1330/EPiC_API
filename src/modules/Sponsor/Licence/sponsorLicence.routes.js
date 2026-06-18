@@ -11,7 +11,8 @@ import {
     uploadLicenceDocument,
     deleteLicenceDocument
 } from './sponsorLicence.controller.js';
-import { confirmGovernmentCredentialsReceived } from './sponsorLicenceGovernment.controller.js';
+import { confirmGovernmentCredentialsReceived, getGovernmentCredentials } from './sponsorLicenceGovernment.controller.js';
+import { listDispatchDocumentsHandler, downloadDispatchDocumentHandler } from '../../Shared/Licence/licenceDispatch.controller.js';
 import {
     getSponsorIntakeSummary,
     updateSponsorIntakeForm,
@@ -56,8 +57,13 @@ router.get("/summary", getLicenceSummary);
 router.post("/documents/upload", upload.array("documents", 10), uploadLicenceDocument);
 router.delete("/documents/:applicationId/:docIndex", deleteLicenceDocument);
 
-// Government credentials confirmation (Phase 3).
+// Government credentials — view (GET) and confirm receipt (POST).
+router.get("/:id/government-credentials", getGovernmentCredentials);
 router.post("/:id/government-credentials", confirmGovernmentCredentialsReceived);
+
+// Documents dispatched to sponsor by admin/caseworker.
+router.get("/:id/dispatch-documents", listDispatchDocumentsHandler);
+router.get("/:id/dispatch-documents/:docId/download", downloadDispatchDocumentHandler);
 
 // Intake: information form + document checklist.
 router.get("/:id/intake", getSponsorIntakeSummary);
