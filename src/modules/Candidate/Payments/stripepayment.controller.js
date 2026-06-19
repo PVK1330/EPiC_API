@@ -830,12 +830,42 @@ export const createSetupIntent = async (req, res) => {
 export const handleWebhook = async (req, res) => {
   const sig = req.headers["stripe-signature"];
 
+  let verified;
   let event;
   try {
-    event = await constructStripeWebhookEvent(req.body, sig);
+    ({ verified, event } = await constructStripeWebhookEvent(req.body, sig));
   } catch (err) {
     logger.warn({ errMessage: err.message }, "Webhook signature verification failed");
     return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  // No Stripe webhook signing secret is configured in the DB yet (production
+  // has none). The payload could not be verified, so we ACK to stop Stripe
+  // retrying and SKIP all side effects rather than acting on unauthenticated
+  // data. Payment finalisation does not depend on this path — verify-session
+  // (candidate + org billing) is authoritative and idempotent.
+  if (!verified) {
+    if (event?.id) {
+      await platformDb.StripeWebhookEvent.findOrCreate({
+        where: { event_id: event.id },
+        defaults: {
+          event_id: event.id,
+          event_type: event.type || "unknown",
+          stripe_account_id: event.account || null,
+          tenant_id: null,
+          processing_status: "skipped",
+          error_message:
+            "No Stripe webhook signing secret configured — event not verified; side effects skipped (verify-session is authoritative).",
+        },
+      }).catch((err) =>
+        logger.warn({ err, eventId: event.id }, "Failed to record skipped webhook event"),
+      );
+    }
+    logger.warn(
+      { eventType: event?.type },
+      "Stripe webhook received but no signing secret is configured — acknowledged and skipped",
+    );
+    return res.json({ received: true, skipped: true });
   }
 
   const { tenantDb, organisationId } = await resolveTenantDbFromStripeObject(event.data?.object || {});

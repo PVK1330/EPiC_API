@@ -2,6 +2,7 @@ import logger from '../../../utils/logger.js';
 import { Op } from 'sequelize';
 import { mergeCaseWhere } from '../../../utils/tenantScope.js';
 import { toPublicImagePath } from '../../../utils/storagePath.util.js';
+import { computeSponsorPayables } from '../Payments/sponsorPayment.controller.js';
 
 const INACTIVE = ['Cancelled', 'Closed', 'Rejected'];
 
@@ -240,32 +241,39 @@ export const getBusinessPayments = async (req, res) => {
     });
     const caseIds = sponsorCases.map((c) => c.id);
 
-    if (!caseIds.length) {
-      return res.status(200).json({
-        status: 'success',
-        data: {
-          summary: { totalFee: 0, totalPaid: 0, outstanding: 0 },
-          payments: []
-        }
-      });
-    }
-
-    const payments = await req.tenantDb.CasePayment.findAll({
-      where: { caseId: { [Op.in]: caseIds } },
-      include: [
-        {
-          model: req.tenantDb.Case,
-          attributes: ['caseId', 'status'],
-          include: [{ model: req.tenantDb.User, as: 'candidate', attributes: ['first_name', 'last_name'] }]
-        }
-      ],
-      order: [['created_at', 'DESC']]
-    });
+    // Outstanding payables (licence fee / ISC / case balances) the sponsor can
+    // pay online, plus the sponsor's licence-fee/ISC ledger. Case-fee payments
+    // remain in case_payments (the `payments` list) — the single source of truth
+    // for case balances, also consumed by Invoices/Reports.
+    const [payables, sponsorPayments, payments] = await Promise.all([
+      computeSponsorPayables(req).catch((err) => {
+        logger.warn({ err }, 'computeSponsorPayables failed');
+        return [];
+      }),
+      req.tenantDb.SponsorPayment.findAll({
+        where: { sponsorUserId: userId },
+        order: [['created_at', 'DESC']],
+      }).catch(() => []),
+      caseIds.length
+        ? req.tenantDb.CasePayment.findAll({
+            where: { caseId: { [Op.in]: caseIds } },
+            include: [
+              {
+                model: req.tenantDb.Case,
+                attributes: ['caseId', 'status'],
+                include: [{ model: req.tenantDb.User, as: 'candidate', attributes: ['first_name', 'last_name'] }],
+              },
+            ],
+            order: [['created_at', 'DESC']],
+          })
+        : Promise.resolve([]),
+    ]);
 
     const totalFee = payments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
     const totalPaid = payments
       .filter((p) => p.paymentStatus === 'completed')
       .reduce((sum, p) => sum + Number(p.amount || 0), 0);
+    const outstandingPayables = payables.reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
     res.status(200).json({
       status: 'success',
@@ -273,9 +281,12 @@ export const getBusinessPayments = async (req, res) => {
         summary: {
           totalFee,
           totalPaid,
-          outstanding: Math.max(totalFee - totalPaid, 0)
+          outstanding: Math.max(totalFee - totalPaid, 0),
+          outstandingPayables,
         },
-        payments
+        payments,
+        sponsorPayments,
+        payables,
       }
     });
   } catch (err) {

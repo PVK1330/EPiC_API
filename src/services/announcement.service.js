@@ -38,6 +38,10 @@ export async function sendAnnouncement(tenantDb, userIds, title, message, option
     metadata = {},
     priority = NotificationPriority.HIGH,
     source = 'announcement',
+    // Platform broadcasts pass platform branding so the EMAIL shows the platform
+    // logo/name even though the in-app notification is org-scoped. Tenant
+    // announcements omit it and fall back to the recipient org's branding.
+    emailBranding = null,
   } = options;
 
   if (!tenantDb) throw new Error('tenantDb is required');
@@ -58,6 +62,7 @@ export async function sendAnnouncement(tenantDb, userIds, title, message, option
     metadata: { source, ...metadata },
     sendEmail,
     organisationId,
+    emailBranding,
     isInternalAdminOnly: true,
   });
 
@@ -132,9 +137,11 @@ export async function resolveUserIdsByTargetRoles(tenantDb, targetRoles, organis
 /**
  * Optional: email organisation primary contact when no tenant admin user exists.
  */
-export async function emailOrganisationPrimaryContact(org, title, message) {
+export async function emailOrganisationPrimaryContact(org, title, message, brandingOverride = null) {
   if (!org?.primaryEmail) return false;
-  const branding = await getOrganisationEmailBranding(org.id);
+  // For platform broadcasts, brandingOverride is the PLATFORM identity so the
+  // email shows the platform logo/name; otherwise fall back to the org's own.
+  const branding = brandingOverride || (await getOrganisationEmailBranding(org.id));
   const result = await sendTransactionalEmail({
     organisationId: org.id,
     to: org.primaryEmail,
@@ -148,6 +155,7 @@ export async function emailOrganisationPrimaryContact(org, title, message) {
       metadata: { source: 'platform_announcement' },
       branding,
     }),
+    brandingOverride: brandingOverride || undefined,
   });
   return result.sent === true;
 }
@@ -165,6 +173,10 @@ export async function broadcastPlatformAnnouncement({ target, orgIds, title, mes
     where,
     attributes: ['id', 'name', 'database_name', 'primaryEmail', 'status'],
   });
+
+  // This is a PLATFORM/superadmin message: every recipient sees the platform
+  // logo/name, not their own tenant branding.
+  const platformBranding = await getOrganisationEmailBranding(null);
 
   const summary = {
     organisations: organisations.length,
@@ -189,7 +201,7 @@ export async function broadcastPlatformAnnouncement({ target, orgIds, title, mes
     const userIds = await resolveTenantAdminUserIds(org, tenantDb);
     if (!userIds.length) {
       if (sendEmail) {
-        await emailOrganisationPrimaryContact(org, title, message);
+        await emailOrganisationPrimaryContact(org, title, message, platformBranding);
       }
       summary.skipped.push({ orgId: org.id, reason: 'no_tenant_admin_users' });
       continue;
@@ -198,6 +210,7 @@ export async function broadcastPlatformAnnouncement({ target, orgIds, title, mes
     const result = await sendAnnouncement(tenantDb, userIds, title, message, {
       sendEmail,
       organisationId: org.id,
+      emailBranding: platformBranding,
       metadata: { source: 'superadmin', organisationId: org.id, organisationName: org.name },
     });
     summary.recipients += result.notified;

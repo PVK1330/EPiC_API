@@ -15,7 +15,7 @@ const stripeSvc = {
   buildStripeMetadata: mock.fn(() => ({})),
   resolveTenantDbByOrganisationId: mock.fn(async () => null),
   resolveTenantDbFromStripeObject: mock.fn(async () => ({ tenantDb: null, organisationId: 1 })),
-  constructStripeWebhookEvent: mock.fn(async () => ({ id: "evt", type: "customer.created" })),
+  constructStripeWebhookEvent: mock.fn(async () => ({ verified: true, event: { id: "evt", type: "customer.created" } })),
   syncSubscriptionToCandidate: mock.fn(async () => {}),
   notifyCandidatePaymentEvent: mock.fn(async () => {}),
 };
@@ -42,7 +42,7 @@ describe("Stripe Webhook Controller", () => {
     platformDb.StripeWebhookEvent.create.mock.resetCalls();
     platformDb.PaymentWebhookRetryQueue.create.mock.resetCalls();
     // restore default implementations
-    stripeSvc.constructStripeWebhookEvent.mock.mockImplementation(async () => ({ id: "evt", type: "customer.created" }));
+    stripeSvc.constructStripeWebhookEvent.mock.mockImplementation(async () => ({ verified: true, event: { id: "evt", type: "customer.created" } }));
     stripeSvc.resolveTenantDbFromStripeObject.mock.mockImplementation(async () => ({ tenantDb: null, organisationId: 1 }));
     platformDb.StripeWebhookEvent.findOne.mock.mockImplementation(async () => null);
     platformDb.StripeWebhookEvent.create.mock.mockImplementation(async () => ({ save: mock.fn() }));
@@ -58,9 +58,23 @@ describe("Stripe Webhook Controller", () => {
     assert.ok(res.text.includes("Webhook Error: Invalid signature"));
   });
 
+  it("acknowledges and skips (200) when no webhook signing secret is configured", async () => {
+    const event = { id: "evt_unverified789", type: "payment_intent.succeeded", data: { object: {} } };
+    stripeSvc.constructStripeWebhookEvent.mock.mockImplementationOnce(async () => ({ verified: false, event }));
+
+    const record = { save: mock.fn() };
+    platformDb.StripeWebhookEvent.findOrCreate = mock.fn(async () => [record, true]);
+
+    const res = await post(event);
+    assert.equal(res.status, 200);
+    assert.deepEqual(res.body, { received: true, skipped: true });
+    // No verified processing happened — nothing pushed to the retry queue.
+    assert.equal(platformDb.PaymentWebhookRetryQueue.create.mock.calls.length, 0);
+  });
+
   it("ignores duplicate webhooks for idempotency", async () => {
     const event = { id: "evt_duplicate123", type: "customer.created" };
-    stripeSvc.constructStripeWebhookEvent.mock.mockImplementationOnce(async () => event);
+    stripeSvc.constructStripeWebhookEvent.mock.mockImplementationOnce(async () => ({ verified: true, event }));
     platformDb.StripeWebhookEvent.findOne.mock.mockImplementationOnce(async () => ({ id: 1, event_id: event.id }));
 
     const res = await post(event);
@@ -75,7 +89,7 @@ describe("Stripe Webhook Controller", () => {
       type: "charge.refunded",
       data: { object: { metadata: { userId: "1" }, amount_refunded: 5000, id: "ch_123" } },
     };
-    stripeSvc.constructStripeWebhookEvent.mock.mockImplementationOnce(async () => event);
+    stripeSvc.constructStripeWebhookEvent.mock.mockImplementationOnce(async () => ({ verified: true, event }));
     platformDb.StripeWebhookEvent.findOne.mock.mockImplementationOnce(async () => null);
 
     const record = { save: mock.fn() };

@@ -55,6 +55,10 @@ export async function notifyUser(tenantDb, userId, payload = {}) {
       metadata = {},
       sendEmail: doEmail = false,
       actionType = null,
+      // Override the EMAIL branding only (logo/name/From) while the in-app
+      // notification stays org-scoped — used for platform/superadmin broadcasts
+      // so the recipient sees the PLATFORM logo, not their own tenant's.
+      emailBranding = null,
     } = payload;
 
     // The notifications table is per-tenant but still carries organisation_id so
@@ -117,7 +121,7 @@ export async function notifyUser(tenantDb, userId, payload = {}) {
     if (sendEmail) {
       const user = await tenantDb.User.findByPk(userId, { attributes: ['email', 'first_name'] });
       if (user?.email) {
-        const branding = await getOrganisationEmailBranding(organisationId);
+        const branding = emailBranding || (await getOrganisationEmailBranding(organisationId));
         const absoluteActionUrl = actionUrl
           ? (/^https?:\/\//i.test(actionUrl)
               ? actionUrl
@@ -136,6 +140,9 @@ export async function notifyUser(tenantDb, userId, payload = {}) {
             actionUrl: absoluteActionUrl,
             branding,
           }),
+          // When an explicit email branding is given (platform broadcast), make
+          // the From display-name match it too.
+          brandingOverride: emailBranding || undefined,
         }).catch((err) => logger.error({ err }, 'notifyUser email failed'));
       }
     }
