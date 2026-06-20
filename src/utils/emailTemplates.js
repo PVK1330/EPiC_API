@@ -67,7 +67,9 @@ export function generateCredentialsTemplate(
   password,
   loginUrl,
   mainLoginUrl,
+  branding = {},
 ) {
+  const name = brandName(branding);
   return wrapEpicEmail({
     branding,
     pageTitle: `${name} — Your Account`,
@@ -88,7 +90,9 @@ export function generateAdminCredentialsTemplate(
   password,
   loginUrl,
   mainLoginUrl,
+  branding = {},
 ) {
+  const name = brandName(branding);
   return wrapEpicEmail({
     branding,
     pageTitle: `${name} — Admin Account`,
@@ -111,6 +115,7 @@ export function generateAdminCredentialsTemplate(
 }
 
 export function generateOrganisationWelcomeTemplate({
+  branding = {},
   organisationName,
   adminName,
   email,
@@ -143,6 +148,7 @@ export function generateOrganisationWelcomeTemplate({
 }
 
 export function generateCaseworkerWelcomeTemplate({
+  branding = {},
   name,
   email,
   password,
@@ -163,6 +169,7 @@ export function generateCaseworkerWelcomeTemplate({
 }
 
 export function generateSponsorWelcomeTemplate({
+  branding = {},
   name,
   email,
   password,
@@ -189,6 +196,7 @@ export function generateSponsorWelcomeTemplate({
 }
 
 export function generateCandidateWelcomeTemplate({
+  branding = {},
   candidateName,
   email,
   password,
@@ -209,6 +217,7 @@ export function generateCandidateWelcomeTemplate({
 }
 
 export function generateNotificationEmailTemplate({
+  branding = {},
   recipientName = "User",
   title,
   message,
@@ -238,6 +247,7 @@ export function generateNotificationEmailTemplate({
 }
 
 export function generateAppointmentTemplate({
+  branding = {},
   title,
   date,
   time,
@@ -279,6 +289,7 @@ export function generateAppointmentTemplate({
 }
 
 export function generateSubscriptionExpiryTemplate({
+  branding = {},
   organisationName,
   daysRemaining,
   loginUrl,
@@ -321,6 +332,7 @@ export function generateDiagnosticTemplate({ source, message, branding = {} }) {
 }
 
 export function generateFailureNoticeTemplate({
+  branding = {},
   reasonLabel,
   recipientSafe,
   subjectSafe,
@@ -405,6 +417,7 @@ export function generateDocumentDispatchTemplate({
 }
 
 export function generateDispatchReceiptTemplate({
+  branding = {},
   recipient,
   subject,
   ctx,

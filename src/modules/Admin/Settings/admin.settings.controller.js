@@ -1384,7 +1384,12 @@ export const listSlaRules = async (req, res) => {
     });
   } catch (error) {
     logger.error({ err: error }, "listSlaRules error");
-    res.status(500).json({ status: "error", message: "Internal server error", data: null });
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error",
+      data: null,
+      ...(process.env.NODE_ENV === "development" ? { error: error.message, stack: error.stack } : {}),
+    });
   }
 };
 
@@ -1408,7 +1413,11 @@ export const createSlaRule = async (req, res) => {
     if (error.name === "SequelizeUniqueConstraintError") {
       return res.status(400).json({ status: "error", message: "A rule with this name already exists" });
     }
-    res.status(500).json({ status: "error", message: "Internal server error" });
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error",
+      ...(process.env.NODE_ENV === "development" ? { error: error.message, stack: error.stack } : {}),
+    });
   }
 };
 
@@ -1433,7 +1442,11 @@ export const updateSlaRule = async (req, res) => {
     if (error.name === "SequelizeUniqueConstraintError") {
       return res.status(400).json({ status: "error", message: "A rule with this name already exists" });
     }
-    res.status(500).json({ status: "error", message: "Internal server error" });
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error",
+      ...(process.env.NODE_ENV === "development" ? { error: error.message, stack: error.stack } : {}),
+    });
   }
 };
 
@@ -1448,7 +1461,11 @@ export const deleteSlaRule = async (req, res) => {
     res.status(200).json({ status: "success", message: "SLA rule deleted." });
   } catch (error) {
     logger.error({ err: error }, "deleteSlaRule error");
-    res.status(500).json({ status: "error", message: "Internal server error" });
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error",
+      ...(process.env.NODE_ENV === "development" ? { error: error.message, stack: error.stack } : {}),
+    });
   }
 };
 

@@ -127,7 +127,12 @@ export async function notifyUser(tenantDb, userId, payload = {}) {
               ? actionUrl
               : `${(process.env.FRONTEND_URL?.split(',')[0]?.trim() || '').replace(/\/$/, '')}${actionUrl}`)
           : null;
-        await sendTransactionalEmail({
+        // Fire-and-forget: SMTP delivery can take several seconds. The in-app
+        // notification + socket emit above have already happened; awaiting the
+        // email here would block the API response (e.g. a candidate's action),
+        // sometimes exceeding the client's 10s timeout. Delivery is best-effort
+        // and errors are logged.
+        void sendTransactionalEmail({
           organisationId,
           to: user.email,
           subject: title,
