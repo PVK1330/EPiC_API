@@ -1,5 +1,7 @@
 import logger from '../utils/logger.js';
 import { sendTransactionalEmail } from './mail.service.js';
+import { generateNotificationEmailTemplate } from '../utils/emailTemplates.js';
+import { getOrganisationEmailBranding } from '../utils/emailBranding.js';
 import { ROLES } from '../middlewares/role.middleware.js';
 import { getIO } from '../realtime/ioRegistry.js';
 import { userRoom } from '../realtime/messagingRealtime.js';
@@ -53,6 +55,10 @@ export async function notifyUser(tenantDb, userId, payload = {}) {
       metadata = {},
       sendEmail: doEmail = false,
       actionType = null,
+      // Override the EMAIL branding only (logo/name/From) while the in-app
+      // notification stays org-scoped — used for platform/superadmin broadcasts
+      // so the recipient sees the PLATFORM logo, not their own tenant's.
+      emailBranding = null,
     } = payload;
 
     // The notifications table is per-tenant but still carries organisation_id so
@@ -113,13 +119,35 @@ export async function notifyUser(tenantDb, userId, payload = {}) {
     }
 
     if (sendEmail) {
-      const user = await tenantDb.User.findByPk(userId, { attributes: ['email'] });
+      const user = await tenantDb.User.findByPk(userId, { attributes: ['email', 'first_name'] });
       if (user?.email) {
-        await sendTransactionalEmail({
+        const branding = emailBranding || (await getOrganisationEmailBranding(organisationId));
+        const absoluteActionUrl = actionUrl
+          ? (/^https?:\/\//i.test(actionUrl)
+              ? actionUrl
+              : `${(process.env.FRONTEND_URL?.split(',')[0]?.trim() || '').replace(/\/$/, '')}${actionUrl}`)
+          : null;
+        // Fire-and-forget: SMTP delivery can take several seconds. The in-app
+        // notification + socket emit above have already happened; awaiting the
+        // email here would block the API response (e.g. a candidate's action),
+        // sometimes exceeding the client's 10s timeout. Delivery is best-effort
+        // and errors are logged.
+        void sendTransactionalEmail({
           organisationId,
           to: user.email,
           subject: title,
-          html: `<p>${message}</p>`,
+          html: generateNotificationEmailTemplate({
+            recipientName: user.first_name || 'there',
+            title,
+            message,
+            priority,
+            notificationType: type,
+            actionUrl: absoluteActionUrl,
+            branding,
+          }),
+          // When an explicit email branding is given (platform broadcast), make
+          // the From display-name match it too.
+          brandingOverride: emailBranding || undefined,
         }).catch((err) => logger.error({ err }, 'notifyUser email failed'));
       }
     }
@@ -581,8 +609,10 @@ export const generateNotification = async (context, payload) => {
       const user = await tenantDb.User.findByPk(recipientId, { attributes: ['email'] });
       if (user && user.email) {
         try {
+          // The send layer frames emailHtml/message in the branded shell and sets
+          // the org From-name. Use the RESOLVED org id so branding/SMTP resolve.
           await sendTransactionalEmail({
-            organisationId,
+            organisationId: resolvedOrganisationId,
             to: user.email,
             subject: emailSubject,
             html: emailHtml || message, // Fallback to message if no specific HTML template

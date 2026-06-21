@@ -19,6 +19,10 @@ import {
   getComplianceSummary,
   getBusinessDocuments,
 } from './Dashboard/sponsorDashboard.controller.js';
+import {
+  createSponsorCheckoutSession,
+  verifySponsorCheckoutSession,
+} from './Payments/sponsorPayment.controller.js';
 
 const router = Router();
 
@@ -38,6 +42,9 @@ router.use('/dashboard', sponsorDashboardRoutes);
 
 router.get('/cases', getBusinessCases);
 router.get('/payments', getBusinessPayments);
+// Sponsor online payments on the tenant Stripe account (licence fee / ISC / case fees).
+router.post('/payments/checkout', createSponsorCheckoutSession);
+router.get('/payments/verify-session/:session_id', verifySponsorCheckoutSession);
 router.get('/compliance/summary', getComplianceSummary);
 router.get('/documents', getBusinessDocuments);
 

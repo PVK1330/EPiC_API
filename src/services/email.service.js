@@ -1,4 +1,5 @@
 import { sendTransactionalEmail } from "./mail.service.js";
+import { getOrganisationEmailBranding } from "../utils/emailBranding.js";
 
 /**
  * Low-level send. Use specific helpers below for account / transactional mail.
@@ -17,9 +18,10 @@ export async function sendMail({ to, subject, html, text, organisationId = null 
  * Admin account creation (HTML from template utils).
  */
 export async function sendAdminWelcomeEmail({ to, html, organisationId = null }) {
+  const branding = await getOrganisationEmailBranding(organisationId);
   return sendMail({
     to,
-    subject: "Elite Pic - Admin Account Created",
+    subject: `${branding.orgName} — Admin Account Created`,
     html,
     organisationId,
   });
@@ -29,9 +31,10 @@ export async function sendAdminWelcomeEmail({ to, html, organisationId = null })
  * Caseworker account creation — credentials + login link.
  */
 export async function sendCaseworkerWelcomeEmail({ to, html, organisationId = null }) {
+  const branding = await getOrganisationEmailBranding(organisationId);
   return sendMail({
     to,
-    subject: "Elite Pic - Caseworker Account Created",
+    subject: `${branding.orgName} — Caseworker Account Created`,
     html,
     organisationId,
   });
@@ -41,9 +44,10 @@ export async function sendCaseworkerWelcomeEmail({ to, html, organisationId = nu
  * Candidate account creation — credentials + login link.
  */
 export async function sendCandidateWelcomeEmail({ to, html, organisationId = null }) {
+  const branding = await getOrganisationEmailBranding(organisationId);
   return sendMail({
     to,
-    subject: "Elite Pic - Candidate Account Created",
+    subject: `${branding.orgName} — Candidate Account Created`,
     html,
     organisationId,
   });
@@ -53,9 +57,10 @@ export async function sendCandidateWelcomeEmail({ to, html, organisationId = nul
  * Case reschedule notification — date changes with reason.
  */
 export async function sendRescheduleEmail({ to, html, organisationId = null }) {
+  const branding = await getOrganisationEmailBranding(organisationId);
   return sendMail({
     to,
-    subject: "Elite Pic - Case Rescheduled",
+    subject: `${branding.orgName} — Case Rescheduled`,
     html,
     organisationId,
   });
@@ -65,9 +70,10 @@ export async function sendRescheduleEmail({ to, html, organisationId = null }) {
  * Appointment notification.
  */
 export async function sendAppointmentEmail({ to, html, organisationId = null }) {
+  const branding = await getOrganisationEmailBranding(organisationId);
   return sendMail({
     to,
-    subject: "Elite Pic - Appointment Scheduled",
+    subject: `${branding.orgName} — Appointment Scheduled`,
     html,
     organisationId,
   });

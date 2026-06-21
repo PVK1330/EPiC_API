@@ -38,6 +38,25 @@ export const createRtwRecord = async (req, res) => {
   }
 };
 
+export const getAllRtwRecordsForSponsor = async (req, res) => {
+  try {
+    const sponsorId = req.user.userId;
+
+    const records = await req.tenantDb.RightToWorkRecord.findAll({
+      where: { sponsorId },
+      include: [
+        { model: req.tenantDb.User, as: "worker", attributes: ["id", "first_name", "last_name", "email"] },
+      ],
+      order: [["initialCheckDate", "DESC"]],
+    });
+
+    return res.status(200).json({ status: "success", data: records });
+  } catch (error) {
+    logger.error({ err: error }, "Error fetching all right to work records for sponsor");
+    return res.status(500).json({ status: "error", message: "Internal server error" });
+  }
+};
+
 export const getRtwRecordsByWorker = async (req, res) => {
   try {
     const sponsorId = req.user.userId;

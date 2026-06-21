@@ -126,16 +126,32 @@ export async function syncCclReleaseForApprovedFees({
     !["ccl_issued", "ccl_payment_received"].includes(stage) &&
     currentOrder < cclOrder
   ) {
-    await applyCaseStageChange({
-      tenantDb,
-      caseRecord,
-      nextStageId: "ccl_issued",
-      performedBy,
-      organisationId,
-      reason: "CCL fees approved — released to client",
-      sendEmail: false,
-    });
-    synced = true;
+    // Best-effort stage advance. The case may sit at an earlier stage from which
+    // the strict workflow FSM does not permit a direct jump to the CCL stage
+    // (e.g. data_capture_initial_docs → client_care_letter skips
+    // application_preparation). Releasing the CCL to the candidate does NOT
+    // depend on the case stage advancing — visibility is driven by the CCL
+    // record status (set to "issued" above) and amountStatus. So a non-permitted
+    // transition must be logged and skipped, never allowed to 500 the
+    // candidate's payment-schedule / CCL / checkout reads. applyCaseStageChange
+    // validates the transition before any write, so catching leaves no partial state.
+    try {
+      await applyCaseStageChange({
+        tenantDb,
+        caseRecord,
+        nextStageId: "ccl_issued",
+        performedBy,
+        organisationId,
+        reason: "CCL fees approved — released to client",
+        sendEmail: false,
+      });
+      synced = true;
+    } catch (err) {
+      logger.warn(
+        { errMessage: err.message, caseId: caseRecord.id, fromStage: stage },
+        "syncCclReleaseForApprovedFees: skipped CCL stage advance (transition not permitted by workflow FSM)",
+      );
+    }
   }
 
   if (synced) {

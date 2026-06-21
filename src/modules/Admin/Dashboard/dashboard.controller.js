@@ -54,8 +54,9 @@ export const getDashboardStats = async (req, res) => {
       const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
       dateWhere = { created_at: { [Op.gte]: firstDay } };
     } else if (filter === 'this_week') {
+      // BUG-061: build the week start without mutating `now` via setDate().
       const now = new Date();
-      const firstDay = new Date(now.setDate(now.getDate() - now.getDay()));
+      const firstDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay());
       dateWhere = { created_at: { [Op.gte]: firstDay } };
     }
 

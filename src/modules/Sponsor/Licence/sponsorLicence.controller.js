@@ -2,6 +2,7 @@ import { Op } from 'sequelize';
 import logger from '../../../utils/logger.js';
 import { sendTransactionalEmail } from '../../../services/mail.service.js';
 import { generateNotificationEmailTemplate } from '../../../utils/emailTemplates.js';
+import { getOrganisationEmailBranding } from '../../../utils/emailBranding.js';
 import { notifyAdmins, notifyUser, NotificationTypes, NotificationPriority } from '../../../services/notification.service.js';
 import { validateTransition, WORKFLOW_TYPES } from '../../../services/workflowEngine.service.js';
 import * as sponsorshipNotify from '../../../services/sponsorshipNotification.service.js';
@@ -395,6 +396,7 @@ export const renewLicenceApplication = async (req, res) => {
             existingApp.contactEmail ||
             null;
         if (recipientEmail) {
+            const branding = await getOrganisationEmailBranding(profile?.organisation_id ?? null);
             sendTransactionalEmail({
                 organisationId: profile?.organisation_id ?? null,
                 to: recipientEmail,
@@ -411,6 +413,7 @@ export const renewLicenceApplication = async (req, res) => {
                     priority: NotificationPriority.HIGH,
                     notificationType: NotificationTypes.SUCCESS,
                     actionUrl: `${process.env.FRONTEND_URL || ''}/business/licence-process`,
+                    branding,
                 }),
             }).catch((err) => logger.error({ err }, 'Failed to send renewal confirmation email'));
         }
@@ -623,6 +626,7 @@ export const uploadLicenceDocument = async (req, res) => {
             });
 
             if (user?.email) {
+                const branding = await getOrganisationEmailBranding(req.user?.organisation_id ?? null);
                 await sendTransactionalEmail({
                     organisationId: req.user?.organisation_id ?? null,
                     to: user.email,
@@ -632,7 +636,8 @@ export const uploadLicenceDocument = async (req, res) => {
                         title: 'Documents Received',
                         message: `Your ${newPaths.length} document(s) for application #LIC-${applicationId} have been uploaded successfully.`,
                         actionUrl: `${process.env.FRONTEND_URL || '#'}/business/licence/documents`,
-                        actionText: 'View Documents'
+                        actionText: 'View Documents',
+                        branding
                     })
                 });
             }

@@ -7,6 +7,7 @@ import {
 import { applyCaseStageChange } from "./caseStageAutomation.service.js";
 import {
   validateTransition,
+  findTransitionPath,
   WORKFLOW_TYPES,
 } from "./workflowEngine.service.js";
 import { recordTimelineEntry } from "./caseTimeline.service.js";
@@ -724,6 +725,26 @@ export async function markBiometricAttendedByCandidate({
     };
   }
 
+  // The case may sit on a stage that is not a direct neighbour of
+  // `awaiting_decision` — e.g. a drifted `caseStage` still at
+  // `data_capture_initial_docs` while biometrics were already booked and
+  // attended. A direct jump is rejected by the state machine ("Invalid
+  // transition … Allowed: …", which previously surfaced as a 500). Resolve the
+  // shortest VALID path up front so we can fail gracefully BEFORE writing any
+  // partial state, then walk every hop legally.
+  const path = findTransitionPath(
+    WORKFLOW_TYPES.CASE,
+    stage,
+    "awaiting_decision",
+  );
+  if (!path) {
+    return {
+      ok: false,
+      status: 409,
+      message: `This case can't be moved to the decision stage from its current stage (${stage}). Please contact your caseworker.`,
+    };
+  }
+
   const bookedSlot = effectiveBiometricBookedSlot(caseRecord, ws);
   const biometricsPatch = {
     ...ws.biometrics,
@@ -745,15 +766,23 @@ export async function markBiometricAttendedByCandidate({
     visibility: "public",
   });
 
-  await applyCaseStageChange({
-    tenantDb,
-    caseRecord,
-    nextStageId: "awaiting_decision",
-    performedBy,
-    reason: "Candidate attended biometrics — awaiting decision",
-    organisationId,
-    sendEmail: false,
-  });
+  // Walk the shortest legal path to `awaiting_decision`. Pass-through hops only
+  // move the pointer (no emails/tasks/hooks); the final landing runs the full
+  // `awaiting_decision` side effects.
+  for (let i = 0; i < path.length; i += 1) {
+    const isFinal = i === path.length - 1;
+    await applyCaseStageChange({
+      tenantDb,
+      caseRecord,
+      nextStageId: path[i],
+      performedBy,
+      reason: "Candidate attended biometrics — awaiting decision",
+      organisationId,
+      sendEmail: false,
+      intermediate: !isFinal,
+    });
+    await caseRecord.reload();
+  }
 
   await completePendingBiometricAttendTasks(tenantDb, caseRecord, performedBy);
   await syncCandidateApplicationAfterBiometrics(tenantDb, caseRecord);
@@ -764,9 +793,13 @@ export async function markBiometricAttendedByCandidate({
     ...parseCaseworkerIds(caseRecord),
   ]);
 
+  // Fire staff notifications in the background. These send transactional email
+  // (SMTP) which can take several seconds; awaiting them here would block the
+  // candidate's HTTP response long enough for the browser to abort it. Each
+  // notifyUser already swallows its own errors.
   for (const uid of notifyIds) {
     if (uid === performedBy) continue;
-    await notifyUser(tenantDb, uid, {
+    notifyUser(tenantDb, uid, {
       tenantDb,
       type: NotificationTypes.CASE_STATUS_CHANGED,
       priority: NotificationPriority.HIGH,

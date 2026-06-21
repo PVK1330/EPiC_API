@@ -262,7 +262,7 @@ const STAGE_ROLE_ORDER = {
   government_sms_registration:   ["caseworker", "sponsor", "admin"],
   sponsor_portal_onboarding:     ["caseworker", "sponsor", "admin"],
   government_portal_credentials: ["caseworker", "sponsor", "admin"],
-  government_application_forms:  ["caseworker", "admin"],
+  government_application_forms:  ["caseworker", "sponsor", "admin"],
   government_submission:         ["caseworker", "sponsor", "admin"],
 };
 

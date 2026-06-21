@@ -86,6 +86,7 @@ import LicenceDispatchDocumentModel from "./tenant/licenceDispatchDocument.model
 import CosAllocationRecordModel from "./tenant/cosAllocationRecord.model.js";
 import SponsoredWorkerModel from "./tenant/sponsoredWorker.model.js";
 import SponsoredWorkerAuditModel from "./tenant/sponsoredWorkerAudit.model.js";
+import SponsorPaymentModel from "./tenant/sponsorPayment.model.js";
 
 /**
  * Register all models and associations on a Sequelize instance (main or tenant DB).
@@ -179,6 +180,7 @@ export function buildDb(sequelize) {
   db.CosAllocationRecord = CosAllocationRecordModel(sequelize, Sequelize.DataTypes);
   db.SponsoredWorker = SponsoredWorkerModel(sequelize, Sequelize.DataTypes);
   db.SponsoredWorkerAudit = SponsoredWorkerAuditModel(sequelize, Sequelize.DataTypes);
+  db.SponsorPayment = SponsorPaymentModel(sequelize, Sequelize.DataTypes);
 
   // Associations (Same as before)
   db.Conversation.belongsTo(db.User, { foreignKey: "participantOneId", as: "participantOne" });
@@ -457,6 +459,11 @@ export function buildDb(sequelize) {
   db.User.hasMany(db.SponsoredWorker, { foreignKey: "sponsorId", as: "sponsoredWorkers" });
   db.CosRequest.hasMany(db.SponsoredWorker, { foreignKey: "cosRequestId", as: "sponsoredWorkers" });
   db.CosAllocationRecord.hasMany(db.SponsoredWorker, { foreignKey: "cosAllocationRecordId", as: "sponsoredWorkers" });
+
+  // Sponsor (business) online payments ledger — licence fee + Immigration Skills
+  // Charge paid on the tenant Stripe account. (Case-fee payments stay in case_payments.)
+  db.SponsorPayment.belongsTo(db.User, { foreignKey: "sponsorUserId", as: "sponsor" });
+  db.User.hasMany(db.SponsorPayment, { foreignKey: "sponsorUserId", as: "sponsorPayments" });
 
   return db;
 }

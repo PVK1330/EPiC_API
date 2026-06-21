@@ -657,6 +657,37 @@ export async function verifyAppendixDocument(tenantDb, licenceApplicationId, doc
   return doc;
 }
 
+/**
+ * Verify several appendix (Appendix A) documents in one request. Reuses the
+ * single-document verify path (so audit logging + idempotency are preserved) and
+ * returns a per-document result so one bad/already-handled id never fails the batch.
+ */
+export async function bulkVerifyAppendixDocuments(tenantDb, licenceApplicationId, documentIds, userId, notes, req) {
+  if (!Array.isArray(documentIds) || documentIds.length === 0) {
+    const err = new Error("documentIds must be a non-empty array");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const results = [];
+  for (const rawId of documentIds) {
+    const documentId = Number(rawId);
+    if (!Number.isInteger(documentId) || documentId <= 0) {
+      results.push({ documentId: rawId, status: "failed", message: "Invalid document id" });
+      continue;
+    }
+    try {
+      const doc = await verifyAppendixDocument(tenantDb, licenceApplicationId, documentId, userId, notes, req);
+      results.push({ documentId, status: "verified", documentName: doc.documentName });
+    } catch (err) {
+      results.push({ documentId, status: "failed", message: err.message });
+    }
+  }
+
+  const verifiedCount = results.filter((r) => r.status === "verified").length;
+  return { verifiedCount, failedCount: results.length - verifiedCount, results };
+}
+
 /** Caseworker rejects an appendix document and notifies the sponsor to re-upload. */
 export async function rejectAppendixDocument(tenantDb, licenceApplicationId, documentId, reason, caseworkerId, req) {
   const doc = await tenantDb.LicenceAppendixDocument.findOne({

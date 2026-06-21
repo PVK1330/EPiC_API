@@ -20,6 +20,7 @@ import {
     rejectCaseworkerDocument,
     requestCaseworkerDocumentInfo,
     verifyCaseworkerAppendixDocument,
+    bulkVerifyCaseworkerAppendixDocuments,
     rejectCaseworkerAppendixDocument,
 } from './caseworkerLicenceIntake.controller.js';
 import { verifyTokenAndTenant } from '../../../middlewares/authStack.middleware.js';
@@ -84,6 +85,7 @@ router.patch("/:id/intake/documents/:documentKey/request-info", ensureAssignedCa
 
 // Appendix A documents (V2 wizard uploads) — caseworker verify / reject.
 router.patch("/:id/appendix-documents/:documentId/verify", ensureAssignedCaseworker(), verifyCaseworkerAppendixDocument);
+router.post("/:id/appendix-documents/bulk-verify", ensureAssignedCaseworker(), bulkVerifyCaseworkerAppendixDocuments);
 router.patch("/:id/appendix-documents/:documentId/reject", ensureAssignedCaseworker(), rejectCaseworkerAppendixDocument);
 
 // Licence Grant — caseworker may view the grant record (read-only).

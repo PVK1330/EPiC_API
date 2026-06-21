@@ -17,6 +17,7 @@ import {
   rejectDocument,
   requestDocumentInfo,
   verifyAppendixDocument,
+  bulkVerifyAppendixDocuments,
   rejectAppendixDocument,
 } from "../../../services/licenceIntake.service.js";
 
@@ -164,6 +165,23 @@ export async function verifyCaseworkerAppendixDocument(req, res) {
     return res.json({ success: true, message: "Appendix document verified", data: doc });
   } catch (err) {
     logger.error({ err }, "verifyCaseworkerAppendixDocument failed");
+    return res.status(err.statusCode || 500).json({ success: false, message: err.message });
+  }
+}
+
+export async function bulkVerifyCaseworkerAppendixDocuments(req, res) {
+  try {
+    const { id } = req.params;
+    const { documentIds, notes } = req.body;
+    const caseworkerId = req.user?.userId ?? req.user?.id;
+
+    const app = await resolveApplication(req, res);
+    if (!app) return;
+
+    const result = await bulkVerifyAppendixDocuments(req.tenantDb, Number(id), documentIds, caseworkerId, notes, req);
+    return res.json({ success: true, message: `${result.verifiedCount} document(s) verified`, data: result });
+  } catch (err) {
+    logger.error({ err }, "bulkVerifyCaseworkerAppendixDocuments failed");
     return res.status(err.statusCode || 500).json({ success: false, message: err.message });
   }
 }

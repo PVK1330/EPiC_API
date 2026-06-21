@@ -24,7 +24,7 @@ import {
 } from "../../../services/cosRequest.service.js";
 import * as sponsorshipNotify from "../../../services/sponsorshipNotification.service.js";
 import { ensureStageTasks } from "../../../services/licenceStageTask.service.js";
-import { verifyAppendixDocument, rejectAppendixDocument } from "../../../services/licenceIntake.service.js";
+import { verifyAppendixDocument, bulkVerifyAppendixDocuments, rejectAppendixDocument } from "../../../services/licenceIntake.service.js";
 import { resolveLicenceDocumentPaths } from "../../../utils/licenceDocuments.util.js";
 import { validateTransition, WORKFLOW_TYPES } from "../../../services/workflowEngine.service.js";
 
@@ -675,6 +675,20 @@ export const verifyAdminAppendixDocument = async (req, res) => {
     const code = err.statusCode || 500;
     if (code >= 500) logger.error({ err }, "verifyAdminAppendixDocument failed");
     res.status(code).json({ status: "error", message: err.message || "Failed to verify document" });
+  }
+};
+
+export const bulkVerifyAdminAppendixDocuments = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { documentIds, notes } = req.body;
+    const adminId = req.user?.userId ?? req.user?.id ?? null;
+    const result = await bulkVerifyAppendixDocuments(req.tenantDb, Number(id), documentIds, adminId, notes, req);
+    res.status(200).json({ status: "success", message: `${result.verifiedCount} document(s) verified`, data: result });
+  } catch (err) {
+    const code = err.statusCode || 500;
+    if (code >= 500) logger.error({ err }, "bulkVerifyAdminAppendixDocuments failed");
+    res.status(code).json({ status: "error", message: err.message || "Failed to verify documents" });
   }
 };
 

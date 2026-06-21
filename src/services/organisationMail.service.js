@@ -2,6 +2,7 @@ import crypto from "crypto";
 import { sendTransactionalEmail } from "./mail.service.js";
 import { generateOrganisationWelcomeTemplate } from "../utils/emailTemplates.js";
 import { buildTenantFrontendUrls } from "../utils/organisationHost.js";
+import { getOrganisationEmailBranding, clearEmailBrandingCache } from "../utils/emailBranding.js";
 
 /**
  * Random password for new organisation admins (meets common policy rules).
@@ -35,6 +36,10 @@ export async function sendOrganisationAdminWelcomeEmail({ organisation, admin, p
   const loginUrl = `${tenantUrls.subdomain.replace(/\/$/, "")}/login`;
   const adminName = [admin.first_name, admin.last_name].filter(Boolean).join(" ").trim() || "Admin";
 
+  // Newly-created org: bust any stale cache so the just-uploaded logo/name resolve.
+  clearEmailBrandingCache(organisation.id);
+  const branding = await getOrganisationEmailBranding(organisation.id);
+
   const html = generateOrganisationWelcomeTemplate({
     organisationName: organisation.name,
     adminName,
@@ -42,13 +47,15 @@ export async function sendOrganisationAdminWelcomeEmail({ organisation, admin, p
     password: plainPassword,
     loginUrl,
     mainLoginUrl: tenantUrls.main,
+    branding,
   });
 
   const result = await sendTransactionalEmail({
     organisationId: organisation.id,
     to: admin.email,
-    subject: `Welcome to EPiC — ${organisation.name} is ready`,
+    subject: `Welcome to ${organisation.name} — your workspace is ready`,
     html,
+    brandingOverride: branding,
   });
 
   return { ...result, loginUrl, mainLoginUrl: tenantUrls.main };

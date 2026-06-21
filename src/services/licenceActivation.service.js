@@ -7,6 +7,7 @@ import {
 } from "./notification.service.js";
 import { sendTransactionalEmail } from "./mail.service.js";
 import { generateNotificationEmailTemplate } from "../utils/emailTemplates.js";
+import { getOrganisationEmailBranding } from "../utils/emailBranding.js";
 import { recordLicenceAudit, extractCaseworkerIds } from "./licenceAssignment.service.js";
 import { licenceActivatedCaseworkers } from "./sponsorshipNotification.service.js";
 
@@ -273,6 +274,7 @@ async function notifySponsorLicenceActivated({
     }
 
     if (recipientEmail) {
+      const branding = await getOrganisationEmailBranding(profile.organisation_id ?? null);
       await sendTransactionalEmail({
         organisationId: profile.organisation_id ?? null,
         to: recipientEmail,
@@ -297,6 +299,7 @@ async function notifySponsorLicenceActivated({
           notificationType: NotificationTypes.SUCCESS,
           actionUrl: `${process.env.FRONTEND_URL || ""}/business/licence`,
           metadata: { licenceNumber },
+          branding,
         }),
       });
     } else {

@@ -5,6 +5,7 @@ import catchAsync from '../../utils/catchAsync.js';
 import ApiResponse from '../../utils/apiResponse.js';
 import platformDb from '../../models/index.js';
 import { generateOTPTemplate, generateCredentialsTemplate } from '../../utils/emailTemplates.js';
+import { getOrganisationEmailBranding } from '../../utils/emailBranding.js';
 import { sendPasswordResetOtpEmail } from '../../services/tenantUserMail.service.js';
 import { sendTransactionalEmail } from '../../services/mail.service.js';
 import { ensureCandidateEnquiryCase } from '../../services/candidateOnboarding.service.js';
@@ -390,11 +391,12 @@ export const register = catchAsync(async (req, res) => {
     organisation_id: orgId,
   });
 
+  const registerBranding = await getOrganisationEmailBranding(orgId);
   const mailResult = await sendTransactionalEmail({
     organisationId: orgId,
     to: emailNorm,
-    subject: "Elite Pic - OTP Verification",
-    html: generateOTPTemplate(otp),
+    subject: `${registerBranding.orgName} — OTP Verification`,
+    html: generateOTPTemplate(otp, registerBranding),
   });
   if (!mailResult.sent) {
     return ApiResponse.error(
@@ -481,14 +483,17 @@ export const verifyOTP = catchAsync(async (req, res) => {
     await ensureCandidateEnquiryCase(tenantDb, verifiedUser.id, { organisationId: orgId });
   }
 
+  const verifyBranding = await getOrganisationEmailBranding(orgId);
   await sendTransactionalEmail({
     organisationId: orgId,
     to: email,
-    subject: "EPiC — Account verified",
+    subject: `${verifyBranding.orgName} — Account verified`,
     html: generateCredentialsTemplate(
       email,
       "Use the password you chose during registration",
       loginUrl,
+      null,
+      verifyBranding,
     ),
   });
 
@@ -576,11 +581,13 @@ export const resendOTP = catchAsync(async (req, res) => {
   unverifiedUser.otp_expiry = otpExpiry;
   await unverifiedUser.save();
 
+  const resendOrgId = orgId || unverifiedUser.organisation_id;
+  const resendBranding = await getOrganisationEmailBranding(resendOrgId);
   const mailResult = await sendTransactionalEmail({
-    organisationId: orgId || unverifiedUser.organisation_id,
+    organisationId: resendOrgId,
     to: email,
-    subject: "Elite Pic - OTP Verification",
-    html: generateOTPTemplate(otp),
+    subject: `${resendBranding.orgName} — OTP Verification`,
+    html: generateOTPTemplate(otp, resendBranding),
   });
   if (!mailResult.sent) {
     return ApiResponse.error(
@@ -1090,10 +1097,12 @@ export const setPassword = catchAsync(async (req, res) => {
     ? `${buildTenantFrontendUrls(orgSlug).subdomain}/login`
     : `${process.env.FRONTEND_URL?.split(",")[0]?.trim() || "http://localhost:5173"}/login`;
 
+  const setPasswordOrgId = user.organisation_id ?? req.organisationContext?.organisation?.id ?? null;
+  const setPasswordBranding = await getOrganisationEmailBranding(setPasswordOrgId);
   await sendTransactionalEmail({
-    organisationId: user.organisation_id ?? req.organisationContext?.organisation?.id ?? null,
+    organisationId: setPasswordOrgId,
     to: user.email,
-    subject: "Elite Pic - Password Updated Successfully",
+    subject: `${setPasswordBranding.orgName} — Password Updated Successfully`,
     html: `<p>Your password was updated successfully.</p><p>You can now log in at <a href="${loginUrl}">${loginUrl}</a>.</p>`,
   });
 
@@ -1123,11 +1132,12 @@ export const resendOtpUser = catchAsync(async (req, res) => {
   await user.save();
   await mirrorPlatformUserById(user.id);
 
+  const resendUserBranding = await getOrganisationEmailBranding(user.organisation_id);
   await sendTransactionalEmail({
     organisationId: user.organisation_id,
     to: email,
-    subject: "Elite Pic - OTP Verification",
-    html: generateOTPTemplate(otp),
+    subject: `${resendUserBranding.orgName} — OTP Verification`,
+    html: generateOTPTemplate(otp, resendUserBranding),
   });
 
   return ApiResponse.success(res, "OTP sent successfully", { email });
@@ -1183,11 +1193,13 @@ export const sendPasswordChangeOtp = catchAsync(async (req, res) => {
   await user.save();
   await mirrorPlatformUserById(userId);
 
+  const passwordChangeOrgId = req.user?.organisation_id ?? user.organisation_id;
+  const passwordChangeBranding = await getOrganisationEmailBranding(passwordChangeOrgId);
   await sendTransactionalEmail({
-    organisationId: req.user?.organisation_id ?? user.organisation_id,
+    organisationId: passwordChangeOrgId,
     to: user.email,
-    subject: "Elite Pic - Password Change OTP",
-    html: generateOTPTemplate(otp),
+    subject: `${passwordChangeBranding.orgName} — Password Change OTP`,
+    html: generateOTPTemplate(otp, passwordChangeBranding),
   });
 
   return ApiResponse.success(res, "OTP sent successfully", { email: user.email });

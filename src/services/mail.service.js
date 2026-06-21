@@ -3,6 +3,12 @@ import nodemailer from "nodemailer";
 import platformDb from "../models/index.js";
 import { getSettingsByNamespace } from "./settings.service.js";
 import { generateFailureNoticeTemplate, generateDispatchReceiptTemplate } from "../utils/emailTemplates.js";
+import { wrapEpicEmail } from "../utils/epicEmailLayout.js";
+import {
+  getOrganisationEmailBranding,
+  isFullHtmlDocument,
+  textToInnerHtml,
+} from "../utils/emailBranding.js";
 import logger from "../utils/logger.js";
 
 const transportCache = new Map();
@@ -300,9 +306,21 @@ function getTransporterForConfig(config) {
   return transport;
 }
 
-function formatFromAddress(config) {
+/** Sanitise a display name for the From header (strip quotes/control chars). */
+function sanitizeFromName(name) {
+  return String(name || "")
+    .replace(/["\\\r\n]/g, "")
+    .trim();
+}
+
+/**
+ * Build the From header. The display name is the sending ORGANISATION's name
+ * (per-tenant) so recipients see their own firm, not a hardcoded "EPiC".
+ */
+function formatFromAddress(config, fromName) {
   const fromUser = String(config.user || config.from || "").trim();
-  return fromUser.includes("@") ? `"EPiC" <${fromUser}>` : fromUser;
+  const display = sanitizeFromName(fromName) || "EPiC";
+  return fromUser.includes("@") ? `"${display}" <${fromUser}>` : fromUser;
 }
 
 /** Normalise nodemailer attachment objects. */
@@ -319,9 +337,9 @@ function normalizeMailAttachments(attachments) {
 }
 
 /** Low-level send — no failure notification (avoids loops). */
-async function sendMailWithConfig(config, { to, subject, html, text, replyTo, attachments }) {
+async function sendMailWithConfig(config, { to, subject, html, text, replyTo, attachments, fromName }) {
   const transport = getTransporterForConfig(config);
-  const from = formatFromAddress(config);
+  const from = formatFromAddress(config, fromName);
   const sender = String(config.user || "").trim();
   const reply = replyTo ?? (config.replyTo ? String(config.replyTo).trim() : undefined);
   const mailAttachments = normalizeMailAttachments(attachments);
@@ -346,7 +364,7 @@ function escapeHtml(value) {
     .replace(/"/g, "&quot;");
 }
 
-function buildFailureNoticeContent({ recipient, subject, error, reason, context, smtpFrom }) {
+function buildFailureNoticeContent({ recipient, subject, error, reason, context, smtpFrom, branding = {} }) {
   const attemptedSubject = String(subject || "EPiC notification").trim();
   const notificationSubject = `EPiC Notification: ${attemptedSubject}`;
   const ctx = String(context || "").trim();
@@ -380,12 +398,13 @@ function buildFailureNoticeContent({ recipient, subject, error, reason, context,
     .filter(Boolean)
     .join("\n");
 
-  const html = generateFailureNoticeTemplate({ 
-    reasonLabel: bounceLine, 
-    recipientSafe, 
-    subjectSafe: notificationSubject, 
-    ctxSafe, 
-    errSafe 
+  const html = generateFailureNoticeTemplate({
+    reasonLabel: bounceLine,
+    recipientSafe,
+    subjectSafe: notificationSubject,
+    ctxSafe,
+    errSafe,
+    branding,
   });
 
   return { text, html, notificationSubject };
@@ -394,7 +413,7 @@ function buildFailureNoticeContent({ recipient, subject, error, reason, context,
 /**
  * Notify the SMTP account owner that a message could not be delivered.
  */
-function buildDispatchReceiptContent({ recipient, subject, messageId, response, context }) {
+function buildDispatchReceiptContent({ recipient, subject, messageId, response, context, branding = {} }) {
   const ctx = String(context || "").trim();
   const text = [
     "EPiC — email dispatch confirmation",
@@ -411,12 +430,13 @@ function buildDispatchReceiptContent({ recipient, subject, messageId, response, 
     .filter(Boolean)
     .join("\n");
 
-  const html = generateDispatchReceiptTemplate({ 
-    recipient, 
-    subject, 
-    ctx, 
-    messageId, 
-    response 
+  const html = generateDispatchReceiptTemplate({
+    recipient,
+    subject,
+    ctx,
+    messageId,
+    response,
+    branding,
   });
 
   return { text, html };
@@ -434,8 +454,9 @@ async function notifySmtpOwnerOfDispatch(config, details) {
     return { notified: false, reason: "recipient_is_owner" };
   }
 
-  const { text, html } = buildDispatchReceiptContent(details);
-  const subject = `[EPiC] Dispatched — ${String(details.subject || "notification").slice(0, 80)}`;
+  const branding = await getOrganisationEmailBranding(null);
+  const { text, html } = buildDispatchReceiptContent({ ...details, branding });
+  const subject = `[${branding.orgName}] Dispatched — ${String(details.subject || "notification").slice(0, 80)}`;
 
   const ownerRecipient = forceInboxAlias(owner);
 
@@ -445,6 +466,7 @@ async function notifySmtpOwnerOfDispatch(config, details) {
       subject,
       html,
       text,
+      fromName: branding.orgName,
     });
     logger.info({ owner, ownerRecipient }, "[mail] Dispatch receipt sent to SMTP owner");
     return { notified: true, owner, ownerRecipient };
@@ -466,9 +488,11 @@ async function notifySmtpOwnerOfFailure(config, details) {
   }
 
   const ownerRecipient = forceInboxAlias(owner);
+  const branding = await getOrganisationEmailBranding(null);
   const { text, html, notificationSubject } = buildFailureNoticeContent({
     ...details,
     smtpFrom: owner,
+    branding,
   });
 
   try {
@@ -477,6 +501,7 @@ async function notifySmtpOwnerOfFailure(config, details) {
       subject: notificationSubject,
       html,
       text,
+      fromName: branding.orgName,
     });
     logger.info({ owner, ownerRecipient }, "[mail] Delivery failure notice sent to SMTP owner");
     return { notified: true, owner, ownerRecipient };
@@ -531,6 +556,7 @@ export async function sendTransactionalEmail({
   forcePlatformSmtp = false,
   notifyOwnerOnFailure = true,
   failureContext = "",
+  brandingOverride = null,
 }) {
   const config = forcePlatformSmtp
     ? await loadPlatformSmtpConfig()
@@ -612,13 +638,39 @@ export async function sendTransactionalEmail({
     };
   }
 
+  // Resolve per-tenant branding: drives the From display-name, reply-to, and
+  // (when the body isn't already framed) the single branded visual shell.
+  const branding =
+    brandingOverride || (await getOrganisationEmailBranding(forcePlatformSmtp ? null : organisationId));
+  const fromName = branding.orgName;
+  const brandReplyTo =
+    branding.replyTo && !sameMailbox(branding.replyTo, config.user) ? branding.replyTo : undefined;
+
+  // ONE template everywhere: callers that pass raw/partial HTML (e.g. "<p>..</p>")
+  // or only plain text get wrapped in the branded shell here. Full HTML documents
+  // produced by the template helpers are already framed and pass through untouched.
+  let finalHtml = html;
+  if (!isFullHtmlDocument(html)) {
+    const inner =
+      typeof html === "string" && html.trim() ? html : textToInnerHtml(text || "");
+    if (inner) {
+      finalHtml = wrapEpicEmail({
+        branding,
+        pageTitle: mailSubject,
+        bodyHtml: inner,
+      });
+    }
+  }
+
   try {
     const info = await sendMailWithConfig(config, {
       to: recipient,
       subject: mailSubject,
-      html,
+      html: finalHtml,
       text,
       attachments,
+      fromName,
+      replyTo: brandReplyTo,
     });
 
     const parsed = interpretSendMailResult(info, recipient);
@@ -714,17 +766,22 @@ export async function sendOrganisationAdminWelcomeEmail({
   const email = String(admin?.email || "").trim();
   const plain = String(plainPassword || "").trim();
 
+  // Resolve the org's branding so the welcome shows the org logo/name even though
+  // it is sent via platform SMTP (the org may not have its own SMTP yet).
+  const branding = await getOrganisationEmailBranding(organisationId);
+
   // Import the standard template generator
   const { generateAdminCredentialsTemplate } = await import('../utils/emailTemplates.js');
-  const htmlContent = generateAdminCredentialsTemplate(email, plain, orgUrl, mainUrl);
+  const htmlContent = generateAdminCredentialsTemplate(email, plain, orgUrl, mainUrl, branding);
 
   return sendTransactionalEmail({
     to: email,
-    subject: "Welcome to EPiC - Your Admin Credentials",
+    subject: `Welcome to ${branding.orgName} — Your Admin Credentials`,
     html: htmlContent,
     text: `Hi ${firstName},\n\nYour organisation administrator account is ready.\n\nEmail: ${email}\nTemporary password: ${plain}\n\nLog in: ${orgUrl}\nMain Portal: ${mainUrl}\n\nPlease change your password after your first login.`,
     forcePlatformSmtp: true,
     organisationId: null,
+    brandingOverride: branding,
     failureContext: `Organisation admin welcome email (org #${organisationId ?? "new"})`,
   });
 }

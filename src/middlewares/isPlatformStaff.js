@@ -31,7 +31,10 @@ export const isPlatformStaff = async (req, res, next) => {
       ],
     });
 
-    if (!user || user.organisation_id != null) {
+    // BUG-051: a null organisation_id alone is not sufficient — also require the
+    // user's role to be platform-scoped. Otherwise a user whose organisation_id
+    // was cleared but who holds a tenant role could reach superadmin endpoints.
+    if (!user || user.organisation_id != null || user.role?.scope !== "platform") {
       return ApiResponse.forbidden(res, "Platform access required");
     }
 

@@ -52,7 +52,7 @@ async function notifyAdminsOfPaymentReceived({ tenantDb, caseRecord, organisatio
       priority: 'high',
       dueInDays: 1,
       organisationId: organisationId ?? null,
-    }).catch(() => {});
+    }).catch((err) => logger.warn({ err }, "BUG-005: create 'review payment received' admin task failed"));
   }
 }
 
@@ -130,27 +130,77 @@ async function recordStripeCasePayment({ tenantDb, caseRecord, paymentIntent, us
   const txnId = paymentIntent?.id;
   if (!txnId) return null;
 
-  const existing = await findCasePaymentByTransaction(tenantDb, txnId, caseRecord.id);
-  if (existing) {
-    await caseRecord.reload();
-    return existing;
-  }
-
   const amount = paymentIntent.amount / 100;
   const paymentStatus = paymentIntent.status === 'succeeded' ? 'completed' : 'pending';
 
-  const casePayment = await tenantDb.CasePayment.create({
-    caseId: caseRecord.id,
-    paymentType: 'fee',
-    amount,
-    paymentMethod: 'online',
-    paymentDate: localDateStr(),
-    paymentStatus,
-    transactionId: txnId,
-    invoiceNumber: txnId,
-    description: 'Stripe payment',
-    receivedBy: userId || null,
-  });
+  // BUG-105: the checkout amount is server-enforced (unit_amount = balanceDue),
+  // so the candidate cannot lower it through the normal flow. But if a recorded
+  // amount comes in materially below the case's outstanding balance, surface it
+  // as an auditable discrepancy rather than crediting silently. Partial/instalment
+  // payments are legitimate, so this warns (for reconciliation) without rejecting.
+  {
+    const outstanding = Math.max(0, (Number(caseRecord.totalAmount) || 0) - (Number(caseRecord.paidAmount) || 0));
+    if (outstanding > 0 && amount + 0.02 < outstanding) {
+      logger.warn(
+        { caseId: caseRecord.id, paymentIntentId: txnId, amount, outstanding },
+        'Stripe payment amount is below the outstanding balance — recording as a partial payment',
+      );
+    }
+  }
+
+  // BUG-104: finalisation is triggered from BOTH the Stripe webhook AND the
+  // verifyCheckoutSession endpoint, which can fire concurrently for the same
+  // paymentIntent. A plain find-then-create has a race window that lets both
+  // callers create a CasePayment, double-crediting the case. Serialise the
+  // check-and-insert inside a transaction that row-locks the case, and treat any
+  // unique-constraint violation (defence-in-depth if a DB unique index on
+  // transactionId is added later) as "already recorded".
+  let created = false;
+  let casePayment;
+  try {
+    casePayment = await tenantDb.sequelize.transaction(async (t) => {
+      // Lock the case row so the two finalize paths serialise on it.
+      await caseRecord.reload({ transaction: t, lock: t.LOCK.UPDATE });
+
+      const existingInTxn = await tenantDb.CasePayment.findOne({
+        where: { transactionId: String(txnId), caseId: caseRecord.id },
+        transaction: t,
+      });
+      if (existingInTxn) return existingInTxn;
+
+      created = true;
+      return tenantDb.CasePayment.create(
+        {
+          caseId: caseRecord.id,
+          paymentType: 'fee',
+          amount,
+          paymentMethod: 'online',
+          paymentDate: localDateStr(),
+          paymentStatus,
+          transactionId: txnId,
+          invoiceNumber: txnId,
+          description: 'Stripe payment',
+          receivedBy: userId || null,
+        },
+        { transaction: t },
+      );
+    });
+  } catch (err) {
+    if (err?.name === 'SequelizeUniqueConstraintError') {
+      const existing = await findCasePaymentByTransaction(tenantDb, txnId, caseRecord.id);
+      if (existing) {
+        await caseRecord.reload();
+        return existing;
+      }
+    }
+    throw err;
+  }
+
+  // Already recorded by a concurrent caller — do not re-apply the balance update.
+  if (!created) {
+    await caseRecord.reload();
+    return casePayment;
+  }
 
   if (paymentStatus === 'completed') {
     const prevPaid = Number(caseRecord.paidAmount) || 0;
@@ -184,7 +234,7 @@ async function recordStripeCasePayment({ tenantDb, caseRecord, paymentIntent, us
       trigger: 'payment_received',
       performedBy: userId || null,
       organisationId: organisationId ?? null,
-    }).catch(() => {});
+    }).catch((err) => logger.warn({ err, caseId: caseRecord.id }, "BUG-005: evaluateCaseStageAfterEvent (payment_received) failed"));
 
     await notifyAdminsOfPaymentReceived({ tenantDb, caseRecord, organisationId });
   }
@@ -216,7 +266,17 @@ async function finalizeStripePaymentForUser({ userId, paymentIntent, caseRef = n
   const user = await platformDb.User.findByPk(userId, { attributes: ['organisation_id'] });
   const organisationId = user?.organisation_id ?? null;
 
-  if (paymentIntent.status !== 'succeeded') return null;
+  // BUG-108: only a 'succeeded' intent updates the balance, but a non-succeeded
+  // status (processing / requires_action / requires_payment_method, etc.) must
+  // not be dropped silently — log it so pending/stuck payments leave an audit
+  // trail and can be reconciled.
+  if (paymentIntent.status !== 'succeeded') {
+    logger.warn(
+      { userId, paymentIntentId: paymentIntent.id, status: paymentIntent.status, caseId: caseRecord.id },
+      'Stripe payment finalisation skipped — payment intent not succeeded',
+    );
+    return null;
+  }
 
   const recorded = await recordStripeCasePayment({
     tenantDb,
@@ -261,7 +321,7 @@ async function notifyAdminsOfBankTransferReported({ tenantDb, caseRecord, organi
       priority: 'high',
       dueInDays: 2,
       organisationId: organisationId ?? null,
-    }).catch(() => {});
+    }).catch((err) => logger.warn({ err }, "BUG-005: create 'confirm bank transfer' admin task failed"));
   }
 }
 
@@ -334,7 +394,7 @@ export const recordBankTransferIntent = async (req, res) => {
       tenantDb,
       caseRecord,
       organisationId: user?.organisation_id ?? null,
-    }).catch(() => {});
+    }).catch((err) => logger.warn({ err, caseId: caseRecord.id }, "BUG-005: notifyAdminsOfBankTransferReported failed"));
 
     return res.status(200).json({
       status: 'success',
@@ -597,7 +657,9 @@ export const confirmPayment = async (req, res) => {
         userId: req.user?.userId,
         paymentIntent,
         caseRef: paymentIntent.metadata?.caseId,
-      }).catch(() => {});
+      }).catch((err) =>
+        logger.error({ err, paymentIntentId: paymentIntent.id }, "BUG-005: finalizeStripePaymentForUser failed"),
+      );
 
       return res.status(200).json({
         status: "success",
@@ -622,7 +684,9 @@ export const confirmPayment = async (req, res) => {
         userId: req.user?.userId,
         paymentIntent: confirmedPayment,
         caseRef: confirmedPayment.metadata?.caseId,
-      }).catch(() => {});
+      }).catch((err) =>
+        logger.error({ err, paymentIntentId: confirmedPayment.id }, "BUG-005: finalizeStripePaymentForUser failed"),
+      );
     }
 
     res.status(200).json({
@@ -668,7 +732,9 @@ export const getPaymentStatus = async (req, res) => {
         userId: req.user?.userId,
         paymentIntent,
         caseRef: paymentIntent.metadata?.caseId,
-      }).catch(() => {});
+      }).catch((err) =>
+        logger.error({ err, paymentIntentId: paymentIntent.id }, "BUG-005: finalizeStripePaymentForUser failed"),
+      );
     }
 
     res.status(200).json({
@@ -764,12 +830,42 @@ export const createSetupIntent = async (req, res) => {
 export const handleWebhook = async (req, res) => {
   const sig = req.headers["stripe-signature"];
 
+  let verified;
   let event;
   try {
-    event = await constructStripeWebhookEvent(req.body, sig);
+    ({ verified, event } = await constructStripeWebhookEvent(req.body, sig));
   } catch (err) {
     logger.warn({ errMessage: err.message }, "Webhook signature verification failed");
     return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  // No Stripe webhook signing secret is configured in the DB yet (production
+  // has none). The payload could not be verified, so we ACK to stop Stripe
+  // retrying and SKIP all side effects rather than acting on unauthenticated
+  // data. Payment finalisation does not depend on this path — verify-session
+  // (candidate + org billing) is authoritative and idempotent.
+  if (!verified) {
+    if (event?.id) {
+      await platformDb.StripeWebhookEvent.findOrCreate({
+        where: { event_id: event.id },
+        defaults: {
+          event_id: event.id,
+          event_type: event.type || "unknown",
+          stripe_account_id: event.account || null,
+          tenant_id: null,
+          processing_status: "skipped",
+          error_message:
+            "No Stripe webhook signing secret configured — event not verified; side effects skipped (verify-session is authoritative).",
+        },
+      }).catch((err) =>
+        logger.warn({ err, eventId: event.id }, "Failed to record skipped webhook event"),
+      );
+    }
+    logger.warn(
+      { eventType: event?.type },
+      "Stripe webhook received but no signing secret is configured — acknowledged and skipped",
+    );
+    return res.json({ received: true, skipped: true });
   }
 
   const { tenantDb, organisationId } = await resolveTenantDbFromStripeObject(event.data?.object || {});

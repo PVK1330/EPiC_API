@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { sendTransactionalEmail } from '../../../services/mail.service.js';
 import { generateCredentialsTemplate, generateNotificationEmailTemplate } from '../../../utils/emailTemplates.js';
+import { getOrganisationEmailBranding } from '../../../utils/emailBranding.js';
 import crypto from 'crypto';
 import { generateCaseId } from '../../../utils/case.utils.js';
 import { notifyAdmins, createNotification, NotificationTypes, NotificationPriority } from '../../../services/notification.service.js';
@@ -146,11 +147,12 @@ export const addSponsoredWorker = async (req, res) => {
 
     const loginUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
     try {
+      const branding = await getOrganisationEmailBranding(organisationId);
       await sendTransactionalEmail({
-        organisationId: req.user?.organisation_id ?? null,
+        organisationId,
         to: email,
-        subject: "Elite Pic - Your Sponsored Worker Account",
-        html: generateCredentialsTemplate(email, tempPassword, loginUrl),
+        subject: `${branding.orgName} — Your Sponsored Worker Account`,
+        html: generateCredentialsTemplate(email, tempPassword, loginUrl, branding.portalUrl, branding),
       });
     } catch (mailErr) {
       logger.error({ err: mailErr }, 'Failed to send credentials email');
@@ -713,8 +715,10 @@ export const updateWorkerStatus = async (req, res) => {
 
     if (candidate?.email) {
       try {
+        const organisationId = req.user?.organisation_id ?? null;
+        const branding = await getOrganisationEmailBranding(organisationId);
         await sendTransactionalEmail({
-          organisationId: req.user?.organisation_id ?? null,
+          organisationId,
           to: candidate.email,
           subject: 'Your Case Status Has Been Updated',
           html: generateNotificationEmailTemplate({
@@ -724,6 +728,7 @@ export const updateWorkerStatus = async (req, res) => {
             priority: NotificationPriority.HIGH,
             notificationType: NotificationTypes.INFO,
             actionUrl: `${process.env.FRONTEND_URL || '#'}/candidate/application-status`,
+            branding,
           })
         });
       } catch (err) {

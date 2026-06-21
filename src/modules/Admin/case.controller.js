@@ -1139,52 +1139,64 @@ export const assignCase = async (req, res) => {
       proposedAmount,
     } = req.body;
 
-    const caseData = (await req.tenantDb.Case.findOne({ where: { caseId: id } })) || 
+    const caseData = (await req.tenantDb.Case.findOne({ where: { caseId: id } })) ||
                      (!isNaN(parseInt(id)) ? await req.tenantDb.Case.findOne({ where: { id: parseInt(id, 10) } }) : null);
 
     if (!caseData) return res.status(404).json({ status: "error", message: "Case not found" });
 
-    const rawAssign = assignTo ?? (caseworkerId != null ? caseworkerId : null);
-    const cwIds = Array.isArray(rawAssign)
-      ? rawAssign
-      : rawAssign != null && rawAssign !== ""
-        ? [rawAssign]
-        : caseData.assignedcaseworkerId;
+    // BUG-080: two concurrent admin assignments to the same case could each read
+    // the old caseworker list and write, silently overwriting one another. Lock the
+    // case row inside a short transaction and recompute the assignment from the
+    // locked state so concurrent requests serialise.
+    const oldCwIds = await req.tenantDb.sequelize.transaction(async (t) => {
+      await caseData.reload({ transaction: t, lock: t.LOCK.UPDATE });
 
-    const noteLines = [];
-    if (reason) noteLines.push(`[System]: ${reason}`);
-    if (internalNotes) noteLines.push(`[Admin]: ${internalNotes}`);
-    if (assignToName) noteLines.push(`[System]: Assigned to ${assignToName}`);
-    const updatedNotes = noteLines.length
-      ? [caseData.notes, ...noteLines].filter(Boolean).join("\n")
-      : caseData.notes;
+      const lockedOldCwIds = Array.isArray(caseData.assignedcaseworkerId)
+        ? caseData.assignedcaseworkerId
+        : caseData.assignedcaseworkerId
+          ? [caseData.assignedcaseworkerId]
+          : [];
 
-    const oldCwIds = Array.isArray(caseData.assignedcaseworkerId)
-      ? caseData.assignedcaseworkerId
-      : caseData.assignedcaseworkerId
-        ? [caseData.assignedcaseworkerId]
-        : [];
-    const normalizedCwIds = Array.isArray(cwIds)
-      ? cwIds.map(Number).filter((id) => Number.isFinite(id) && id > 0)
-      : cwIds != null && cwIds !== ""
-        ? [Number(cwIds)].filter((id) => Number.isFinite(id) && id > 0)
-        : [];
+      const rawAssign = assignTo ?? (caseworkerId != null ? caseworkerId : null);
+      const cwIds = Array.isArray(rawAssign)
+        ? rawAssign
+        : rawAssign != null && rawAssign !== ""
+          ? [rawAssign]
+          : caseData.assignedcaseworkerId;
 
-    const updates = {
-      assignedcaseworkerId: normalizedCwIds,
-      notes: updatedNotes,
-    };
-    if (priority) updates.priority = priority;
+      const noteLines = [];
+      if (reason) noteLines.push(`[System]: ${reason}`);
+      if (internalNotes) noteLines.push(`[Admin]: ${internalNotes}`);
+      if (assignToName) noteLines.push(`[System]: Assigned to ${assignToName}`);
+      const updatedNotes = noteLines.length
+        ? [caseData.notes, ...noteLines].filter(Boolean).join("\n")
+        : caseData.notes;
 
-    const parsedProposed = parseFloat(proposedAmount);
-    if (!Number.isNaN(parsedProposed) && parsedProposed >= 0) {
-      updates.proposedAmount = parsedProposed;
-    }
+      const normalizedCwIds = Array.isArray(cwIds)
+        ? cwIds.map(Number).filter((id) => Number.isFinite(id) && id > 0)
+        : cwIds != null && cwIds !== ""
+          ? [Number(cwIds)].filter((id) => Number.isFinite(id) && id > 0)
+          : [];
+
+      const updates = {
+        assignedcaseworkerId: normalizedCwIds,
+        notes: updatedNotes,
+      };
+      if (priority) updates.priority = priority;
+
+      const parsedProposed = parseFloat(proposedAmount);
+      if (!Number.isNaN(parsedProposed) && parsedProposed >= 0) {
+        updates.proposedAmount = parsedProposed;
+      }
+
+      await caseData.update(updates, { transaction: t });
+      return lockedOldCwIds;
+    });
+    await caseData.reload();
+
+    const normalizedCwIds = Array.isArray(caseData.assignedcaseworkerId) ? caseData.assignedcaseworkerId : [];
     const hadNoCaseworker = oldCwIds.length === 0;
     const nowHasCaseworker = normalizedCwIds.length > 0;
-
-    await caseData.update(updates);
-    await caseData.reload();
 
     if (nowHasCaseworker && (hadNoCaseworker || caseData.caseStage === "client_enquiry")) {
       const currentStage = resolveCaseStage(caseData);

@@ -17,6 +17,7 @@ import {
     getLicenceApplicationV2,
     downloadLicenceDocument,
     verifyAdminAppendixDocument,
+    bulkVerifyAdminAppendixDocuments,
     rejectAdminAppendixDocument,
 } from './licenceManagement.controller.js';
 import {
@@ -89,6 +90,7 @@ router.get("/:id/grant-record",  getGrantRecordHandler);
 
 // Appendix A documents — admin verify / reject (same as caseworker but admin-gated).
 router.patch("/:id/appendix-documents/:documentId/verify", verifyAdminAppendixDocument);
+router.post("/:id/appendix-documents/bulk-verify", bulkVerifyAdminAppendixDocuments);
 router.patch("/:id/appendix-documents/:documentId/reject", rejectAdminAppendixDocument);
 
 // Government credential management (Phase 3).

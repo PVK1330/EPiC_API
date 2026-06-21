@@ -69,6 +69,12 @@ export async function applyCaseStageChange({
   reason,
   sendEmail = true,
   organisationId = null,
+  // When true this is a pass-through hop in a multi-step advance: persist the
+  // stage and leave an audit trail, but skip emails, notifications, task
+  // automation and stage-entry hooks so stages the case is merely walking
+  // through don't re-fire side effects (e.g. re-requesting biometrics
+  // availability when crossing `application_submitted`).
+  intermediate = false,
 }) {
   // Reload caseRecord first to avoid race conditions/duplicate events
   await caseRecord.reload().catch(() => {});
@@ -103,6 +109,10 @@ export async function applyCaseStageChange({
     description: reason || `Workflow advanced to: ${nextStep?.title || nextStage}`,
     isSystemAction: true,
   });
+
+  if (intermediate) {
+    return { previousStage, nextStage };
+  }
 
   if (sendEmail) {
     try {

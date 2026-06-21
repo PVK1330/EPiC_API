@@ -28,6 +28,7 @@ import {
   sendTransactionalEmail,
 } from "../../services/mail.service.js";
 import { generateDiagnosticTemplate } from "../../utils/emailTemplates.js";
+import { getOrganisationEmailBranding } from "../../utils/emailBranding.js";
 import { toPublicImagePath } from "../../utils/storagePath.util.js";
 
 // ---------------------------------------------------------------------------
@@ -235,11 +236,13 @@ export const sendSmtpTestEmail = catchAsync(async (req, res) => {
 
   const smtpOwner = config.user;
 
+  const branding = await getOrganisationEmailBranding(null);
+
   const result = await sendTransactionalEmail({
     to,
-    subject: "EPiC — SMTP test email",
-    text: "This is a test email from EPiC platform SMTP. If you received it, transactional mail is working.",
-    html: generateDiagnosticTemplate({ source: config.source, message: "This is a test email from EPiC platform SMTP." }),
+    subject: `${branding.orgName} — SMTP test email`,
+    text: `This is a test email from ${branding.orgName} platform SMTP. If you received it, transactional mail is working.`,
+    html: generateDiagnosticTemplate({ source: config.source, message: `This is a test email from ${branding.orgName} platform SMTP.`, branding }),
     failureContext: "Superadmin Connectivity — Send test email",
     forcePlatformSmtp: true,
   });

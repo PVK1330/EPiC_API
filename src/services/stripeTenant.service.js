@@ -15,13 +15,20 @@ export function toPublicAssetUrl(relativePath) {
   return toPublicImagePath(relativePath);
 }
 
-/** Load tenant payment row; falls back to env keys when DB empty. */
+/**
+ * Load the tenant's payment row. Stripe keys come ONLY from the tenant DB
+ * (payment_settings) — entered by the org admin in Admin → Payment Config.
+ * There is deliberately NO process.env fallback: a tenant with no keys must
+ * fail loudly (callers surface a "configure in Admin" error) rather than
+ * silently transacting on whatever account env keys happen to point at, which
+ * would break per-tenant isolation.
+ */
 export async function getTenantPaymentSettings(tenantDb) {
   if (!tenantDb?.PaymentSetting) {
     return {
-      stripe_secret_key: process.env.STRIPE_SECRET_KEY || null,
-      stripe_public_key: process.env.STRIPE_PUBLIC_KEY || null,
-      stripe_webhook_secret: process.env.STRIPE_WEBHOOK_SECRET || null,
+      stripe_secret_key: null,
+      stripe_public_key: null,
+      stripe_webhook_secret: null,
     };
   }
   let row = await tenantDb.PaymentSetting.findOne();
@@ -31,10 +38,9 @@ export async function getTenantPaymentSettings(tenantDb) {
   const plain = row.toJSON ? row.toJSON() : row;
   return {
     ...plain,
-    stripe_secret_key: plain.stripe_secret_key || process.env.STRIPE_SECRET_KEY || null,
-    stripe_public_key: plain.stripe_public_key || process.env.STRIPE_PUBLIC_KEY || null,
-    stripe_webhook_secret:
-      plain.stripe_webhook_secret || process.env.STRIPE_WEBHOOK_SECRET || null,
+    stripe_secret_key: plain.stripe_secret_key || null,
+    stripe_public_key: plain.stripe_public_key || null,
+    stripe_webhook_secret: plain.stripe_webhook_secret || null,
   };
 }
 
@@ -53,19 +59,34 @@ export async function getStripeForTenant(tenantDb) {
   };
 }
 
+/**
+ * Load the platform (superadmin) Stripe credentials. These come ONLY from the
+ * platform DB (PlatformSetting), entered by the superadmin in Settings →
+ * Commerce — never from process.env.
+ *
+ * Note on the publishable key name: the superadmin form (configureGateway)
+ * persists it under `stripe_publishable_key`; older rows may use
+ * `stripe_public_key`. We read both so the saved key is always found, and
+ * expose it as `stripe_public_key` for a uniform shape with the tenant getter.
+ */
 export async function getPlatformPaymentSettings() {
-  const keys = ['stripe_secret_key', 'stripe_public_key', 'stripe_webhook_secret'];
+  const keys = [
+    'stripe_secret_key',
+    'stripe_publishable_key',
+    'stripe_public_key',
+    'stripe_webhook_secret',
+  ];
   const settings = await platformDb.PlatformSetting.findAll({
     where: { key: keys }
   });
-  
+
   const map = {};
   for (const s of settings) map[s.key] = s.value;
 
   return {
-    stripe_secret_key: map.stripe_secret_key || process.env.STRIPE_SECRET_KEY || null,
-    stripe_public_key: map.stripe_public_key || process.env.STRIPE_PUBLIC_KEY || null,
-    stripe_webhook_secret: map.stripe_webhook_secret || process.env.STRIPE_WEBHOOK_SECRET || null,
+    stripe_secret_key: map.stripe_secret_key || null,
+    stripe_public_key: map.stripe_publishable_key || map.stripe_public_key || null,
+    stripe_webhook_secret: map.stripe_webhook_secret || null,
   };
 }
 
@@ -136,7 +157,22 @@ export async function resolveTenantDbFromStripeObject(stripeObject) {
 }
 
 /**
- * Verify webhook signature using tenant secret from metadata, else env fallback.
+ * Verify an incoming Stripe webhook using the signing secret stored in the DB:
+ *   - the tenant webhook secret when the event payload carries
+ *     metadata.organisationId (candidate / sponsor / tenant events), else
+ *   - the platform webhook secret (PlatformSetting) for org-subscription events.
+ *
+ * Secrets come ONLY from the DB — never from process.env.
+ *
+ * Production has no Stripe webhook signing secret configured yet, and the
+ * post-redirect verify-session endpoints (candidate verifyCheckoutSession +
+ * org-billing verifySession) are the AUTHORITATIVE payment finalisers. So a
+ * missing signing secret must NOT crash the endpoint or dead-letter every
+ * event: we return `{ verified: false, event }` (the parsed-but-untrusted
+ * payload) and let the caller ACK and skip side effects. When a secret IS
+ * configured, a bad signature still throws (genuine tampering / misconfig).
+ *
+ * @returns {Promise<{ verified: boolean, event: object }>}
  */
 export async function constructStripeWebhookEvent(rawBody, signature) {
   let payload;
@@ -147,35 +183,42 @@ export async function constructStripeWebhookEvent(rawBody, signature) {
   }
 
   const metaOrgId = payload?.data?.object?.metadata?.organisationId;
-  let webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
+  let webhookSecret = null;
+  let apiSecret = null;
+
+  // Tenant-signed events carry organisationId in metadata → verify with that
+  // tenant's own webhook secret + API key.
   if (metaOrgId) {
     const tenantDb = await resolveTenantDbByOrganisationId(metaOrgId);
     if (tenantDb) {
       const settings = await getTenantPaymentSettings(tenantDb);
-      if (settings.stripe_webhook_secret) {
-        webhookSecret = settings.stripe_webhook_secret;
-      }
+      webhookSecret = settings.stripe_webhook_secret || null;
+      apiSecret = settings.stripe_secret_key || null;
     }
   }
 
-  if (!webhookSecret) {
-    throw new Error(
-      "Stripe webhook secret is not configured. Set stripe_webhook_secret in Admin → Payment Config or STRIPE_WEBHOOK_SECRET in env.",
-    );
-  }
-
-  // Use platform fallback for webhook verification if tenant lacks it
-  let stripeClientSecret = process.env.STRIPE_SECRET_KEY || "sk_placeholder";
-  if (!metaOrgId) {
+  // Platform-signed events (e.g. org subscriptions, which deliberately omit
+  // organisationId) — or a tenant whose own secret is unset — fall to the
+  // platform credentials.
+  if (!webhookSecret || !apiSecret) {
     const pSettings = await getPlatformPaymentSettings();
-    if (pSettings.stripe_secret_key) stripeClientSecret = pSettings.stripe_secret_key;
-    if (!webhookSecret && pSettings.stripe_webhook_secret) webhookSecret = pSettings.stripe_webhook_secret;
+    webhookSecret = webhookSecret || pSettings.stripe_webhook_secret || null;
+    apiSecret = apiSecret || pSettings.stripe_secret_key || null;
   }
 
-  const stripe = new Stripe(stripeClientSecret);
+  // No signing secret configured anywhere (DB-only). We cannot verify the
+  // signature, so return the untrusted payload as unverified — the caller will
+  // acknowledge and skip side effects (verify-session is authoritative).
+  if (!webhookSecret) {
+    return { verified: false, event: payload };
+  }
+
+  // constructEvent verifies the HMAC using webhookSecret; the API key on the
+  // client is not used for verification, but the SDK requires a non-empty key.
+  const stripe = new Stripe(apiSecret || webhookSecret);
   const event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
-  return event;
+  return { verified: true, event };
 }
 
 async function upsertCandidateStripePrefs(tenantDb, userId, patch) {
