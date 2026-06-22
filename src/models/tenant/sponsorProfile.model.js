@@ -80,7 +80,7 @@ export default (sequelize, DataTypes) => {
                 allowNull: true,
             },
             authorisingPhone: {
-                type: DataTypes.STRING(20),
+                type: DataTypes.STRING(30),
                 allowNull: true,
             },
             authorisingEmail: {
@@ -97,7 +97,7 @@ export default (sequelize, DataTypes) => {
                 allowNull: true,
             },
             keyContactPhone: {
-                type: DataTypes.STRING(20),
+                type: DataTypes.STRING(30),
                 allowNull: true,
             },
             keyContactEmail: {
@@ -118,7 +118,7 @@ export default (sequelize, DataTypes) => {
                 allowNull: true,
             },
             hrPhone: {
-                type: DataTypes.STRING(20),
+                type: DataTypes.STRING(30),
                 allowNull: true,
             },
             hrJobTitle: {
@@ -160,7 +160,7 @@ export default (sequelize, DataTypes) => {
                 allowNull: true,
             },
             billingPhone: {
-                type: DataTypes.STRING(20),
+                type: DataTypes.STRING(30),
                 allowNull: true,
             },
             outstandingBalance: {

@@ -18,7 +18,10 @@ export default (sequelize, DataTypes) => {
         references: { model: "organisations", key: "id" },
       },
       organisationType: { type: DataTypes.STRING(100), allowNull: true, field: "organisation_type" },
-      companiesHouseNumber: { type: DataTypes.STRING(20), allowNull: true, field: "companies_house_number" },
+      // Widened to 50 to match sponsor_profiles.registrationNumber (STRING 50),
+      // which syncPersonnelFromProfile copies in here — a 21–50 char value used
+      // to overflow the old VARCHAR(20) and 500 the licence-V2 sync.
+      companiesHouseNumber: { type: DataTypes.STRING(50), allowNull: true, field: "companies_house_number" },
       payeReference: { type: DataTypes.STRING(50), allowNull: true, field: "paye_reference" },
       accountsOfficeReference: { type: DataTypes.STRING(50), allowNull: true, field: "accounts_office_reference" },
       vatNumber: { type: DataTypes.STRING(30), allowNull: true, field: "vat_number" },
