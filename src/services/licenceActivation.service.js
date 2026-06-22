@@ -8,8 +8,7 @@ import {
 import { sendTransactionalEmail } from "./mail.service.js";
 import { generateNotificationEmailTemplate } from "../utils/emailTemplates.js";
 import { getOrganisationEmailBranding } from "../utils/emailBranding.js";
-import { recordLicenceAudit, extractCaseworkerIds } from "./licenceAssignment.service.js";
-import { licenceActivatedCaseworkers } from "./sponsorshipNotification.service.js";
+import { recordLicenceAudit } from "./licenceAssignment.service.js";
 
 /** Standard UK sponsor licence validity. */
 const LICENCE_VALIDITY_YEARS = 4;
@@ -137,8 +136,13 @@ export async function activateSponsorLicence({
     throw err;
   }
 
-  // 4) Audit log — Licence Approved / Approved By / Approved Date (best effort).
-  await recordAuditLog({
+  // 4–6) All post-activation side-effects are fire-and-forget so they never
+  // block the outer transaction (which may still be open when this function
+  // returns). Holding DB row locks while sending emails or writing audit rows
+  // in separate connections was the root cause of the frontend timeout.
+
+  // 4) Audit log
+  recordAuditLog({
     tenantDb,
     userId: approvedByUserId,
     action: "LICENCE_APPROVED",
@@ -161,8 +165,8 @@ export async function activateSponsorLicence({
     logger.error({ err, applicationId: application.id, sponsorUserId: application.userId }, "Failed to record licence approval audit log")
   );
 
-  // 4b) Timeline entry — LICENCE_ACTIVATED / LICENCE_RENEWED.
-  await recordLicenceAudit({
+  // 4b) Timeline entry
+  recordLicenceAudit({
     tenantDb,
     application,
     actorId: approvedByUserId,
@@ -177,8 +181,7 @@ export async function activateSponsorLicence({
     logger.error({ err, applicationId: application.id, sponsorUserId: application.userId }, "Failed to record licence timeline entry")
   );
 
-  // 5) Notify the sponsor (portal + email) — fire-and-forget so slow SMTP
-  // doesn't hold the outer transaction open past the client timeout.
+  // 5) Sponsor notification (portal + email)
   notifySponsorLicenceActivated({
     tenantDb,
     profile,
@@ -189,20 +192,8 @@ export async function activateSponsorLicence({
     isRenewal,
   }).catch((err) => logger.error({ err, applicationId: application.id }, "notifySponsorLicenceActivated failed"));
 
-  // 6) Notify assigned caseworkers (in-app).
-  const cwIds = extractCaseworkerIds(application.assignedcaseworkerId);
-  if (cwIds.length > 0) {
-    await licenceActivatedCaseworkers({
-      tenantDb,
-      application,
-      licenceNumber,
-      cosAllocation: profile.cosAllocation ?? 0,
-      caseworkerIds: cwIds,
-      req,
-    }).catch((err) =>
-      logger.error({ err, applicationId: application.id, caseworkerIds: cwIds }, "Failed to notify caseworkers of licence activation")
-    );
-  }
+  // 6) Caseworker in-app notifications (also sent by licenceGrant.service after
+  // commit — this call is intentionally removed to avoid duplicate notifications).
 
   logger.info(
     {
