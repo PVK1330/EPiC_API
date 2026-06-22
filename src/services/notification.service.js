@@ -595,7 +595,9 @@ export const generateNotification = async (context, payload) => {
     //    centralized registry instance).
     const ioInstance = io || getIO();
     if (sendSocket && ioInstance && recipientId) {
-      ioInstance.to(userRoom(recipientId)).emit('notification:new', notification);
+      // Emit plain JSON (matches the notifyUser path) so the client always
+      // receives flat fields (entityType, actionType, metadata...) for routing.
+      ioInstance.to(userRoom(recipientId)).emit('notification:new', notification.toJSON());
 
       // Update unread count
       const unreadCount = await tenantDb.Notification.count({ where: { userId: recipientId, isRead: false } });
