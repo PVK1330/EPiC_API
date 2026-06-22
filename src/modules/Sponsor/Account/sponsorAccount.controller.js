@@ -6,6 +6,16 @@ import { Op } from 'sequelize';
 import logger from '../../../utils/logger.js';
 import { toPublicImagePath } from '../../../utils/storagePath.util.js';
 
+const ALLOWED_PROFILE_DOC_FIELDS = new Set([
+  'sponsorLetter',
+  'insuranceCertificate',
+  'hrPolicies',
+  'organisationalChart',
+  'recruitmentDocs',
+]);
+const PRIVATE_STORAGE_DIR = path.resolve(process.cwd(), 'storage', 'private');
+const INLINE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.pdf']);
+
 /**
  * Resolve user ID from request
  */
@@ -363,5 +373,46 @@ export const changePassword = async (req, res) => {
       message: 'Internal server error',
       error: err.message
     });
+  }
+};
+
+export const downloadProfileDocument = async (req, res) => {
+  try {
+    const userId = resolveUserId(req);
+    if (!userId) return res.status(401).json({ status: 'error', message: 'Unauthorised' });
+
+    const { field } = req.params;
+    if (!ALLOWED_PROFILE_DOC_FIELDS.has(field)) {
+      return res.status(400).json({ status: 'error', message: 'Invalid document field' });
+    }
+
+    const profile = await req.tenantDb.SponsorProfile.findOne({ where: { userId } });
+    const filePath = profile?.[field];
+    if (!filePath) {
+      return res.status(404).json({ status: 'error', message: 'Document not found' });
+    }
+
+    const absolute = path.resolve(String(filePath));
+    if (!absolute.startsWith(PRIVATE_STORAGE_DIR + path.sep)) {
+      return res.status(400).json({ status: 'error', message: 'Invalid path' });
+    }
+    if (!fs.existsSync(absolute)) {
+      return res.status(404).json({ status: 'error', message: 'File no longer exists' });
+    }
+
+    const filename = path.basename(absolute);
+    const ext = path.extname(filename).toLowerCase();
+    const disposition = INLINE_EXTENSIONS.has(ext) ? 'inline' : 'attachment';
+
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Disposition', `${disposition}; filename="${filename}"`);
+    return res.sendFile(absolute, (err) => {
+      if (err && !res.headersSent) {
+        res.status(500).json({ status: 'error', message: 'Error streaming file' });
+      }
+    });
+  } catch (err) {
+    logger.error({ err }, 'downloadProfileDocument error');
+    res.status(500).json({ status: 'error', message: 'Internal server error' });
   }
 };

@@ -12,5 +12,6 @@ router.get('/profile', sponsorAccountController.getProfile);
 router.put('/profile', handleSponsorRegistrationUpload, sponsorAccountController.updateProfile);
 router.put('/key-personnel', sponsorAccountController.updateKeyPersonnel);
 router.post('/change-password', sponsorAccountController.changePassword);
+router.get('/profile/documents/:field/download', sponsorAccountController.downloadProfileDocument);
 
 export default router;
