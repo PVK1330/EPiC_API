@@ -175,16 +175,10 @@ test("checkStatusGate: government_sms_registration allowed when status is Decisi
   assert.doesNotThrow(() => checkStatusGate(app, def));
 });
 
-test("checkStatusGate: decision_activation blocked when status is Government Processing", () => {
+test("checkStatusGate: decision_activation allowed when status is Government Processing", () => {
   const app = { status: "Government Processing", id: 1 };
   const def = stageDef("decision_activation");
-  assert.throws(
-    () => checkStatusGate(app, def),
-    (err) => {
-      assertBlocked(err, 409, "Decision Pending");
-      return true;
-    },
-  );
+  assert.doesNotThrow(() => checkStatusGate(app, def));
 });
 
 test("checkStatusGate: decision_activation allowed when status is Decision Pending", () => {

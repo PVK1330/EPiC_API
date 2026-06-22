@@ -289,7 +289,7 @@ export const STAGE_STATUS_GATE = {
   government_application_forms:  new Set(["Government Processing", "Decision Pending"]),
   government_submission:         new Set(["Government Processing", "Decision Pending"]),
   submission:                    new Set(["Government Processing", "Decision Pending"]),
-  decision_activation:           new Set(["Decision Pending"]),
+  decision_activation:           new Set(["Government Processing", "Decision Pending"]),
 };
 
 // ─── Stage-level sequential validators ───────────────────────────────────────
@@ -484,12 +484,11 @@ function deriveStageCompletion(app) {
   const docsComplete = docs.length > 0 && docs.every((d) => d.verificationStatus === "Verified");
 
   // Status-based sentinels for government pipeline stages.
-  // These use the application status as the primary completion signal until
-  // government tracking data (governmentRegistrationRef etc.) is available in
-  // the app shape. Refined signals can be added when the V2 serializer includes
-  // the licence_government_tracking columns.
-  const govActive = ["Government Processing", "Decision Pending", "Approved"].includes(status);
-  const decisionActive = ["Decision Pending", "Approved"].includes(status);
+  // "Licence Granted" is the canonical terminal status set by grantLicence(); treat
+  // it identically to "Approved" so the stage engine marks all stages complete.
+  const isGranted = status === "Licence Granted";
+  const govActive = ["Government Processing", "Decision Pending", "Approved", "Licence Granted"].includes(status);
+  const decisionActive = ["Decision Pending", "Approved", "Licence Granted"].includes(status);
   // Sponsor information provision is done once the application left Pending —
   // either assigned for review or sent back for info.
   const infoProvided = submitted && !["Draft", "Pending"].includes(status);
@@ -503,28 +502,19 @@ function deriveStageCompletion(app) {
     key_personnel:                  !!app.authorisingOfficer,
     declarations:                   !!(app.declaration && app.declaration.accuracyConfirmed),
     payment:                        submitted || app.fee?.total != null,
-    // Intake stages (orders 9-10) — status-inferred, same pattern as Phase 2.
-    // Intake form and document data live in separate tables not included in the
-    // V2 serializer shape, so we use application status as the completion proxy:
-    //   - information form: considered done once the application is under active
-    //     review (caseworker has received and acknowledged it — "Under Review" or beyond).
-    //   - document checklist: considered done once government registration has been
-    //     triggered, which the engine only allows after all intake docs are verified.
-    intake_information_form:        infoProvided,   // Under Review / Info Requested / Gov Processing / Decision Pending / Approved
-    intake_document_checklist:      govActive,      // Government Processing / Decision Pending / Approved
-    // Phase 2 — government pipeline (status-inferred until tracking data is in shape)
+    intake_information_form:        infoProvided,
+    intake_document_checklist:      govActive,
     sponsor_information_provision:  infoProvided,
     government_sms_registration:    govActive,
     sponsor_portal_onboarding:      govActive,
     government_portal_credentials:  govActive,
     government_application_forms:   decisionActive,
     government_submission:          decisionActive,
-    // Outcome stages
     submission:                     submitted,
-    decision_activation:            status === "Approved",
+    decision_activation:            status === "Approved" || isGranted,
   };
 
-  if (status === "Approved") {
+  if (status === "Approved" || isGranted) {
     LICENCE_STAGE_DEFINITIONS.forEach((s) => completed.add(s.key));
     return { completed, currentKey: null };
   }
@@ -836,7 +826,7 @@ export async function ensureStageTasks(tenantDb, applicationOrId, { req = null, 
   const ctx = { org, completed, recipients, req };
 
   // Terminal: seed every chain node so the history panel is fully populated.
-  if (["Approved", "Rejected"].includes(application.status)) {
+  if (["Approved", "Licence Granted", "Rejected", "Licence Rejected"].includes(application.status)) {
     for (const { stageDef, role } of TASK_CHAIN) {
       await seedSingleTask(tenantDb, application, stageDef, role, ctx).catch((err) =>
         logger.warn({ err, stageKey: stageDef.key, role }, "ensureStageTasks: terminal seed failed"),
@@ -1061,7 +1051,7 @@ export async function ensureStageTasks(tenantDb, applicationOrId, { req = null, 
  * Approved, every task is genuinely done.
  */
 function roleAutoCompletes(role, dataComplete, appStatus) {
-  if (appStatus === "Approved") return true;
+  if (appStatus === "Approved" || appStatus === "Licence Granted") return true;
   // Only sponsor/candidate tasks auto-complete from data signals.
   // Caseworker and admin review tasks must always be completed by a human, even
   // when the underlying data signal is satisfied — they represent mandatory QA steps.
@@ -1091,7 +1081,7 @@ export async function getStagesForApplication(tenantDb, applicationOrId, { req =
 
   const appShape = await buildAppShape(tenantDb, application);
   const { completed, currentKey } = deriveStageCompletion(appShape);
-  const rejected = application.status === "Rejected";
+  const rejected = application.status === "Rejected" || application.status === "Licence Rejected";
 
   const rows = await tenantDb.LicenceStageTask.findAll({
     where: { licenceApplicationId: application.id },
