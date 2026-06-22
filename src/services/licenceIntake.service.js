@@ -525,6 +525,15 @@ export async function verifyDocument(tenantDb, licenceApplicationId, organisatio
   doc.rejectionReason = null;
   await doc.save();
 
+  // Sync verification back to the linked Appendix A document so the full
+  // application view reflects the same status as the intake checklist.
+  if (doc.sourceAppendixDocumentId && tenantDb.LicenceAppendixDocument) {
+    tenantDb.LicenceAppendixDocument.update(
+      { verificationStatus: "Verified", verifiedBy: caseworkerId, verifiedAt: doc.verifiedAt, notes: notes || null },
+      { where: { id: doc.sourceAppendixDocumentId } },
+    ).catch((err) => logger.warn({ err, docId: doc.sourceAppendixDocumentId }, "verifyDocument: appendix sync failed"));
+  }
+
   const application = await tenantDb.LicenceApplication.findByPk(licenceApplicationId);
 
   await recordAuditLog({
@@ -569,6 +578,14 @@ export async function rejectDocument(tenantDb, licenceApplicationId, organisatio
   doc.verifiedAt = null;
   doc.verifiedByUserId = null;
   await doc.save();
+
+  // Sync rejection back to the linked Appendix A document.
+  if (doc.sourceAppendixDocumentId && tenantDb.LicenceAppendixDocument) {
+    tenantDb.LicenceAppendixDocument.update(
+      { verificationStatus: "Rejected", verifiedBy: null, verifiedAt: null, notes: doc.rejectionReason },
+      { where: { id: doc.sourceAppendixDocumentId } },
+    ).catch((err) => logger.warn({ err, docId: doc.sourceAppendixDocumentId }, "rejectDocument: appendix sync failed"));
+  }
 
   const application = await tenantDb.LicenceApplication.findByPk(licenceApplicationId);
 
