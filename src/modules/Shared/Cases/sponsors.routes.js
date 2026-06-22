@@ -26,6 +26,7 @@ router.get("/:id", checkPermission('admin.sponsors.view'), validate(schema.getSp
 router.put("/:id", checkPermission('admin.sponsors.update'), validate(schema.updateSponsorSchema), sponsorsController.updateSponsor);
 router.patch("/:id/toggle-status", checkPermission('admin.users.toggle_status'), validate(schema.getSponsorSchema), sponsorsController.toggleSponsorStatus);
 router.patch("/:id/reset-password", checkPermission('admin.users.reset_password'), validate(schema.resetSponsorPasswordSchema), sponsorsController.resetSponsorPassword);
+router.post("/:id/resend-credentials", checkPermission('admin.users.reset_password'), validate(schema.getSponsorSchema), sponsorsController.resendSponsorCredentials);
 
 // DELETE Operations
 router.delete("/:id", checkPermission('admin.sponsors.delete'), validate(schema.getSponsorSchema), sponsorsController.deleteSponsor);
