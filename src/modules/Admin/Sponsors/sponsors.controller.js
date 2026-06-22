@@ -614,6 +614,40 @@ export const deleteSponsor = async (req, res) => {
   }
 };
 
+// Resend EPiC Portal Credentials — generates a new password and emails welcome to sponsor
+export const resendSponsorCredentials = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const sponsor = await req.tenantDb.User.findOne({ where: { id, role_id: 4 } });
+    if (!sponsor) {
+      return res.status(404).json({ status: "error", message: "Sponsor not found", data: null });
+    }
+
+    const plainPassword = generateStrongPassword(12);
+    const hashedPassword = await bcrypt.hash(plainPassword, 12);
+    await sponsor.update({ password: hashedPassword, temp_password: null });
+
+    const profile = await req.tenantDb.SponsorProfile.findOne({ where: { userId: sponsor.id } }).catch(() => null);
+    const firstName = profile?.firstName || sponsor.first_name || "Sponsor";
+
+    await sendTenantSponsorWelcomeEmail({
+      user: sponsor,
+      plainPassword,
+      organisationId: req.organisationId,
+      firstName,
+    });
+
+    return res.status(200).json({
+      status: "success",
+      message: "Credentials regenerated and emailed to the sponsor",
+      data: null,
+    });
+  } catch (error) {
+    logger.error({ err: error }, "Resend Sponsor Credentials Error");
+    return res.status(500).json({ status: "error", message: "Internal server error", data: null });
+  }
+};
+
 // Reset Sponsor Password
 export const resetSponsorPassword = async (req, res) => {
   try {
