@@ -682,27 +682,75 @@ export const exportReportingExcel = async (req, res) => {
     const wantFinancial  = !sheet || sheet === 'financial';
     const wantPerformance= !sheet || sheet === 'performance';
 
+    const guard = (label, p) =>
+      p.catch((err) => {
+        logger.error({ err }, `exportReportingExcel: ${label} section failed`);
+        return null;
+      });
+
     const [cases, workload, financial, performance] = await Promise.all([
-      wantCases       ? computeCaseAnalyticsData(req).catch(() => null)      : null,
-      wantWorkload    ? computeWorkloadReportData(req).catch(() => null)      : null,
-      wantFinancial   ? computeFinancialReportData(req).catch(() => null)     : null,
-      wantPerformance ? computePerformanceReportData(req).catch(() => null)   : null,
+      wantCases       ? guard('cases', computeCaseAnalyticsData(req))         : null,
+      wantWorkload    ? guard('workload', computeWorkloadReportData(req))     : null,
+      wantFinancial   ? guard('financial', computeFinancialReportData(req))   : null,
+      wantPerformance ? guard('performance', computePerformanceReportData(req)) : null,
     ]);
 
     /** @type {{ name: string, columns: { key: string, header: string }[], rows: Record<string, unknown>[] }[]} */
     const sheets = [];
 
+    // ── Overview (first sheet) ────────────────────────────────────────────────
+    // Excel opens on the first sheet, so lead with a populated, human-readable
+    // summary instead of a bare metadata sheet (users were assuming the whole
+    // workbook was empty because the first tab only showed Generated/StartDate).
+    const gbp = (n) =>
+      `£${Number(n || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const rangeLabel =
+      startDate || endDate ? `${startDate || '…'} → ${endDate || '…'}` : 'All time';
+
+    const overviewRows = [
+      { field: 'Report', value: 'ElitePic — Reporting & Analytics' },
+      { field: 'Generated', value: `${new Date().toISOString().replace('T', ' ').slice(0, 16)} UTC` },
+      { field: 'Date Range', value: rangeLabel },
+      { field: 'Scope', value: sheet ? `${sheet} only` : 'All reports' },
+    ];
+
+    if (cases?.summary) {
+      overviewRows.push(
+        { field: '', value: '' },
+        { field: 'CASES', value: '' },
+        { field: 'Total Cases', value: cases.summary.totalCases ?? 0 },
+        { field: 'New This Month', value: cases.summary.thisMonth ?? 0 },
+        { field: 'New Last Month', value: cases.summary.lastMonth ?? 0 },
+        { field: 'Month-on-Month Change %', value: cases.summary.momChangePct ?? 'N/A' },
+        { field: 'SLA Met %', value: cases.summary.slaMetPct ?? 'N/A' },
+      );
+    }
+    if (financial?.summary) {
+      overviewRows.push(
+        { field: '', value: '' },
+        { field: 'FINANCE', value: '' },
+        { field: 'Total Revenue', value: gbp(financial.summary.totalRevenue) },
+        { field: 'Outstanding', value: gbp(financial.summary.totalOutstanding) },
+        { field: 'Completed Payment Records', value: financial.summary.totalPaid ?? 0 },
+      );
+    }
+    if (workload?.caseworkers?.length) {
+      const teamCases = workload.caseworkers.reduce((s, c) => s + (c.totalCases || 0), 0);
+      overviewRows.push(
+        { field: '', value: '' },
+        { field: 'TEAM', value: '' },
+        { field: 'Caseworkers', value: workload.caseworkers.length },
+        { field: 'Cases Handled by Team', value: teamCases },
+      );
+    }
+
     sheets.push({
-      name: 'Report_Info',
+      name: 'Overview',
       columns: [
-        { key: 'k', header: 'Key' },
-        { key: 'v', header: 'Value' },
+        { key: 'field', header: 'Field' },
+        { key: 'value', header: 'Value' },
       ],
-      rows: [
-        { k: 'Generated_UTC', v: new Date().toISOString() },
-        { k: 'StartDate', v: startDate || '' },
-        { k: 'EndDate', v: endDate || '' },
-      ],
+      rows: overviewRows,
     });
 
     if (cases?.summary) {
@@ -938,6 +986,15 @@ export const exportReportingExcel = async (req, res) => {
           ],
           rows: recentFlat,
         });
+      }
+    }
+
+    // Make empty detail sheets self-explanatory rather than header-only blanks.
+    for (const s of sheets) {
+      if (s.name !== 'Overview' && (!s.rows || s.rows.length === 0) && s.columns?.length) {
+        const note = { [s.columns[0].key]: 'No data for the selected range' };
+        s.columns.slice(1).forEach((c) => { note[c.key] = ''; });
+        s.rows = [note];
       }
     }
 

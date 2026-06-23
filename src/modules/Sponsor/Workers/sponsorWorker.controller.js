@@ -1,3 +1,6 @@
+import path from 'path';
+import fs from 'fs';
+import archiver from 'archiver';
 import bcrypt from 'bcryptjs';
 import { sendTransactionalEmail } from '../../../services/mail.service.js';
 import { generateCredentialsTemplate, generateNotificationEmailTemplate } from '../../../utils/emailTemplates.js';
@@ -477,6 +480,127 @@ export const getEmployeeRecords = async (req, res) => {
       message: 'Internal server error',
       data: null
     });
+  }
+};
+
+const sanitizeDownloadName = (name, fallback = 'document') => {
+  const base = path.basename(String(name || fallback)).replace(/[/\\]/g, '_');
+  // Strip characters that would break a Content-Disposition header
+  return base.replace(/["\r\n]/g, '').trim() || fallback;
+};
+
+/**
+ * Download a sponsored worker's documents.
+ * If the worker has exactly one document we stream that single file; if there
+ * are two or more we bundle them into a .zip. The sponsor may only download
+ * documents for candidates who are their own sponsored workers.
+ *
+ * Endpoint: GET /api/business/workers/:candidateId/documents/download
+ */
+export const downloadWorkerDocuments = async (req, res) => {
+  try {
+    const sponsorId = req.user.userId;
+    const candidateId = Number(req.params.candidateId);
+    if (!Number.isFinite(candidateId) || candidateId <= 0) {
+      return res.status(400).json({ status: 'error', message: 'Invalid worker', data: null });
+    }
+
+    // Ownership check: the candidate must be a sponsored worker of this sponsor.
+    const workerCase = await req.tenantDb.Case.findOne({
+      where: { sponsorId, candidateId },
+      include: [
+        {
+          model: req.tenantDb.User,
+          as: 'candidate',
+          attributes: ['id', 'first_name', 'last_name']
+        }
+      ]
+    });
+    if (!workerCase) {
+      return res.status(403).json({
+        status: 'error',
+        message: 'You do not have access to this worker\'s documents',
+        data: null
+      });
+    }
+
+    const documents = await req.tenantDb.Document.findAll({
+      where: { userId: candidateId },
+      order: [['uploadedAt', 'DESC']]
+    });
+
+    // Keep only documents whose file actually exists on disk.
+    const pending = [];
+    const usedNames = new Set();
+    for (const doc of documents) {
+      if (!doc.documentPath) continue;
+      const absolutePath = path.resolve(doc.documentPath);
+      const inPrivate = absolutePath.startsWith(path.resolve('storage/private'));
+      const inUploads = absolutePath.startsWith(path.resolve('uploads'));
+      if ((!inPrivate && !inUploads) || !fs.existsSync(absolutePath)) continue;
+
+      let entryName = sanitizeDownloadName(doc.userFileName || doc.documentName);
+      const ext = path.extname(entryName);
+      const stem = path.basename(entryName, ext);
+      let candidate = entryName;
+      let n = 0;
+      while (usedNames.has(candidate)) {
+        n += 1;
+        candidate = `${stem}_${doc.id}_${n}${ext || ''}`;
+      }
+      usedNames.add(candidate);
+      pending.push({ absolutePath, name: candidate, mimeType: doc.mimeType });
+    }
+
+    if (!pending.length) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'No documents available for this worker',
+        data: null
+      });
+    }
+
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+
+    // Single document → stream the file directly.
+    if (pending.length === 1) {
+      const file = pending[0];
+      res.setHeader('Content-Type', file.mimeType || 'application/octet-stream');
+      res.setHeader('Content-Disposition', `attachment; filename="${file.name}"`);
+      const stream = fs.createReadStream(file.absolutePath);
+      stream.on('error', (err) => {
+        logger.error({ err }, 'downloadWorkerDocuments single-file stream error');
+        if (!res.headersSent) {
+          res.status(500).json({ status: 'error', message: 'Failed to download document', data: null });
+        }
+      });
+      return stream.pipe(res);
+    }
+
+    // Multiple documents → bundle into a zip.
+    const workerName = `${workerCase.candidate?.first_name || ''} ${workerCase.candidate?.last_name || ''}`.trim() || 'Worker';
+    const zipName = `${sanitizeDownloadName(workerName, 'Worker')}_Documents.zip`;
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${zipName}"`);
+
+    const archive = archiver('zip', { zlib: { level: 9 } });
+    archive.on('error', (err) => {
+      logger.error({ err }, 'downloadWorkerDocuments ZIP archive error');
+      if (!res.headersSent) {
+        res.status(500).json({ status: 'error', message: 'Failed to create archive', data: null });
+      }
+    });
+    archive.pipe(res);
+    for (const item of pending) {
+      archive.file(item.absolutePath, { name: item.name });
+    }
+    await archive.finalize();
+  } catch (err) {
+    logger.error({ err }, 'downloadWorkerDocuments error');
+    if (!res.headersSent) {
+      res.status(500).json({ status: 'error', message: 'Internal server error', data: null });
+    }
   }
 };
 

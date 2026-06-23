@@ -27,5 +27,6 @@ router.delete("/timeline/:id", timelineController.deleteTimelineEntry);
 // Export Routes
 router.get("/:id/export/csv", caseDetailController.exportCaseCSV);
 router.get("/:id/export/pdf", caseDetailController.exportCasePDF);
+router.get("/:id/invoice/pdf", caseDetailController.exportCaseInvoicePDF);
 
 export default router;

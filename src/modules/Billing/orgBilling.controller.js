@@ -17,6 +17,10 @@ import {
   getLatestSubscriptionForOrg,
   activateOrgSubscriptionAfterPayment,
 } from "../../services/orgBilling.service.js";
+import {
+  computeOrgCharge,
+  buildChargeLineItems,
+} from "../../services/orgCharge.service.js";
 
 function frontendBase() {
   return (process.env.FRONTEND_URL || "http://localhost:5173")
@@ -53,9 +57,19 @@ export const getMySubscription = catchAsync(async (req, res) => {
     attributes: ["id", "name", "status"],
   });
 
+  // Itemised total due (subscription + platform fee + VAT) so the pay page can
+  // show the same professional breakdown the customer is charged.
+  const charge = subscription?.plan
+    ? await computeOrgCharge({
+        planPrice: subscription.plan.price,
+        currency: subscription.plan.currency,
+      })
+    : null;
+
   return ApiResponse.success(res, "Subscription status", {
     organisation: org ? { id: org.id, name: org.name, status: org.status } : null,
     subscription: serializeSubscription(subscription),
+    charge,
     expired:
       org?.status === "suspended" || subscription?.status === "expired",
   });
@@ -75,16 +89,22 @@ export const createCheckoutSession = catchAsync(async (req, res) => {
   }
 
   const plan = subscription.plan;
-  const price = Number(plan.price) || 0;
   const currency = (plan.currency || "GBP").toLowerCase();
 
-  // Free plan — nothing to charge, activate immediately.
-  if (price <= 0) {
+  // Total due = plan price + superadmin platform fee (%) + VAT (%), computed
+  // server-side (never trust a client amount).
+  const charge = await computeOrgCharge({
+    planPrice: plan.price,
+    currency: plan.currency,
+  });
+
+  // Nothing to charge (free plan with no fee/VAT) — activate immediately.
+  if (charge.total <= 0) {
     await activateOrgSubscriptionAfterPayment({
       organisationId: orgId,
       paymentRef: `free-${subscription.id}-${Date.now()}`,
       amount: 0,
-      currency,
+      currency: charge.currency,
       paymentMethod: "free",
     });
     return ApiResponse.success(res, "Subscription activated", {
@@ -107,19 +127,7 @@ export const createCheckoutSession = catchAsync(async (req, res) => {
   const session = await stripe.checkout.sessions.create({
     mode: "payment",
     payment_method_types: ["card"],
-    line_items: [
-      {
-        price_data: {
-          currency,
-          product_data: {
-            name: `${plan.name} subscription`,
-            description: `Reactivate your organisation subscription (${plan.billing_cycle})`,
-          },
-          unit_amount: Math.round(price * 100),
-        },
-        quantity: 1,
-      },
-    ],
+    line_items: buildChargeLineItems(charge, plan),
     success_url: `${base}/admin/subscription?payment=success&session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${base}/admin/subscription?payment=cancelled`,
     // NOTE: deliberately NOT keyed `organisationId` — that key routes webhook
@@ -129,6 +137,18 @@ export const createCheckoutSession = catchAsync(async (req, res) => {
       type: "org_subscription",
       subOrganisationId: String(orgId),
       subscriptionId: String(subscription.id),
+      // Snapshot the breakdown so activation persists figures that tie EXACTLY to
+      // the gross Stripe charges here — not a fresh recompute that could drift if
+      // a superadmin edits plan price / fee / VAT before the webhook fires.
+      breakdown: JSON.stringify({
+        planPrice: charge.planPrice,
+        platformFeePercent: charge.platformFeePercent,
+        platformFee: charge.platformFee,
+        subtotal: charge.subtotal,
+        taxRatePercent: charge.taxRatePercent,
+        taxAmount: charge.taxAmount,
+        total: charge.total,
+      }),
     },
   });
 
@@ -176,12 +196,20 @@ export const verifySession = catchAsync(async (req, res) => {
       ? session.payment_intent?.id
       : session.payment_intent || null;
 
+  let breakdown = null;
+  try {
+    if (session.metadata?.breakdown) breakdown = JSON.parse(session.metadata.breakdown);
+  } catch {
+    /* malformed snapshot — activation falls back to a fresh compute */
+  }
+
   const { subscription } = await activateOrgSubscriptionAfterPayment({
     organisationId: orgId,
     paymentRef: session.id,
     amount: session.amount_total != null ? session.amount_total / 100 : undefined,
     currency: session.currency,
     paymentIntentId,
+    breakdown,
   });
 
   return ApiResponse.success(res, "Subscription activated", {

@@ -3,6 +3,7 @@ import {
   addSponsoredWorker,
   getSponsoredWorkers,
   getEmployeeRecords,
+  downloadWorkerDocuments,
   getSponsoredWorkerDetails,
   updateSponsoredWorker,
   deleteSponsoredWorker,
@@ -27,6 +28,7 @@ router.patch('/:id/status', requireActiveSponsorLicence(), updateWorkerStatus);
 // --- Allowed regardless of licence status (reads + compliance reporting) ---
 router.get('/', getSponsoredWorkers);
 router.get('/employee-records', getEmployeeRecords);
+router.get('/:candidateId/documents/download', downloadWorkerDocuments);
 router.get('/absence/worker/:workerId', getAbsenceByWorker);
 router.post('/absence', upload.single('document'), createAbsenceRecord);
 router.put('/absence/:id', upload.single('document'), updateAbsenceRecord);

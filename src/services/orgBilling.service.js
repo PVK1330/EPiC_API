@@ -10,6 +10,7 @@
  */
 import platformDb from "../models/index.js";
 import { invalidateOrgCache } from "./orgCache.service.js";
+import { computeOrgCharge } from "./orgCharge.service.js";
 import logger from "../utils/logger.js";
 
 /** Most recent subscription (any status) for an org, with its plan. */
@@ -98,6 +99,10 @@ export async function reactivateOrgManually(organisationId) {
  * @param {string} [p.currency]
  * @param {string|null} [p.paymentIntentId]
  * @param {string} [p.paymentMethod]
+ * @param {object|null} [p.breakdown]   Charge breakdown snapshotted at checkout
+ *   (planPrice/platformFeePercent/platformFee/subtotal/taxRatePercent/taxAmount/total).
+ *   Persisted verbatim so the invoice ties to the exact gross charged; falls back
+ *   to a fresh compute (free/legacy path) when absent.
  * @returns {Promise<{subscription: object|null, invoice?: object, alreadyProcessed: boolean}>}
  */
 export async function activateOrgSubscriptionAfterPayment({
@@ -107,6 +112,7 @@ export async function activateOrgSubscriptionAfterPayment({
   currency = "GBP",
   paymentIntentId = null,
   paymentMethod = "card",
+  breakdown = null,
 }) {
   if (!organisationId || !paymentRef) {
     throw new Error("organisationId and paymentRef are required");
@@ -143,7 +149,23 @@ export async function activateOrgSubscriptionAfterPayment({
         : now;
     const newPeriodEnd = computeNextPeriodEnd(plan, base);
     const resolvedCurrency = (currency || plan?.currency || "GBP").toUpperCase();
-    const resolvedAmount = amount != null ? amount : Number(plan?.price) || 0;
+
+    // Prefer the breakdown SNAPSHOTTED at checkout (it ties exactly to the gross
+    // Stripe charged). Only fall back to a fresh compute for the free/legacy path
+    // (no snapshot), where a recompute is harmless.
+    const persisted =
+      breakdown && breakdown.total != null
+        ? {
+            planPrice: Number(breakdown.planPrice) || 0,
+            platformFeePercent: Number(breakdown.platformFeePercent) || 0,
+            platformFee: Number(breakdown.platformFee) || 0,
+            subtotal: Number(breakdown.subtotal) || 0,
+            taxRatePercent: Number(breakdown.taxRatePercent) || 0,
+            taxAmount: Number(breakdown.taxAmount) || 0,
+            total: Number(breakdown.total) || 0,
+          }
+        : await computeOrgCharge({ planPrice: plan?.price, currency: resolvedCurrency });
+    const resolvedAmount = amount != null ? amount : persisted.total;
 
     await subscription.update(
       {
@@ -180,6 +202,11 @@ export async function activateOrgSubscriptionAfterPayment({
         subscription_id: subscription.id,
         invoice_number: invoiceNumber,
         amount: resolvedAmount,
+        subtotal: persisted.subtotal,
+        platform_fee_amount: persisted.platformFee,
+        tax_rate: persisted.taxRatePercent,
+        tax_amount: persisted.taxAmount,
+        total: persisted.total,
         currency: resolvedCurrency,
         status: "paid",
         payment_method: paymentMethod,
@@ -201,7 +228,19 @@ export async function activateOrgSubscriptionAfterPayment({
         payment_method: paymentMethod,
         gateway: "Stripe",
         gateway_reference: paymentIntentId || paymentRef,
-        metadata: { type: "org_subscription", subscription_id: subscription.id },
+        metadata: {
+          type: "org_subscription",
+          subscription_id: subscription.id,
+          breakdown: {
+            plan_price: persisted.planPrice,
+            platform_fee_percent: persisted.platformFeePercent,
+            platform_fee: persisted.platformFee,
+            subtotal: persisted.subtotal,
+            tax_rate: persisted.taxRatePercent,
+            tax_amount: persisted.taxAmount,
+            total: persisted.total,
+          },
+        },
       },
       { transaction: tx },
     );
@@ -215,6 +254,15 @@ export async function activateOrgSubscriptionAfterPayment({
     return { subscription, invoice, alreadyProcessed: false };
   } catch (err) {
     await tx.rollback();
+    // A concurrent writer (the other verify-session call, a double-click, or the
+    // webhook) recorded this exact payment first and the PaymentTransaction
+    // UNIQUE(reference) fired. That means activation already succeeded — surface
+    // it as idempotent success, not a 500.
+    if (err?.name === "SequelizeUniqueConstraintError") {
+      const subscription = await getLatestSubscriptionForOrg(organisationId);
+      invalidateOrgCache(organisationId);
+      return { subscription, alreadyProcessed: true };
+    }
     throw err;
   }
 }

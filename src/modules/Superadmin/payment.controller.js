@@ -71,11 +71,14 @@ async function buildUkReceiptDocDef(txn, platformSettings) {
   const supportEmail = platformSettings["support_email"] || "support@elitepic.co.uk";
   const platformLogoUrl = platformSettings["logo_url"] || null;
 
-  // Taxation — only apply if configured in Settings > Commerce > Taxation
-  const taxRateRaw = parseFloat(platformSettings["tax_rate"] || "0");
+  // Taxation — prefer the linked invoice's persisted breakdown (txn.amount =
+  // GROSS for itemised org-subscription charges); else fall back to the
+  // configured rate for legacy rows where amount is the net subscription price.
+  const hasBreakdown = invoice.total != null && invoice.tax_amount != null;
+  const taxRateRaw = parseFloat((hasBreakdown ? invoice.tax_rate : platformSettings["tax_rate"]) || "0");
   const taxRate = Number.isFinite(taxRateRaw) && taxRateRaw > 0 ? taxRateRaw / 100 : 0;
   const taxId = platformSettings["tax_id"] || null;
-  const taxEnabled = taxRate > 0;
+  const taxEnabled = hasBreakdown ? parseFloat(invoice.tax_amount || 0) > 0 : taxRate > 0;
 
   // Resolve platform logo
   const platformLogoPath = path.join(__dirname, "../../assets/elitepic_logo.png");
@@ -89,9 +92,13 @@ async function buildUkReceiptDocDef(txn, platformSettings) {
 
   const orgLogoDataUri = resolveLogoDataUri(org.logoUrl);
 
-  const amountNet = parseFloat(txn.amount || 0);
-  const taxAmount = taxEnabled ? parseFloat((amountNet * taxRate).toFixed(2)) : 0;
-  const totalGross = parseFloat((amountNet + taxAmount).toFixed(2));
+  const amountNet = parseFloat((hasBreakdown ? invoice.subtotal : txn.amount) || 0);
+  const taxAmount = hasBreakdown
+    ? parseFloat(invoice.tax_amount || 0)
+    : (taxEnabled ? parseFloat((amountNet * taxRate).toFixed(2)) : 0);
+  const totalGross = hasBreakdown
+    ? parseFloat((invoice.total ?? txn.amount) || 0)
+    : parseFloat((amountNet + taxAmount).toFixed(2));
 
   const statusColour = txn.status === "completed" ? "#16a34a"
     : txn.status === "refunded" ? "#d97706"
@@ -435,7 +442,10 @@ export const getTransactionById = catchAsync(async (req, res) => {
       {
         model: platformDb.Invoice,
         as: "invoice",
-        attributes: ["id", "invoice_number", "amount", "status"],
+        attributes: [
+          "id", "invoice_number", "amount", "status",
+          "subtotal", "platform_fee_amount", "tax_rate", "tax_amount", "total",
+        ],
       },
     ],
   });
@@ -460,7 +470,10 @@ export const downloadTransactionReceipt = catchAsync(async (req, res) => {
       {
         model: platformDb.Invoice,
         as: "invoice",
-        attributes: ["id", "invoice_number", "amount", "status"],
+        attributes: [
+          "id", "invoice_number", "amount", "status",
+          "subtotal", "platform_fee_amount", "tax_rate", "tax_amount", "total",
+        ],
       },
     ],
   });
@@ -525,6 +538,16 @@ export const getGatewayStatus = catchAsync(async (req, res) => {
   const settings = {};
   rows.forEach(r => { settings[r.key] = r.value; });
 
+  // Clamp legacy/out-of-range percent values on read so a stored fee/tax > 100
+  // (seed, manual DB edit, or an older build) can never lock the Commerce save
+  // form (the configure schema rejects > 100 — see superadminPayment.validation).
+  const clampPct = (v, dflt) => {
+    if (v == null || v === '') return dflt;
+    const n = Number(v);
+    if (!Number.isFinite(n)) return dflt;
+    return String(Math.min(100, Math.max(0, n)));
+  };
+
   const configured = !!(settings.stripe_secret_key && settings.stripe_publishable_key);
 
   const lastTransaction = await platformDb.PaymentTransaction.findOne({
@@ -540,20 +563,21 @@ export const getGatewayStatus = catchAsync(async (req, res) => {
       publishable_key: settings.stripe_publishable_key || '',
       webhook_secret: settings.stripe_webhook_secret || '',
       currency: settings.stripe_currency || 'GBP',
-      platform_fee: settings.platform_fee || '0',
+      platform_fee: clampPct(settings.platform_fee, '0'),
       secret_key_set: !!settings.stripe_secret_key,
-      tax_rate: settings.tax_rate || '',
+      tax_rate: clampPct(settings.tax_rate, ''),
       tax_id:   settings.tax_id   || '',
     },
   });
 });
 
 export const configureGateway = catchAsync(async (req, res) => {
-  const { publishable_key, secret_key, webhook_secret, currency, platform_fee } = req.validated.body;
+  const { publishable_key, secret_key, webhook_secret, currency, platform_fee, tax_rate: taxRateInput, tax_id: taxIdInput } =
+    req.validated.body;
 
-  // Read optional tax fields from body (not in validated schema — safe to read directly)
-  const tax_rate   = req.body?.tax_rate != null   ? String(req.body.tax_rate).trim()   : null;
-  const tax_id     = req.body?.tax_id   != null   ? String(req.body.tax_id).trim()     : null;
+  // platform_fee & tax_rate are validated as numeric percents (0-100); persist as strings.
+  const tax_rate = taxRateInput != null ? String(taxRateInput).trim() : null;
+  const tax_id   = taxIdInput   != null ? String(taxIdInput).trim()   : null;
 
   const upserts = [];
   if (publishable_key !== undefined && publishable_key !== null) {
