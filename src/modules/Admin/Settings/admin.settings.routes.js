@@ -7,7 +7,7 @@ import * as integrationsDashboardController from './integrationsDashboard.contro
 import * as integrationCredentialsController from './integrationCredentials.controller.js';
 import { verifyTokenAndTenant } from '../../../middlewares/authStack.middleware.js';
 import { checkRole, ROLES } from '../../../middlewares/role.middleware.js';
-import { handleProfilePicUpload, handleCclTemplateUpload, handleOrganisationLogoUpload } from '../../../middlewares/upload.middleware.js';
+import { handleProfilePicUpload, handleCclTemplateUpload, handleOrganisationLogoUpload, handleOrganisationFaviconUpload } from '../../../middlewares/upload.middleware.js';
 
 const router = Router();
 
@@ -61,6 +61,7 @@ router.put("/payment-settings", adminSettingsController.updatePaymentSetting);
 
 router.get("/organisation", adminSettingsController.getOrganisation);
 router.post("/organisation/logo", handleOrganisationLogoUpload, adminSettingsController.uploadOrganisationLogo);
+router.post("/organisation/favicon", handleOrganisationFaviconUpload, adminSettingsController.uploadOrganisationFavicon);
 
 router.get("/smtp-settings", smtpSettingsController.getSmtpSettings);
 router.put("/smtp-settings", smtpSettingsController.updateSmtpSettings);

@@ -86,9 +86,23 @@ const orgLogoUpload = multer({
   fileFilter: imageOnlyFilter
 });
 
+const orgFaviconUpload = multer({
+  storage: createSecureDiskStorage('organisations'),
+  limits: { fileSize: MAX_FILE_SIZES.FAVICON },
+  fileFilter: createFileFilter([...ALLOWED_IMAGE_EXTENSIONS, '.ico'])
+});
+
 const platformBrandUpload = multer({
   storage: createSecureDiskStorage('platform'),
   limits: { fileSize: MAX_FILE_SIZES.AVATAR },
+  fileFilter: createFileFilter(ALLOWED_IMAGE_EXTENSIONS)
+});
+
+// Favicons are tiny; cap at 512 KB and allow .ico + standard image formats.
+// .ico is explicitly included because ALLOWED_IMAGE_EXTENSIONS excludes it.
+const platformFaviconUpload = multer({
+  storage: createSecureDiskStorage('platform'),
+  limits: { fileSize: MAX_FILE_SIZES.FAVICON },
   fileFilter: createFileFilter([...ALLOWED_IMAGE_EXTENSIONS, '.ico'])
 });
 
@@ -186,7 +200,16 @@ const withSecurityProcessing = (uploadMiddleware) => {
     uploadMiddleware(req, res, async (err) => {
       if (err) {
         if (err.code === "LIMIT_FILE_SIZE") {
-          return res.status(400).json({ status: "error", message: "File is too large." });
+          let limitStr = null;
+          if (err.limit) {
+            limitStr = err.limit >= 1024 * 1024
+              ? `${Math.round(err.limit / (1024 * 1024))} MB`
+              : `${Math.round(err.limit / 1024)} KB`;
+          }
+          const msg = limitStr
+            ? `File is too large. Maximum allowed size is ${limitStr}.`
+            : 'File is too large.';
+          return res.status(400).json({ status: "error", message: msg });
         }
         return res.status(400).json({ status: "error", message: err.message || "File upload failed" });
       }
@@ -237,9 +260,10 @@ export const handleSponsorRegistrationUpload = withSecurityProcessing(
 export const handleDocumentUpload = withSecurityProcessing(upload.array("files", 10));
 
 export const handleOrganisationLogoUpload = withSecurityProcessing(orgLogoUpload.single('logo'));
+export const handleOrganisationFaviconUpload = withSecurityProcessing(orgFaviconUpload.single('favicon'));
 export const handleCclTemplateUpload = withSecurityProcessing(cclTemplateUpload.single('file'));
 
 export const handlePlatformLogoUpload = withSecurityProcessing(platformBrandUpload.single('logo'));
-export const handlePlatformFaviconUpload = withSecurityProcessing(platformBrandUpload.single('favicon'));
+export const handlePlatformFaviconUpload = withSecurityProcessing(platformFaviconUpload.single('favicon'));
 
 export const handleSuperadminAvatarUpload = withSecurityProcessing(superadminAvatarUpload.single('avatar'));

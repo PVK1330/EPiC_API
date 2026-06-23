@@ -46,6 +46,11 @@ export default (sequelize, DataTypes) => {
         allowNull: true,
         field: "logo_url",
       },
+      faviconUrl: {
+        type: DataTypes.STRING(500),
+        allowNull: true,
+        field: "favicon_url",
+      },
       timezone: {
         type: DataTypes.STRING(64),
         allowNull: false,

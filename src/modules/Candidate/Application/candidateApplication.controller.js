@@ -1293,6 +1293,114 @@ export const importCandidateApplicationsExcel = async (req, res) => {
   }
 };
 
+export const downloadImportSampleTemplate = async (req, res) => {
+  try {
+    const userCols = [
+      { key: 'user_id',       header: 'User ID' },
+      { key: 'first_name',    header: 'First Name' },
+      { key: 'last_name',     header: 'Last Name' },
+      { key: 'email',         header: 'Email' },
+      { key: 'country_code',  header: 'Country Code' },
+      { key: 'mobile',        header: 'Mobile' },
+      { key: 'account_status',header: 'Account Status' },
+    ];
+
+    let labelMap = {};
+    try {
+      const settings = await req.tenantDb.ApplicationFieldSetting.findAll();
+      for (const s of settings) labelMap[s.field_key] = s.field_label;
+    } catch { /* ignore — fall back to humanized keys */ }
+
+    const appCols = APPLICATION_FIELDS
+      .filter((k) => k !== 'customResponses')
+      .map((k) => ({ key: `app_${k}`, header: labelMap[k] || humanizeFieldKey(k) }));
+
+    const columns = [...userCols, ...appCols];
+
+    const sample = {
+      user_id: '',
+      first_name: 'Jane',
+      last_name: 'Doe',
+      email: 'jane.doe@example.com',
+      country_code: '+44',
+      mobile: '7911123456',
+      account_status: 'active',
+      app_firstName: 'Jane',
+      app_lastName: 'Doe',
+      app_email: 'jane.doe@example.com',
+      app_contactNumber: '7911123456',
+      app_applicationType: 'Single',
+      app_gender: 'Female',
+      app_relationshipStatus: 'Single',
+      app_address: '123 High Street, London, E1 6RF',
+      app_contactNumber2: '',
+      app_previousFullAddress: '',
+      app_previousAddress: '',
+      app_startDate: '',
+      app_endDate: '',
+      app_nationality: 'British',
+      app_birthCountry: 'United Kingdom',
+      app_placeOfBirth: 'London',
+      app_dob: '1990-05-15',
+      app_passportNumber: '123456789',
+      app_issuingAuthority: 'UK Passport Office',
+      app_issueDate: '2020-01-10',
+      app_expiryDate: '2030-01-09',
+      app_passportAvailable: 'Yes',
+      app_nationalIdCardNumber: '',
+      app_nationalIdNumber: '',
+      app_idIssuingAuthorityCard: '',
+      app_idIssuingAuthorityNational: '',
+      app_otherNationality: 'No',
+      app_ukLicense: 'No',
+      app_medicalTreatment: 'No',
+      app_ukStayDuration: '5 years',
+      app_parentName: '',
+      app_parentRelation: '',
+      app_parentDob: '',
+      app_parentNationality: '',
+      app_sameNationality: '',
+      app_parent2Name: '',
+      app_parent2Relation: '',
+      app_parent2Dob: '',
+      app_parent2Nationality: '',
+      app_parent2SameNationality: '',
+      app_illegalEntry: 'No',
+      app_overstayed: 'No',
+      app_breach: 'No',
+      app_falseInfo: 'No',
+      app_otherBreach: 'No',
+      app_refusedVisa: 'No',
+      app_refusedEntry: 'No',
+      app_refusedPermission: 'No',
+      app_refusedAsylum: 'No',
+      app_deported: 'No',
+      app_removed: 'No',
+      app_requiredToLeave: 'No',
+      app_banned: 'No',
+      app_visitedOther: 'No',
+      app_countryVisited: '',
+      app_visitReason: '',
+      app_entryDate: '',
+      app_leaveDate: '',
+      app_visaType: 'Skilled Worker',
+      app_brpNumber: 'BRP1234567',
+      app_visaEndDate: '2026-12-31',
+      app_niNumber: 'QQ123456C',
+      app_sponsored: 'No',
+      app_englishProof: 'Yes',
+    };
+
+    const buf = rowsToXlsxBuffer([sample], columns);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="candidate-import-sample.xlsx"');
+    return res.send(buf);
+  } catch (err) {
+    logger.error({ err }, 'downloadImportSampleTemplate error');
+    return res.status(500).json({ status: 'error', message: 'Failed to generate sample template', data: null });
+  }
+};
+
 function humanizeFieldKey(key) {
   return key
     .replace(/([A-Z])/g, ' $1')

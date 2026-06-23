@@ -20,6 +20,12 @@ router.get(
   candidateApplicationController.exportCandidateApplicationsExcel
 );
 
+router.get(
+  "/applications/import/sample",
+  checkRole([ROLES.ADMIN, ROLES.CASEWORKER]),
+  candidateApplicationController.downloadImportSampleTemplate
+);
+
 router.post(
   "/applications/import",
   checkRole([ROLES.ADMIN, ROLES.CASEWORKER]),

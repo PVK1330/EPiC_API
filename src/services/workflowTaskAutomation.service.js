@@ -188,12 +188,26 @@ const STAGE_TASK_MATRIX = {
         dueInDays: 3,
       },
     ],
+    // Title must stay "Attend biometrics" so the full formatted title
+    // "Attend biometrics — {caseLabel}" matches the task created by
+    // bookBiometricDirect — skipIfExists deduplication relies on this.
+    // Notification is sent by recordBiometricDocumentsUploaded, not here,
+    // so skipNotify suppresses the generic notifyTaskAssigned call.
+    candidates: [
+      {
+        title: "Attend biometrics",
+        priority: "high",
+        dueInDays: 3,
+        notify: false,
+        skipNotify: true,
+      },
+    ],
   },
   awaiting_decision: {
     caseworkers: [{ title: "Monitor Home Office decision status", priority: "low", dueInDays: 14 }],
   },
   decision_communicated: {
-    caseworkers: [{ title: "Send decision letter to client", priority: "high", dueInDays: 2 }],
+    caseworkers: [{ title: "Upload decision letter to portal", priority: "high", dueInDays: 2 }],
     candidates: [
       {
         title: "Download decision letter from Application Pack",
@@ -298,7 +312,7 @@ export async function syncWorkflowTasksForStage({
       priority: spec.priority,
       dueInDays: spec.dueInDays,
       organisationId,
-      skipAssigneeNotification: spec.notify === true,
+      skipAssigneeNotification: spec.notify === true || spec.skipNotify === true,
     });
     if (t) created.push(t);
 

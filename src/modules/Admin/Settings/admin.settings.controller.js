@@ -1215,6 +1215,7 @@ async function loadOrganisationForRequest(req) {
     name: plain.name,
     slug: plain.slug,
     logoUrl: toPublicAssetUrl(plain.logoUrl),
+    faviconUrl: toPublicAssetUrl(plain.faviconUrl),
     timezone: plain.timezone,
     date_format: plain.date_format,
   };
@@ -1255,7 +1256,7 @@ export const getOrganisationBranding = async (req, res) => {
     res.status(200).json({
       status: "success",
       data: {
-        organisation: organisation || { logoUrl: null, name: null },
+        organisation: organisation || { logoUrl: null, faviconUrl: null, name: null },
       },
     });
   } catch (error) {
@@ -1316,6 +1317,47 @@ export const uploadOrganisationLogo = async (req, res) => {
     });
   } catch (error) {
     logger.error({ err: error }, "uploadOrganisationLogo error");
+    res.status(500).json({ status: "error", message: error.message || "Internal server error" });
+  }
+};
+
+/** POST organisation favicon (multipart field: favicon) */
+export const uploadOrganisationFavicon = async (req, res) => {
+  try {
+    if (!(await requireAdmin(req, res))) return;
+    const orgId = req.user?.organisation_id;
+    if (!orgId) {
+      return res.status(400).json({ status: "error", message: "Organisation context required" });
+    }
+    if (!req.file?.path) {
+      return res.status(400).json({ status: "error", message: "Favicon file is required" });
+    }
+
+    const relativePath = normalizeStorageRelativePath(req.file.path);
+    if (!relativePath) {
+      return res.status(400).json({ status: "error", message: "Could not resolve favicon storage path" });
+    }
+
+    await req.tenantDb.Organisation.update({ faviconUrl: relativePath }, { where: { id: orgId } });
+
+    try {
+      await platformDb.Organisation.update({ faviconUrl: relativePath }, { where: { id: orgId } });
+    } catch (syncErr) {
+      logger.warn({ errMessage: syncErr.message }, "Platform organisation favicon sync skipped");
+    }
+
+    res.status(200).json({
+      status: "success",
+      message: "Organisation favicon updated",
+      data: {
+        organisation: {
+          id: orgId,
+          faviconUrl: toPublicAssetUrl(relativePath),
+        },
+      },
+    });
+  } catch (error) {
+    logger.error({ err: error }, "uploadOrganisationFavicon error");
     res.status(500).json({ status: "error", message: error.message || "Internal server error" });
   }
 };

@@ -41,13 +41,13 @@ function fakePlatformDb(rows) {
 }
 
 const SPONSOR_SCENARIO = [
-  { id: 20, email: 'technoweb@gmail.com', role_id: 3, status: 'inactive', organisation_id: null },
-  { id: 46, email: 'technoweb@gmail.com', role_id: 4, status: 'active', organisation_id: 19 },
+  { id: 20, email: 'demo@gmail.com', role_id: 3, status: 'inactive', organisation_id: null },
+  { id: 46, email: 'demo@gmail.com', role_id: 4, status: 'active', organisation_id: 19 },
 ];
 
 test('no org context: active sponsor is returned, not the inactive org-null duplicate', async () => {
   const db = fakePlatformDb(SPONSOR_SCENARIO);
-  const user = await findPlatformUserForLogin(db, 'technoweb@gmail.com', null);
+  const user = await findPlatformUserForLogin(db, 'demo@gmail.com', null);
   assert.ok(user, 'a user should be resolved');
   assert.strictEqual(user.id, 46, 'must pick the ACTIVE record, not the inactive shadow');
   assert.strictEqual(user.status, 'active');
@@ -55,7 +55,7 @@ test('no org context: active sponsor is returned, not the inactive org-null dupl
 
 test('org-scoped (subdomain) login returns the exact org record', async () => {
   const db = fakePlatformDb(SPONSOR_SCENARIO);
-  const user = await findPlatformUserForLogin(db, 'technoweb@gmail.com', { organisation: { id: 19 } });
+  const user = await findPlatformUserForLogin(db, 'demo@gmail.com', { organisation: { id: 19 } });
   assert.strictEqual(user.id, 46);
   assert.strictEqual(user.organisation_id, 19);
 });

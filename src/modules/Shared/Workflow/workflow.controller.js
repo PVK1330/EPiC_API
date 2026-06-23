@@ -33,6 +33,7 @@ import {
   recordVisaPortalReply,
   markBiometricAttendedByCandidate,
   hasBiometricAppointmentBooked,
+  communicateDecision,
 } from "../../../services/caseWorkflowProcess.service.js";
 import {
   submitCclFeeProposal,
@@ -52,6 +53,7 @@ import path from "path";
 import fs from "fs";
 import { buildCandidateCclApprovalTimeline } from "../../../utils/cclApprovalTimeline.utils.js";
 import logger from '../../../utils/logger.js';
+import { notifyUser, NotificationTypes, NotificationPriority } from '../../../services/notification.service.js';
 
 function organisationIdFromReq(req) {
   const id = req.user?.organisation_id;
@@ -1657,10 +1659,10 @@ export const getCandidateWorkflowProcess = async (req, res) => {
         caseId: caseRecord.caseId,
         caseStage,
         proposedAmount: caseRecord.proposedAmount,
-        biometricLocation: caseRecord.biometricLocation,
-        biometricTime: caseRecord.biometricTime,
-        biometricDay: caseRecord.biometricDay,
-        biometricsDate: caseRecord.biometricsDate,
+        biometricLocation: caseRecord.biometricLocation || workflowState.biometrics?.bookedSlot?.location || null,
+        biometricTime: caseRecord.biometricTime || workflowState.biometrics?.bookedSlot?.appointmentTime || null,
+        biometricDay: caseRecord.biometricDay || workflowState.biometrics?.bookedSlot?.appointmentDay || null,
+        biometricsDate: caseRecord.biometricsDate || workflowState.biometrics?.bookedSlot?.appointmentDate || null,
         hasBiometricAppointment,
         canMarkBiometricAttended,
         timezone,
@@ -2028,6 +2030,163 @@ export const staffRecordVisaPortalReply = async (req, res) => {
     });
   } catch (err) {
     logger.error({ err }, "staffRecordVisaPortalReply");
+    res.status(500).json({ status: "error", message: err.message, data: null });
+  }
+};
+
+/** Staff: communicate Home Office decision to candidate */
+export const staffCommunicateDecision = async (req, res) => {
+  try {
+    const caseRecord = await findCaseByRef(req.tenantDb, req.params.caseId);
+    if (!caseRecord) {
+      return res
+        .status(404)
+        .json({ status: "error", message: "Case not found", data: null });
+    }
+
+    const result = await communicateDecision({
+      tenantDb: req.tenantDb,
+      caseRecord,
+      outcome: req.body?.outcome,
+      notes: req.body?.notes,
+      performedBy: req.user?.userId,
+      organisationId: organisationIdFromReq(req),
+    });
+
+    if (!result.ok) {
+      return res.status(result.status || 400).json({
+        status: "error",
+        message: result.message,
+        data: null,
+      });
+    }
+
+    await caseRecord.reload();
+
+    res.status(200).json({
+      status: "success",
+      data: {
+        caseStage: resolveCaseStage(caseRecord),
+        workflowState: getWorkflowState(caseRecord),
+      },
+    });
+  } catch (err) {
+    logger.error({ err }, "staffCommunicateDecision");
+    res.status(500).json({ status: "error", message: err.message, data: null });
+  }
+};
+
+/**
+ * Staff: upload a decision document (Decision Letter / Approval Notice /
+ * Visa Copy / BRP Information) for a case and notify the candidate by email.
+ *
+ * Expects multipart/form-data with:
+ *   - files[]  : the file (from handleDocumentUpload middleware)
+ *   - documentType : one of DECISION_DOC_TYPES
+ */
+export const staffUploadDecisionDocument = async (req, res) => {
+  try {
+    const documentType = req.body?.documentType?.trim();
+    if (!documentType || !DECISION_DOC_TYPES.includes(documentType)) {
+      return res.status(400).json({
+        status: "error",
+        message: `documentType must be one of: ${DECISION_DOC_TYPES.join(", ")}`,
+        data: null,
+      });
+    }
+
+    const file = req.files?.[0];
+    if (!file) {
+      return res.status(400).json({ status: "error", message: "No file uploaded", data: null });
+    }
+
+    const caseRecord = await findCaseByRef(req.tenantDb, req.params.caseId);
+    if (!caseRecord) {
+      if (file.path && fs.existsSync(file.path)) fs.unlinkSync(file.path);
+      return res.status(404).json({ status: "error", message: "Case not found", data: null });
+    }
+
+    const uploadedBy = req.user?.userId ?? req.user?.id;
+    const caseLabel = caseRecord.caseId || `#${caseRecord.id}`;
+
+    // Move file to permanent case storage
+    const targetDir = path.join("storage", "private", "caseimages", String(caseRecord.id));
+    fs.mkdirSync(targetDir, { recursive: true });
+    const ext = path.extname(file.originalname || ".pdf");
+    const systemName = `${documentType.replace(/[\s/]+/g, "_").toUpperCase()}-${Date.now()}${ext}`;
+    const targetPath = path.join(targetDir, systemName);
+    fs.renameSync(file.path, targetPath);
+
+    // Upsert: replace existing record for this type if one exists
+    const existing = await req.tenantDb.Document.findOne({
+      where: { caseId: caseRecord.id, documentType },
+      order: [["uploadedAt", "DESC"]],
+    });
+
+    let document;
+    const docMeta = {
+      documentName: systemName,
+      userFileName: file.originalname || systemName,
+      documentPath: targetPath,
+      documentCategory: "decision",
+      mimeType: file.mimetype,
+      fileSize: file.size,
+      uploadedBy,
+      uploadedAt: new Date(),
+      status: "uploaded",
+    };
+
+    if (existing) {
+      if (existing.documentPath && fs.existsSync(existing.documentPath)) {
+        try { fs.unlinkSync(existing.documentPath); } catch { /* ignore stale cleanup */ }
+      }
+      await existing.update(docMeta);
+      document = await existing.reload();
+    } else {
+      document = await req.tenantDb.Document.create({
+        userId: caseRecord.candidateId ?? uploadedBy,
+        caseId: caseRecord.id,
+        documentType,
+        ...docMeta,
+      });
+    }
+
+    // Notify candidate via in-app + email
+    if (caseRecord.candidateId) {
+      try {
+        await notifyUser(req.tenantDb, caseRecord.candidateId, {
+          type: NotificationTypes.SUCCESS,
+          priority: NotificationPriority.HIGH,
+          category: "document",
+          title: `${documentType} is now available`,
+          message: `Your ${documentType.toLowerCase()} for case ${caseLabel} has been uploaded to the portal. Download it from your Application Pack.`,
+          entityType: "document",
+          entityId: document.id,
+          actionType: "decision_document_uploaded",
+          actionUrl: "/my-account?tab=downloads",
+          sendEmail: true,
+          organisationId: organisationIdFromReq(req),
+        });
+      } catch (notifErr) {
+        logger.error({ err: notifErr }, "staffUploadDecisionDocument: notification failed");
+      }
+    }
+
+    res.status(200).json({
+      status: "success",
+      data: {
+        document: {
+          id: document.id,
+          documentType: document.documentType,
+          documentName: document.documentName,
+          userFileName: document.userFileName,
+          uploadedAt: document.uploadedAt,
+          status: document.status,
+        },
+      },
+    });
+  } catch (err) {
+    logger.error({ err }, "staffUploadDecisionDocument");
     res.status(500).json({ status: "error", message: err.message, data: null });
   }
 };

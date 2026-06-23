@@ -292,11 +292,12 @@ export async function confirmBiometricSlot({
     organisationId,
   });
 
+  const caseLabel = caseRecord.caseId || `#${caseRecord.id}`;
   await createWorkflowTask({
     tenantDb,
     caseRecord,
     assigneeId: caseRecord.candidateId,
-    title: `Attend biometrics on ${date}${time ? ` at ${time}` : ""} — ${location}`,
+    title: `Attend biometrics — ${caseLabel}`,
     priority: "high",
     dueInDays: 7,
     createdBy: performedBy,
@@ -305,36 +306,22 @@ export async function confirmBiometricSlot({
   return { ok: true, slot: booked };
 }
 
-/** After biometrics confirmation — upload docs to visa portal. */
+/** After biometrics confirmation — upload docs to visa portal.
+ * Task creation is handled by STAGE_TASK_MATRIX in workflowTaskAutomation.service.js.
+ * This hook is intentionally a no-op to avoid duplicate caseworker tasks.
+ */
 export async function onEnterBiometricsConfirmationSent({ tenantDb, caseRecord, performedBy }) {
-  const cwIds = parseCaseworkerIds(caseRecord);
-  for (const cwId of cwIds) {
-    await createWorkflowTask({
-      tenantDb,
-      caseRecord,
-      assigneeId: cwId,
-      title: "Upload biometric documents to the UK Visa Portal",
-      priority: "high",
-      dueInDays: 2,
-      createdBy: performedBy,
-    });
-  }
+  // No-op: syncWorkflowTasksForStage("biometrics_confirmation_sent") already
+  // creates "Upload biometric documents to Visa Portal" for all caseworkers.
 }
 
-/** Awaiting decision — monitor visa portal inbox. */
+/** Awaiting decision — monitor visa portal inbox.
+ * Task creation is handled by STAGE_TASK_MATRIX in workflowTaskAutomation.service.js.
+ * This hook is intentionally a no-op to avoid duplicate caseworker tasks.
+ */
 export async function onEnterAwaitingDecision({ tenantDb, caseRecord, performedBy }) {
-  const cwIds = parseCaseworkerIds(caseRecord);
-  for (const cwId of cwIds) {
-    await createWorkflowTask({
-      tenantDb,
-      caseRecord,
-      assigneeId: cwId,
-      title: "Check UK Visa Portal email and record Home Office reply",
-      priority: "medium",
-      dueInDays: 3,
-      createdBy: performedBy,
-    });
-  }
+  // No-op: syncWorkflowTasksForStage("awaiting_decision") already creates
+  // "Monitor Home Office decision status" for all caseworkers.
 }
 
 export async function recordVisaPortalUpdate({

@@ -32,6 +32,7 @@ const EMPTY_STATE = {
     documentsUploadedAt: null,
     visaPortalReply: null,
   },
+  decision: null,
 };
 
 export function getWorkflowState(caseRecord) {
@@ -717,7 +718,14 @@ export async function markBiometricAttendedByCandidate({
     return { ok: true, nextStage: stage, alreadyDone: true };
   }
 
-  if (!hasBiometricAppointmentBooked(caseRecord, ws)) {
+  // Only block if the case hasn't reached the biometrics stage yet.
+  // Once the case is at biometrics_booked or later the appointment may have
+  // been arranged outside the system (no slot data stored), but the candidate
+  // should still be able to confirm they attended.
+  if (
+    !hasBiometricAppointmentBooked(caseRecord, ws) &&
+    getStageOrder(stage) < getStageOrder("biometrics_booked")
+  ) {
     return {
       ok: false,
       status: 400,
@@ -885,7 +893,7 @@ export async function sendBiometricSlotToCandidate({
       tenantDb,
       caseRecord,
       assigneeId: caseRecord.candidateId,
-      title: `Attend biometrics appointment — ${caseLabel}`,
+      title: `Attend biometrics — ${caseLabel}`,
       createdBy: performedBy,
       priority: "high",
       dueInDays: 7,
@@ -943,6 +951,9 @@ export async function recordBiometricDocumentsUploaded({
     };
   }
 
+  const ws = getWorkflowState(caseRecord);
+  const wasAlreadyUploaded = !!ws.biometrics?.documentsUploadedAt;
+
   const now = new Date().toISOString();
   await setWorkflowState(tenantDb, caseRecord, {
     biometrics: { documentsUploadedAt: now },
@@ -966,6 +977,61 @@ export async function recordBiometricDocumentsUploaded({
       reason: "Biometric documents uploaded to visa portal",
       organisationId,
     });
+  }
+
+  // Notify candidate on first confirmation only (avoid re-spamming).
+  if (!wasAlreadyUploaded && caseRecord.candidateId) {
+    try {
+      await notifyUser(tenantDb, caseRecord.candidateId, {
+        tenantDb,
+        type: NotificationTypes.INFO,
+        priority: NotificationPriority.HIGH,
+        title: "Biometric documents submitted — confirm attendance",
+        message:
+          "Your supporting documents have been submitted to the visa portal. Please log in and confirm that you attended your biometrics appointment.",
+        actionType: "documents_uploaded",
+        entityId: caseRecord.id,
+        entityType: "case",
+        sendEmail: true,
+        organisationId,
+      });
+    } catch (notifErr) {
+      logger.warn({ notifErr }, "recordBiometricDocumentsUploaded: candidate notification failed");
+    }
+  }
+
+  // Always ensure the candidate has the "Attend biometrics" task — independent
+  // of wasAlreadyUploaded. The stage may have been set manually (skipping
+  // applyCaseStageChange / syncWorkflowTasksForStage entirely), or a previous
+  // call may have set documentsUploadedAt without successfully creating the task.
+  if (caseRecord.candidateId) {
+    try {
+      const existing = await tenantDb.Task.findOne({
+        where: {
+          case_id: caseRecord.id,
+          assigned_to: caseRecord.candidateId,
+          status: "pending",
+          title: { [Op.iLike]: "%attend biometrics%" },
+        },
+      });
+      if (!existing) {
+        const caseLabel = caseRecord.caseId || `#${caseRecord.id}`;
+        await createWorkflowTask({
+          tenantDb,
+          caseRecord,
+          assigneeId: caseRecord.candidateId,
+          title: `Attend biometrics — ${caseLabel}`,
+          createdBy: performedBy,
+          priority: "high",
+          dueInDays: 3,
+          organisationId,
+          skipIfExists: false,
+          skipAssigneeNotification: true,
+        });
+      }
+    } catch (taskErr) {
+      logger.warn({ taskErr }, "recordBiometricDocumentsUploaded: candidate task upsert failed");
+    }
   }
 
   return { ok: true, nextStage: "documents_uploaded" };
@@ -1029,6 +1095,99 @@ export async function recordVisaPortalReply({
   }
 
   return { ok: true, nextStage: "awaiting_decision" };
+}
+
+/** Staff: communicate Home Office decision to candidate and advance to decision_communicated. */
+export async function communicateDecision({
+  tenantDb,
+  caseRecord,
+  outcome,
+  notes,
+  performedBy,
+  organisationId = null,
+}) {
+  const stage = resolveCaseStage(caseRecord);
+  if (!["awaiting_decision", "decision_communicated"].includes(stage)) {
+    return {
+      ok: false,
+      status: 400,
+      message: "Decision can only be communicated when the case is awaiting a Home Office decision",
+    };
+  }
+
+  if (!["approved", "refused"].includes(outcome)) {
+    return {
+      ok: false,
+      status: 400,
+      message: "Decision outcome must be 'approved' or 'refused'",
+    };
+  }
+
+  const decision = {
+    outcome,
+    notes: notes?.trim() || null,
+    communicatedAt: new Date().toISOString(),
+    communicatedBy: performedBy,
+  };
+
+  await setWorkflowState(tenantDb, caseRecord, { decision });
+
+  await recordTimelineEntry({
+    tenantDb,
+    caseId: caseRecord.id,
+    actionType: "decision_communicated",
+    description: `Home Office decision communicated to candidate: ${outcome}${notes?.trim() ? ` — ${notes.trim().slice(0, 120)}` : ""}`,
+    performedBy,
+    visibility: "candidate",
+    metadata: { outcome, notes: notes?.trim() || null },
+  });
+
+  if (caseRecord.candidateId) {
+    try {
+      await notifyUser(tenantDb, caseRecord.candidateId, {
+        tenantDb,
+        type: outcome === "approved" ? NotificationTypes.SUCCESS : NotificationTypes.WARNING,
+        priority: NotificationPriority.HIGH,
+        title: outcome === "approved"
+          ? "Your visa application has been approved"
+          : "Update on your visa application",
+        message: outcome === "approved"
+          ? "Great news — your visa application has been approved. Please log in to your account to download your final documents."
+          : "We have an update on your visa application. Please log in to your account for details from your caseworker.",
+        actionType: "decision_communicated",
+        entityId: caseRecord.id,
+        entityType: "case",
+        sendEmail: true,
+        organisationId,
+      });
+    } catch (notifErr) {
+      logger.warn({ notifErr }, "communicateDecision: candidate notification failed");
+    }
+  }
+
+  try {
+    await sendWorkflowStageEmail({
+      tenantDb,
+      caseRecord,
+      stageId: "decision_communicated",
+      organisationId,
+    });
+  } catch (emailErr) {
+    logger.warn({ emailErr }, "communicateDecision: email failed (non-fatal)");
+  }
+
+  if (stage !== "decision_communicated") {
+    await applyCaseStageChange({
+      tenantDb,
+      caseRecord,
+      nextStageId: "decision_communicated",
+      performedBy,
+      reason: `Home Office decision communicated to candidate — ${outcome}`,
+      organisationId,
+    });
+  }
+
+  return { ok: true, nextStage: "decision_communicated" };
 }
 
 /** Called when case enters draft_application_review — lock form and reset pending review if re-entering. */

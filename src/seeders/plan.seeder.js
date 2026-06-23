@@ -1,10 +1,11 @@
+
 import platformDb from "../models/index.js";
 import logger from "../utils/logger.js";
 
 const plans = [
   {
     name: "Starter",
-    description: "Perfect for small agencies",
+  description: "Perfect for small agencies",
     price: 49.00,
     currency: "GBP",
     billing_cycle: "monthly",
