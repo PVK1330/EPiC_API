@@ -14,9 +14,113 @@ const ALLOWED_PROFILE_DOC_FIELDS = new Set([
   'organisationalChart',
   'recruitmentDocs',
 ]);
-// Profile docs are stored in uploads/sponsor_docs/{userId}/
+const PRIVATE_STORAGE_DIR = path.resolve(process.cwd(), 'storage', 'private');
+// Registration documents are MOVED here by updateProfile (multer temp ->
+// uploads/sponsor_docs/<userId>/...), so the stored path lives under this tree,
+// NOT storage/private. Both are allowed for download so legacy + new files work.
 const SPONSOR_DOCS_DIR = path.resolve(process.cwd(), 'uploads', 'sponsor_docs');
+const ALLOWED_DOWNLOAD_DIRS = [PRIVATE_STORAGE_DIR, SPONSOR_DOCS_DIR];
 const INLINE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.pdf']);
+
+// Fields with strict shapes. Validated server-side so bad input from ANY of the
+// profile modals returns a clean 400 instead of a Sequelize 500 (e.g. an email
+// pasted into a phone field overflowing the column).
+const PROFILE_EMAIL_FIELDS = ['authorisingEmail', 'keyContactEmail', 'hrEmail', 'billingEmail'];
+const PROFILE_PHONE_FIELDS = ['authorisingPhone', 'keyContactPhone', 'hrPhone', 'billingPhone'];
+const PHONE_MAX_LEN = 30; // matches the widened VARCHAR(30) columns
+const EMAIL_MAX_LEN = 255; // matches the VARCHAR(255) email columns
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// Phone: +, digits, spaces, parentheses, hyphens, dots — 5 to 30 chars.
+const PHONE_RE = /^[+()\-.\s\d]{5,30}$/;
+
+/**
+ * Validate + normalise the subset of sponsor-profile fields that have strict
+ * shapes (emails, phones, numbers, dates). Only fields actually PRESENT in the
+ * body are checked, so partial updates from the per-section modals stay valid.
+ *
+ * @returns {{ errors: Record<string,string>, normalised: Record<string,any> }}
+ *          `errors` is field→message (empty when valid); `normalised` holds the
+ *          cleaned/coerced values to persist (numbers as numbers, trimmed text).
+ */
+function validateSponsorProfileInput(body = {}) {
+  const errors = {};
+  const normalised = {};
+  const has = (k) =>
+    body[k] !== undefined && body[k] !== null && String(body[k]).trim() !== '';
+
+  for (const f of PROFILE_EMAIL_FIELDS) {
+    if (!has(f)) continue;
+    const v = String(body[f]).trim();
+    if (!EMAIL_RE.test(v)) errors[f] = 'Enter a valid email address';
+    else if (v.length > EMAIL_MAX_LEN) errors[f] = `Email address must be ${EMAIL_MAX_LEN} characters or fewer`;
+    else normalised[f] = v;
+  }
+
+  for (const f of PROFILE_PHONE_FIELDS) {
+    if (!has(f)) continue;
+    const v = String(body[f]).trim();
+    if (v.includes('@')) errors[f] = 'Phone number cannot be an email address';
+    else if (!PHONE_RE.test(v)) errors[f] = 'Enter a valid phone number';
+    else if (v.length > PHONE_MAX_LEN) errors[f] = `Phone number must be ${PHONE_MAX_LEN} characters or fewer`;
+    else normalised[f] = v;
+  }
+
+  if (has('yearEstablished')) {
+    const n = Number(body.yearEstablished);
+    const currentYear = new Date().getFullYear();
+    if (!Number.isInteger(n) || n < 1800 || n > currentYear) {
+      errors.yearEstablished = `Enter a valid year between 1800 and ${currentYear}`;
+    } else {
+      normalised.yearEstablished = n;
+    }
+  }
+
+  if (has('cosAllocation')) {
+    const n = Number(body.cosAllocation);
+    if (!Number.isInteger(n) || n < 0) errors.cosAllocation = 'CoS allocation must be a whole number';
+    else normalised.cosAllocation = n;
+  }
+
+  if (has('outstandingBalance')) {
+    const n = Number(body.outstandingBalance);
+    if (Number.isNaN(n) || n < 0) errors.outstandingBalance = 'Outstanding balance must be a number';
+    else normalised.outstandingBalance = n;
+  }
+
+  if (has('licenceIssueDate') && has('licenceExpiryDate')) {
+    const issue = new Date(body.licenceIssueDate);
+    const expiry = new Date(body.licenceExpiryDate);
+    if (!Number.isNaN(issue.getTime()) && !Number.isNaN(expiry.getTime()) && expiry < issue) {
+      errors.licenceExpiryDate = 'Licence expiry date cannot be before the issue date';
+    }
+  }
+
+  return { errors, normalised };
+}
+
+/**
+ * Map a Sequelize/Postgres data error to a clean 400 (instead of a 500) when the
+ * payload was simply malformed/too long. Returns true if it handled the response.
+ */
+function handleProfileDbError(err, res) {
+  const msg = String(err?.message || '');
+  // Match only genuinely user-correctable data errors. We deliberately do NOT
+  // match the broad 'SequelizeDatabaseError' name — that also wraps schema drift
+  // (missing column), constraint faults, deadlocks, etc., which must stay 500s so
+  // they surface in logs/alerts rather than masquerading as "bad input".
+  if (
+    err?.name === 'SequelizeValidationError' ||
+    /value too long|invalid input syntax|out of range|numeric field overflow/i.test(msg)
+  ) {
+    res.status(400).json({
+      status: 'error',
+      message: 'One or more fields are invalid or too long. Please review your input and try again.',
+      error: msg,
+    });
+    return true;
+  }
+  return false;
+}
 
 /**
  * Resolve user ID from request
@@ -140,9 +244,20 @@ export const updateProfile = async (req, res) => {
 
     // Basic Validation for Registration
     if (req.body.isFullRegistration && (!companyName || !registrationNumber)) {
-      return res.status(400).json({ 
-        status: 'error', 
-        message: 'Company Name and Registration Number are required for full registration.' 
+      return res.status(400).json({
+        status: 'error',
+        message: 'Company Name and Registration Number are required for full registration.'
+      });
+    }
+
+    // Field-level validation (emails, phones, year, numbers, licence dates).
+    // Returns a clean 400 before we ever touch the DB.
+    const { errors: fieldErrors, normalised } = validateSponsorProfileInput(req.body);
+    if (Object.keys(fieldErrors).length > 0) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Please correct the highlighted fields and try again.',
+        errors: fieldErrors,
       });
     }
 
@@ -221,8 +336,12 @@ export const updateProfile = async (req, res) => {
 
     profileFields.forEach(field => {
       if (req.body[field] !== undefined) {
-        let value = req.body[field];
-        
+        // Prefer the validated/coerced value (numbers as numbers, trimmed text)
+        // when validation produced one for this field.
+        let value = Object.prototype.hasOwnProperty.call(normalised, field)
+          ? normalised[field]
+          : req.body[field];
+
         // Convert empty strings to null (important for DATE and ENUM fields)
         if (value === "") {
           value = null;
@@ -278,6 +397,7 @@ export const updateProfile = async (req, res) => {
     });
   } catch (err) {
     logger.error({ err }, 'updateProfile error');
+    if (handleProfileDbError(err, res)) return;
     res.status(500).json({
       status: 'error',
       message: 'Internal server error',
@@ -303,15 +423,38 @@ export const updateKeyPersonnel = async (req, res) => {
       level1Users
     } = req.body;
 
+    const { errors: fieldErrors, normalised } = validateSponsorProfileInput(req.body);
+    if (Object.keys(fieldErrors).length > 0) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Please correct the highlighted fields and try again.',
+        errors: fieldErrors,
+      });
+    }
+
     const [profile] = await req.tenantDb.SponsorProfile.findOrCreate({
       where: { userId }
     });
 
+    // Treat a cleared field ("") as NULL, mirroring updateProfile, so both
+    // endpoints store consistent values for the same columns.
+    const blankToNull = (v) => (typeof v === 'string' && v.trim() === '' ? null : v);
     await profile.update({
-      authorisingName, authorisingPhone, authorisingEmail, authorisingJobTitle,
-      keyContactName, keyContactPhone, keyContactEmail, keyContactDepartment,
-      hrName, hrPhone, hrEmail, hrJobTitle,
-      level1Users: Array.isArray(level1Users) ? level1Users : []
+      authorisingName: blankToNull(authorisingName),
+      authorisingPhone: blankToNull(authorisingPhone),
+      authorisingEmail: blankToNull(authorisingEmail),
+      authorisingJobTitle: blankToNull(authorisingJobTitle),
+      keyContactName: blankToNull(keyContactName),
+      keyContactPhone: blankToNull(keyContactPhone),
+      keyContactEmail: blankToNull(keyContactEmail),
+      keyContactDepartment: blankToNull(keyContactDepartment),
+      hrName: blankToNull(hrName),
+      hrPhone: blankToNull(hrPhone),
+      hrEmail: blankToNull(hrEmail),
+      hrJobTitle: blankToNull(hrJobTitle),
+      level1Users: Array.isArray(level1Users) ? level1Users : [],
+      // Validated/normalised emails & phones override the raw destructured values.
+      ...normalised,
     });
 
     const updatedProfile = await req.tenantDb.SponsorProfile.findOne({ where: { userId } });
@@ -325,6 +468,7 @@ export const updateKeyPersonnel = async (req, res) => {
     });
   } catch (err) {
     logger.error({ err }, 'updateKeyPersonnel error');
+    if (handleProfileDbError(err, res)) return;
     res.status(500).json({
       status: 'error',
       message: 'Failed to update Key Personnel',
@@ -399,7 +543,12 @@ export const downloadProfileDocument = async (req, res) => {
     }
 
     const absolute = path.resolve(String(filePath));
-    if (!absolute.startsWith(SPONSOR_DOCS_DIR + path.sep)) {
+    // Allow files within either approved tree; the prefix check (dir + sep) keeps
+    // a crafted "../" path from escaping the allowed roots.
+    const isAllowed = ALLOWED_DOWNLOAD_DIRS.some(
+      (dir) => absolute === dir || absolute.startsWith(dir + path.sep)
+    );
+    if (!isAllowed) {
       return res.status(400).json({ status: 'error', message: 'Invalid path' });
     }
     if (!fs.existsSync(absolute)) {

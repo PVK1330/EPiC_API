@@ -268,6 +268,23 @@ async function prefillIntakeForm(tenantDb, licenceApplicationId, form) {
 export async function updateIntakeForm(tenantDb, licenceApplicationId, organisationId, data, userId) {
   const form = await getOrCreateIntakeForm(tenantDb, licenceApplicationId, organisationId);
 
+  // Guard the length-constrained columns so an over-long value returns a clean
+  // 400 (the controller maps err.statusCode) instead of a Sequelize 500. The
+  // sponsor UI validates these; this covers direct API calls and keeps the
+  // failure mode consistent with the rest of the app.
+  // Columns: phoneNumber VARCHAR(30), niNumber VARCHAR(20).
+  const reject = (message) => {
+    const err = new Error(message);
+    err.statusCode = 400;
+    throw err;
+  };
+  if (typeof data.phoneNumber === "string" && data.phoneNumber.trim().length > 30) {
+    reject("Phone number is too long (max 30 characters).");
+  }
+  if (typeof data.niNumber === "string" && data.niNumber.trim().length > 20) {
+    reject("NI number is too long (max 20 characters).");
+  }
+
   const allowedFields = [
     "tradingName", "premisesAddress", "owningLimitedCompany", "namedPersonOnLicence",
     "phoneNumber", "niNumber", "emailAddress", "jobTitlesRequired",
