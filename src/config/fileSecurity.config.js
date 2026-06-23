@@ -20,14 +20,16 @@ export const ALLOWED_MIME_TYPES = {
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
-  '.webp': 'image/webp'
+  '.webp': 'image/webp',
+  '.ico': 'image/x-icon',
 };
 
 export const MAX_FILE_SIZES = {
-  DOCUMENT: 10 * 1024 * 1024, // 10MB
-  IMAGE: 5 * 1024 * 1024,     // 5MB
-  AVATAR: 2 * 1024 * 1024,    // 2MB
-  TEMPLATE: 5 * 1024 * 1024   // 5MB
+  DOCUMENT: 10 * 1024 * 1024,  // 10MB
+  IMAGE: 5 * 1024 * 1024,      // 5MB
+  AVATAR: 2 * 1024 * 1024,     // 2MB
+  TEMPLATE: 5 * 1024 * 1024,   // 5MB
+  FAVICON: 512 * 1024,         // 512KB — favicons are tiny; generous upper bound
 };
 
 /**

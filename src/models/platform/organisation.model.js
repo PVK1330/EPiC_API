@@ -54,6 +54,11 @@ export default (sequelize, DataTypes) => {
         allowNull: true,
         field: "logo_url",
       },
+      faviconUrl: {
+        type: DataTypes.STRING(500),
+        allowNull: true,
+        field: "favicon_url",
+      },
       // Org-wide display timezone (IANA id) + date format — admin-selectable,
       // applied across every panel for formatting dates/times.
       timezone: {

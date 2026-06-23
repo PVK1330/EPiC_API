@@ -1144,6 +1144,10 @@ export const assignCase = async (req, res) => {
 
     if (!caseData) return res.status(404).json({ status: "error", message: "Case not found" });
 
+    // Hoist parsedProposed here — it's derived from req.body so it's already in scope,
+    // and it's referenced both inside the transaction (updates) and outside it (notifications).
+    const parsedProposed = parseFloat(proposedAmount);
+
     // BUG-080: two concurrent admin assignments to the same case could each read
     // the old caseworker list and write, silently overwriting one another. Lock the
     // case row inside a short transaction and recompute the assignment from the
@@ -1184,7 +1188,6 @@ export const assignCase = async (req, res) => {
       };
       if (priority) updates.priority = priority;
 
-      const parsedProposed = parseFloat(proposedAmount);
       if (!Number.isNaN(parsedProposed) && parsedProposed >= 0) {
         updates.proposedAmount = parsedProposed;
       }

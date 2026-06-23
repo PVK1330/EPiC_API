@@ -2,6 +2,7 @@ import { Router } from "express";
 import { verifyTokenAndTenant } from "../../../middlewares/authStack.middleware.js";
 import { requireCandidate } from "../../../middlewares/requireCandidate.middleware.js";
 import { checkRole, ROLES } from "../../../middlewares/role.middleware.js";
+import { handleDocumentUpload } from "../../../middlewares/upload.middleware.js";
 
 const adminOnly = checkRole([ROLES.ADMIN]);
 import * as workflowController from "./workflow.controller.js";
@@ -44,5 +45,7 @@ router.post("/cases/:caseId/visa-portal-submit", staff, workflowController.staff
 router.post("/cases/:caseId/biometric-slot", staff, workflowController.staffSendBiometricSlot);
 router.post("/cases/:caseId/biometric-docs-uploaded", staff, workflowController.staffRecordBiometricDocsUploaded);
 router.post("/cases/:caseId/visa-portal-reply", staff, workflowController.staffRecordVisaPortalReply);
+router.post("/cases/:caseId/communicate-decision", staff, workflowController.staffCommunicateDecision);
+router.post("/cases/:caseId/upload-decision-document", staff, handleDocumentUpload, workflowController.staffUploadDecisionDocument);
 
 export default router;

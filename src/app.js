@@ -5,6 +5,7 @@ import cors from 'cors';
 import compression from 'compression';
 
 import routes from './routes/index.js';
+import { getSettingsByNamespace } from './services/settings.service.js';
 import { getCorsOptions } from './config/frontendOrigins.js';
 import { getHelmetMiddleware } from './config/helmet.config.js';
 import { csrfProtection, generateCsrfToken } from './config/csrf.config.js';
@@ -93,6 +94,23 @@ app.use('/api/public/images', (req, res, next) => {
    express.static('storage/private/platform', STATIC_CACHE),
    express.static('storage/private/superadmin', STATIC_CACHE),
    express.static('storage/private/avatars', STATIC_CACHE));
+
+// Public favicon — browsers request /favicon.ico before any scripts load.
+// Reads the platform setting and redirects to the static file so the browser
+// tab shows whatever the superadmin uploaded in the branding settings.
+// Returns 204 (no content) when no favicon has been uploaded yet.
+app.get('/favicon.ico', async (req, res) => {
+  try {
+    const settings = await getSettingsByNamespace(null);
+    const faviconPath = settings?.favicon_url;
+    if (!faviconPath) return res.status(204).end();
+    // faviconPath is stored as "api/public/images/<file>" (no leading slash).
+    const redirectTo = faviconPath.startsWith('/') ? faviconPath : `/${faviconPath}`;
+    return res.redirect(302, redirectTo);
+  } catch {
+    return res.status(204).end();
+  }
+});
 
 // API Routes
 app.use('/api', routes);
