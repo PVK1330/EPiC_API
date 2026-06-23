@@ -5,6 +5,7 @@ import { Op } from 'sequelize';
 
 import logger from '../../../utils/logger.js';
 import { toPublicImagePath } from '../../../utils/storagePath.util.js';
+import platformDb from '../../../models/index.js';
 
 const ALLOWED_PROFILE_DOC_FIELDS = new Set([
   'sponsorLetter',
@@ -13,7 +14,8 @@ const ALLOWED_PROFILE_DOC_FIELDS = new Set([
   'organisationalChart',
   'recruitmentDocs',
 ]);
-const PRIVATE_STORAGE_DIR = path.resolve(process.cwd(), 'storage', 'private');
+// Profile docs are stored in uploads/sponsor_docs/{userId}/
+const SPONSOR_DOCS_DIR = path.resolve(process.cwd(), 'uploads', 'sponsor_docs');
 const INLINE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.pdf']);
 
 /**
@@ -347,8 +349,12 @@ export const changePassword = async (req, res) => {
       return res.status(400).json({ status: 'error', message: 'New password is required' });
     }
 
-    const user = await req.tenantDb.User.findOne({ where: { id: userId } });
-    
+    // Passwords live in the platform DB (same DB that login checks against).
+    const user = await platformDb.User.findByPk(userId);
+    if (!user) {
+      return res.status(404).json({ status: 'error', message: 'User not found' });
+    }
+
     if (user.password) {
       if (!current_password) {
         return res.status(400).json({ status: 'error', message: 'Current password is required' });
@@ -360,7 +366,7 @@ export const changePassword = async (req, res) => {
     }
 
     const hashed = await bcrypt.hash(new_password, 12);
-    await req.tenantDb.User.update({ password: hashed }, { where: { id: userId } });
+    await platformDb.User.update({ password: hashed, password_changed_at: new Date() }, { where: { id: userId } });
 
     res.status(200).json({
       status: 'success',
@@ -393,7 +399,7 @@ export const downloadProfileDocument = async (req, res) => {
     }
 
     const absolute = path.resolve(String(filePath));
-    if (!absolute.startsWith(PRIVATE_STORAGE_DIR + path.sep)) {
+    if (!absolute.startsWith(SPONSOR_DOCS_DIR + path.sep)) {
       return res.status(400).json({ status: 'error', message: 'Invalid path' });
     }
     if (!fs.existsSync(absolute)) {
