@@ -66,8 +66,12 @@ const notifyInvolvedParties = async ({ tenantDb, workerCase, workerId, title, me
     logger.error({ err }, "Failed to notify admins for worker event");
   }
 
+  // BUG-06 fix: use workerCase.candidateId (the DB-verified User.id) rather
+  // than the raw workerId from the request body, which is in the SponsoredWorker
+  // ID space and may not correspond to a User record.
+  const candidateUserId = workerCase?.candidateId ?? workerId;
   try {
-    await notifyUser(tenantDb, workerId, {
+    await notifyUser(tenantDb, candidateUserId, {
       type: NotificationTypes.INFO,
       priority: NotificationPriority.MEDIUM,
       title,
@@ -266,6 +270,11 @@ export const deleteWorkerEvent = async (req, res) => {
   try {
     const sponsorId = req.user.userId;
     const { id } = req.params;
+
+    // BUG-14 fix: load the event and capture all data needed for notifications
+    // BEFORE destroying it, then use a single destroy() scoped to the same
+    // owner. This eliminates the TOCTOU window between findOne and destroy, and
+    // removes the unreachable second 404 branch that could never fire.
     const event = await req.tenantDb.WorkerEvent.findOne({ where: { id, sponsorId } });
     if (!event) {
       return res.status(404).json({ status: "error", message: "Worker event not found" });
@@ -276,19 +285,19 @@ export const deleteWorkerEvent = async (req, res) => {
       attributes: ["id", "caseId", "assignedcaseworkerId"],
     });
 
-    const deleted = await req.tenantDb.WorkerEvent.destroy({ where: { id, sponsorId } });
-    if (!deleted) {
-      return res.status(404).json({ status: "error", message: "Worker event not found" });
-    }
+    // Snapshot fields before destroy so notification has full context.
+    const eventSnapshot = { id: event.id, eventType: event.eventType, workerId: event.workerId };
+
+    await event.destroy();
 
     await notifyInvolvedParties({
       tenantDb: req.tenantDb,
       workerCase,
-      workerId: event.workerId,
+      workerId: eventSnapshot.workerId,
       title: "Worker Event Removed",
-      message: `Worker event "${event.eventType}" has been removed from reporting obligations.`,
+      message: `Worker event "${eventSnapshot.eventType}" has been removed from reporting obligations.`,
       actionType: "worker_event_deleted",
-      eventId: event.id,
+      eventId: eventSnapshot.id,
     });
 
     return res.status(200).json({ status: "success", message: "Worker event deleted" });

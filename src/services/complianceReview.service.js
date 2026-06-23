@@ -101,7 +101,12 @@ export function resolveEntity(slug) {
 }
 
 export function isTransitionAllowed(from, to) {
-  const allowed = TRANSITIONS[from] || TRANSITIONS[REVIEW_STATUS.SUBMITTED];
+  // BUG-12 fix: when `from` is null, undefined, or any unknown value the
+  // original code fell back to TRANSITIONS[SUBMITTED], inadvertently allowing
+  // all SUBMITTED-origin transitions on uninitialized records. Unknown states
+  // must be explicitly rejected.
+  if (!Object.prototype.hasOwnProperty.call(TRANSITIONS, from)) return false;
+  const allowed = TRANSITIONS[from];
   return from !== to && allowed.includes(to);
 }
 

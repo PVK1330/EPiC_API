@@ -5,7 +5,8 @@ import {
     NotificationTypes,
     NotificationPriority
 } from '../../services/notification.service.js';
-import { recordLicenceAudit, statusToAuditAction, getLicenceAuditTrail } from '../../services/licenceAssignment.service.js';
+import { recordLicenceAudit, statusToAuditAction, getLicenceAuditTrail, isCaseworkerAssigned } from '../../services/licenceAssignment.service.js';
+import { hasFullAccessRole } from '../../middlewares/role.middleware.js';
 import * as sponsorshipNotify from '../../services/sponsorshipNotification.service.js';
 import { loadFullApplication as loadFullApplicationV2, serializeApplication as serializeApplicationV2 } from '../../services/licenceApplicationV2.service.js';
 import { ensureStageTasks } from '../../services/licenceStageTask.service.js';
@@ -196,14 +197,37 @@ export const getMyAssignedDashboard = async (req, res) => {
 
 /**
  * GET /api/caseworker/licence/v2/:id — full normalized V2 application (read-only).
- * Assignment is enforced by the ensureAssignedCaseworker middleware on the route.
+ * Primary authorization is enforced by the ensureAssignedCaseworker middleware
+ * on the route. BUG-09 fix: the handler also validates the application ID
+ * against the middleware-loaded req.licenceApplication so it cannot be bypassed
+ * if this handler is ever mounted without the middleware, or if the middleware
+ * is reconfigured with a different idParam.
  */
 export const getLicenceApplicationV2Full = async (req, res) => {
     try {
+        const requestedId = Number(req.params.id);
+
+        // Defence-in-depth: if the middleware loaded the application, verify the
+        // IDs match before trusting it. If middleware was skipped (misconfiguration),
+        // req.licenceApplication is undefined and we fall through to the DB load
+        // which exposes no cross-tenant data since it is scoped to req.tenantDb.
+        if (req.licenceApplication && Number(req.licenceApplication.id) !== requestedId) {
+            return res.status(403).json({ status: 'error', message: 'Application ID mismatch' });
+        }
+
         const app = await loadFullApplicationV2(req.tenantDb, req.params.id, {});
         if (!app) {
             return res.status(404).json({ status: 'error', message: 'Licence application not found' });
         }
+
+        // D-2 fix: use statically imported helpers instead of dynamic import().
+        // If middleware was NOT present, enforce assignment here as a fallback.
+        if (!req.licenceApplication) {
+            if (!hasFullAccessRole(req.user.role_id) && !isCaseworkerAssigned(app, req.user.userId)) {
+                return res.status(403).json({ status: 'error', message: 'You are not assigned to this application' });
+            }
+        }
+
         return res.status(200).json({ status: 'success', data: serializeApplicationV2(app) });
     } catch (error) {
         logger.error({ err: error }, 'getLicenceApplicationV2Full failed');

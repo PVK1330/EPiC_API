@@ -1,5 +1,6 @@
 import { Op } from 'sequelize';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import multer from 'multer';
 import platformDb from '../../../models/index.js';
 import { isPlatformEmailTaken, normalizePlatformEmail } from '../../../utils/platformUserEmail.js';
@@ -235,7 +236,14 @@ export const createSponsor = async (req, res) => {
 // Get All Sponsors
 export const getAllSponsors = async (req, res) => {
   try {
-    const { page = 1, limit = 10, search, status, licenceStatus, riskLevel } = req.query;
+    // BUG-13 fix: validate and clamp pagination params before use.
+    // ?limit=0  → Math.ceil(count / 0) = Infinity in the response.
+    // ?limit=abc → parseInt = NaN  → Sequelize throws 500.
+    const rawPage  = parseInt(req.query.page,  10);
+    const rawLimit = parseInt(req.query.limit, 10);
+    const page  = Number.isFinite(rawPage)  && rawPage  > 0 ? rawPage  : 1;
+    const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 100) : 10;
+    const { search, status, licenceStatus, riskLevel } = req.query;
     const offset = (page - 1) * limit;
 
     // Build where clause
@@ -630,10 +638,12 @@ export const resendSponsorCredentials = async (req, res) => {
     const profile = await req.tenantDb.SponsorProfile.findOne({ where: { userId: sponsor.id } }).catch(() => null);
     const firstName = profile?.firstName || sponsor.first_name || "Sponsor";
 
+    // BUG-10 fix: req.organisationId is never set by any middleware.
+    // The correct source is req.user.organisation_id (matches createSponsor usage).
     await sendTenantSponsorWelcomeEmail({
       user: sponsor,
       plainPassword,
-      organisationId: req.organisationId,
+      organisationId: req.user?.organisation_id ?? null,
       firstName,
     });
 
@@ -741,7 +751,7 @@ export const bulkImportSponsors = async (req, res) => {
 
     const csvData = req.file.buffer.toString('utf-8');
     const lines = csvData.split('\n').filter(line => line.trim());
-    
+
     if (lines.length < 2) {
       return res.status(400).json({
         status: "error",
@@ -750,7 +760,34 @@ export const bulkImportSponsors = async (req, res) => {
       });
     }
 
-    const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+    // BUG-11 fix: naive split(',') breaks on fields that contain commas
+    // (e.g. "Acme, Inc." or "123 Main St, London"). Use a proper RFC-4180
+    // CSV parser that respects double-quoted fields.
+    const parseCSVLine = (line) => {
+      const fields = [];
+      let current = '';
+      let inQuotes = false;
+      for (let ci = 0; ci < line.length; ci++) {
+        const ch = line[ci];
+        if (ch === '"') {
+          if (inQuotes && line[ci + 1] === '"') {
+            current += '"';
+            ci++;
+          } else {
+            inQuotes = !inQuotes;
+          }
+        } else if (ch === ',' && !inQuotes) {
+          fields.push(current.trim());
+          current = '';
+        } else {
+          current += ch;
+        }
+      }
+      fields.push(current.trim());
+      return fields;
+    };
+
+    const headers = parseCSVLine(lines[0]);
     const results = {
       success: [],
       errors: []
@@ -758,9 +795,9 @@ export const bulkImportSponsors = async (req, res) => {
 
     for (let i = 1; i < lines.length; i++) {
       try {
-        const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
+        const values = parseCSVLine(lines[i]);
         const rowData = {};
-        
+
         headers.forEach((header, index) => {
           rowData[header] = values[index] || '';
         });
@@ -776,8 +813,9 @@ export const bulkImportSponsors = async (req, res) => {
           throw new Error("Email is required");
         }
 
-        const generatedPassword =
-          Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-4);
+        // BUG-11 fix: Math.random() is not cryptographically secure (~41 bits).
+        // Use crypto.randomBytes for a high-entropy temporary password.
+        const generatedPassword = crypto.randomBytes(16).toString('hex');
         const hashedPassword = await bcrypt.hash(generatedPassword, 12);
 
         const sponsor = await createUserOnPlatformAndTenant(req.tenantDb, {
