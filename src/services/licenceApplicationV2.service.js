@@ -26,18 +26,27 @@ export const ROUTE_LABELS = Object.freeze({
 
 // Appendix A document checklist seeded per application. `base` is always required;
 // route-specific entries are added when that route is selected.
+//
+// The base list mirrors the 10 mandatory documents the caseworker later verifies at
+// the Sponsor Intake stage (MANDATORY_DOCUMENTS in licenceIntake.service.js) so Step 4
+// of the wizard asks for exactly the same evidence — and an upload here auto-flows onto
+// the intake checklist via INTAKE_TO_APPENDIX_MAP, so the sponsor is never asked twice.
+// Two keys keep their historical appendix name (proof_of_registration, annual_accounts)
+// while the intake side maps to them under certificate_of_incorporation /
+// company_financials. Order matches the intake sortOrder for a consistent display.
 const APPENDIX_BASE = [
-  { key: "employer_liability_insurance", name: "Employer's liability insurance certificate (min £5m)" },
-  { key: "proof_of_registration", name: "Certificate of incorporation / proof of business registration" },
-  { key: "paye_hmrc_registration", name: "PAYE / HMRC registration evidence" },
-  { key: "business_bank_statement", name: "Business bank account statement" },
-  { key: "evidence_of_premises", name: "Evidence of trading premises (lease or ownership)" },
+  { key: "employer_liability_insurance", name: "Employer's Liability Insurance Certificate (minimum £5m cover)" },
+  { key: "proof_of_registration", name: "Certificate of Incorporation or Proof of Business Registration" },
+  { key: "paye_hmrc_registration", name: "PAYE / HMRC Registration Evidence" },
+  { key: "business_bank_statement", name: "Business Bank Account Statement (last 3 months)" },
+  { key: "evidence_of_premises", name: "Evidence of Trading Premises (lease agreement or ownership proof)" },
+  { key: "vat_registration", name: "VAT Registration Certificate (if VAT-registered)" },
+  { key: "id_proof_named_person", name: "Proof of Identity — Named Person on Licence (passport or driving licence)" },
+  { key: "right_to_work_named_person", name: "Right to Work Evidence — Named Person on Licence" },
+  { key: "annual_accounts", name: "Latest Company Accounts or Financial Statements" },
+  { key: "organisational_chart", name: "Organisational Chart showing Named Person's reporting line" },
 ];
 const APPENDIX_BY_ROUTE = Object.freeze({
-  SkilledWorker: [
-    { key: "annual_accounts", name: "Latest annual accounts (audited where applicable)" },
-    { key: "vat_registration", name: "VAT registration certificate (if VAT registered)" },
-  ],
   ScaleUp: [{ key: "scaleup_growth_evidence", name: "Evidence of scale-up growth (annualised growth / HMRC)" }],
   GBM: [{ key: "overseas_link_evidence", name: "Evidence of common ownership / link with the overseas business" }],
   GAE: [{ key: "gae_endorsement", name: "Government Authorised Exchange scheme endorsement" }],

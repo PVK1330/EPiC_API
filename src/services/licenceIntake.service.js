@@ -80,12 +80,14 @@ const CONDITION_KEY_MAP = {
  * evidence requirement. When a sponsor opens the intake checklist, any matching
  * Stage 4 upload is auto-attached so they are not asked to upload it twice.
  *
- * Intake keys NOT listed here (id_proof_named_person, right_to_work_named_person,
- * organisational_chart) have no Stage 4 equivalent and always require a fresh
- * upload. The value is an ordered list of candidate appendix keys — the first one
- * with an uploaded file wins.
- *
- * Keep in sync with docs/intake-document-mapping.md.
+ * All ten mandatory intake documents now have a Stage 4 equivalent (the wizard's
+ * Appendix A base list mirrors MANDATORY_DOCUMENTS), so every mandatory key maps.
+ * Two intake keys map to a differently-named appendix key kept for backwards
+ * compatibility: certificate_of_incorporation → proof_of_registration and
+ * company_financials → annual_accounts. Conditional documents (food hygiene, CQC,
+ * etc.) have no Stage 4 equivalent and are intentionally absent — they always
+ * require a fresh manual upload. The value is an ordered list of candidate appendix
+ * keys — the first one with an uploaded file wins.
  */
 export const INTAKE_TO_APPENDIX_MAP = {
   employer_liability_insurance: ["employer_liability_insurance"],
@@ -94,7 +96,10 @@ export const INTAKE_TO_APPENDIX_MAP = {
   business_bank_statement:      ["business_bank_statement"],
   evidence_of_premises:         ["evidence_of_premises"],
   vat_registration:             ["vat_registration"],
+  id_proof_named_person:        ["id_proof_named_person"],
+  right_to_work_named_person:   ["right_to_work_named_person"],
   company_financials:           ["annual_accounts"],
+  organisational_chart:         ["organisational_chart"],
 };
 
 /** Source values for an intake document slot. */
@@ -165,8 +170,15 @@ export async function importMatchingAppendixDocuments(tenantDb, licenceApplicati
     intakeDoc.fileName = baseName(appendixDoc.filePath);
     intakeDoc.fileMimeType = null;
     intakeDoc.fileSizeBytes = null;
-    intakeDoc.status = "uploaded";
+    // Carry over the appendix verification state. If a reviewer already verified the
+    // document on the Appendix A view, it must land on the sponsor's checklist as
+    // "verified" rather than reverting to "awaiting review". (Rejected appendix docs
+    // are never imported — planAppendixImports excludes them.)
+    const alreadyVerified = appendixDoc.verificationStatus === "Verified";
+    intakeDoc.status = alreadyVerified ? "verified" : "uploaded";
     intakeDoc.uploadedAt = new Date();
+    intakeDoc.verifiedAt = alreadyVerified ? appendixDoc.verifiedAt || new Date() : null;
+    intakeDoc.verifiedByUserId = alreadyVerified ? appendixDoc.verifiedBy ?? null : null;
     intakeDoc.source = INTAKE_DOC_SOURCE.IMPORTED;
     intakeDoc.sourceAppendixDocumentId = appendixDoc.id;
     intakeDoc.rejectionReason = null;
@@ -675,6 +687,17 @@ export async function verifyAppendixDocument(tenantDb, licenceApplicationId, doc
   if (notes) doc.notes = notes;
   await doc.save();
 
+  // Reflect this verification on the sponsor's intake checklist: any intake slot that
+  // was imported from this appendix document mirrors the same status, so the sponsor,
+  // admin and caseworker all see one consistent verification state. Best-effort —
+  // a sync failure must never roll back the appendix verification itself.
+  if (tenantDb.LicenceIntakeDocument) {
+    tenantDb.LicenceIntakeDocument.update(
+      { status: "verified", verifiedAt: doc.verifiedAt, verifiedByUserId: caseworkerId ?? null, rejectionReason: null },
+      { where: { licenceApplicationId, sourceAppendixDocumentId: doc.id } },
+    ).catch((err) => logger.warn({ err, docId: doc.id }, "verifyAppendixDocument: intake checklist sync failed"));
+  }
+
   const application = await tenantDb.LicenceApplication.findByPk(licenceApplicationId);
 
   await recordAuditLog({
@@ -738,6 +761,15 @@ export async function rejectAppendixDocument(tenantDb, licenceApplicationId, doc
   doc.verifiedAt = null;
   doc.notes = reason || "No reason provided";
   await doc.save();
+
+  // Mirror the rejection onto any linked intake checklist slot so the sponsor sees the
+  // same "Rejected" state (and the reason) wherever the document appears. Best-effort.
+  if (tenantDb.LicenceIntakeDocument) {
+    tenantDb.LicenceIntakeDocument.update(
+      { status: "rejected", rejectionReason: doc.notes, verifiedAt: null, verifiedByUserId: null },
+      { where: { licenceApplicationId, sourceAppendixDocumentId: doc.id } },
+    ).catch((err) => logger.warn({ err, docId: doc.id }, "rejectAppendixDocument: intake checklist sync failed"));
+  }
 
   const application = await tenantDb.LicenceApplication.findByPk(licenceApplicationId);
 
