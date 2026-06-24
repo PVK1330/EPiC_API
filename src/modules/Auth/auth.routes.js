@@ -8,7 +8,10 @@ import {
   forgotPasswordLimiter,
   resendOtpLimiter,
   verifyOtpLimiter,
+  verifyResetOtpLimiter,
   verify2FALimiter,
+  globalAuthLimiter,
+  setPasswordLimiter,
 } from '../../middlewares/authRateLimiter.js';
 
 import { validate } from '../../middlewares/validate.middleware.js';
@@ -26,12 +29,15 @@ router.post("/register",       ...withOrgContext, registerLimiter,       validat
 router.post("/verify-otp",     ...withOrgContext, verifyOtpLimiter,      validate(schema.verifyOtpSchema),      auth.verifyOTP);
 router.post("/resend-otp",     ...withOrgContext, resendOtpLimiter,      validate(schema.resendOtpSchema),      auth.resendOTP);
 router.post("/login",          ...withOrgContext, loginLimiter,          validate(schema.loginSchema),          auth.login);
-router.post("/logout",                                                   auth.logout);
+// S-17 fix: logout and refresh also get the global rate limiter to prevent
+// CSRF-style logout floods and token-stuffing on the refresh endpoint.
+router.post("/logout",         globalAuthLimiter,                        auth.logout);
 router.post("/logout-all",     verifyTokenAndTenant,                     auth.logoutAll);
-router.post("/refresh",                                                  auth.refreshToken);
+router.post("/refresh",        globalAuthLimiter,                        auth.refreshToken);
 router.post("/forgot-password",...withOrgContext, forgotPasswordLimiter,  validate(schema.forgotPasswordSchema),  auth.forgotPassword);
-router.post("/verify-reset-otp",...withOrgContext,                       validate(schema.verifyResetOtpSchema),    auth.verifyResetOTP);
-router.post("/set-password",   ...withOrgContext,                        validate(schema.setPasswordSchema),     auth.setPassword);
+// S-16 fix: dedicated strict limiter for OTP brute-force on the reset flow.
+router.post("/verify-reset-otp",...withOrgContext, verifyResetOtpLimiter, validate(schema.verifyResetOtpSchema),  auth.verifyResetOTP);
+router.post("/set-password",   ...withOrgContext, setPasswordLimiter,    validate(schema.setPasswordSchema),     auth.setPassword);
 router.post("/resendOtpUser",  ...withOrgContext, resendOtpLimiter,      validate(schema.resendOtpUserSchema),   auth.resendOtpUser);
 router.post("/verifyOtpUser",  ...withOrgContext, verifyOtpLimiter,      validate(schema.verifyOtpUserSchema),   auth.verifyOtpUser);
 router.post("/send-password-change-otp", verifyTokenAndTenant,          auth.sendPasswordChangeOtp);

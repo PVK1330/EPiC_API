@@ -32,6 +32,9 @@ const APPENDIX_BASE = [
   { key: "paye_hmrc_registration", name: "PAYE / HMRC registration evidence" },
   { key: "business_bank_statement", name: "Business bank account statement" },
   { key: "evidence_of_premises", name: "Evidence of trading premises (lease or ownership)" },
+  { key: "evidence_of_genuine_vacancy", name: "Evidence of genuine vacancy (job advert or vacancy justification)" },
+  { key: "proof_of_trading_activity", name: "Proof of trading activity (recent contracts, invoices, or purchase orders)" },
+  { key: "organisation_chart", name: "Organisational chart showing key personnel and reporting lines" },
 ];
 const APPENDIX_BY_ROUTE = Object.freeze({
   SkilledWorker: [

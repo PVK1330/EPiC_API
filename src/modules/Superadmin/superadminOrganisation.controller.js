@@ -1,5 +1,6 @@
 import { Op } from "sequelize";
 import bcrypt from "bcryptjs";
+import { randomBytes } from "crypto";
 import platformDb from "../../models/index.js";
 import { createImpersonationTicket } from "../../services/impersonationTicket.service.js";
 import {
@@ -379,8 +380,8 @@ export const createOrganisationWithAdmin = async (req, res) => {
     const plain =
       password && String(password).length >= 8
         ? String(password)
-        : `Temp-${Math.random().toString(36).slice(2, 10)}!1Aa`;
-    const hashed = await bcrypt.hash(plain, 10);
+        : `T-${randomBytes(12).toString('base64url')}`; // S-09 fix: CSPRNG temp password
+    const hashed = await bcrypt.hash(plain, 12); // S-29 fix: uniform cost factor
 
     await sequelize.transaction(async (transaction) => {
       org = await Organisation.create(
@@ -839,8 +840,8 @@ export const createOrganisationAdmin = async (req, res) => {
     const plain =
       password && String(password).length >= 8
         ? String(password)
-        : `Temp-${Math.random().toString(36).slice(2, 10)}!1Aa`;
-    const hashed = await bcrypt.hash(plain, 10);
+        : `T-${randomBytes(12).toString('base64url')}`; // S-09 fix: CSPRNG temp password
+    const hashed = await bcrypt.hash(plain, 12); // S-29 fix: uniform cost factor
 
     const admin = await User.create({
       email: emailNorm,
@@ -989,6 +990,23 @@ export const impersonateOrganisationAdmin = async (req, res) => {
       role_id: admin.role_id,
       organisation_id: admin.organisation_id,
     });
+
+    // S-15 fix: every impersonation must be traceable. Record who impersonated
+    // which org admin and from which IP so the event survives even if the
+    // impersonation token is later revoked or expires without being used.
+    platformDb.PlatformAuditLog.create({
+      user_id: req.user?.userId ?? req.user?.id ?? null,
+      action: 'IMPERSONATE_ORG_ADMIN',
+      details: JSON.stringify({
+        actorId: req.user?.userId ?? req.user?.id,
+        targetOrgId: orgId,
+        targetOrgSlug: org.slug,
+        targetAdminId: admin.id,
+        targetAdminEmail: admin.email,
+      }),
+      ip_address: req.ip || req.socket?.remoteAddress || null,
+      status: 'Success',
+    }).catch((e) => logger.error({ err: e }, 'Failed to write impersonation audit log'));
 
     return res.status(200).json({
       status: "success",

@@ -75,8 +75,11 @@ router.get('/temp/:filename',
         if (!fs.default.existsSync(targetPath)) {
           return res.status(404).json({ status: false, message: "File not found" });
         }
+        // RE-13 fix: strip non-safe characters before using filename in a header
+        // to prevent HTTP response header injection via crafted filenames.
+        const safeFilename = filename.replace(/[^A-Za-z0-9._-]/g, '_');
         res.setHeader('X-Content-Type-Options', 'nosniff');
-        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}"`);
         res.sendFile(targetPath);
       });
     });

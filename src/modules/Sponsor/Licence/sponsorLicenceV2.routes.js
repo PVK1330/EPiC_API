@@ -11,6 +11,7 @@ import {
   saveDraft,
   submitApplication,
   uploadAppendixDocument,
+  previewAppendixDocument,
   deleteDraft,
   feePreview,
   getApplicationAuditTrail,
@@ -42,6 +43,7 @@ router.delete("/applications/:id", deleteDraft);
 router.post("/applications/:id/submit", submitApplication);
 router.post("/applications/:id/sync-from-profile", syncFromProfile);
 router.post("/applications/:id/appendix-documents/:docId/file", upload.single("file"), uploadAppendixDocument);
+router.get("/applications/:id/appendix-documents/:docId/file", previewAppendixDocument);
 
 // Audit trail — immutable event history for the Timeline tab.
 router.get("/applications/:id/audit-trail", getApplicationAuditTrail);

@@ -34,14 +34,24 @@ function isSlaMet(c, slaRules) {
 }
 
 // Date filter
+// S-28 fix: validate date strings before passing to `new Date()` — an invalid
+// value silently produces NaN which corrupts the WHERE clause.
+function parseReportDate(raw) {
+  if (!raw) return null;
+  const d = new Date(raw);
+  return Number.isFinite(d.getTime()) ? d : null;
+}
+
 function buildDateWhere(startDate, endDate, field = 'createdAt') {
-  if (!startDate && !endDate) return {};
+  const start = parseReportDate(startDate);
+  const end = parseReportDate(endDate);
+  if (!start && !end) return {};
   const range = {};
-  if (startDate) range[Op.gte] = new Date(startDate);
-  if (endDate) {
-    const end = new Date(endDate);
-    end.setHours(23, 59, 59, 999);
-    range[Op.lte] = end;
+  if (start) range[Op.gte] = start;
+  if (end) {
+    const endOfDay = new Date(end);
+    endOfDay.setHours(23, 59, 59, 999);
+    range[Op.lte] = endOfDay;
   }
   return { [field]: range };
 }
@@ -130,15 +140,16 @@ export async function computeCaseAnalyticsData(req) {
     // Total
     req.tenantDb.Case.count({ where: { ...dateWhere, ...roleWhere } }).catch(() => 0),
 
-    // By Visa Type — raw SQL with correct quoted column names
+    // By Visa Type — raw SQL scoped by organisation (S-20 fix)
     req.tenantDb.sequelize.query(
       `SELECT vt.id, vt.name, COUNT(c.id)::int AS count
        FROM cases c
        LEFT JOIN visa_types vt ON c."visaTypeId" = vt.id
        WHERE c.deleted_at IS NULL
+         AND (:orgId::int IS NULL OR c."organisation_id" = :orgId::int)
        GROUP BY vt.id, vt.name
        ORDER BY count DESC`,
-      { type: req.tenantDb.Sequelize.QueryTypes.SELECT }
+      { type: req.tenantDb.Sequelize.QueryTypes.SELECT, replacements: { orgId: req.user?.organisation_id ?? null } }
     ).catch((err) => {
       logger.error({ err }, 'VisaType Query Error');
       return [];
@@ -375,7 +386,7 @@ export async function computeFinancialReportData(req) {
       raw: true,
     }).catch(() => []),
 
-    // Revenue by Visa Type — raw SQL with correct quoted column names
+    // Revenue by Visa Type — raw SQL scoped by organisation (S-20 fix)
     req.tenantDb.sequelize.query(
       `SELECT vt.name, COALESCE(SUM(cp.amount), 0)::float AS total
        FROM case_payments cp
@@ -383,12 +394,13 @@ export async function computeFinancialReportData(req) {
        LEFT JOIN visa_types vt ON c."visaTypeId" = vt.id
        WHERE cp."paymentStatus" = 'completed'
          AND c.deleted_at IS NULL
+         AND (:orgId::int IS NULL OR c."organisation_id" = :orgId::int)
        GROUP BY vt.id, vt.name
        ORDER BY total DESC`,
-      { type: req.tenantDb.Sequelize.QueryTypes.SELECT }
+      { type: req.tenantDb.Sequelize.QueryTypes.SELECT, replacements: { orgId: req.user?.organisation_id ?? null } }
     ).catch(() => []),
 
-    // Revenue by Sponsor — raw SQL with correct quoted column names
+    // Revenue by Sponsor — raw SQL scoped by organisation (S-20 fix)
     req.tenantDb.sequelize.query(
       `SELECT CONCAT(u.first_name, ' ', u.last_name) AS name,
               COALESCE(SUM(cp.amount), 0)::float AS total
@@ -397,9 +409,10 @@ export async function computeFinancialReportData(req) {
        JOIN users u ON c."sponsorId" = u.id
        WHERE cp."paymentStatus" = 'completed'
          AND c.deleted_at IS NULL
+         AND (:orgId::int IS NULL OR c."organisation_id" = :orgId::int)
        GROUP BY u.id, u.first_name, u.last_name
        ORDER BY total DESC`,
-      { type: req.tenantDb.Sequelize.QueryTypes.SELECT }
+      { type: req.tenantDb.Sequelize.QueryTypes.SELECT, replacements: { orgId: req.user?.organisation_id ?? null } }
     ).catch(() => []),
   ]);
 

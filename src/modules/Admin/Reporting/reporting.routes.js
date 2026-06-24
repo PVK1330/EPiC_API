@@ -14,7 +14,9 @@ import { checkRole, ROLES } from '../../../middlewares/role.middleware.js';
 const router = Router();
 
 router.use(verifyTokenAndTenant);
-// Removed checkRole([ROLES.ADMIN]) so other roles can access their own reports
+// S-06 fix: financial and personnel data is restricted to Admin and Caseworker.
+// Role-scoped filtering is applied inside each controller via buildRoleWhere(req.user).
+router.use(checkRole([ROLES.ADMIN, ROLES.CASEWORKER]));
 
 // Summary KPIs (all-in-one for dashboard header)
 router.get('/summary', getReportingSummary);

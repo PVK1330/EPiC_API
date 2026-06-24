@@ -158,10 +158,16 @@ const rateLimitHandler = (req, res) => {
  * integration tests or internal service calls). Never skip in production
  * unless the X-Internal-RateLimit-Bypass header is present with the
  * correct shared secret.
+ *
+ * S-19 fix: guard against undefined===undefined when RATELIMIT_BYPASS_SECRET
+ * is not set — an unset env var would allow any request with the header to
+ * bypass rate limiting in non-production environments.
  */
 const skipIfInternal = (req) => {
   if (process.env.NODE_ENV === 'production') return false;
-  return req.headers['x-internal-ratelimit-bypass'] === process.env.RATELIMIT_BYPASS_SECRET;
+  const bypassSecret = process.env.RATELIMIT_BYPASS_SECRET;
+  if (!bypassSecret) return false;
+  return req.headers['x-internal-ratelimit-bypass'] === bypassSecret;
 };
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -245,6 +251,30 @@ export const verify2FALimiter = createLimiter({
 });
 
 /**
+ * POST /api/auth/verify-reset-otp — 5 attempts per 15 minutes per IP.
+ * S-16 fix: tighter limit than the global 50/15min catch-all. Brute-forcing
+ * a 6-digit OTP through this endpoint (900,000 combinations) would take ~45 hours
+ * at 5 attempts per window vs ~2.5 hours at 50 attempts.
+ */
+export const verifyResetOtpLimiter = createLimiter({
+  windowMs: FIFTEEN_MINUTES,
+  max: 5,
+  keyMode: 'ip',
+  message: 'Too many reset attempts. Please wait before trying again.',
+});
+
+/**
+ * POST /api/auth/set-password — RE-12 fix: dedicated limiter tighter than the
+ * global 50/15min catch-all. Limits token-guessing if a reset_token leaks.
+ */
+export const setPasswordLimiter = createLimiter({
+  windowMs: FIFTEEN_MINUTES,
+  max: 10,
+  keyMode: 'ip',
+  message: 'Too many password-set attempts. Please wait before trying again.',
+});
+
+/**
  * Global auth limiter — catch-all for the entire /api/auth/* prefix.
  * 50 requests per 15 minutes per IP. Applied in routes/index.js.
  */
@@ -264,6 +294,8 @@ export default {
   forgotPasswordLimiter,
   resendOtpLimiter,
   verifyOtpLimiter,
+  verifyResetOtpLimiter,
   verify2FALimiter,
+  setPasswordLimiter,
   globalAuthLimiter,
 };
