@@ -1,4 +1,5 @@
 import bcrypt from "bcryptjs";
+import { randomInt } from "crypto";
 import { Op } from "sequelize";
 import platformDb from "../../models/index.js";
 import catchAsync from "../../utils/catchAsync.js";
@@ -130,14 +131,14 @@ export const inviteTeamMember = catchAsync(async (req, res) => {
   }
 
   const plain = generateOrganisationAdminPassword();
-  const hashed = await bcrypt.hash(plain, 10);
+  const hashed = await bcrypt.hash(plain, 12);
 
   const user = await User.create({
     email: emailNorm,
     first_name: String(first_name).trim(),
     last_name: String(last_name).trim(),
     country_code: String(country_code || "+44").trim(),
-    mobile: mobile ? String(mobile).trim() : `00${Date.now()}${Math.floor(Math.random() * 90 + 10)}`.slice(-15),
+    mobile: mobile ? String(mobile).trim() : `00${Date.now()}${randomInt(10, 100)}`.slice(-15),
     password: hashed,
     role_id: role.id,
     organisation_id: null,
@@ -177,10 +178,11 @@ export const inviteTeamMember = catchAsync(async (req, res) => {
     type: "info"
   });
 
-  return ApiResponse.created(res, welcomeEmail.sent ? "Team member invited. Login email sent." : "Team member created.", {
+  // RE-10 fix: never return the temporary password in the API response.
+  // If email delivery failed the admin must use the resend-invite flow.
+  return ApiResponse.created(res, welcomeEmail.sent ? "Team member invited. Login email sent." : "Team member created. Welcome email could not be sent — use resend invite to deliver credentials.", {
     member: formatMember(withRole),
     welcome_email: welcomeEmail,
-    ...(welcomeEmail.sent ? {} : { temporary_password: plain }),
   });
 });
 

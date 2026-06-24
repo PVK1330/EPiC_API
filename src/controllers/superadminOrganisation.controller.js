@@ -1,5 +1,6 @@
 import { Op } from "sequelize";
 import bcrypt from "bcryptjs";
+import { randomBytes } from "crypto";
 import db from "../models/index.js";
 import {
   isPhysicalTenantDatabaseEnabled,
@@ -210,8 +211,8 @@ export const createOrganisationAdmin = async (req, res) => {
     const plain =
       password && String(password).length >= 8
         ? String(password)
-        : `Temp-${Math.random().toString(36).slice(2, 10)}!1Aa`;
-    const hashed = await bcrypt.hash(plain, 10);
+        : `T-${randomBytes(12).toString('base64url')}`; // S-09 fix: CSPRNG
+    const hashed = await bcrypt.hash(plain, 12); // S-29 fix: uniform cost factor
 
     const admin = await User.create({
       email: emailNorm,

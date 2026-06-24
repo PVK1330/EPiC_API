@@ -22,8 +22,14 @@ import logger from '../utils/logger.js';
  * Express middleware that wraps every request in an AsyncLocalStorage context
  * so all downstream log calls carry the same request ID.
  */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export function requestContextMiddleware(req, res, next) {
-  const requestId = req.headers['x-request-id'] || randomUUID();
+  // S-30 fix: validate client-supplied X-Request-Id is a proper UUID before
+  // accepting it. An arbitrary string would be embedded in every log line for
+  // that request, enabling log injection / SIEM pollution.
+  const incoming = req.headers['x-request-id'];
+  const requestId = (incoming && UUID_RE.test(incoming)) ? incoming : randomUUID();
 
   req.requestId = requestId;
   res.setHeader('X-Request-Id', requestId);

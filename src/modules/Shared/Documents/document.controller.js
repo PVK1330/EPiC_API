@@ -26,47 +26,75 @@ import { ROLES } from '../../../middlewares/role.middleware.js';
 const DECISION_DOC_TYPES = ['Decision Letter', 'Approval Notice'];
 const FINAL_DOC_TYPES = ['Visa Copy', 'BRP Information'];
 
-async function assertCandidateMayDownloadDocument(req, document) {
+// S-12 fix: full ownership check for all roles, not just candidates.
+async function assertDocumentAccess(req, document) {
   const roleId = Number(req.user?.role_id);
-  if (roleId !== ROLES.CANDIDATE) return { ok: true };
+  const userId = Number(req.user?.userId ?? req.user?.id);
 
-  if (!document.caseId) return { ok: true };
+  // Admins and superadmins can access any document within their org (already
+  // scoped to the tenant DB by verifyTokenAndTenant).
+  if (roleId === ROLES.ADMIN || roleId === ROLES.SUPERADMIN) return { ok: true };
+
+  // Sponsors have org-wide document visibility for compliance purposes.
+  if (roleId === ROLES.SPONSOR) return { ok: true };
+
+  // Documents not linked to a case: only the document owner may download.
+  if (!document.caseId) {
+    const ownerId = Number(document.userId ?? document.uploadedBy);
+    if (ownerId !== userId) return { ok: false, message: 'Access denied' };
+    return { ok: true };
+  }
 
   const caseRecord = await req.tenantDb.Case.findByPk(document.caseId, {
-    attributes: ['id', 'caseStage', 'status', 'candidateId'],
+    attributes: ['id', 'caseStage', 'status', 'candidateId', 'assignedcaseworkerId'],
   });
   if (!caseRecord) {
     return { ok: false, message: 'Case not found for this document' };
   }
-  if (Number(caseRecord.candidateId) !== Number(req.user?.userId)) {
-    return { ok: false, message: 'Access denied' };
-  }
 
-  const stage = resolveCaseStage(caseRecord);
-  const order = getStageOrder(stage);
-  const docType = document.documentType || '';
-
-  if (DECISION_DOC_TYPES.includes(docType)) {
-    if (order < getStageOrder('decision_communicated')) {
-      return {
-        ok: false,
-        message: 'Decision documents are available after your decision has been communicated.',
-      };
+  if (roleId === ROLES.CASEWORKER) {
+    // assignedcaseworkerId is a JSONB array of assigned caseworker user IDs.
+    const assigned = caseRecord.assignedcaseworkerId;
+    const ids = Array.isArray(assigned) ? assigned : (assigned ? [assigned] : []);
+    if (!ids.map(Number).includes(userId)) {
+      return { ok: false, message: 'Access denied' };
     }
     return { ok: true };
   }
 
-  if (FINAL_DOC_TYPES.includes(docType)) {
-    if (order < getStageOrder('case_closure')) {
-      return {
-        ok: false,
-        message: 'Final documents are available after case closure.',
-      };
+  if (roleId === ROLES.CANDIDATE) {
+    if (Number(caseRecord.candidateId) !== userId) {
+      return { ok: false, message: 'Access denied' };
     }
+
+    const stage = resolveCaseStage(caseRecord);
+    const order = getStageOrder(stage);
+    const docType = document.documentType || '';
+
+    if (DECISION_DOC_TYPES.includes(docType)) {
+      if (order < getStageOrder('decision_communicated')) {
+        return {
+          ok: false,
+          message: 'Decision documents are available after your decision has been communicated.',
+        };
+      }
+      return { ok: true };
+    }
+
+    if (FINAL_DOC_TYPES.includes(docType)) {
+      if (order < getStageOrder('case_closure')) {
+        return {
+          ok: false,
+          message: 'Final documents are available after case closure.',
+        };
+      }
+      return { ok: true };
+    }
+
     return { ok: true };
   }
 
-  return { ok: true };
+  return { ok: false, message: 'Access denied' };
 }
 
 const documentsColumnMetadataByDb = new Map();
@@ -502,6 +530,16 @@ export const uploadDocuments = async (req, res) => {
 export const getUserDocumentsByCategory = async (req, res) => {
   try {
     const { userId } = req.params;
+    const roleId = Number(req.user?.role_id);
+    const requestingUserId = Number(req.user?.userId ?? req.user?.id);
+
+    // RE-03 fix: candidates and sponsors may only view their own documents.
+    if (roleId === ROLES.CANDIDATE || roleId === ROLES.SPONSOR) {
+      if (Number(userId) !== requestingUserId) {
+        return res.status(403).json({ status: 'error', message: 'Access denied', data: null });
+      }
+    }
+
     const { page = 1, limit = 10 } = req.query;
     const offset = (page - 1) * limit;
 
@@ -692,6 +730,12 @@ export const getDocumentById = async (req, res) => {
       });
     }
 
+    // RE-03 fix: enforce ownership before returning document metadata.
+    const access = await assertDocumentAccess(req, document);
+    if (!access.ok) {
+      return res.status(403).json({ status: 'error', message: access.message, data: null });
+    }
+
     const docData = document.toJSON();
     docData.documentUrl = `${process.env.BASE_URL || 'http://localhost:5000'}/api/documents/download/${docData.id}`;
 
@@ -727,6 +771,12 @@ export const updateDocument = async (req, res) => {
         message: "Document not found",
         data: null
       });
+    }
+
+    // RE-03 fix: only the document owner, an assigned caseworker, or an admin may update.
+    const access = await assertDocumentAccess(req, document);
+    if (!access.ok) {
+      return res.status(403).json({ status: 'error', message: access.message, data: null });
     }
 
     await document.update({
@@ -767,6 +817,12 @@ export const deleteDocument = async (req, res) => {
         message: "Document not found",
         data: null
       });
+    }
+
+    // RE-03 fix: only an admin or the document owner may delete.
+    const access = await assertDocumentAccess(req, document);
+    if (!access.ok) {
+      return res.status(403).json({ status: 'error', message: access.message, data: null });
     }
 
     // Delete file from filesystem
@@ -950,7 +1006,7 @@ export const downloadDocument = async (req, res) => {
       });
     }
 
-    const access = await assertCandidateMayDownloadDocument(req, document);
+    const access = await assertDocumentAccess(req, document);
     if (!access.ok) {
       auditLogger.logDownloadAttempt({
         userId: req.user?.id,

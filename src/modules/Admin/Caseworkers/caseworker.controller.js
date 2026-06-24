@@ -1,5 +1,6 @@
 import { Op } from 'sequelize';
 import bcrypt from 'bcryptjs';
+import { randomBytes } from 'crypto';
 import multer from 'multer';
 import { ROLES } from '../../../middlewares/role.middleware.js';
 import { rowsToXlsxBuffer, sendXlsxDownload } from '../../../utils/excelExport.util.js';
@@ -1261,7 +1262,7 @@ export const bulkImportCaseworkers = async (req, res) => {
         });
 
         // Generate password
-        const generatedPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-4);
+        const generatedPassword = randomBytes(16).toString('hex'); // S-09 fix: CSPRNG
         const hashedPassword = await bcrypt.hash(generatedPassword, 12);
 
         // Create caseworker

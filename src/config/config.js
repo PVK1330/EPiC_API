@@ -52,10 +52,19 @@ function buildBaseConfig(databaseName) {
   };
 
   if (useSsl()) {
+    // S-18 fix: always verify the database server's TLS certificate to prevent
+    // MITM attacks between the API and the database. Set DB_SSL_CA to the path
+    // or PEM content of the managed DB provider's CA bundle (Render, Neon, RDS…).
+    // If DB_SSL_CA is not set we fall back to the system CA store which works for
+    // providers that use public CAs (e.g. Let's Encrypt-based Neon, Supabase).
+    const caOption = process.env.DB_SSL_CA
+      ? { ca: process.env.DB_SSL_CA }
+      : {};
     cfg.dialectOptions = {
       ssl: {
         require: true,
-        rejectUnauthorized: false,
+        rejectUnauthorized: true,
+        ...caOption,
       },
     };
   }

@@ -29,6 +29,34 @@ function frontendBase() {
     .replace(/\/$/, "");
 }
 
+/**
+ * Resolve the org admin's actual frontend origin for Stripe redirect URLs.
+ *
+ * The admin panel is served from a subdomain (e.g. acme.elitepic.co.uk) and
+ * calls this API cross-origin, so the browser always sets the Origin header.
+ * We validate it is a subdomain of PLATFORM_DOMAIN to prevent header spoofing,
+ * then use it as the base so Stripe returns the user to their own subdomain.
+ * Falls back to FRONTEND_URL if Origin is absent or unrecognised.
+ */
+function resolveOrgBase(req) {
+  const platformDomain = (process.env.PLATFORM_DOMAIN || "").toLowerCase().trim();
+  const origin = (req.headers.origin || "").trim();
+
+  if (origin && platformDomain) {
+    try {
+      const parsed = new URL(origin);
+      const h = parsed.hostname.toLowerCase();
+      if (h === platformDomain || h.endsWith(`.${platformDomain}`)) {
+        return `${parsed.protocol}//${parsed.host}`;
+      }
+    } catch {
+      // malformed Origin — fall through to default
+    }
+  }
+
+  return frontendBase();
+}
+
 function serializeSubscription(subscription) {
   if (!subscription) return null;
   return {
@@ -122,7 +150,7 @@ export const createCheckoutSession = catchAsync(async (req, res) => {
   }
 
   const stripe = new Stripe(settings.stripe_secret_key);
-  const base = frontendBase();
+  const base = resolveOrgBase(req);
 
   const session = await stripe.checkout.sessions.create({
     mode: "payment",

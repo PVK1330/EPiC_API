@@ -16,8 +16,13 @@ import {
 } from './sponsorWorker.controller.js';
 import { upload } from '../../../middlewares/upload.middleware.js';
 import { requireActiveSponsorLicence } from '../../../middlewares/requireActiveSponsorLicence.middleware.js';
+import { verifyTokenAndTenant } from '../../../middlewares/authStack.middleware.js';
+import { checkRole, ROLES } from '../../../middlewares/role.middleware.js';
 
 const router = express.Router();
+
+// S-02 fix: every route on this router requires an authenticated sponsor session.
+router.use(verifyTokenAndTenant, checkRole([ROLES.SPONSOR]));
 
 // --- Worker sponsorship actions: require an ACTIVE sponsor licence ---
 // Creation + mutations on sponsored workers are gated.

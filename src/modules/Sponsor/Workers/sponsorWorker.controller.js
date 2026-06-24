@@ -58,7 +58,7 @@ export const addSponsoredWorker = async (req, res) => {
 
     // 2. Generate temporary password
     const tempPassword = crypto.randomBytes(4).toString('hex'); // 8 characters
-    const hashedPassword = await bcrypt.hash(tempPassword, 10);
+    const hashedPassword = await bcrypt.hash(tempPassword, 12);
 
     const organisationId = req.user?.organisation_id != null ? Number(req.user.organisation_id) : null;
 
