@@ -10,5 +10,7 @@ export const configureGatewaySchema = z.object({
     platform_fee: z.coerce.number().min(0).max(100).optional().nullable(),
     tax_rate: z.coerce.number().min(0).max(100).optional().nullable(),
     tax_id: z.string().trim().max(255).optional().nullable(),
+    free_trial_enabled: z.boolean().optional().nullable(),
+    free_trial_days: z.coerce.number().int().min(1).max(365).optional().nullable(),
   }).strict(),
 });

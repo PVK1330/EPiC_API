@@ -532,7 +532,7 @@ export const getPaymentReconciliation = catchAsync(async (req, res) => {
 
 export const getGatewayStatus = catchAsync(async (req, res) => {
   const rows = await platformDb.PlatformSetting.findAll({
-    where: { key: ['stripe_publishable_key', 'stripe_secret_key', 'stripe_webhook_secret', 'stripe_currency', 'platform_fee', 'tax_rate', 'tax_id'] },
+    where: { key: ['stripe_publishable_key', 'stripe_secret_key', 'stripe_webhook_secret', 'stripe_currency', 'platform_fee', 'tax_rate', 'tax_id', 'free_trial_enabled', 'free_trial_days'] },
   });
 
   const settings = {};
@@ -561,18 +561,20 @@ export const getGatewayStatus = catchAsync(async (req, res) => {
       status: configured ? "Connected" : "Not Configured",
       lastSync: lastTransaction ? new Date(lastTransaction.createdAt).toISOString() : null,
       publishable_key: settings.stripe_publishable_key || '',
-      webhook_secret: settings.stripe_webhook_secret || '',
       currency: settings.stripe_currency || 'GBP',
       platform_fee: clampPct(settings.platform_fee, '0'),
       secret_key_set: !!settings.stripe_secret_key,
+      webhook_secret_set: !!settings.stripe_webhook_secret,
       tax_rate: clampPct(settings.tax_rate, ''),
       tax_id:   settings.tax_id   || '',
+      free_trial_enabled: settings.free_trial_enabled !== 'false',
+      free_trial_days: parseInt(settings.free_trial_days || '14', 10),
     },
   });
 });
 
 export const configureGateway = catchAsync(async (req, res) => {
-  const { publishable_key, secret_key, webhook_secret, currency, platform_fee, tax_rate: taxRateInput, tax_id: taxIdInput } =
+  const { publishable_key, secret_key, webhook_secret, currency, platform_fee, tax_rate: taxRateInput, tax_id: taxIdInput, free_trial_enabled, free_trial_days } =
     req.validated.body;
 
   // platform_fee & tax_rate are validated as numeric percents (0-100); persist as strings.
@@ -598,6 +600,12 @@ export const configureGateway = catchAsync(async (req, res) => {
 
   if (tax_rate !== null) upserts.push({ key: 'tax_rate', value: tax_rate });
   if (tax_id   !== null) upserts.push({ key: 'tax_id',   value: tax_id   });
+  if (free_trial_enabled !== undefined && free_trial_enabled !== null) {
+    upserts.push({ key: 'free_trial_enabled', value: String(free_trial_enabled) });
+  }
+  if (free_trial_days !== undefined && free_trial_days !== null) {
+    upserts.push({ key: 'free_trial_days', value: String(free_trial_days) });
+  }
 
   for (const item of upserts) {
     await platformDb.PlatformSetting.upsert(item, { conflictFields: ['key'] });
