@@ -11,6 +11,7 @@ import {
   generateNotificationEmailTemplate,
   generateUKVIPortalCredentialsTemplate,
 } from "../utils/emailTemplates.js";
+import { getOrganisationEmailBranding } from "../utils/emailBranding.js";
 
 /**
  * Centralized Sponsorship Notification Service.
@@ -1069,8 +1070,8 @@ export async function intakeReadyForGovernmentRegistration({
 // ─── Event 5b: Licence Activated — caseworker notification ───────────────────
 
 /**
- * Notify each assigned caseworker (in-app) when a sponsor licence is activated.
- * The sponsor's portal + email notification is handled by
+ * Notify each assigned caseworker (in-app + email) when a sponsor licence is activated.
+ * The sponsor's portal + email notification is handled separately by
  * licenceActivation.service.notifySponsorLicenceActivated.
  */
 export async function licenceActivatedCaseworkers({
@@ -1100,7 +1101,6 @@ export async function licenceActivatedCaseworkers({
       entityId: application.id,
       actionType: "licence_activated",
       actionUrl: `/caseworker/licence-reviews`,
-      email: false,
       req,
       organisationId: org,
     });
