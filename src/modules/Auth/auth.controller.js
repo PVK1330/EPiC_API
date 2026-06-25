@@ -1064,10 +1064,6 @@ export const setPassword = catchAsync(async (req, res) => {
     return ApiResponse.unauthorized(res, "Invalid reset token");
   }
 
-  if (!user.password_reset_otp || new Date() > user.password_reset_otp_expiry) {
-    return ApiResponse.badRequest(res, "OTP verification required or expired");
-  }
-
   if (!password || !confirmPassword) {
     return ApiResponse.badRequest(res, "Password and confirm password are required");
   }

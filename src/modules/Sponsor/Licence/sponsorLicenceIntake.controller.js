@@ -10,6 +10,7 @@
  */
 
 import path from "path";
+import fs from "fs";
 import logger from "../../../utils/logger.js";
 import {
   getIntakeSummary,
@@ -141,6 +142,53 @@ export async function uploadSponsorIntakeDocument(req, res) {
     return res.json({ success: true, message: "Document uploaded", data: doc });
   } catch (err) {
     logger.error({ err }, "uploadSponsorIntakeDocument failed");
+    return res.status(err.statusCode || 500).json({ success: false, message: err.message });
+  }
+}
+
+// ─── GET /:id/intake/documents/:documentKey/download ─────────────────────────
+
+const PRIVATE_STORAGE_DIR = path.resolve(process.cwd(), "storage/private");
+const INLINE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".webp", ".gif", ".pdf"];
+
+export async function downloadSponsorIntakeDocument(req, res) {
+  try {
+    const { id, documentKey } = req.params;
+    const tenantDb = req.tenantDb;
+
+    const app = await resolveOwnedApplication(req, res);
+    if (!app) return;
+
+    const doc = await tenantDb.LicenceIntakeDocument.findOne({
+      where: { licenceApplicationId: Number(id), documentKey },
+    });
+
+    if (!doc || !doc.filePath) {
+      return res.status(404).json({ success: false, message: "Document not found or not yet uploaded" });
+    }
+
+    const absolute = path.resolve(String(doc.filePath));
+    if (!absolute.startsWith(PRIVATE_STORAGE_DIR + path.sep) && absolute !== PRIVATE_STORAGE_DIR) {
+      return res.status(400).json({ success: false, message: "Invalid document path" });
+    }
+    if (!fs.existsSync(absolute)) {
+      return res.status(404).json({ success: false, message: "File no longer exists on the server" });
+    }
+
+    const filename = doc.fileName || path.basename(absolute);
+    const ext = path.extname(absolute).toLowerCase();
+    const forceDownload = req.query.download === "1";
+    const disposition = forceDownload || !INLINE_EXTENSIONS.includes(ext) ? "attachment" : "inline";
+
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Content-Disposition", `${disposition}; filename="${filename}"`);
+    return res.sendFile(absolute, (err) => {
+      if (err && !res.headersSent) {
+        res.status(500).json({ success: false, message: "Error streaming document" });
+      }
+    });
+  } catch (err) {
+    logger.error({ err }, "downloadSponsorIntakeDocument failed");
     return res.status(err.statusCode || 500).json({ success: false, message: err.message });
   }
 }

@@ -19,6 +19,7 @@ import {
     submitSponsorIntakeForm,
     uploadSponsorIntakeDocument,
     deleteSponsorIntakeDocument,
+    downloadSponsorIntakeDocument,
 } from './sponsorLicenceIntake.controller.js';
 // CoS logic now lives in the single CoS controller/service. These licence-router
 // CoS routes are kept as DEPRECATED backward-compatible aliases that delegate to
@@ -69,6 +70,7 @@ router.get("/:id/dispatch-documents/:docId/download", downloadDispatchDocumentHa
 router.get("/:id/intake", getSponsorIntakeSummary);
 router.put("/:id/intake", updateSponsorIntakeForm);
 router.post("/:id/intake/submit", submitSponsorIntakeForm);
+router.get("/:id/intake/documents/:documentKey/download", downloadSponsorIntakeDocument);
 router.post("/:id/intake/documents/:documentKey/upload", upload.single("document"), uploadSponsorIntakeDocument);
 router.delete("/:id/intake/documents/:documentKey", deleteSponsorIntakeDocument);
 

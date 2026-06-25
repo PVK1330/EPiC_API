@@ -20,6 +20,7 @@ export default (sequelize, DataTypes) => {
       title: { type: DataTypes.STRING(20), allowNull: true },
       firstName: { type: DataTypes.STRING(120), allowNull: true, field: "first_name" },
       lastName: { type: DataTypes.STRING(120), allowNull: true, field: "last_name" },
+      designation: { type: DataTypes.STRING(255), allowNull: true },
       dob: { type: DataTypes.DATEONLY, allowNull: true },
       nationality: { type: DataTypes.STRING(100), allowNull: true },
       niNumber: { type: DataTypes.STRING(20), allowNull: true, field: "ni_number" },

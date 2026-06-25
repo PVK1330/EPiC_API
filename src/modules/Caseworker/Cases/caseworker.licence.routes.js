@@ -19,6 +19,7 @@ import {
     verifyCaseworkerDocument,
     rejectCaseworkerDocument,
     requestCaseworkerDocumentInfo,
+    downloadCaseworkerIntakeDocument,
     verifyCaseworkerAppendixDocument,
     bulkVerifyCaseworkerAppendixDocuments,
     rejectCaseworkerAppendixDocument,
@@ -79,6 +80,7 @@ router.get("/:id/documents/:index/download", ensureAssignedCaseworker(), downloa
 // Intake: information form + document checklist review.
 router.get("/:id/intake", ensureAssignedCaseworker(), getCaseworkerIntakeSummary);
 router.get("/:id/intake/readiness", ensureAssignedCaseworker(), getIntakeReadiness);
+router.get("/:id/intake/documents/:documentKey/download", ensureAssignedCaseworker(), downloadCaseworkerIntakeDocument);
 router.patch("/:id/intake/documents/:documentKey/verify", ensureAssignedCaseworker(), verifyCaseworkerDocument);
 router.patch("/:id/intake/documents/:documentKey/reject", ensureAssignedCaseworker(), rejectCaseworkerDocument);
 router.patch("/:id/intake/documents/:documentKey/request-info", ensureAssignedCaseworker(), requestCaseworkerDocumentInfo);
