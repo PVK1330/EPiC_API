@@ -56,17 +56,21 @@ export function getCookieConfig(overrides = {}) {
   const isProduction = process.env.NODE_ENV === "production";
   const platformDomain = process.env.PLATFORM_DOMAIN || "localhost";
 
+  // Share cookies across all tenant subdomains whenever a real domain is configured.
+  // Browsers reject domain=.localhost (localhost is a public suffix in the PSL), so
+  // we skip the domain attribute only for localhost/127.0.0.1.
+  // This applies in BOTH production and dev — dev environments that use a real domain
+  // (e.g. a custom hosts-file entry like epic.local) need the same cross-subdomain
+  // sharing or every tenant subdomain becomes an isolated session silo.
+  const isLocalhost =
+    platformDomain === "localhost" || platformDomain === "127.0.0.1";
+
   return {
     httpOnly: true,
     secure: isProduction,
     sameSite: isProduction ? "strict" : "lax",
     path: "/",
-    // In production share across all tenant subdomains.
-    // In dev, do NOT set domain — browsers reject domain=.localhost (they treat
-    // localhost as a public suffix), which would silently discard the cookie.
-    ...(isProduction && platformDomain !== "localhost"
-      ? { domain: `.${platformDomain}` }
-      : {}),
+    ...(!isLocalhost ? { domain: `.${platformDomain}` } : {}),
     ...overrides,
   };
 }
