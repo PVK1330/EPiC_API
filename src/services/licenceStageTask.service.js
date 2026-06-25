@@ -730,14 +730,15 @@ async function seedSingleTask(tenantDb, application, stage, role, ctx) {
 
   // ── Notify the assignee (skip if auto-completed — no action needed) ───────────
   if (!autoComplete && assignee?.userId) {
+    const company = application.companyName || `#LIC-${application.id}`;
     deliver({
       tenantDb,
       recipientUserId: assignee.userId,
       type: NotificationTypes.INFO,
-      priority: NotificationPriority.MEDIUM,
+      priority: NotificationPriority.HIGH,
       category: "sponsorship",
-      title: `New task assigned: ${stage.title}`,
-      message: taskText,
+      title: `Action required — ${stage.title}: ${company}`,
+      message: `${taskText} Please log in to your portal to complete this task.`,
       entityType: "licence_application",
       entityId: application.id,
       actionType: "licence_stage_task_assigned",
@@ -1379,32 +1380,75 @@ export async function completeStageTask(tenantDb, { applicationId, stageKey, rol
 }
 
 /**
+ * Build audience-specific title + message for a stage-completion notification.
+ * Each party gets a message that tells them what happened AND what they should do next.
+ */
+function stageCompletionContent({ stageDef, role, company, audience }) {
+  const nextStageDef = (() => {
+    const idx = LICENCE_STAGE_DEFINITIONS.findIndex((s) => s.key === stageDef.key);
+    return idx >= 0 ? LICENCE_STAGE_DEFINITIONS[idx + 1] : null;
+  })();
+  const nextHint = nextStageDef ? ` Next stage: ${nextStageDef.title}.` : " This was the final stage.";
+
+  if (audience === "sponsor") {
+    if (role === "sponsor") {
+      return {
+        title: `Stage submitted: ${stageDef.title}`,
+        message: `Your submission for the "${stageDef.title}" stage has been recorded for ${company}. Your case team will review and take the next action.`,
+      };
+    }
+    return {
+      title: `Application update — ${stageDef.title}: ${company}`,
+      message: `Your case team has completed the "${stageDef.title}" stage for your licence application (${company}).${nextHint} Log in to your portal to track progress.`,
+    };
+  }
+
+  if (audience === "caseworker" || audience === "admin") {
+    if (role === "sponsor") {
+      return {
+        title: `Action required — ${stageDef.title}: ${company}`,
+        message: `The sponsor has completed the "${stageDef.title}" stage for ${company}. Please review and complete your assigned action.${nextHint}`,
+      };
+    }
+    const actor = role.charAt(0).toUpperCase() + role.slice(1);
+    return {
+      title: `Stage progressed — ${stageDef.title}: ${company}`,
+      message: `${actor} has completed the "${stageDef.title}" stage for ${company}.${nextHint}`,
+    };
+  }
+
+  // Candidate (email-only)
+  return {
+    title: `Application update: ${stageDef.title}`,
+    message: `The sponsor licence application for ${company} has progressed — the "${stageDef.title}" stage is now complete.`,
+  };
+}
+
+/**
  * Fan a "task completed" event across in-app + email to the parties who care
  * (tenant admin, sponsor owner, assigned caseworkers, and the candidate by
- * email), skipping the actor. The audit row is written atomically by
- * completeStageTask() before this function is called; it is not re-written here.
+ * email), skipping the actor. Each audience receives a specific, actionable
+ * message. The audit row is written atomically by completeStageTask() before
+ * this function is called; it is not re-written here.
  */
 async function notifyStageTaskCompleted({ tenantDb, application, stageDef, role, task, actorUser, req }) {
   const recipients = await resolveRoleRecipients(tenantDb, application);
   const org = application.organisationId ?? req?.user?.organisation_id ?? null;
   const actorId = actorUser?.userId ?? null;
   const company = application.companyName || `#LIC-${application.id}`;
-  const roleLabel = (role.charAt(0).toUpperCase() + role.slice(1)) + (actorUser ? "" : " (auto-completed)");
 
   const targets = [];
   if (recipients.admin?.userId) targets.push({ ...recipients.admin, audience: "admin" });
   if (recipients.sponsor?.userId) targets.push({ ...recipients.sponsor, audience: "sponsor" });
-  // Tell assigned caseworkers too (they coordinate the review).
   for (const cw of recipients.caseworkers) {
     if (cw.userId) targets.push({ ...cw, audience: "caseworker" });
   }
-  // The candidate is a free-text CoS contact (no portal user) — notify by email only.
+  // Candidate is a free-text CoS contact (no portal user) — email only.
   if (recipients.candidate?.email) targets.push({ ...recipients.candidate, audience: "candidate" });
 
   const seenUsers = new Set();
   const seenEmails = new Set();
   for (const t of targets) {
-    // Never notify the actor; dedupe users by id and email-only recipients by email.
     if (t.userId) {
       if (t.userId === actorId || seenUsers.has(t.userId)) continue;
       seenUsers.add(t.userId);
@@ -1412,16 +1456,21 @@ async function notifyStageTaskCompleted({ tenantDb, application, stageDef, role,
       if (!t.email || seenEmails.has(t.email)) continue;
       seenEmails.add(t.email);
     }
+
+    const { title, message } = stageCompletionContent({ stageDef, role, company, audience: t.audience });
+
     await deliver({
       tenantDb,
       recipientUserId: t.userId || null,
       recipientEmail: t.email,
       recipientName: t.name || "there",
-      type: NotificationTypes.SUCCESS,
-      priority: NotificationPriority.MEDIUM,
+      type: t.audience === "sponsor" ? NotificationTypes.SUCCESS : NotificationTypes.INFO,
+      priority: role === "sponsor" && (t.audience === "caseworker" || t.audience === "admin")
+        ? NotificationPriority.HIGH
+        : NotificationPriority.MEDIUM,
       category: "sponsorship",
-      title: `Licence stage progressed: ${stageDef.title}`,
-      message: `${roleLabel} completed "${task.title}" for ${company} (stage: ${stageDef.title}).`,
+      title,
+      message,
       entityType: "licence_application",
       entityId: application.id,
       actionType: "licence_stage_task_completed",

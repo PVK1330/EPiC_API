@@ -435,8 +435,30 @@ export async function confirmHomeOfficeDispatch(tenantDb, application, actorUser
     req,
   });
 
-  notify
-    .governmentApplicationSubmitted({ tenantDb, application, submissionRef: dispatchRef || "N/A", req })
+  // Notify sponsor that their physical documents have been dispatched.
+  // Caseworker/admin already know (they triggered this), so they're excluded.
+  resolveRoleRecipients(tenantDb, application)
+    .then(async (recipients) => {
+      const company = application.companyName || `#LIC-${application.id}`;
+      const refNote = dispatchRef ? ` (ref: ${dispatchRef})` : "";
+      if (recipients.sponsor?.userId) {
+        await notify.deliver({
+          tenantDb,
+          recipientUserId: recipients.sponsor.userId,
+          type: "SUCCESS",
+          priority: "HIGH",
+          category: "sponsorship",
+          title: "Supporting Documents Dispatched to Home Office",
+          message: `Your supporting documents have been dispatched to the Home Office on your behalf${refNote} for ${company}. We will notify you once a UKVI decision has been received.`,
+          entityType: "licence_application",
+          entityId: application.id,
+          actionType: "home_office_docs_dispatched",
+          actionUrl: "/business/licence-process",
+          req,
+          organisationId: application.organisationId ?? null,
+        });
+      }
+    })
     .catch((err) => logger.error({ err }, "confirmHomeOfficeDispatch: notification failed"));
 
   completeStageTask(tenantDb, {
@@ -473,16 +495,37 @@ export async function confirmUkviPayment(tenantDb, application, actorUser, req) 
     req,
   });
 
-  // Notify caseworkers + admin that the sponsor has confirmed UKVI payment.
+  // Notify caseworkers + admin, and send a receipt to the sponsor.
   resolveRoleRecipients(tenantDb, application)
     .then(async (recipients) => {
       const company = application.companyName || `#LIC-${application.id}`;
-      const msg = `${company} — the sponsor has confirmed payment of the UKVI licence fee on the UKVI portal. Please review and confirm on your end.`;
-      const targets = [
+
+      // Sponsor receipt — they're the actor so completeStageTask skips them in the stage notification
+      if (recipients.sponsor?.userId) {
+        await notify.deliver({
+          tenantDb,
+          recipientUserId: recipients.sponsor.userId,
+          type: "SUCCESS",
+          priority: "MEDIUM",
+          category: "sponsorship",
+          title: "UKVI Payment Confirmation Recorded",
+          message: `Your UKVI licence fee payment confirmation has been recorded for ${company}. Your case team has been notified and will update your application once confirmed on their end.`,
+          entityType: "licence_application",
+          entityId: application.id,
+          actionType: "ukvi_payment_confirmed",
+          actionUrl: "/business/licence-process",
+          req,
+          organisationId: application.organisationId ?? null,
+        });
+      }
+
+      // Staff notification
+      const staffMsg = `${company} — the sponsor has confirmed payment of the UKVI licence fee on the UKVI portal. Please verify and confirm on your end.`;
+      const staffTargets = [
         ...(recipients.admin ? [{ ...recipients.admin, url: "/admin/licence-applications" }] : []),
         ...recipients.caseworkers.map((cw) => ({ ...cw, url: "/caseworker/licence-reviews" })),
       ];
-      for (const t of targets) {
+      for (const t of staffTargets) {
         await notify.deliver({
           tenantDb,
           recipientUserId: t.userId,
@@ -490,7 +533,7 @@ export async function confirmUkviPayment(tenantDb, application, actorUser, req) 
           priority: "HIGH",
           category: "sponsorship",
           title: "UKVI Licence Fee — Payment Confirmed by Sponsor",
-          message: msg,
+          message: staffMsg,
           entityType: "licence_application",
           entityId: application.id,
           actionType: "ukvi_payment_confirmed",
