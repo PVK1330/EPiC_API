@@ -86,6 +86,9 @@ export function signToken(payload, options = {}) {
   const secret = getJwtSecret();
   const opts = {
     expiresIn: AUTH_TOKEN_EXPIRY,
+    // S-11 fix: pin the algorithm so an attacker cannot substitute 'none'
+    // or exploit RS256/HS256 key-confusion attacks on older jsonwebtoken builds.
+    algorithm: 'HS256',
     ...options,
   };
   return jwt.sign(payload, secret, opts);
@@ -119,7 +122,9 @@ export function signImpersonationToken(payload, options = {}) {
  */
 export function verifyToken(token, ignoreExpiration = false) {
   try {
-    return jwt.verify(token, getJwtSecret(), { ignoreExpiration });
+    // S-11 fix: whitelist algorithms so only HS256 is accepted — rejects 'none'
+    // and prevents RS256/HS256 key-confusion when the secret is a public key.
+    return jwt.verify(token, getJwtSecret(), { algorithms: ['HS256'], ignoreExpiration });
   } catch (err) {
     if (ignoreExpiration && err.name === 'TokenExpiredError') {
       return jwt.decode(token);
@@ -134,7 +139,7 @@ export function verifyToken(token, ignoreExpiration = false) {
  * @param {(err: Error|null, decoded: object|null) => void} callback
  */
 export function verifyTokenAsync(token, callback) {
-  jwt.verify(token, getJwtSecret(), callback);
+  jwt.verify(token, getJwtSecret(), { algorithms: ['HS256'] }, callback);
 }
 
 // ---------------------------------------------------------------------------

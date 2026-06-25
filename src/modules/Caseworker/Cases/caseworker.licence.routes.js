@@ -12,6 +12,7 @@ import {
     completeLicenceGovernmentRegistration,
     requestLicenceGovernmentCredentials,
     recordLicenceGovernmentSubmission,
+    recordHomeOfficeDispatch,
 } from '../caseworkerLicenceGovernment.controller.js';
 import {
     getCaseworkerIntakeSummary,
@@ -19,6 +20,7 @@ import {
     verifyCaseworkerDocument,
     rejectCaseworkerDocument,
     requestCaseworkerDocumentInfo,
+    downloadCaseworkerIntakeDocument,
     verifyCaseworkerAppendixDocument,
     bulkVerifyCaseworkerAppendixDocuments,
     rejectCaseworkerAppendixDocument,
@@ -45,6 +47,7 @@ import { upload } from '../../../middlewares/upload.middleware.js';
 import {
     completeRegistrationSchema,
     governmentSubmissionSchema,
+    homeOfficeDispatchSchema,
 } from '../../../validations/licenceGovernment.validation.js';
 
 const router = Router();
@@ -79,6 +82,7 @@ router.get("/:id/documents/:index/download", ensureAssignedCaseworker(), downloa
 // Intake: information form + document checklist review.
 router.get("/:id/intake", ensureAssignedCaseworker(), getCaseworkerIntakeSummary);
 router.get("/:id/intake/readiness", ensureAssignedCaseworker(), getIntakeReadiness);
+router.get("/:id/intake/documents/:documentKey/download", ensureAssignedCaseworker(), downloadCaseworkerIntakeDocument);
 router.patch("/:id/intake/documents/:documentKey/verify", ensureAssignedCaseworker(), verifyCaseworkerDocument);
 router.patch("/:id/intake/documents/:documentKey/reject", ensureAssignedCaseworker(), rejectCaseworkerDocument);
 router.patch("/:id/intake/documents/:documentKey/request-info", ensureAssignedCaseworker(), requestCaseworkerDocumentInfo);
@@ -109,5 +113,6 @@ router.post("/:id/government-registration/start", ensureAssignedCaseworker(), st
 router.post("/:id/government-registration/complete", ensureAssignedCaseworker(), validate(completeRegistrationSchema), completeLicenceGovernmentRegistration);
 router.post("/:id/request-government-credentials", ensureAssignedCaseworker(), requestLicenceGovernmentCredentials);
 router.post("/:id/government-submission", ensureAssignedCaseworker(), validate(governmentSubmissionSchema), recordLicenceGovernmentSubmission);
+router.post("/:id/home-office-dispatch", ensureAssignedCaseworker(), validate(homeOfficeDispatchSchema), recordHomeOfficeDispatch);
 
 export default router;

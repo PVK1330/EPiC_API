@@ -34,14 +34,24 @@ function isSlaMet(c, slaRules) {
 }
 
 // Date filter
+// S-28 fix: validate date strings before passing to `new Date()` — an invalid
+// value silently produces NaN which corrupts the WHERE clause.
+function parseReportDate(raw) {
+  if (!raw) return null;
+  const d = new Date(raw);
+  return Number.isFinite(d.getTime()) ? d : null;
+}
+
 function buildDateWhere(startDate, endDate, field = 'createdAt') {
-  if (!startDate && !endDate) return {};
+  const start = parseReportDate(startDate);
+  const end = parseReportDate(endDate);
+  if (!start && !end) return {};
   const range = {};
-  if (startDate) range[Op.gte] = new Date(startDate);
-  if (endDate) {
-    const end = new Date(endDate);
-    end.setHours(23, 59, 59, 999);
-    range[Op.lte] = end;
+  if (start) range[Op.gte] = start;
+  if (end) {
+    const endOfDay = new Date(end);
+    endOfDay.setHours(23, 59, 59, 999);
+    range[Op.lte] = endOfDay;
   }
   return { [field]: range };
 }
@@ -130,15 +140,16 @@ export async function computeCaseAnalyticsData(req) {
     // Total
     req.tenantDb.Case.count({ where: { ...dateWhere, ...roleWhere } }).catch(() => 0),
 
-    // By Visa Type — raw SQL with correct quoted column names
+    // By Visa Type — raw SQL scoped by organisation (S-20 fix)
     req.tenantDb.sequelize.query(
       `SELECT vt.id, vt.name, COUNT(c.id)::int AS count
        FROM cases c
        LEFT JOIN visa_types vt ON c."visaTypeId" = vt.id
        WHERE c.deleted_at IS NULL
+         AND (:orgId::int IS NULL OR c."organisation_id" = :orgId::int)
        GROUP BY vt.id, vt.name
        ORDER BY count DESC`,
-      { type: req.tenantDb.Sequelize.QueryTypes.SELECT }
+      { type: req.tenantDb.Sequelize.QueryTypes.SELECT, replacements: { orgId: req.user?.organisation_id ?? null } }
     ).catch((err) => {
       logger.error({ err }, 'VisaType Query Error');
       return [];
@@ -375,7 +386,7 @@ export async function computeFinancialReportData(req) {
       raw: true,
     }).catch(() => []),
 
-    // Revenue by Visa Type — raw SQL with correct quoted column names
+    // Revenue by Visa Type — raw SQL scoped by organisation (S-20 fix)
     req.tenantDb.sequelize.query(
       `SELECT vt.name, COALESCE(SUM(cp.amount), 0)::float AS total
        FROM case_payments cp
@@ -383,12 +394,13 @@ export async function computeFinancialReportData(req) {
        LEFT JOIN visa_types vt ON c."visaTypeId" = vt.id
        WHERE cp."paymentStatus" = 'completed'
          AND c.deleted_at IS NULL
+         AND (:orgId::int IS NULL OR c."organisation_id" = :orgId::int)
        GROUP BY vt.id, vt.name
        ORDER BY total DESC`,
-      { type: req.tenantDb.Sequelize.QueryTypes.SELECT }
+      { type: req.tenantDb.Sequelize.QueryTypes.SELECT, replacements: { orgId: req.user?.organisation_id ?? null } }
     ).catch(() => []),
 
-    // Revenue by Sponsor — raw SQL with correct quoted column names
+    // Revenue by Sponsor — raw SQL scoped by organisation (S-20 fix)
     req.tenantDb.sequelize.query(
       `SELECT CONCAT(u.first_name, ' ', u.last_name) AS name,
               COALESCE(SUM(cp.amount), 0)::float AS total
@@ -397,9 +409,10 @@ export async function computeFinancialReportData(req) {
        JOIN users u ON c."sponsorId" = u.id
        WHERE cp."paymentStatus" = 'completed'
          AND c.deleted_at IS NULL
+         AND (:orgId::int IS NULL OR c."organisation_id" = :orgId::int)
        GROUP BY u.id, u.first_name, u.last_name
        ORDER BY total DESC`,
-      { type: req.tenantDb.Sequelize.QueryTypes.SELECT }
+      { type: req.tenantDb.Sequelize.QueryTypes.SELECT, replacements: { orgId: req.user?.organisation_id ?? null } }
     ).catch(() => []),
   ]);
 
@@ -682,27 +695,75 @@ export const exportReportingExcel = async (req, res) => {
     const wantFinancial  = !sheet || sheet === 'financial';
     const wantPerformance= !sheet || sheet === 'performance';
 
+    const guard = (label, p) =>
+      p.catch((err) => {
+        logger.error({ err }, `exportReportingExcel: ${label} section failed`);
+        return null;
+      });
+
     const [cases, workload, financial, performance] = await Promise.all([
-      wantCases       ? computeCaseAnalyticsData(req).catch(() => null)      : null,
-      wantWorkload    ? computeWorkloadReportData(req).catch(() => null)      : null,
-      wantFinancial   ? computeFinancialReportData(req).catch(() => null)     : null,
-      wantPerformance ? computePerformanceReportData(req).catch(() => null)   : null,
+      wantCases       ? guard('cases', computeCaseAnalyticsData(req))         : null,
+      wantWorkload    ? guard('workload', computeWorkloadReportData(req))     : null,
+      wantFinancial   ? guard('financial', computeFinancialReportData(req))   : null,
+      wantPerformance ? guard('performance', computePerformanceReportData(req)) : null,
     ]);
 
     /** @type {{ name: string, columns: { key: string, header: string }[], rows: Record<string, unknown>[] }[]} */
     const sheets = [];
 
+    // ── Overview (first sheet) ────────────────────────────────────────────────
+    // Excel opens on the first sheet, so lead with a populated, human-readable
+    // summary instead of a bare metadata sheet (users were assuming the whole
+    // workbook was empty because the first tab only showed Generated/StartDate).
+    const gbp = (n) =>
+      `£${Number(n || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const rangeLabel =
+      startDate || endDate ? `${startDate || '…'} → ${endDate || '…'}` : 'All time';
+
+    const overviewRows = [
+      { field: 'Report', value: 'ElitePic — Reporting & Analytics' },
+      { field: 'Generated', value: `${new Date().toISOString().replace('T', ' ').slice(0, 16)} UTC` },
+      { field: 'Date Range', value: rangeLabel },
+      { field: 'Scope', value: sheet ? `${sheet} only` : 'All reports' },
+    ];
+
+    if (cases?.summary) {
+      overviewRows.push(
+        { field: '', value: '' },
+        { field: 'CASES', value: '' },
+        { field: 'Total Cases', value: cases.summary.totalCases ?? 0 },
+        { field: 'New This Month', value: cases.summary.thisMonth ?? 0 },
+        { field: 'New Last Month', value: cases.summary.lastMonth ?? 0 },
+        { field: 'Month-on-Month Change %', value: cases.summary.momChangePct ?? 'N/A' },
+        { field: 'SLA Met %', value: cases.summary.slaMetPct ?? 'N/A' },
+      );
+    }
+    if (financial?.summary) {
+      overviewRows.push(
+        { field: '', value: '' },
+        { field: 'FINANCE', value: '' },
+        { field: 'Total Revenue', value: gbp(financial.summary.totalRevenue) },
+        { field: 'Outstanding', value: gbp(financial.summary.totalOutstanding) },
+        { field: 'Completed Payment Records', value: financial.summary.totalPaid ?? 0 },
+      );
+    }
+    if (workload?.caseworkers?.length) {
+      const teamCases = workload.caseworkers.reduce((s, c) => s + (c.totalCases || 0), 0);
+      overviewRows.push(
+        { field: '', value: '' },
+        { field: 'TEAM', value: '' },
+        { field: 'Caseworkers', value: workload.caseworkers.length },
+        { field: 'Cases Handled by Team', value: teamCases },
+      );
+    }
+
     sheets.push({
-      name: 'Report_Info',
+      name: 'Overview',
       columns: [
-        { key: 'k', header: 'Key' },
-        { key: 'v', header: 'Value' },
+        { key: 'field', header: 'Field' },
+        { key: 'value', header: 'Value' },
       ],
-      rows: [
-        { k: 'Generated_UTC', v: new Date().toISOString() },
-        { k: 'StartDate', v: startDate || '' },
-        { k: 'EndDate', v: endDate || '' },
-      ],
+      rows: overviewRows,
     });
 
     if (cases?.summary) {
@@ -938,6 +999,15 @@ export const exportReportingExcel = async (req, res) => {
           ],
           rows: recentFlat,
         });
+      }
+    }
+
+    // Make empty detail sheets self-explanatory rather than header-only blanks.
+    for (const s of sheets) {
+      if (s.name !== 'Overview' && (!s.rows || s.rows.length === 0) && s.columns?.length) {
+        const note = { [s.columns[0].key]: 'No data for the selected range' };
+        s.columns.slice(1).forEach((c) => { note[c.key] = ''; });
+        s.rows = [note];
       }
     }
 

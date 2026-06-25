@@ -6,6 +6,7 @@ import {
   completeGovernmentRegistration,
   requestGovernmentCredentials,
   recordGovernmentSubmission,
+  confirmHomeOfficeDispatch,
 } from "../../services/licenceGovernment.service.js";
 
 // All handlers rely on req.licenceApplication populated by ensureAssignedCaseworker().
@@ -52,11 +53,11 @@ export const completeLicenceGovernmentRegistration = async (req, res) => {
 export const requestLicenceGovernmentCredentials = async (req, res) => {
   try {
     const data = await requestGovernmentCredentials(req.tenantDb, req.licenceApplication, req.user, req);
-    return ApiResponse.success(res, "Government credentials sent to sponsor", data);
+    return ApiResponse.success(res, "Prompt sent to sponsor to submit UKVI credentials", data);
   } catch (err) {
     if (err.statusCode === 400) return ApiResponse.badRequest(res, err.message);
     logger.error({ err }, "requestLicenceGovernmentCredentials failed");
-    return ApiResponse.error(res, "Failed to send government credentials", 500, err);
+    return ApiResponse.error(res, "Failed to send credentials prompt", 500, err);
   }
 };
 
@@ -74,5 +75,24 @@ export const recordLicenceGovernmentSubmission = async (req, res) => {
     if (err.statusCode === 400) return ApiResponse.badRequest(res, err.message);
     logger.error({ err }, "recordLicenceGovernmentSubmission failed");
     return ApiResponse.error(res, "Failed to record government submission", 500, err);
+  }
+};
+
+// POST /:id/home-office-dispatch
+// Caseworker confirms physical supporting documents dispatched to the Home Office.
+export const recordHomeOfficeDispatch = async (req, res) => {
+  try {
+    const data = await confirmHomeOfficeDispatch(
+      req.tenantDb,
+      req.licenceApplication,
+      req.user,
+      req.validated?.body ?? req.body,
+      req
+    );
+    return ApiResponse.success(res, "Home Office document dispatch recorded", data);
+  } catch (err) {
+    if (err.statusCode === 400) return ApiResponse.badRequest(res, err.message);
+    logger.error({ err }, "recordHomeOfficeDispatch failed");
+    return ApiResponse.error(res, "Failed to record Home Office dispatch", 500, err);
   }
 };

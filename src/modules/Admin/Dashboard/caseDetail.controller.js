@@ -13,6 +13,7 @@ import { syncCclReleaseForApprovedFees } from '../../../services/cclCandidateRel
 import { evaluateCaseStageAfterEvent, applyCaseStageChange } from '../../../services/caseStageAutomation.service.js';
 import { bookBiometricDirect } from '../../../services/caseWorkflowProcess.service.js';
 import { recordTimelineEntry } from '../../../services/caseTimeline.service.js';
+import { getOrganisationEmailBranding } from '../../../utils/emailBranding.js';
 import {
   assertSubmissionGate,
   resolveCaseStage,
@@ -1320,5 +1321,145 @@ export const exportCasePDF = catchAsync(async (req, res) => {
     res.status(200).send(buffer);
   } catch (error) {
     return ApiResponse.error(res, "Failed to export case PDF", 500, error);
+  }
+});
+
+const money = (n) => `£${(Number.isFinite(Number(n)) ? Number(n) : 0).toFixed(2)}`;
+
+// Generate a branded invoice PDF for a single case (admin/caseworker).
+export const exportCaseInvoicePDF = catchAsync(async (req, res) => {
+  try {
+    const { id } = req.params;
+    const caseData = await fetchFullCaseData(req.tenantDb, id);
+    if (!caseData) {
+      return ApiResponse.notFound(res, "Case not found");
+    }
+
+    const payments = caseData.payments || [];
+    const totalFee = Number(caseData.totalAmount) || 0;
+    const totalPaid = payments.reduce(
+      (sum, p) => (p.paymentStatus === "completed" ? sum + (Number(p.amount) || 0) : sum),
+      0,
+    );
+    const balanceDue = totalFee - totalPaid;
+
+    const candidateName = `${caseData.candidate?.first_name || ""} ${
+      caseData.candidate?.last_name || ""
+    }`.trim() || "Client";
+    const candidateEmail = caseData.candidate?.email || "";
+
+    // Prefer an existing invoice number; otherwise mint a stable-looking one.
+    const existingInvoiceNo = payments.find((p) => p.invoiceNumber)?.invoiceNumber;
+    const safeCaseId = String(caseData.caseId || id).replace(/[^A-Za-z0-9_-]/g, "_");
+    const invoiceNo = existingInvoiceNo || `INV-${safeCaseId}-${Date.now()}`;
+
+    // Per-tenant branding (never throws — falls back to platform identity).
+    const branding = await getOrganisationEmailBranding(req.user?.organisation_id);
+    const orgName = branding?.orgName || "EPiC Immigration Services";
+
+    const todayStr = new Date().toLocaleDateString("en-GB");
+
+    const historyBody = [
+      [
+        { text: "Date", style: "tableHeader" },
+        { text: "Method", style: "tableHeader" },
+        { text: "Ref / Invoice", style: "tableHeader" },
+        { text: "Amount", style: "tableHeader" },
+        { text: "Status", style: "tableHeader" },
+      ],
+      ...payments.map((p) => [
+        p.paymentDate ? new Date(p.paymentDate).toLocaleDateString("en-GB") : "—",
+        p.paymentMethod || p.method || "—",
+        p.invoiceNumber || "—",
+        money(p.amount),
+        p.paymentStatus || "—",
+      ]),
+    ];
+    if (payments.length === 0) {
+      historyBody.push([{ text: "No payments recorded yet.", colSpan: 5, alignment: "center", italics: true, color: "#94a3b8" }, {}, {}, {}, {}]);
+    }
+
+    const docDefinition = {
+      pageMargins: [40, 40, 40, 60],
+      content: [
+        {
+          columns: [
+            { text: "INVOICE", style: "header" },
+            {
+              stack: [
+                { text: orgName, bold: true, alignment: "right" },
+                { text: `Invoice No: ${invoiceNo}`, alignment: "right", fontSize: 9, color: "#64748b" },
+                { text: `Date: ${todayStr}`, alignment: "right", fontSize: 9, color: "#64748b" },
+              ],
+            },
+          ],
+          margin: [0, 0, 0, 20],
+        },
+        {
+          columns: [
+            {
+              stack: [
+                { text: "BILLED TO", style: "label" },
+                { text: candidateName, bold: true },
+                ...(candidateEmail ? [{ text: candidateEmail, fontSize: 9, color: "#64748b" }] : []),
+              ],
+            },
+            {
+              stack: [
+                { text: "CASE REFERENCE", style: "label", alignment: "right" },
+                { text: caseData.caseId || `#${caseData.id}`, bold: true, alignment: "right" },
+                { text: `Status: ${caseData.status || "—"}`, fontSize: 9, color: "#64748b", alignment: "right" },
+              ],
+            },
+          ],
+          margin: [0, 0, 0, 20],
+        },
+        { text: "Fee Summary", style: "sectionHeader" },
+        {
+          table: {
+            headerRows: 1,
+            widths: ["*", "auto"],
+            body: [
+              [
+                { text: "Description", style: "tableHeader" },
+                { text: "Amount", style: "tableHeader", alignment: "right" },
+              ],
+              [caseData.visaType?.name ? `${caseData.visaType.name} — Professional Fees` : "Professional Fees", { text: money(totalFee), alignment: "right" }],
+              [{ text: "Total Fee", bold: true }, { text: money(totalFee), bold: true, alignment: "right" }],
+              [{ text: "Amount Paid", color: "#16a34a" }, { text: money(totalPaid), color: "#16a34a", alignment: "right" }],
+              [{ text: "Balance Due", bold: true }, { text: money(balanceDue), bold: true, alignment: "right" }],
+            ],
+          },
+          layout: "lightHorizontalLines",
+          margin: [0, 0, 0, 20],
+        },
+        { text: "Payment History", style: "sectionHeader" },
+        {
+          table: { headerRows: 1, widths: ["auto", "auto", "*", "auto", "auto"], body: historyBody },
+          margin: [0, 0, 0, 15],
+        },
+      ],
+      footer: (currentPage, pageCount) => ({
+        text: `${orgName}  ·  Invoice ${invoiceNo}  ·  Page ${currentPage} of ${pageCount}`,
+        alignment: "center",
+        fontSize: 8,
+        color: "#94a3b8",
+        margin: [0, 20, 0, 0],
+      }),
+      styles: {
+        header: { fontSize: 26, bold: true, color: "#2563eb" },
+        label: { fontSize: 9, bold: true, color: "#94a3b8" },
+        sectionHeader: { fontSize: 13, bold: true, color: "#1e293b", margin: [0, 6, 0, 8] },
+        tableHeader: { bold: true, fontSize: 10, color: "#475569", fillColor: "#f8fafc" },
+      },
+      defaultStyle: { fontSize: 10 },
+    };
+
+    const buffer = await generatePdfBufferFromDefinition(docDefinition);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename=Invoice_${safeCaseId}.pdf`);
+    res.status(200).send(buffer);
+  } catch (error) {
+    return ApiResponse.error(res, "Failed to generate invoice PDF", 500, error);
   }
 });

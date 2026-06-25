@@ -233,6 +233,12 @@ export async function rejectLicence(
     application.status = "Licence Rejected";
     application.rejectionReason = rejectionReason.trim();
     if (notes) application.adminNotes = notes;
+
+    // UKVI policy: sponsor must wait 6 months before reapplying.
+    const cooldown = new Date();
+    cooldown.setMonth(cooldown.getMonth() + 6);
+    application.rejectionCooldownUntil = cooldown.toISOString().slice(0, 10);
+
     await application.save({ transaction: t });
 
     // Audit write is inside the transaction — no longer best-effort.

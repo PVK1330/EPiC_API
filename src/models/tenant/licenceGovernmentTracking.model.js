@@ -69,6 +69,33 @@ export default (sequelize, DataTypes) => {
         allowNull: true,
         field: "government_submission_date",
       },
+      // ── Flow v2 fields ────────────────────────────────────────────────────
+      // Set when caseworker sends a prompt email to the sponsor asking them
+      // to retrieve their UKVI credentials and submit them in the portal.
+      ukviCredentialsRequestedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: "ukvi_credentials_requested_at",
+      },
+      // 5 working-day deadline for sending supporting docs to the Home Office
+      // after UKVI submission. Computed by recordGovernmentSubmission().
+      homeOfficeDocDeadline: {
+        type: DataTypes.DATEONLY,
+        allowNull: true,
+        field: "home_office_doc_deadline",
+      },
+      // Set when the caseworker confirms physical docs dispatched to Home Office.
+      homeOfficeDocsSentAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: "home_office_docs_sent_at",
+      },
+      // Optional dispatch/tracking reference for the Home Office submission.
+      homeOfficeDocsRef: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+        field: "home_office_docs_ref",
+      },
     },
     {
       tableName: "licence_government_tracking",

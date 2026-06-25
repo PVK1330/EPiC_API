@@ -78,15 +78,25 @@ export function parseOrganisationSlugFromOrigin(origin) {
 
 /**
  * Resolve tenant slug from API request (header, body, browser origin, or host).
+ *
+ * S-13 fix: Client-supplied X-Organisation-Slug / organisation_slug are only
+ * trusted when the request is already authenticated and the slug matches the
+ * session user's own organisation. For unauthenticated flows (login, register,
+ * forgot-password, OTP) we derive the slug from the Host/Origin only.
+ *
+ * The caller (attachOrganisationContext middleware) controls whether auth is
+ * required. This function accepts an optional `trustClientSlug` flag
+ * (default false) that is only set to true for authenticated routes that have
+ * already verified the slug matches the session user.
  */
-export function resolveOrganisationSlugFromRequest(req) {
-  const headerSlug = req.headers["x-organisation-slug"];
-  if (headerSlug) {
-    return String(headerSlug).trim().toLowerCase();
-  }
+export function resolveOrganisationSlugFromRequest(req, { trustClientSlug = false } = {}) {
+  if (trustClientSlug) {
+    const headerSlug = req.headers["x-organisation-slug"];
+    if (headerSlug) return String(headerSlug).trim().toLowerCase();
 
-  if (req.body?.organisation_slug) {
-    return String(req.body.organisation_slug).trim().toLowerCase();
+    if (req.body?.organisation_slug) {
+      return String(req.body.organisation_slug).trim().toLowerCase();
+    }
   }
 
   const origin = req.headers.origin || req.headers.referer;

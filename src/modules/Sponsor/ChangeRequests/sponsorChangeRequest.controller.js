@@ -66,28 +66,16 @@ export const getChangeRequestsBySponsor = async (req, res) => {
       order: [["eventDate", "DESC"]],
     });
 
-    const data = await Promise.all(
-      requests.map(async (reqItem) => {
-        const plain = reqItem.toJSON();
-        const status = resolveStatus(plain.dateReported, plain.reportingDeadline);
-        // Persist the derived "overdue" state so it is durable rather than
-        // recomputed on every read.
-        if (status === "overdue" && plain.status !== "overdue") {
-          try {
-            await reqItem.update({ status: "overdue" });
-          } catch (persistError) {
-            logger.error(
-              { err: persistError, changeRequestId: plain.id },
-              "Failed to persist overdue status for sponsor change request"
-            );
-          }
-        }
-        return {
-          ...plain,
-          status,
-        };
-      })
-    );
+    // BUG-08 fix: GET handlers must be idempotent. Overdue status is computed
+    // in memory only. Durable persistence of "overdue" is handled by the
+    // background compliance job, not on every list read.
+    const data = requests.map((reqItem) => {
+      const plain = reqItem.toJSON();
+      return {
+        ...plain,
+        status: resolveStatus(plain.dateReported, plain.reportingDeadline),
+      };
+    });
 
     return res.status(200).json({ status: "success", data });
   } catch (error) {
@@ -96,19 +84,34 @@ export const getChangeRequestsBySponsor = async (req, res) => {
   }
 };
 
+// BUG-03 fix: sponsors may only update notes, evidence, and dateReported.
+// Status is always computed server-side via resolveStatus() — never accepted
+// from the request body — so a sponsor cannot self-approve/reject their own
+// regulatory change request.
+const SPONSOR_MUTABLE_STATUSES = ["pending", "submitted", "overdue"];
+
 export const updateChangeRequestStatus = async (req, res) => {
   try {
     const sponsorId = req.user.userId;
     const { id } = req.params;
-    const { status, notes, dateReported, reportedBy } = req.validated.body;
+    const { notes, dateReported, reportedBy } = req.validated.body;
 
     const request = await req.tenantDb.SponsorChangeRequest.findOne({ where: { id, sponsorId } });
     if (!request) {
       return res.status(404).json({ status: "error", message: "Change request not found" });
     }
 
+    // Only allow edits while the request is still in a sponsor-mutable state.
+    if (!SPONSOR_MUTABLE_STATUSES.includes(request.status)) {
+      return res.status(400).json({
+        status: "error",
+        message: `Change request cannot be edited in its current state: ${request.status}`,
+      });
+    }
+
     const nextDateReported = dateReported ? new Date(dateReported) : request.dateReported;
-    const nextStatus = status || resolveStatus(nextDateReported, request.reportingDeadline);
+    // Status is always derived from the data — never from the request body.
+    const nextStatus = resolveStatus(nextDateReported, request.reportingDeadline);
 
     request.status = nextStatus;
     request.notes = notes ?? request.notes;

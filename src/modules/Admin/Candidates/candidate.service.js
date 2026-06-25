@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import { randomInt } from 'crypto';
 import { Op, Sequelize } from 'sequelize';
 import { CandidateRepository } from './candidate.repository.js';
 import { generateStrongPassword } from '../../../utils/passwordGenerator.js';
@@ -187,7 +188,7 @@ export class CandidateService {
         const assignedcaseworkerId = caseworkerId ? [Number(caseworkerId)] : null;
 
         await this.repository.createCase({
-          caseId: `CAS-${Math.floor(100000 + Math.random() * 900000)}`,
+          caseId: `CAS-${randomInt(100000, 1000000)}`,
           candidateId: newUser.id,
           visaTypeId,
           status: 'Lead',

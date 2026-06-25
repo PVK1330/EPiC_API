@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import { randomInt } from 'crypto';
 import speakeasy from 'speakeasy';
 import QRCode from 'qrcode';
 import catchAsync from '../../utils/catchAsync.js';
@@ -372,8 +373,8 @@ export const register = catchAsync(async (req, res) => {
   }
 
   // ── Create unverified user & send OTP ─────────────────────────────────────
-  const hashedPassword = await bcrypt.hash(password, 10);
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  const hashedPassword = await bcrypt.hash(password, 12);
+  const otp = randomInt(100000, 1000000).toString(); // S-08 fix: CSPRNG
   const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
 
   await UnverifiedUser.create({
@@ -574,7 +575,7 @@ export const resendOTP = catchAsync(async (req, res) => {
     return ApiResponse.notFound(res, "User not found. Please register first.");
   }
 
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  const otp = randomInt(100000, 1000000).toString(); // S-08 fix: CSPRNG
   const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
 
   unverifiedUser.otp_code = otp;
@@ -753,7 +754,7 @@ export const login = catchAsync(async (req, res) => {
 
   const crypto = await import('crypto');
   const refreshTokenString = crypto.randomBytes(40).toString('hex');
-  const hashedRefresh = await bcrypt.hash(refreshTokenString, 10);
+  const hashedRefresh = await bcrypt.hash(refreshTokenString, 12);
 
   const deviceString = req.headers['user-agent'] || 'Unknown Device';
 
@@ -894,7 +895,7 @@ export const refreshToken = catchAsync(async (req, res) => {
 
   const crypto = await import('crypto');
   const newRefreshString = crypto.randomBytes(40).toString('hex');
-  const newHash = await bcrypt.hash(newRefreshString, 10);
+  const newHash = await bcrypt.hash(newRefreshString, 12);
 
   currentSession.refresh_token_hash = newHash;
   currentSession.last_active = new Date();
@@ -952,7 +953,7 @@ export const forgotPassword = catchAsync(async (req, res) => {
     return ApiResponse.notFound(res, "No account found with this email for this organisation");
   }
 
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  const otp = randomInt(100000, 1000000).toString(); // S-08 fix: CSPRNG
   const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
 
   user.password_reset_otp = otp;
@@ -1019,6 +1020,10 @@ export const verifyResetOTP = catchAsync(async (req, res) => {
     return ApiResponse.badRequest(res, "OTP expired");
   }
 
+  // RE-11 fix: null OTP fields immediately so the code cannot be reused to
+  // obtain a second reset_token while the current one is still in flight.
+  await user.update({ password_reset_otp: null, password_reset_otp_expiry: null });
+
   const resetToken = signShortToken(
     { email: user.email, purpose: RESET_TOKEN_PURPOSE },
   );
@@ -1059,10 +1064,6 @@ export const setPassword = catchAsync(async (req, res) => {
     return ApiResponse.unauthorized(res, "Invalid reset token");
   }
 
-  if (!user.password_reset_otp || new Date() > user.password_reset_otp_expiry) {
-    return ApiResponse.badRequest(res, "OTP verification required or expired");
-  }
-
   if (!password || !confirmPassword) {
     return ApiResponse.badRequest(res, "Password and confirm password are required");
   }
@@ -1075,7 +1076,7 @@ export const setPassword = catchAsync(async (req, res) => {
     return ApiResponse.badRequest(res, "Password must be at least 8 characters");
   }
 
-  const hashedPassword = await bcrypt.hash(password, 10);
+  const hashedPassword = await bcrypt.hash(password, 12);
   user.password = hashedPassword;
   user.password_reset_otp = null;
   user.password_reset_otp_expiry = null;
@@ -1124,7 +1125,7 @@ export const resendOtpUser = catchAsync(async (req, res) => {
     return ApiResponse.notFound(res, "User not found");
   }
 
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  const otp = randomInt(100000, 1000000).toString(); // S-08 fix: CSPRNG
   const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
 
   user.otp_code = otp;
@@ -1185,7 +1186,7 @@ export const sendPasswordChangeOtp = catchAsync(async (req, res) => {
     return ApiResponse.notFound(res, "User not found");
   }
 
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  const otp = randomInt(100000, 1000000).toString(); // S-08 fix: CSPRNG
   const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
 
   user.otp_code = otp;
@@ -1221,9 +1222,11 @@ export const setup2FA = catchAsync(async (req, res) => {
     two_factor_secret: secret.base32,
   });
 
+  // S-10 fix: never return the raw base32 secret in the JSON response.
+  // The QR code already encodes the secret inside the otpauth:// URL.
+  // Returning it separately creates a second plaintext exfiltration channel.
   return ApiResponse.success(res, '2FA setup initiated', {
     qrCode: dataURL,
-    secret: secret.base32,
   });
 });
 

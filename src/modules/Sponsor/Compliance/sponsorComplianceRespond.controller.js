@@ -22,7 +22,12 @@ export const respondToComplianceReview = async (req, res) => {
       return res.status(404).json({ status: "error", message: "Record not found" });
     }
 
-    // Optional additional evidence file.
+    // D-1 fix: copy the file to its permanent location BEFORE calling
+    // sponsorRespond so that the evidence path and the reviewStatus change are
+    // written to the DB in one atomic record.save() inside the service.
+    // If the service guard rejects the request (wrong reviewStatus), we delete
+    // the already-copied permanent file in the catch block — no orphan files
+    // and no split-write inconsistency.
     let evidencePath = null;
     if (req.file) {
       const targetDir = path.join("uploads", "business", String(sponsorId), "compliance-evidence");
@@ -34,15 +39,26 @@ export const respondToComplianceReview = async (req, res) => {
       evidencePath = targetPath.replace(/\\/g, "/");
     }
 
-    await sponsorRespond({
-      tenantDb: req.tenantDb,
-      cfg,
-      record,
-      sponsorId,
-      notes: req.body?.notes ?? null,
-      evidencePath,
-      req,
-    });
+    try {
+      // sponsorRespond does `if (evidencePath) record[field] = path` + one
+      // record.save() — status change and evidence path are committed together.
+      await sponsorRespond({
+        tenantDb: req.tenantDb,
+        cfg,
+        record,
+        sponsorId,
+        notes: req.body?.notes ?? null,
+        evidencePath,
+        req,
+      });
+    } catch (serviceErr) {
+      // Guard failed — delete the permanent file we just wrote so nothing is
+      // left on disk for a request that was ultimately rejected.
+      if (evidencePath) {
+        try { fs.unlinkSync(evidencePath); } catch (_) {}
+      }
+      throw serviceErr;
+    }
 
     res.status(200).json({
       status: "success",

@@ -33,6 +33,29 @@ export default (sequelize, DataTypes) => {
         allowNull: false,
         defaultValue: 0.0,
       },
+      // Professional breakdown of `amount` (gross). Nullable for legacy rows that
+      // predate itemisation; populated for org-subscription charges.
+      subtotal: {
+        type: DataTypes.DECIMAL(10, 2),
+        allowNull: true,
+      },
+      platform_fee_amount: {
+        type: DataTypes.DECIMAL(10, 2),
+        allowNull: true,
+      },
+      tax_rate: {
+        // VAT percent applied (e.g. 20.00), not a money amount.
+        type: DataTypes.DECIMAL(6, 2),
+        allowNull: true,
+      },
+      tax_amount: {
+        type: DataTypes.DECIMAL(10, 2),
+        allowNull: true,
+      },
+      total: {
+        type: DataTypes.DECIMAL(10, 2),
+        allowNull: true,
+      },
       currency: {
         type: DataTypes.STRING(10),
         allowNull: false,

@@ -80,11 +80,14 @@ async function buildUkInvoiceDocDef(invoice, platformSettings) {
   const platformLogoUrl = platformSettings["logo_url"] || null;
   const supportEmail = platformSettings["support_email"] || "support@elitepic.co.uk";
 
-  // Taxation — only apply if configured in Settings > Commerce > Taxation
-  const taxRateRaw = parseFloat(platformSettings["tax_rate"] || "0");
+  // Taxation — prefer the invoice's persisted breakdown (invoice.amount = GROSS
+  // for itemised org-subscription invoices); else fall back to the configured
+  // rate for legacy rows where amount is the net subscription price.
+  const hasBreakdown = invoice.total != null && invoice.tax_amount != null;
+  const taxRateRaw = parseFloat((hasBreakdown ? invoice.tax_rate : platformSettings["tax_rate"]) || "0");
   const taxRate = Number.isFinite(taxRateRaw) && taxRateRaw > 0 ? taxRateRaw / 100 : 0;
   const taxId = platformSettings["tax_id"] || null;
-  const taxEnabled = taxRate > 0;
+  const taxEnabled = hasBreakdown ? parseFloat(invoice.tax_amount || 0) > 0 : taxRate > 0;
 
   // Resolve platform logo
   const platformLogoPath = path.join(__dirname, "../../assets/elitepic_logo.png");
@@ -98,9 +101,13 @@ async function buildUkInvoiceDocDef(invoice, platformSettings) {
 
   const orgLogoDataUri = resolveLogoDataUri(org.logoUrl);
 
-  const amountNet = parseFloat(invoice.amount || 0);
-  const taxAmount = taxEnabled ? parseFloat((amountNet * taxRate).toFixed(2)) : 0;
-  const totalGross = parseFloat((amountNet + taxAmount).toFixed(2));
+  const amountNet = parseFloat((hasBreakdown ? invoice.subtotal : invoice.amount) || 0);
+  const taxAmount = hasBreakdown
+    ? parseFloat(invoice.tax_amount || 0)
+    : (taxEnabled ? parseFloat((amountNet * taxRate).toFixed(2)) : 0);
+  const totalGross = hasBreakdown
+    ? parseFloat((invoice.total ?? invoice.amount) || 0)
+    : parseFloat((amountNet + taxAmount).toFixed(2));
 
   const statusColour = invoice.status === "paid" ? "#16a34a"
     : invoice.status === "overdue" ? "#dc2626" : "#d97706";

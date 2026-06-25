@@ -586,6 +586,9 @@ export const getLicenceSummary = async (req, res) => {
     }
 };
 
+// BUG-07 fix: statuses that allow sponsor document mutations.
+const LICENCE_MUTABLE_STATUSES = ['Draft', 'Pending', 'Information Requested'];
+
 export const uploadLicenceDocument = async (req, res) => {
     try {
         const userId = req.user.userId;
@@ -598,6 +601,14 @@ export const uploadLicenceDocument = async (req, res) => {
         const application = await req.tenantDb.LicenceApplication.findOne({ where: { id: applicationId, userId } });
         if (!application) {
             return res.status(404).json({ status: 'error', message: 'Licence application not found' });
+        }
+
+        // BUG-07 fix: block uploads on terminal/approved applications.
+        if (!LICENCE_MUTABLE_STATUSES.includes(application.status)) {
+            return res.status(400).json({
+                status: 'error',
+                message: `Documents cannot be uploaded to an application with status: ${application.status}`,
+            });
         }
 
         const newPaths = (req.files || []).map(f => f.path.replace(/\\/g, '/'));
@@ -658,6 +669,16 @@ export const deleteLicenceDocument = async (req, res) => {
         const application = await req.tenantDb.LicenceApplication.findOne({ where: { id: applicationId, userId } });
         if (!application) {
             return res.status(404).json({ status: 'error', message: 'Licence application not found' });
+        }
+
+        // BUG-04 fix: mirror the same status gate as uploadLicenceDocument.
+        // Prevents post-approval document tampering on Approved/Granted/Government
+        // Processing applications.
+        if (!LICENCE_MUTABLE_STATUSES.includes(application.status)) {
+            return res.status(400).json({
+                status: 'error',
+                message: `Documents cannot be deleted from an application with status: ${application.status}`,
+            });
         }
 
         const docs = [...(application.documents || [])];

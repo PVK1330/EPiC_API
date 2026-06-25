@@ -1,8 +1,10 @@
 import { Op, UniqueConstraintError } from "sequelize";
 import logger from "../utils/logger.js";
 import { computeFee } from "./licenceFee.service.js";
-import { validateTransition, WORKFLOW_TYPES } from "./workflowEngine.service.js";
-
+import {
+  validateTransition,
+  WORKFLOW_TYPES,
+} from "./workflowEngine.service.js";
 
 /**
  * Orchestration for the normalized Sponsor Licence Application V2 (8-step wizard).
@@ -14,7 +16,13 @@ import { validateTransition, WORKFLOW_TYPES } from "./workflowEngine.service.js"
 
 export const APPLICATION_VERSION_V2 = 2;
 
-export const ROUTE_CODES = Object.freeze(["SkilledWorker", "Student", "ScaleUp", "GBM", "GAE"]);
+export const ROUTE_CODES = Object.freeze([
+  "SkilledWorker",
+  "Student",
+  "ScaleUp",
+  "GBM",
+  "GAE",
+]);
 
 export const ROUTE_LABELS = Object.freeze({
   SkilledWorker: "Skilled Worker",
@@ -26,39 +34,117 @@ export const ROUTE_LABELS = Object.freeze({
 
 // Appendix A document checklist seeded per application. `base` is always required;
 // route-specific entries are added when that route is selected.
+//
+// The base list mirrors the 10 mandatory documents the caseworker later verifies at
+// the Sponsor Intake stage (MANDATORY_DOCUMENTS in licenceIntake.service.js) so Step 4
+// of the wizard asks for exactly the same evidence — and an upload here auto-flows onto
+// the intake checklist via INTAKE_TO_APPENDIX_MAP, so the sponsor is never asked twice.
+// Two keys keep their historical appendix name (proof_of_registration, annual_accounts)
+// while the intake side maps to them under certificate_of_incorporation /
+// company_financials. Order matches the intake sortOrder for a consistent display.
 const APPENDIX_BASE = [
-  { key: "employer_liability_insurance", name: "Employer's liability insurance certificate (min £5m)" },
-  { key: "proof_of_registration", name: "Certificate of incorporation / proof of business registration" },
-  { key: "paye_hmrc_registration", name: "PAYE / HMRC registration evidence" },
-  { key: "business_bank_statement", name: "Business bank account statement" },
-  { key: "evidence_of_premises", name: "Evidence of trading premises (lease or ownership)" },
+  {
+    key: "employer_liability_insurance",
+    name: "Employer's Liability Insurance Certificate (minimum £5m cover)",
+  },
+  {
+    key: "proof_of_registration",
+    name: "Certificate of Incorporation or Proof of Business Registration",
+  },
+  { key: "paye_hmrc_registration", name: "PAYE / HMRC Registration Evidence" },
+  {
+    key: "business_bank_statement",
+    name: "Business Bank Account Statement (last 3 months)",
+  },
+  {
+    key: "evidence_of_premises",
+    name: "Evidence of Trading Premises (lease agreement or ownership proof)",
+  },
+  {
+    key: "vat_registration",
+    name: "VAT Registration Certificate (if VAT-registered)",
+  },
+  {
+    key: "id_proof_named_person",
+    name: "Proof of Identity — Named Person on Licence (passport or driving licence)",
+  },
+  {
+    key: "right_to_work_named_person",
+    name: "Right to Work Evidence — Named Person on Licence",
+  },
+  {
+    key: "annual_accounts",
+    name: "Latest Company Accounts or Financial Statements",
+  },
+  {
+    key: "organisational_chart",
+    name: "Organisational Chart showing Named Person's reporting line",
+  },
 ];
 const APPENDIX_BY_ROUTE = Object.freeze({
-  SkilledWorker: [
-    { key: "annual_accounts", name: "Latest annual accounts (audited where applicable)" },
-    { key: "vat_registration", name: "VAT registration certificate (if VAT registered)" },
+  ScaleUp: [
+    {
+      key: "scaleup_growth_evidence",
+      name: "Evidence of scale-up growth (annualised growth / HMRC)",
+    },
   ],
-  ScaleUp: [{ key: "scaleup_growth_evidence", name: "Evidence of scale-up growth (annualised growth / HMRC)" }],
-  GBM: [{ key: "overseas_link_evidence", name: "Evidence of common ownership / link with the overseas business" }],
-  GAE: [{ key: "gae_endorsement", name: "Government Authorised Exchange scheme endorsement" }],
-  Student: [{ key: "education_oversight", name: "Educational oversight / accreditation evidence" }],
+  GBM: [
+    {
+      key: "overseas_link_evidence",
+      name: "Evidence of common ownership / link with the overseas business",
+    },
+  ],
+  GAE: [
+    {
+      key: "gae_endorsement",
+      name: "Government Authorised Exchange scheme endorsement",
+    },
+  ],
+  Student: [
+    {
+      key: "education_oversight",
+      name: "Educational oversight / accreditation evidence",
+    },
+  ],
 });
 
 /** Includes for loading the full normalized application graph. */
 const fullIncludes = (tenantDb) => [
-  { model: tenantDb.LicenceApplicationRoute, as: "routes", separate: true, order: [["id", "ASC"]] },
+  {
+    model: tenantDb.LicenceApplicationRoute,
+    as: "routes",
+    separate: true,
+    order: [["id", "ASC"]],
+  },
   { model: tenantDb.LicenceOrganisationInfo, as: "organisationInfo" },
-  { model: tenantDb.LicenceCosRequirement, as: "cosRequirements", separate: true, order: [["id", "ASC"]] },
+  {
+    model: tenantDb.LicenceCosRequirement,
+    as: "cosRequirements",
+    separate: true,
+    order: [["id", "ASC"]],
+  },
   {
     model: tenantDb.LicenceAppendixDocument,
     as: "appendixDocuments",
     separate: true,
     order: [["id", "ASC"]],
-    include: [{ model: tenantDb.User, as: "verifier", attributes: ["id", "first_name", "last_name"], required: false }],
+    include: [
+      {
+        model: tenantDb.User,
+        as: "verifier",
+        attributes: ["id", "first_name", "last_name"],
+        required: false,
+      },
+    ],
   },
   { model: tenantDb.LicenceAuthorisingOfficer, as: "authorisingOfficer" },
   { model: tenantDb.LicenceKeyContact, as: "keyContact" },
-  { model: tenantDb.LicenceLevel1User, as: "level1Users", separate: true, order: [["id", "ASC"]] },
+  {
+    model: tenantDb.LicenceLevel1User,
+    as: "level1Users",
+    separate: true,
+    order: [["id", "ASC"]],
+  },
   { model: tenantDb.LicenceDeclaration, as: "declaration" },
 ];
 
@@ -84,7 +170,11 @@ const fullIncludes = (tenantDb) => [
  *     loadFullApplication(db, id, { ownerUserId: 0 })         → throws 401
  *     loadFullApplication(db, id, { ownerUserId: 123 })       → filtered  (sponsor path)
  */
-export async function loadFullApplication(tenantDb, id, { ownerUserId = undefined } = {}) {
+export async function loadFullApplication(
+  tenantDb,
+  id,
+  { ownerUserId = undefined } = {},
+) {
   const where = { id, applicationVersion: APPLICATION_VERSION_V2 };
 
   if (ownerUserId !== undefined) {
@@ -97,7 +187,7 @@ export async function loadFullApplication(tenantDb, id, { ownerUserId = undefine
       ownerUserId <= 0
     ) {
       const err = new Error(
-        "ownerUserId must be a positive integer for owner-scoped queries — re-authenticate and try again."
+        "ownerUserId must be a positive integer for owner-scoped queries — re-authenticate and try again.",
       );
       err.statusCode = 401;
       throw err;
@@ -105,11 +195,20 @@ export async function loadFullApplication(tenantDb, id, { ownerUserId = undefine
     where.userId = ownerUserId;
   }
 
-  return tenantDb.LicenceApplication.findOne({ where, include: fullIncludes(tenantDb) });
+  return tenantDb.LicenceApplication.findOne({
+    where,
+    include: fullIncludes(tenantDb),
+  });
 }
 
 /** Seed any required Appendix A documents that are missing for the current routes. */
-export async function seedAppendixDocuments(tenantDb, applicationId, organisationId, routeCodes, t = null) {
+export async function seedAppendixDocuments(
+  tenantDb,
+  applicationId,
+  organisationId,
+  routeCodes,
+  t = null,
+) {
   const wanted = [...APPENDIX_BASE];
   for (const code of routeCodes || []) {
     for (const doc of APPENDIX_BY_ROUTE[code] || []) wanted.push(doc);
@@ -129,7 +228,10 @@ export async function seedAppendixDocuments(tenantDb, applicationId, organisatio
       documentName: d.name,
       required: true,
     }));
-  if (toCreate.length) await tenantDb.LicenceAppendixDocument.bulkCreate(toCreate, { transaction: t });
+  if (toCreate.length)
+    await tenantDb.LicenceAppendixDocument.bulkCreate(toCreate, {
+      transaction: t,
+    });
 }
 
 /** Create a new V2 draft application (status Draft) and seed the base Appendix A list. */
@@ -141,7 +243,11 @@ export async function createDraft({ tenantDb, userId, organisationId }) {
   // last-resort guard; its UniqueConstraintError is caught and returned as HTTP 409.
   try {
     return await tenantDb.sequelize.transaction(
-      { isolationLevel: tenantDb.sequelize.constructor.Transaction.ISOLATION_LEVELS.SERIALIZABLE },
+      {
+        isolationLevel:
+          tenantDb.sequelize.constructor.Transaction.ISOLATION_LEVELS
+            .SERIALIZABLE,
+      },
       async (t) => {
         // Re-run the blocking check inside the transaction so no concurrent request
         // can slip past it between the check and the create.
@@ -149,7 +255,15 @@ export async function createDraft({ tenantDb, userId, organisationId }) {
           where: {
             userId,
             applicationVersion: APPLICATION_VERSION_V2,
-            status: { [Op.notIn]: ["Draft", "Rejected", "Approved", "Licence Granted", "Licence Rejected"] },
+            status: {
+              [Op.notIn]: [
+                "Draft",
+                "Rejected",
+                "Approved",
+                "Licence Granted",
+                "Licence Rejected",
+              ],
+            },
             deletedAt: null,
           },
           attributes: ["id", "status"],
@@ -158,7 +272,7 @@ export async function createDraft({ tenantDb, userId, organisationId }) {
         });
         if (blocking) {
           const err = new Error(
-            `You already have an application under review (${blocking.status}). Please wait for a decision before submitting a new one.`
+            `You already have an application under review (${blocking.status}). Please wait for a decision before submitting a new one.`,
           );
           err.statusCode = 409;
           err.code = "ACTIVE_APPLICATION_EXISTS";
@@ -174,18 +288,18 @@ export async function createDraft({ tenantDb, userId, organisationId }) {
             applicationVersion: APPLICATION_VERSION_V2,
             currentStep: 1,
           },
-          { transaction: t }
+          { transaction: t },
         );
         await seedAppendixDocuments(tenantDb, app.id, organisationId, [], t);
         return app;
-      }
+      },
     );
   } catch (err) {
     // CRIT-002: DB unique index `uq_active_v2_application_per_user` fires when a
     // concurrent request inserts before us inside the SERIALIZABLE window.
     if (err instanceof UniqueConstraintError) {
       const conflict = new Error(
-        "You already have an active application. Duplicate application creation is not permitted."
+        "You already have an active application. Duplicate application creation is not permitted.",
       );
       conflict.statusCode = 409;
       conflict.code = "DUPLICATE_ACTIVE_APPLICATION";
@@ -197,19 +311,33 @@ export async function createDraft({ tenantDb, userId, organisationId }) {
 
 async function upsertOne(Model, applicationId, organisationId, data, t) {
   if (!data || typeof data !== "object") return;
-  const existing = await Model.findOne({ where: { licenceApplicationId: applicationId }, transaction: t });
-  const payload = { ...data, licenceApplicationId: applicationId, organisationId };
+  const existing = await Model.findOne({
+    where: { licenceApplicationId: applicationId },
+    transaction: t,
+  });
+  const payload = {
+    ...data,
+    licenceApplicationId: applicationId,
+    organisationId,
+  };
   if (existing) await existing.update(payload, { transaction: t });
   else await Model.create(payload, { transaction: t });
 }
 
 async function replaceChildren(Model, applicationId, organisationId, rows, t) {
   if (!Array.isArray(rows)) return;
-  await Model.destroy({ where: { licenceApplicationId: applicationId }, transaction: t });
+  await Model.destroy({
+    where: { licenceApplicationId: applicationId },
+    transaction: t,
+  });
   if (rows.length) {
     await Model.bulkCreate(
-      rows.map((r) => ({ ...r, licenceApplicationId: applicationId, organisationId })),
-      { transaction: t }
+      rows.map((r) => ({
+        ...r,
+        licenceApplicationId: applicationId,
+        organisationId,
+      })),
+      { transaction: t },
     );
   }
 }
@@ -218,39 +346,96 @@ async function replaceChildren(Model, applicationId, organisationId, rows, t) {
  * Apply a (partial) draft body to the normalized tables. Appendix A documents are
  * managed by seeding (on route change) + file upload, not via this body.
  */
-export async function saveDraft({ tenantDb, application, body, organisationId }) {
+export async function saveDraft({
+  tenantDb,
+  application,
+  body,
+  organisationId,
+}) {
   const appId = application.id;
   await tenantDb.sequelize.transaction(async (t) => {
     if (Number.isInteger(body.currentStep)) {
-      await application.update({ currentStep: body.currentStep }, { transaction: t });
+      await application.update(
+        { currentStep: body.currentStep },
+        { transaction: t },
+      );
     }
 
     if (Array.isArray(body.routes)) {
-      const uniq = [...new Set(body.routes)].filter((r) => ROUTE_CODES.includes(r));
-      await tenantDb.LicenceApplicationRoute.destroy({ where: { licenceApplicationId: appId }, transaction: t });
+      const uniq = [...new Set(body.routes)].filter((r) =>
+        ROUTE_CODES.includes(r),
+      );
+      await tenantDb.LicenceApplicationRoute.destroy({
+        where: { licenceApplicationId: appId },
+        transaction: t,
+      });
       if (uniq.length) {
         await tenantDb.LicenceApplicationRoute.bulkCreate(
-          uniq.map((routeCode) => ({ licenceApplicationId: appId, organisationId, routeCode })),
-          { transaction: t }
+          uniq.map((routeCode) => ({
+            licenceApplicationId: appId,
+            organisationId,
+            routeCode,
+          })),
+          { transaction: t },
         );
       }
       await seedAppendixDocuments(tenantDb, appId, organisationId, uniq, t);
     }
 
-    await upsertOne(tenantDb.LicenceOrganisationInfo, appId, organisationId, body.organisationInfo, t);
-    await upsertOne(tenantDb.LicenceAuthorisingOfficer, appId, organisationId, body.authorisingOfficer, t);
-    await upsertOne(tenantDb.LicenceKeyContact, appId, organisationId, body.keyContact, t);
-    await upsertOne(tenantDb.LicenceDeclaration, appId, organisationId, body.declaration, t);
+    await upsertOne(
+      tenantDb.LicenceOrganisationInfo,
+      appId,
+      organisationId,
+      body.organisationInfo,
+      t,
+    );
+    await upsertOne(
+      tenantDb.LicenceAuthorisingOfficer,
+      appId,
+      organisationId,
+      body.authorisingOfficer,
+      t,
+    );
+    await upsertOne(
+      tenantDb.LicenceKeyContact,
+      appId,
+      organisationId,
+      body.keyContact,
+      t,
+    );
+    await upsertOne(
+      tenantDb.LicenceDeclaration,
+      appId,
+      organisationId,
+      body.declaration,
+      t,
+    );
 
-    await replaceChildren(tenantDb.LicenceCosRequirement, appId, organisationId, body.cosRequirements, t);
-    await replaceChildren(tenantDb.LicenceLevel1User, appId, organisationId, body.level1Users, t);
+    await replaceChildren(
+      tenantDb.LicenceCosRequirement,
+      appId,
+      organisationId,
+      body.cosRequirements,
+      t,
+    );
+    await replaceChildren(
+      tenantDb.LicenceLevel1User,
+      appId,
+      organisationId,
+      body.level1Users,
+      t,
+    );
 
     // Recompute the stored fee snapshot from the latest known inputs.
     const fee = computeFee({
-      routes: Array.isArray(body.routes) ? body.routes : await currentRouteCodes(tenantDb, appId, t),
+      routes: Array.isArray(body.routes)
+        ? body.routes
+        : await currentRouteCodes(tenantDb, appId, t),
       sponsorSize: body.sponsorSize ?? application.feeSponsorSize ?? null,
       charityStatus: body.organisationInfo?.charityStatus ?? false,
-      cosRequirements: Array.isArray(body.cosRequirements) ? body.cosRequirements : [],
+      cosRequirements: Array.isArray(body.cosRequirements)
+        ? body.cosRequirements
+        : [],
     });
     await application.update(
       {
@@ -260,10 +445,23 @@ export async function saveDraft({ tenantDb, application, body, organisationId })
         feeTotal: fee.applicationFeeTotal,
         feeCurrency: fee.currency,
       },
-      { transaction: t }
+      { transaction: t },
     );
   });
-  return loadFullApplication(tenantDb, appId, { ownerUserId: application.userId });
+  // Fire-and-forget: push any filled wizard data back into the sponsor's profile
+  // so the Business Profile section is populated without them having to do it twice.
+  if (
+    body.organisationInfo ||
+    body.authorisingOfficer ||
+    body.keyContact ||
+    body.level1Users
+  ) {
+    syncWizardDataToProfile(tenantDb, application).catch(() => {});
+  }
+
+  return loadFullApplication(tenantDb, appId, {
+    ownerUserId: application.userId,
+  });
 }
 
 async function currentRouteCodes(tenantDb, appId, t = null) {
@@ -283,19 +481,29 @@ async function currentRouteCodes(tenantDb, appId, t = null) {
 export async function submitApplication({ tenantDb, application }) {
   const appId = application.id;
 
-  const check = validateTransition(WORKFLOW_TYPES.LICENCE, application.status, "Pending");
+  const check = validateTransition(
+    WORKFLOW_TYPES.LICENCE,
+    application.status,
+    "Pending",
+  );
   if (!check.valid) {
     const err = new Error(check.message);
     err.statusCode = 422;
     throw err;
   }
 
-  const full = await loadFullApplication(tenantDb, appId, { ownerUserId: application.userId });
+  const full = await loadFullApplication(tenantDb, appId, {
+    ownerUserId: application.userId,
+  });
   const routeCodes = (full.routes || []).map((r) => r.routeCode);
 
   // Company name comes from the sponsor profile; registration from org info.
-  const profile = await tenantDb.SponsorProfile.findOne({ where: { userId: application.userId } });
-  const licenceTypeSummary = routeCodes.map((c) => ROUTE_LABELS[c] || c).join(", ");
+  const profile = await tenantDb.SponsorProfile.findOne({
+    where: { userId: application.userId },
+  });
+  const licenceTypeSummary = routeCodes
+    .map((c) => ROUTE_LABELS[c] || c)
+    .join(", ");
 
   // Mirror a primary contact onto the parent so the existing reviewer screens and
   // the "Licence Submitted" notification (which reads contactName) render sensibly.
@@ -303,7 +511,9 @@ export async function submitApplication({ tenantDb, application }) {
   const kc = full.keyContact || {};
   const contact = kc.sameAsAuthorisingOfficer ? ao : kc;
   const contactName =
-    [contact.firstName, contact.lastName].filter(Boolean).join(" ").trim() || profile?.companyName || "Sponsor";
+    [contact.firstName, contact.lastName].filter(Boolean).join(" ").trim() ||
+    profile?.companyName ||
+    "Sponsor";
 
   const fee = computeFee({
     routes: routeCodes,
@@ -316,8 +526,15 @@ export async function submitApplication({ tenantDb, application }) {
     status: "Pending",
     submittedAt: new Date(),
     currentStep: 8,
-    companyName: profile?.companyName || full.organisationInfo?.organisationType || application.companyName || "Sponsor",
-    registrationNumber: full.organisationInfo?.companiesHouseNumber || application.registrationNumber || null,
+    companyName:
+      profile?.companyName ||
+      full.organisationInfo?.organisationType ||
+      application.companyName ||
+      "Sponsor",
+    registrationNumber:
+      full.organisationInfo?.companiesHouseNumber ||
+      application.registrationNumber ||
+      null,
     licenceType: licenceTypeSummary || application.licenceType || null,
     cosAllocation: String((full.cosRequirements || []).length),
     contactName,
@@ -330,7 +547,12 @@ export async function submitApplication({ tenantDb, application }) {
     feeCurrency: fee.currency,
   });
 
-  return loadFullApplication(tenantDb, appId, { ownerUserId: application.userId });
+  // Definitive sync on submission — profile gets the full wizard picture.
+  syncWizardDataToProfile(tenantDb, application).catch(() => {});
+
+  return loadFullApplication(tenantDb, appId, {
+    ownerUserId: application.userId,
+  });
 }
 
 /** Shape the full graph for API responses. */
@@ -369,6 +591,8 @@ export function serializeApplication(app) {
     level1Users: j.level1Users || [],
     declaration: j.declaration || null,
     reviewNotes: j.adminNotes || null,
+    ukviPaymentConfirmedAt: j.ukviPaymentConfirmedAt || null,
+    rejectionCooldownUntil: j.rejectionCooldownUntil || null,
   };
 }
 
@@ -377,6 +601,66 @@ export function splitFullName(name) {
   const firstName = parts[0] || "";
   const lastName = parts.slice(1).join(" ") || "";
   return { firstName, lastName };
+}
+
+/**
+ * Reverse sync: push wizard data INTO the sponsor's Business Profile.
+ * Called non-blocking (fire-and-forget) on saveDraft and submitApplication.
+ * Non-destructive: only fills fields that are currently null/empty so existing
+ * profile data is never overwritten.
+ */
+async function syncWizardDataToProfile(tenantDb, application) {
+  try {
+    const profile = await tenantDb.SponsorProfile.findOne({
+      where: { userId: application.userId },
+    });
+    if (!profile) return;
+
+    const full = await loadFullApplication(tenantDb, application.id, {
+      ownerUserId: application.userId,
+    });
+
+    const orgInfo = full.organisationInfo || {};
+    const ao = full.authorisingOfficer || {};
+    const rawKc = full.keyContact || {};
+    const kc = rawKc.sameAsAuthorisingOfficer ? ao : rawKc;
+    const level1 = full.level1Users || [];
+
+    const patch = {};
+
+    if (!profile.registrationNumber && orgInfo.companiesHouseNumber)
+      patch.registrationNumber = orgInfo.companiesHouseNumber;
+
+    const aoName = [ao.firstName, ao.lastName].filter(Boolean).join(" ").trim();
+    if (!profile.authorisingName && aoName) patch.authorisingName = aoName;
+    if (!profile.authorisingEmail && ao.email) patch.authorisingEmail = ao.email;
+    if (!profile.authorisingPhone && ao.phone) patch.authorisingPhone = ao.phone;
+    if (!profile.authorisingJobTitle && ao.jobTitle)
+      patch.authorisingJobTitle = ao.jobTitle;
+
+    const kcName = [kc.firstName, kc.lastName].filter(Boolean).join(" ").trim();
+    if (!profile.keyContactName && kcName) patch.keyContactName = kcName;
+    if (!profile.keyContactEmail && kc.email) patch.keyContactEmail = kc.email;
+    if (!profile.keyContactPhone && kc.phone) patch.keyContactPhone = kc.phone;
+    if (!profile.keyContactDepartment && kc.jobTitle)
+      patch.keyContactDepartment = kc.jobTitle;
+
+    if (
+      (!Array.isArray(profile.level1Users) || profile.level1Users.length === 0) &&
+      level1.length > 0
+    ) {
+      patch.level1Users = level1.map((u) => ({
+        name: [u.firstName, u.lastName].filter(Boolean).join(" ").trim(),
+        email: u.email || null,
+        phone: u.phone || null,
+        jobTitle: u.jobTitle || null,
+      }));
+    }
+
+    if (Object.keys(patch).length > 0) await profile.update(patch);
+  } catch (_) {
+    // Never propagate — this is a background best-effort sync.
+  }
 }
 
 /**
@@ -397,7 +681,11 @@ export function splitFullName(name) {
  *     (PAYE, VAT, SIC codes, etc.) are never cleared.
  *   - Level 1 Users are a full replace (the profile is authoritative for the list).
  */
-export async function syncPersonnelFromProfile(tenantDb, applicationId, userId) {
+export async function syncPersonnelFromProfile(
+  tenantDb,
+  applicationId,
+  userId,
+) {
   const application = await tenantDb.LicenceApplication.findByPk(applicationId);
   if (!application) {
     const err = new Error("Application not found");
@@ -411,7 +699,10 @@ export async function syncPersonnelFromProfile(tenantDb, applicationId, userId) 
   }
 
   const syncedAt = new Date();
-  const syncStamp = { lastSyncedAt: syncedAt, lastSyncedByUserId: userId ?? null };
+  const syncStamp = {
+    lastSyncedAt: syncedAt,
+    lastSyncedByUserId: userId ?? null,
+  };
 
   await tenantDb.sequelize.transaction(async (t) => {
     if (profile.authorisingName) {
@@ -431,11 +722,14 @@ export async function syncPersonnelFromProfile(tenantDb, applicationId, userId) 
       if (existingAo) {
         await existingAo.update(aoData, { transaction: t });
       } else {
-        await tenantDb.LicenceAuthorisingOfficer.create({
-          licenceApplicationId: applicationId,
-          organisationId: application.organisationId,
-          ...aoData,
-        }, { transaction: t });
+        await tenantDb.LicenceAuthorisingOfficer.create(
+          {
+            licenceApplicationId: applicationId,
+            organisationId: application.organisationId,
+            ...aoData,
+          },
+          { transaction: t },
+        );
       }
     }
 
@@ -456,11 +750,14 @@ export async function syncPersonnelFromProfile(tenantDb, applicationId, userId) 
       if (existingKc) {
         await existingKc.update(kcData, { transaction: t });
       } else {
-        await tenantDb.LicenceKeyContact.create({
-          licenceApplicationId: applicationId,
-          organisationId: application.organisationId,
-          ...kcData,
-        }, { transaction: t });
+        await tenantDb.LicenceKeyContact.create(
+          {
+            licenceApplicationId: applicationId,
+            organisationId: application.organisationId,
+            ...kcData,
+          },
+          { transaction: t },
+        );
       }
     }
 
@@ -498,15 +795,19 @@ export async function syncPersonnelFromProfile(tenantDb, applicationId, userId) 
       });
       if (existingOrg) {
         const patch = { ...syncStamp };
-        if (!existingOrg.companiesHouseNumber) patch.companiesHouseNumber = profile.registrationNumber;
+        if (!existingOrg.companiesHouseNumber)
+          patch.companiesHouseNumber = profile.registrationNumber;
         await existingOrg.update(patch, { transaction: t });
       } else {
-        await tenantDb.LicenceOrganisationInfo.create({
-          licenceApplicationId: applicationId,
-          organisationId: application.organisationId,
-          companiesHouseNumber: profile.registrationNumber,
-          ...syncStamp,
-        }, { transaction: t });
+        await tenantDb.LicenceOrganisationInfo.create(
+          {
+            licenceApplicationId: applicationId,
+            organisationId: application.organisationId,
+            companiesHouseNumber: profile.registrationNumber,
+            ...syncStamp,
+          },
+          { transaction: t },
+        );
       }
     }
   });

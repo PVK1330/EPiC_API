@@ -21,9 +21,20 @@ test("every mapped intake key is a real mandatory intake document", () => {
   }
 });
 
-test("documents with no Stage 4 equivalent are intentionally unmapped (manual upload)", () => {
-  for (const key of ["id_proof_named_person", "right_to_work_named_person", "organisational_chart"]) {
-    assert.equal(INTAKE_TO_APPENDIX_MAP[key], undefined, `${key} must require a manual upload`);
+test("the named-person + org-chart documents now map to their Stage 4 equivalents", () => {
+  // Step 4 (Appendix A) now collects these too, so they auto-import into the
+  // intake checklist instead of requiring a second manual upload.
+  assert.deepEqual(INTAKE_TO_APPENDIX_MAP.id_proof_named_person, ["id_proof_named_person"]);
+  assert.deepEqual(INTAKE_TO_APPENDIX_MAP.right_to_work_named_person, ["right_to_work_named_person"]);
+  assert.deepEqual(INTAKE_TO_APPENDIX_MAP.organisational_chart, ["organisational_chart"]);
+});
+
+test("every mandatory intake document has a Stage 4 mapping", () => {
+  for (const d of MANDATORY_DOCUMENTS) {
+    assert.ok(
+      Array.isArray(INTAKE_TO_APPENDIX_MAP[d.key]) && INTAKE_TO_APPENDIX_MAP[d.key].length > 0,
+      `mandatory document ${d.key} must map to a Stage 4 appendix key`,
+    );
   }
 });
 
@@ -82,10 +93,19 @@ test("never touches an intake slot the sponsor already populated", () => {
   assert.equal(hasFile.length, 0);
 });
 
-test("skips intake documents that have no Stage 4 mapping", () => {
+test("now imports the named-person documents that gained a Stage 4 mapping", () => {
   const plan = planAppendixImports(
     [intake({ documentKey: "id_proof_named_person" })],
     [appendix({ documentKey: "id_proof_named_person" })],
+  );
+  assert.equal(plan.length, 1);
+  assert.equal(plan[0].intakeDoc.documentKey, "id_proof_named_person");
+});
+
+test("skips intake documents that have no Stage 4 mapping (e.g. conditional docs)", () => {
+  const plan = planAppendixImports(
+    [intake({ documentKey: "food_hygiene_certificate" })],
+    [appendix({ documentKey: "food_hygiene_certificate" })],
   );
   assert.equal(plan.length, 0);
 });
@@ -111,7 +131,7 @@ test("import marks the slot uploaded + imported and links the appendix id", asyn
     id: 99,
     documentKey: "paye_hmrc_registration",
     filePath: "/storage/private/paye.pdf",
-    verificationStatus: "Verified",
+    verificationStatus: "Pending",
   };
 
   const count = await importMatchingAppendixDocuments(mockDb([slot], [app]), 42);
@@ -123,6 +143,29 @@ test("import marks the slot uploaded + imported and links the appendix id", asyn
   assert.equal(slot.sourceAppendixDocumentId, 99);
   assert.equal(slot.filePath, "/storage/private/paye.pdf");
   assert.equal(slot.fileName, "paye.pdf");
+});
+
+test("import carries over an already-verified appendix status onto the intake slot", async () => {
+  const slot = {
+    documentKey: "paye_hmrc_registration",
+    status: "pending",
+    filePath: null,
+    save: async function () {},
+  };
+  const app = {
+    id: 7,
+    documentKey: "paye_hmrc_registration",
+    filePath: "/storage/private/paye.pdf",
+    verificationStatus: "Verified",
+    verifiedBy: 5,
+  };
+
+  const count = await importMatchingAppendixDocuments(mockDb([slot], [app]), 1);
+
+  assert.equal(count, 1);
+  assert.equal(slot.status, "verified", "a verified appendix doc must land on the checklist as verified");
+  assert.equal(slot.verifiedByUserId, 5);
+  assert.equal(slot.sourceAppendixDocumentId, 7);
 });
 
 test("import is a no-op when models are missing (defensive)", async () => {

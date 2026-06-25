@@ -955,19 +955,34 @@ const processStripeWebhookEvent = async (event, tenantDb, req) => {
       ) {
         const orgId = Number(session.metadata.subOrganisationId);
         if (orgId) {
-          await activateOrgSubscriptionAfterPayment({
-            organisationId: orgId,
-            paymentRef: session.id,
-            amount:
-              session.amount_total != null ? session.amount_total / 100 : undefined,
-            currency: session.currency,
-            paymentIntentId:
-              typeof session.payment_intent === "string"
-                ? session.payment_intent
-                : session.payment_intent?.id || null,
-          }).catch((e) =>
-            logger.error({ err: e }, "Org subscription webhook activation failed"),
-          );
+          let breakdown = null;
+          try {
+            if (session.metadata?.breakdown) {
+              breakdown = JSON.parse(session.metadata.breakdown);
+            }
+          } catch {
+            /* malformed snapshot — activation falls back to a fresh compute */
+          }
+          try {
+            await activateOrgSubscriptionAfterPayment({
+              organisationId: orgId,
+              paymentRef: session.id,
+              amount:
+                session.amount_total != null ? session.amount_total / 100 : undefined,
+              currency: session.currency,
+              paymentIntentId:
+                typeof session.payment_intent === "string"
+                  ? session.payment_intent
+                  : session.payment_intent?.id || null,
+              breakdown,
+            });
+          } catch (e) {
+            // Do NOT swallow: rethrow so the outer handler marks the event failed
+            // and enqueues a retry. Activation is idempotent on session.id, so a
+            // retry cannot double-bill.
+            logger.error({ err: e }, "Org subscription webhook activation failed");
+            throw e;
+          }
         }
         break;
       }

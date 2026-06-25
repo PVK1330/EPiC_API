@@ -282,24 +282,44 @@ export const deleteCaseNote = async (req, res) => {
 export const getCaseNoteByNoteId = async (req, res) => {
   try {
     const { id } = req.params;
-    
-    // Find the note
+    const roleId = Number(req.user?.role_id);
+    const userId = req.user?.userId;
+
+    // Find the note with its parent case for ownership verification
     const note = await req.tenantDb.CaseNote.findByPk(id, {
       include: [
         {
           model: req.tenantDb.Case,
           as: 'case',
-          attributes: ['id', 'status', 'created_at', 'updated_at']
+          attributes: ['id', 'status', 'created_at', 'updated_at', 'assignedcaseworkerId', 'candidateId', 'sponsorId']
         }
       ]
     });
-    
+
     if (!note) {
       return res.status(404).json({
         status: "error",
         message: "Note not found",
         data: null,
       });
+    }
+
+    // S-07 fix: IDOR guard — verify the requester has access to the note's parent case.
+    // Admins (3) and Superadmins (5) may access any note.
+    // Caseworkers may only access notes on cases assigned to them.
+    // Candidates/Sponsors may only access notes on their own cases.
+    if (roleId !== ROLES.ADMIN && roleId !== 5) {
+      const parentCase = note.case;
+      if (!parentCase) {
+        return res.status(403).json({ status: 'error', message: 'Access denied' });
+      }
+      const assignedIds = parentCase.assignedcaseworkerId ?? [];
+      const isCaseworkerAssigned = roleId === ROLES.CASEWORKER && assignedIds.includes(userId);
+      const isCandidate = parentCase.candidateId && Number(parentCase.candidateId) === Number(userId);
+      const isSponsor = parentCase.sponsorId && Number(parentCase.sponsorId) === Number(userId);
+      if (!isCaseworkerAssigned && !isCandidate && !isSponsor) {
+        return res.status(403).json({ status: 'error', message: 'Access denied' });
+      }
     }
     
     res.status(200).json({

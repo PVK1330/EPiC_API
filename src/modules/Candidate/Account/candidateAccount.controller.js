@@ -762,6 +762,16 @@ export const changePassword = async (req, res) => {
       return res.status(400).json({ status: 'error', message: 'New password is required', data: null });
     }
 
+    // S-21 fix: enforce password complexity so users cannot set trivially weak passwords.
+    const PW_RE = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]).{8,}$/;
+    if (!PW_RE.test(new_password)) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Password must be at least 8 characters and include an uppercase letter, a lowercase letter, a number, and a special character.',
+        data: null,
+      });
+    }
+
     const user = await req.tenantDb.User.findOne({ where: { id: idNum } });
     
     // If user has a password set, require and verify the old one

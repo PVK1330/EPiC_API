@@ -114,7 +114,7 @@ export const changeSuperadminPassword = catchAsync(async (req, res) => {
   const isMatch = await bcrypt.compare(currentPassword, user.password);
   if (!isMatch) return ApiResponse.badRequest(res, 'Current password is incorrect');
 
-  const hashedPassword = await bcrypt.hash(newPassword, 10);
+  const hashedPassword = await bcrypt.hash(newPassword, 12);
 
   await user.update({
     password: hashedPassword,
@@ -141,7 +141,8 @@ export const setup2FAForSuperadmin = catchAsync(async (req, res) => {
 
   return ApiResponse.success(res, '2FA setup initiated', {
     qrCode: dataURL,
-    secret: secret.base32,
+    // RE-01 fix: secret omitted — QR code already encodes it; returning the
+    // raw base32 seed would allow permanent 2FA bypass if the response is intercepted.
   });
 });
 

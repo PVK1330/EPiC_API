@@ -6,7 +6,7 @@ import {
   LICENCE_AUDIT_ACTIONS,
   extractCaseworkerIds,
 } from "./licenceAssignment.service.js";
-import { completeStageTask } from "./licenceStageTask.service.js";
+import { completeStageTask, resolveRoleRecipients } from "./licenceStageTask.service.js";
 import * as notify from "./sponsorshipNotification.service.js";
 import { checkIntakeReadiness } from "./licenceIntake.service.js";
 
@@ -191,20 +191,16 @@ export async function completeGovernmentRegistration(tenantDb, application, acto
   return { tracking: tracking.toJSON(), application: application.toJSON() };
 }
 
-// ─── Caseworker: request government credentials ───────────────────────────────
+// ─── Caseworker: prompt sponsor to submit their UKVI credentials ──────────────
+// Flow v2: UKVI sends credentials to the sponsor's email directly.
+// The caseworker sends a prompt to the sponsor reminding them to log in and
+// submit those credentials via the portal. This sets credentialsSentAt (the
+// "request sent" timestamp) and fires a notification email to the sponsor.
 
 export async function requestGovernmentCredentials(tenantDb, application, actorUser, req) {
   const actorId = actorUser?.userId ?? actorUser?.id ?? null;
 
-  const tracking = await tenantDb.LicenceGovernmentTracking.findOne({
-    where: { licenceApplicationId: application.id },
-  });
-  if (!tracking?.ukviPortalUserId || !tracking?.ukviPortalPasswordEncrypted) {
-    const err = new Error("No credentials have been generated for this application yet");
-    err.statusCode = 400;
-    throw err;
-  }
-
+  const tracking = await getOrCreateTracking(tenantDb, application.id);
   tracking.credentialsSentAt = new Date();
   await tracking.save();
 
@@ -215,28 +211,13 @@ export async function requestGovernmentCredentials(tenantDb, application, actorU
     action: LICENCE_AUDIT_ACTIONS.CREDENTIALS_REQUESTED,
     previousStatus: application.status,
     newStatus: application.status,
+    notes: "Caseworker prompted sponsor to submit UKVI portal credentials",
     req,
   });
 
-  // Decrypt password so the notification service can embed it in the credentials email.
-  let plainPassword = null;
-  try {
-    plainPassword = decryptCredentialPassword(tracking.ukviPortalPasswordEncrypted);
-  } catch (err) {
-    logger.warn({ err }, "requestGovernmentCredentials: password decryption failed — email will omit password");
-  }
-
   notify
-    .governmentCredentialsRequested({ tenantDb, application, ukviPortalUserId: tracking.ukviPortalUserId, ukviPortalPassword: plainPassword, req })
+    .governmentCredentialsRequested({ tenantDb, application, req })
     .catch((err) => logger.error({ err }, "requestGovernmentCredentials: notification failed"));
-
-  completeStageTask(tenantDb, {
-    applicationId: application.id,
-    stageKey: "government_portal_credentials",
-    role: "caseworker",
-    actorUser,
-    req,
-  }).catch((err) => logger.warn({ err }, "requestGovernmentCredentials: completeStageTask failed"));
 
   return { sent: true };
 }
@@ -263,6 +244,18 @@ export async function recordGovernmentSubmission(tenantDb, application, actorUse
   const tracking = await getOrCreateTracking(tenantDb, application.id);
   tracking.governmentSubmissionRef = submissionRef;
   tracking.governmentSubmissionDate = submissionDate;
+
+  // Compute 5 working-day deadline for Home Office document dispatch.
+  // "Working day" = Mon-Fri; skip weekends only (bank holidays not tracked).
+  const deadline = new Date(submissionDate);
+  let workingDaysAdded = 0;
+  while (workingDaysAdded < 5) {
+    deadline.setDate(deadline.getDate() + 1);
+    const dow = deadline.getDay(); // 0=Sun, 6=Sat
+    if (dow !== 0 && dow !== 6) workingDaysAdded++;
+  }
+  tracking.homeOfficeDocDeadline = deadline.toISOString().slice(0, 10);
+
   await tracking.save();
 
   await recordLicenceAudit({
@@ -369,6 +362,155 @@ export async function resendCredentials(tenantDb, application, actorUser, req) {
     .catch((err) => logger.error({ err }, "resendCredentials: notification failed"));
 
   return { sent: true };
+}
+
+// ─── Sponsor: submit UKVI portal credentials (flow v2) ───────────────────────
+// UKVI sends credentials to the sponsor's email. Sponsor enters them here and
+// submits them to the case team. Caseworker/admin then review and confirm.
+
+export async function submitUkviCredentials(tenantDb, application, actorUser, body, req) {
+  const actorId = actorUser?.userId ?? actorUser?.id ?? null;
+  const { ukviPortalUserId, ukviPortalPassword } = body;
+
+  const encryptedPassword = encryptCredentialPassword(ukviPortalPassword);
+
+  const tracking = await getOrCreateTracking(tenantDb, application.id);
+  tracking.ukviPortalUserId = ukviPortalUserId;
+  tracking.ukviPortalPasswordEncrypted = encryptedPassword;
+  tracking.ukviCredentialsSubmittedAt = new Date();
+  tracking.credentialsGeneratedAt = new Date(); // mark as "credentials on record"
+  await tracking.save();
+
+  const caseworkerIds = extractCaseworkerIds(application.assignedcaseworkerId);
+
+  await recordLicenceAudit({
+    tenantDb,
+    application,
+    actorId,
+    action: LICENCE_AUDIT_ACTIONS.CREDENTIALS_RECEIVED,
+    previousStatus: application.status,
+    newStatus: application.status,
+    notes: `Sponsor submitted UKVI portal credentials (user ID: ${ukviPortalUserId})`,
+    req,
+  });
+
+  notify
+    .credentialsGenerated({ tenantDb, application, caseworkerIds, req })
+    .catch((err) => logger.error({ err }, "submitUkviCredentials: notify caseworker failed"));
+
+  completeStageTask(tenantDb, {
+    applicationId: application.id,
+    stageKey: "government_portal_credentials",
+    role: "sponsor",
+    actorUser,
+    req,
+  }).catch((err) => logger.warn({ err }, "submitUkviCredentials: completeStageTask failed"));
+
+  const result = tracking.toJSON();
+  delete result.ukviPortalPasswordEncrypted;
+  return { tracking: result };
+}
+
+// ─── Caseworker: confirm Home Office document dispatch (flow v2) ──────────────
+// After UKVI submission, caseworker must dispatch physical supporting documents
+// to the Home Office within 5 working days. This records the dispatch.
+
+export async function confirmHomeOfficeDispatch(tenantDb, application, actorUser, body, req) {
+  const actorId = actorUser?.userId ?? actorUser?.id ?? null;
+  const { dispatchRef } = body;
+
+  const tracking = await getOrCreateTracking(tenantDb, application.id);
+  tracking.homeOfficeDocsSentAt = new Date();
+  if (dispatchRef) tracking.homeOfficeDocsRef = dispatchRef;
+  await tracking.save();
+
+  await recordLicenceAudit({
+    tenantDb,
+    application,
+    actorId,
+    action: "HOME_OFFICE_DOCS_DISPATCHED",
+    previousStatus: application.status,
+    newStatus: application.status,
+    notes: dispatchRef ? `Dispatch ref: ${dispatchRef}` : "Documents dispatched",
+    req,
+  });
+
+  notify
+    .governmentApplicationSubmitted({ tenantDb, application, submissionRef: dispatchRef || "N/A", req })
+    .catch((err) => logger.error({ err }, "confirmHomeOfficeDispatch: notification failed"));
+
+  completeStageTask(tenantDb, {
+    applicationId: application.id,
+    stageKey: "home_office_document_dispatch",
+    role: "caseworker",
+    actorUser,
+    req,
+  }).catch((err) => logger.warn({ err }, "confirmHomeOfficeDispatch: completeStageTask failed"));
+
+  return { dispatched: true, homeOfficeDocsSentAt: tracking.homeOfficeDocsSentAt, homeOfficeDocsRef: tracking.homeOfficeDocsRef };
+}
+
+// ─── Sponsor: confirm UKVI licence fee payment (flow v2) ─────────────────────
+// Sponsor pays the fee directly on the UKVI portal (not to the organisation).
+// They then confirm here so the case team is notified.
+
+export async function confirmUkviPayment(tenantDb, application, actorUser, req) {
+  const actorId = actorUser?.userId ?? actorUser?.id ?? null;
+
+  application.ukviPaymentConfirmedAt = new Date();
+  await application.save();
+
+  const caseworkerIds = extractCaseworkerIds(application.assignedcaseworkerId);
+
+  await recordLicenceAudit({
+    tenantDb,
+    application,
+    actorId,
+    action: "UKVI_PAYMENT_CONFIRMED",
+    previousStatus: application.status,
+    newStatus: application.status,
+    notes: "Sponsor confirmed payment made on UKVI portal",
+    req,
+  });
+
+  // Notify caseworkers + admin that the sponsor has confirmed UKVI payment.
+  resolveRoleRecipients(tenantDb, application)
+    .then(async (recipients) => {
+      const company = application.companyName || `#LIC-${application.id}`;
+      const msg = `${company} — the sponsor has confirmed payment of the UKVI licence fee on the UKVI portal. Please review and confirm on your end.`;
+      const targets = [
+        ...(recipients.admin ? [{ ...recipients.admin, url: "/admin/licence-applications" }] : []),
+        ...recipients.caseworkers.map((cw) => ({ ...cw, url: "/caseworker/licence-reviews" })),
+      ];
+      for (const t of targets) {
+        await notify.deliver({
+          tenantDb,
+          recipientUserId: t.userId,
+          type: "INFO",
+          priority: "HIGH",
+          category: "sponsorship",
+          title: "UKVI Licence Fee — Payment Confirmed by Sponsor",
+          message: msg,
+          entityType: "licence_application",
+          entityId: application.id,
+          actionType: "ukvi_payment_confirmed",
+          actionUrl: t.url,
+          req,
+          organisationId: application.organisationId ?? null,
+        });
+      }
+    })
+    .catch((err) => logger.error({ err }, "confirmUkviPayment: notification failed"));
+
+  completeStageTask(tenantDb, {
+    applicationId: application.id,
+    stageKey: "payment_confirmation",
+    role: "sponsor",
+    actorUser,
+    req,
+  }).catch((err) => logger.warn({ err }, "confirmUkviPayment: completeStageTask failed"));
+
+  return { confirmed: true, ukviPaymentConfirmedAt: application.ukviPaymentConfirmedAt };
 }
 
 // ─── Sponsor: confirm credentials received ────────────────────────────────────

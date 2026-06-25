@@ -80,17 +80,9 @@ export const LICENCE_STAGE_DEFINITIONS = [
       admin: "Counter-sign and approve the declarations.",
     },
   },
+  // ── Intake: dedicated information & document collection (orders 8-9) ───────
   {
-    key: "payment", order: 8, title: "Payment", govSection: "Section 7",
-    tasks: {
-      sponsor: "Pay the licence fee based on the sponsor size.",
-      caseworker: "Verify the payment has cleared before submission.",
-      admin: "Record the payment and issue a receipt.",
-    },
-  },
-  // ── Intake: dedicated information & document collection (orders 9-10) ──────
-  {
-    key: "intake_information_form", order: 9, title: "Sponsor Information Form", govSection: "Intake",
+    key: "intake_information_form", order: 8, title: "Sponsor Information Form", govSection: "Intake",
     tasks: {
       sponsor: "Complete the 12-field Sponsor Information Form: trading name, premises address, named person on licence, NI number, employee counts, CoS required, and more.",
       caseworker: "Review the completed information form for accuracy and completeness before progressing to document verification.",
@@ -98,16 +90,16 @@ export const LICENCE_STAGE_DEFINITIONS = [
     },
   },
   {
-    key: "intake_document_checklist", order: 10, title: "Document Collection & Verification", govSection: "Intake",
+    key: "intake_document_checklist", order: 9, title: "Document Collection & Verification", govSection: "Intake",
     tasks: {
       sponsor: "Upload all mandatory documents (Employer's Liability Insurance, Certificate of Incorporation, PAYE registration, bank statements, premises evidence, and identity documents). Toggle additional document requirements if applicable (food/alcohol/care business, TUPE, candidate).",
       caseworker: "Verify each uploaded document meets the Home Office requirements. Reject or request further information where needed. All mandatory documents must reach 'Verified' status before Government Registration can proceed.",
       admin: "Confirm all mandatory documents have been verified and the intake stage is complete.",
     },
   },
-  // ── Phase 2: Government processing pipeline stages (orders 11-16) ─────────
+  // ── Phase 2: Government processing pipeline stages (orders 10-19) ─────────
   {
-    key: "sponsor_information_provision", order: 11, title: "Sponsor Information Provision", govSection: "Government Prep",
+    key: "sponsor_information_provision", order: 10, title: "Sponsor Information Provision", govSection: "Government Prep",
     tasks: {
       sponsor: "Confirm all organisational details, personnel, and documents are accurate and up-to-date before portal submission.",
       caseworker: "Validate completeness of the sponsor's information pack and confirm readiness for government portal entry.",
@@ -115,7 +107,7 @@ export const LICENCE_STAGE_DEFINITIONS = [
     },
   },
   {
-    key: "government_sms_registration", order: 12, title: "Government SMS Registration", govSection: "Government Prep",
+    key: "government_sms_registration", order: 11, title: "Government SMS Registration", govSection: "Government Prep",
     tasks: {
       sponsor: "Await confirmation that your organisation has been registered on the UKVI Sponsorship Management System (SMS).",
       caseworker: "Register the sponsor organisation on the SMS portal and obtain the SMS portal username and registration reference.",
@@ -123,7 +115,7 @@ export const LICENCE_STAGE_DEFINITIONS = [
     },
   },
   {
-    key: "sponsor_portal_onboarding", order: 13, title: "Sponsor Portal Onboarding", govSection: "Government Prep",
+    key: "sponsor_portal_onboarding", order: 12, title: "Sponsor Portal Onboarding", govSection: "Government Prep",
     tasks: {
       sponsor: "Log in to the UKVI Sponsor Management System using the credentials provided and confirm access.",
       caseworker: "Guide the sponsor through the SMS portal login and confirm the sponsor can access their account.",
@@ -131,15 +123,16 @@ export const LICENCE_STAGE_DEFINITIONS = [
     },
   },
   {
-    key: "government_portal_credentials", order: 14, title: "Government Portal Credentials", govSection: "Government Application",
+    // UKVI sends credentials to sponsor's email. Sponsor submits them here → caseworker/admin review.
+    key: "government_portal_credentials", order: 13, title: "Government Portal Credentials", govSection: "Government Application",
     tasks: {
-      sponsor: "Receive and confirm receipt of the UKVI online application portal credentials.",
-      caseworker: "Generate the UKVI online application portal user ID and password; share securely with the sponsor.",
-      admin: "Confirm credentials have been generated and securely transmitted.",
+      sponsor: "UKVI will send your portal credentials directly to your registered email. Once received, log in to this portal and submit your username and password to share them securely with your case team.",
+      caseworker: "Review the UKVI portal credentials submitted by the sponsor. Confirm they are correct and record them for completing the UKVI application forms.",
+      admin: "Confirm that the UKVI portal credentials have been received from the sponsor and are securely recorded in the system.",
     },
   },
   {
-    key: "government_application_forms", order: 15, title: "Government Application Forms", govSection: "Government Application",
+    key: "government_application_forms", order: 14, title: "Government Application Forms", govSection: "Government Application",
     tasks: {
       sponsor: "Log in to the UKVI portal and complete the online sponsor licence application forms.",
       caseworker: "Review and verify all form entries with the sponsor; ensure declarations and supporting data are correctly entered.",
@@ -147,28 +140,45 @@ export const LICENCE_STAGE_DEFINITIONS = [
     },
   },
   {
-    key: "government_submission", order: 16, title: "Government Submission", govSection: "Government Application",
+    key: "government_submission", order: 15, title: "Government Submission", govSection: "Government Application",
     tasks: {
       sponsor: "Confirm submission of the online application to UKVI and note the government submission reference number.",
-      caseworker: "Submit the completed online application form to UKVI and record the submission reference and date.",
-      admin: "Record the government submission reference, date, and fee payment confirmation.",
-    },
-  },
-  // ── Post-submission outcome stages (orders 17-18) ─────────────────────────
-  {
-    key: "submission", order: 17, title: "Submission", govSection: "Section 8",
-    tasks: {
-      sponsor: "Acknowledge that the application has been submitted.",
-      caseworker: "Generate the submission sheet and submit to UKVI.",
-      admin: "Carry out a final review and authorise submission.",
+      caseworker: "Submit the completed online application form to UKVI, record the submission reference and date. A 5 working-day deadline begins now for dispatching physical supporting documents to the Home Office.",
+      admin: "Record the government submission reference and date.",
     },
   },
   {
-    key: "decision_activation", order: 18, title: "UKVI Decision & Activation", govSection: "Outcome",
+    // Caseworker must dispatch physical supporting documents to the Home Office within 5 working days of UKVI submission.
+    key: "home_office_document_dispatch", order: 16, title: "Home Office Document Dispatch", govSection: "Post-Submission",
     tasks: {
-      sponsor: "Receive the licence and begin assigning Certificates of Sponsorship.",
-      caseworker: "Coordinate any UKVI requests for further information.",
-      admin: "Record the decision and activate the licence (SLN, issue/expiry dates).",
+      caseworker: "Dispatch the supporting documents package to the Home Office within 5 working days of UKVI submission. Record the dispatch date and any tracking/postal reference.",
+      admin: "Confirm that the Home Office document package has been dispatched on time and record the dispatch reference.",
+      sponsor: "Your case team will dispatch the required supporting documents to the Home Office on your behalf. You will be notified once this is complete.",
+    },
+  },
+  {
+    // Sponsor pays UKVI licence fee directly on the UKVI portal (not to the organisation).
+    key: "payment_confirmation", order: 17, title: "UKVI Licence Fee Payment", govSection: "Post-Submission",
+    tasks: {
+      sponsor: "Pay the sponsor licence fee directly on the UKVI portal. Once payment is confirmed, mark this task as complete below.",
+      caseworker: "Confirm that the sponsor has paid the licence fee on the UKVI portal. Check the UKVI portal or obtain written confirmation from the sponsor.",
+      admin: "Record the UKVI payment confirmation and update the application accordingly.",
+    },
+  },
+  {
+    key: "submission", order: 18, title: "Submission", govSection: "Section 8",
+    tasks: {
+      sponsor: "Acknowledge that the application has been fully submitted.",
+      caseworker: "Generate the submission sheet and confirm all post-submission steps are complete.",
+      admin: "Carry out a final review and authorise the completed submission.",
+    },
+  },
+  {
+    key: "decision_activation", order: 19, title: "UKVI Decision & Activation", govSection: "Outcome",
+    tasks: {
+      sponsor: "UKVI will communicate their decision directly to you. If approved, your licence will be activated and you can begin assigning Certificates of Sponsorship. If rejected, a 6-month waiting period applies before you can reapply on UKVI.",
+      caseworker: "Coordinate any UKVI requests for further information during the decision period.",
+      admin: "Record the UKVI decision and activate the licence (SLN, issue/expiry dates), or record the rejection and set the 6-month reapplication cooldown.",
     },
   },
 ];
@@ -187,24 +197,25 @@ const STAGE_BY_KEY = Object.fromEntries(LICENCE_STAGE_DEFINITIONS.map((s) => [s.
  * pipeline and are enforced by dedicated middleware and services.
  */
 export const STAGE_PHASE_MAP = {
-  enquiry_onboarding:            2,
-  licence_routes:                2,
-  organisation_details:          2,
-  cos_requirements:              2,
-  supporting_documents:          2,
-  key_personnel:                 2,
-  declarations:                  2,
-  payment:                       2,
-  intake_information_form:       2,
-  intake_document_checklist:     2,
-  sponsor_information_provision: 3,
-  government_sms_registration:   3,
-  sponsor_portal_onboarding:     3,
-  government_portal_credentials: 3,
-  government_application_forms:  3,
-  government_submission:         3,
-  submission:                    3,
-  decision_activation:           3,
+  enquiry_onboarding:              2,
+  licence_routes:                  2,
+  organisation_details:            2,
+  cos_requirements:                2,
+  supporting_documents:            2,
+  key_personnel:                   2,
+  declarations:                    2,
+  intake_information_form:         2,
+  intake_document_checklist:       2,
+  sponsor_information_provision:   3,
+  government_sms_registration:     3,
+  sponsor_portal_onboarding:       3,
+  government_portal_credentials:   3,
+  government_application_forms:    3,
+  government_submission:           3,
+  home_office_document_dispatch:   3,
+  payment_confirmation:            3,
+  submission:                      3,
+  decision_activation:             3,
 };
 
 /**
@@ -213,24 +224,25 @@ export const STAGE_PHASE_MAP = {
  * dueDate = seedTime + SLA_DAYS stored on the task row.
  */
 export const STAGE_SLA_DAYS = {
-  enquiry_onboarding:            3,
-  licence_routes:                5,
-  organisation_details:          5,
-  cos_requirements:              5,
-  supporting_documents:          7,
-  key_personnel:                 5,
-  declarations:                  3,
-  payment:                       5,
-  intake_information_form:       5,
-  intake_document_checklist:     7,
-  sponsor_information_provision: 5,
-  government_sms_registration:   7,
-  sponsor_portal_onboarding:     3,
-  government_portal_credentials: 5,
-  government_application_forms:  7,
-  government_submission:         3,
-  submission:                    5,
-  decision_activation:           60,
+  enquiry_onboarding:              3,
+  licence_routes:                  5,
+  organisation_details:            5,
+  cos_requirements:                5,
+  supporting_documents:            7,
+  key_personnel:                   5,
+  declarations:                    3,
+  intake_information_form:         5,
+  intake_document_checklist:       7,
+  sponsor_information_provision:   5,
+  government_sms_registration:     7,
+  sponsor_portal_onboarding:       3,
+  government_portal_credentials:   5,
+  government_application_forms:    7,
+  government_submission:           3,
+  home_office_document_dispatch:   5, // 5 working-day Home Office dispatch deadline
+  payment_confirmation:            7, // sponsor has 7 days to confirm UKVI payment
+  submission:                      5,
+  decision_activation:             60,
 };
 
 /**
@@ -256,14 +268,17 @@ export function computeSlaStatus(dueDate) {
  * are listed explicitly with reversed ordering.
  */
 const STAGE_ROLE_ORDER = {
-  // Data-entry stages (1–10) use the default order: sponsor → caseworker → admin.
-  // Government-pipeline stages: caseworker operates the portal first, then
-  // sponsor confirms receipt/submission, then admin records the outcome.
-  government_sms_registration:   ["caseworker", "sponsor", "admin"],
-  sponsor_portal_onboarding:     ["caseworker", "sponsor", "admin"],
-  government_portal_credentials: ["caseworker", "sponsor", "admin"],
-  government_application_forms:  ["caseworker", "sponsor", "admin"],
-  government_submission:         ["caseworker", "sponsor", "admin"],
+  // Data-entry stages use the default order: sponsor → caseworker → admin.
+  // Government-pipeline stages where caseworker drives portal work first.
+  government_sms_registration:      ["caseworker", "sponsor", "admin"],
+  sponsor_portal_onboarding:        ["caseworker", "sponsor", "admin"],
+  // CHANGED (flow v2): UKVI sends credentials to sponsor's email.
+  // Sponsor submits them here first; caseworker then reviews; admin confirms.
+  government_portal_credentials:    ["sponsor", "caseworker", "admin"],
+  government_application_forms:     ["caseworker", "sponsor", "admin"],
+  government_submission:            ["caseworker", "sponsor", "admin"],
+  // Home Office document dispatch: caseworker dispatches first, admin confirms, sponsor acknowledges.
+  home_office_document_dispatch:    ["caseworker", "admin", "sponsor"],
 };
 
 const DEFAULT_ROLE_ORDER = ["sponsor", "caseworker", "admin"];
@@ -282,14 +297,16 @@ export function stageRoleOrder(stageKey) {
  * Stages without an entry here have no application-status prerequisite.
  */
 export const STAGE_STATUS_GATE = {
-  sponsor_information_provision: new Set(["Under Review", "Information Requested", "Government Processing", "Decision Pending"]),
-  government_sms_registration:   new Set(["Government Processing", "Decision Pending"]),
-  sponsor_portal_onboarding:     new Set(["Government Processing", "Decision Pending"]),
-  government_portal_credentials: new Set(["Government Processing", "Decision Pending"]),
-  government_application_forms:  new Set(["Government Processing", "Decision Pending"]),
-  government_submission:         new Set(["Government Processing", "Decision Pending"]),
-  submission:                    new Set(["Government Processing", "Decision Pending"]),
-  decision_activation:           new Set(["Government Processing", "Decision Pending"]),
+  sponsor_information_provision:  new Set(["Under Review", "Information Requested", "Government Processing", "Decision Pending"]),
+  government_sms_registration:    new Set(["Government Processing", "Decision Pending"]),
+  sponsor_portal_onboarding:      new Set(["Government Processing", "Decision Pending"]),
+  government_portal_credentials:  new Set(["Government Processing", "Decision Pending"]),
+  government_application_forms:   new Set(["Government Processing", "Decision Pending"]),
+  government_submission:          new Set(["Government Processing", "Decision Pending"]),
+  home_office_document_dispatch:  new Set(["Government Processing", "Decision Pending"]),
+  payment_confirmation:           new Set(["Decision Pending", "Government Processing"]),
+  submission:                     new Set(["Government Processing", "Decision Pending"]),
+  decision_activation:            new Set(["Government Processing", "Decision Pending"]),
 };
 
 // ─── Stage-level sequential validators ───────────────────────────────────────
@@ -494,24 +511,26 @@ function deriveStageCompletion(app) {
   const infoProvided = submitted && !["Draft", "Pending"].includes(status);
 
   const signal = {
-    enquiry_onboarding:             true,
-    licence_routes:                 (app.routes || []).length > 0,
-    organisation_details:           !!(app.organisationInfo && (app.organisationInfo.companiesHouseNumber || app.organisationInfo.organisationType)),
-    cos_requirements:               (app.cosRequirements || []).length > 0,
-    supporting_documents:           docsComplete,
-    key_personnel:                  !!app.authorisingOfficer,
-    declarations:                   !!(app.declaration && app.declaration.accuracyConfirmed),
-    payment:                        submitted || app.fee?.total != null,
-    intake_information_form:        infoProvided,
-    intake_document_checklist:      govActive,
-    sponsor_information_provision:  infoProvided,
-    government_sms_registration:    govActive,
-    sponsor_portal_onboarding:      govActive,
-    government_portal_credentials:  govActive,
-    government_application_forms:   decisionActive,
-    government_submission:          decisionActive,
-    submission:                     submitted,
-    decision_activation:            status === "Approved" || isGranted,
+    enquiry_onboarding:              true,
+    licence_routes:                  (app.routes || []).length > 0,
+    organisation_details:            !!(app.organisationInfo && (app.organisationInfo.companiesHouseNumber || app.organisationInfo.organisationType)),
+    cos_requirements:                (app.cosRequirements || []).length > 0,
+    supporting_documents:            docsComplete,
+    key_personnel:                   !!app.authorisingOfficer,
+    declarations:                    !!(app.declaration && app.declaration.accuracyConfirmed),
+    intake_information_form:         infoProvided,
+    intake_document_checklist:       govActive,
+    sponsor_information_provision:   infoProvided,
+    government_sms_registration:     govActive,
+    sponsor_portal_onboarding:       govActive,
+    government_portal_credentials:   govActive,
+    government_application_forms:    decisionActive,
+    government_submission:           decisionActive,
+    // These two are completed manually (no data-signal auto-complete):
+    home_office_document_dispatch:   false,
+    payment_confirmation:            false,
+    submission:                      submitted,
+    decision_activation:             status === "Approved" || isGranted,
   };
 
   if (status === "Approved" || isGranted) {
@@ -647,7 +666,7 @@ async function seedSingleTask(tenantDb, application, stage, role, ctx) {
   if (!taskText) return null;
 
   const assignee = pickAssignee(role, recipients);
-  const autoComplete = roleAutoCompletes(role, completed.has(stage.key), application.status);
+  const autoComplete = roleAutoCompletes(role, completed.has(stage.key), application.status, stage.key);
 
   const slaDays = STAGE_SLA_DAYS[stage.key] ?? null;
   const seedDueDate = slaDays && !autoComplete ? new Date(Date.now() + slaDays * 86_400_000) : null;
@@ -858,7 +877,7 @@ export async function ensureStageTasks(tenantDb, applicationOrId, { req = null, 
     const incompleteTasks = existingRows.filter(
       (r) => r.stageKey === stageKey &&
              r.status !== "completed" &&
-             roleAutoCompletes(r.role, true, application.status)
+             roleAutoCompletes(r.role, true, application.status, r.stageKey)
     );
     if (incompleteTasks.length > 0) {
       await tenantDb.LicenceStageTask.update(
@@ -912,7 +931,13 @@ export async function ensureStageTasks(tenantDb, applicationOrId, { req = null, 
 
       const tracking = await tenantDb.LicenceGovernmentTracking.findOne({
         where: { licenceApplicationId: application.id },
-        attributes: ["smsRegistrationRef", "credentialsGeneratedAt", "credentialsSentAt", "ukviCredentialsSubmittedAt"],
+        attributes: [
+          "smsRegistrationRef",
+          "credentialsGeneratedAt",
+          "credentialsSentAt",
+          "ukviCredentialsSubmittedAt",
+          "homeOfficeDocsSentAt",
+        ],
       });
 
       // Build a list of (stageKey, role) pairs that should be force-completed.
@@ -938,48 +963,56 @@ export async function ensureStageTasks(tenantDb, applicationOrId, { req = null, 
         if (isPending("government_sms_registration", "admin"))        toForce.push("government_sms_registration:admin");
       }
 
-      // stage 13 — sponsor_portal_onboarding
+      // stage 12 — sponsor_portal_onboarding
+      if (tracking?.ukviCredentialsSubmittedAt || tracking?.credentialsSentAt) {
+        if (isPending("sponsor_portal_onboarding", "caseworker"))     toForce.push("sponsor_portal_onboarding:caseworker");
+        if (isPending("sponsor_portal_onboarding", "admin"))          toForce.push("sponsor_portal_onboarding:admin");
+      }
       if (tracking?.ukviCredentialsSubmittedAt) {
         if (isPending("sponsor_portal_onboarding", "sponsor"))        toForce.push("sponsor_portal_onboarding:sponsor");
-        if (isPending("sponsor_portal_onboarding", "caseworker"))     toForce.push("sponsor_portal_onboarding:caseworker");
-        if (isPending("sponsor_portal_onboarding", "admin"))          toForce.push("sponsor_portal_onboarding:admin");
-      } else if (tracking?.credentialsSentAt) {
-        // Credentials sent but sponsor hasn't confirmed yet — caseworker/admin work is done.
-        if (isPending("sponsor_portal_onboarding", "caseworker"))     toForce.push("sponsor_portal_onboarding:caseworker");
-        if (isPending("sponsor_portal_onboarding", "admin"))          toForce.push("sponsor_portal_onboarding:admin");
       }
 
-      // stage 14 — government_portal_credentials
-      if (tracking?.credentialsGeneratedAt) {
-        if (isPending("government_portal_credentials", "admin"))      toForce.push("government_portal_credentials:admin");
-      }
-      if (tracking?.credentialsSentAt) {
-        if (isPending("government_portal_credentials", "caseworker")) toForce.push("government_portal_credentials:caseworker");
-      }
+      // stage 13 — government_portal_credentials (flow v2: sponsor submits first)
       if (tracking?.ukviCredentialsSubmittedAt) {
         if (isPending("government_portal_credentials", "sponsor"))    toForce.push("government_portal_credentials:sponsor");
       }
+      if (tracking?.credentialsGeneratedAt || tracking?.ukviCredentialsSubmittedAt) {
+        if (isPending("government_portal_credentials", "caseworker")) toForce.push("government_portal_credentials:caseworker");
+        if (isPending("government_portal_credentials", "admin"))      toForce.push("government_portal_credentials:admin");
+      }
 
-      // stages 15-17 — once the application reaches Decision Pending, all three
+      // stages 14-15 + 18 — once the application reaches Decision Pending, these
       // government-application and submission stage tasks are implicitly done.
-      // completeStageTask() calls in these stages often silently fail due to
-      // sequential-order violations that were resolved later; this repair catches them.
       const decisionStatuses = ["Decision Pending", "Approved"];
       if (decisionStatuses.includes(appStatus)) {
-        // stage 15 — government_application_forms
+        // stage 14 — government_application_forms
         if (isPending("government_application_forms", "sponsor"))    toForce.push("government_application_forms:sponsor");
         if (isPending("government_application_forms", "caseworker")) toForce.push("government_application_forms:caseworker");
         if (isPending("government_application_forms", "admin"))      toForce.push("government_application_forms:admin");
 
-        // stage 16 — government_submission
+        // stage 15 — government_submission
         if (isPending("government_submission", "sponsor"))    toForce.push("government_submission:sponsor");
         if (isPending("government_submission", "caseworker")) toForce.push("government_submission:caseworker");
         if (isPending("government_submission", "admin"))      toForce.push("government_submission:admin");
 
-        // stage 17 — submission (final submission acknowledgement)
+        // stage 18 — submission (final submission acknowledgement)
         if (isPending("submission", "sponsor"))    toForce.push("submission:sponsor");
         if (isPending("submission", "caseworker")) toForce.push("submission:caseworker");
         if (isPending("submission", "admin"))      toForce.push("submission:admin");
+      }
+
+      // stage 16 — home_office_document_dispatch: repair when docs already sent
+      if (tracking?.homeOfficeDocsSentAt) {
+        if (isPending("home_office_document_dispatch", "caseworker")) toForce.push("home_office_document_dispatch:caseworker");
+        if (isPending("home_office_document_dispatch", "admin"))      toForce.push("home_office_document_dispatch:admin");
+        if (isPending("home_office_document_dispatch", "sponsor"))    toForce.push("home_office_document_dispatch:sponsor");
+      }
+
+      // stage 17 — payment_confirmation: repair when sponsor already confirmed
+      if (application.ukviPaymentConfirmedAt) {
+        if (isPending("payment_confirmation", "sponsor"))    toForce.push("payment_confirmation:sponsor");
+        if (isPending("payment_confirmation", "caseworker")) toForce.push("payment_confirmation:caseworker");
+        if (isPending("payment_confirmation", "admin"))      toForce.push("payment_confirmation:admin");
       }
 
       if (toForce.length > 0) {
@@ -1050,11 +1083,17 @@ export async function ensureStageTasks(tenantDb, applicationOrId, { req = null, 
  * admin tasks remain actionable until explicitly completed. Once the licence is
  * Approved, every task is genuinely done.
  */
-function roleAutoCompletes(role, dataComplete, appStatus) {
+// Stages where the sponsor must take an active manual action.
+// Auto-completing these would bypass the required sponsor confirmation step.
+const SPONSOR_MANUAL_STAGES = new Set(["payment_confirmation"]);
+
+function roleAutoCompletes(role, dataComplete, appStatus, stageKey) {
   if (appStatus === "Approved" || appStatus === "Licence Granted") return true;
-  // Only sponsor/candidate tasks auto-complete from data signals.
-  // Caseworker and admin review tasks must always be completed by a human, even
-  // when the underlying data signal is satisfied — they represent mandatory QA steps.
+  // Sponsor/candidate tasks for stages requiring manual sponsor action must NOT
+  // auto-complete — the sponsor must click a button to confirm.
+  if ((role === "sponsor" || role === "candidate") && SPONSOR_MANUAL_STAGES.has(stageKey)) return false;
+  // Other sponsor/candidate tasks auto-complete from data signals.
+  // Caseworker and admin review tasks must always be completed by a human.
   return role === "sponsor" || role === "candidate";
 }
 
@@ -1080,7 +1119,7 @@ export async function getStagesForApplication(tenantDb, applicationOrId, { req =
   await ensureStageTasks(tenantDb, application, { req });
 
   const appShape = await buildAppShape(tenantDb, application);
-  const { completed, currentKey } = deriveStageCompletion(appShape);
+  const { completed } = deriveStageCompletion(appShape);
   const rejected = application.status === "Rejected" || application.status === "Licence Rejected";
 
   const rows = await tenantDb.LicenceStageTask.findAll({
@@ -1092,6 +1131,24 @@ export async function getStagesForApplication(tenantDb, applicationOrId, { req =
   for (const r of rows) {
     if (!byStage.has(r.stageKey)) byStage.set(r.stageKey, []);
     byStage.get(r.stageKey).push(r);
+  }
+
+  // Supplement the data-signal completed set with DB task-row state for stages
+  // that have no data signal (manual-completion only). This allows the timeline
+  // to advance past stages 16 and 17 once all task rows are actually completed,
+  // without relying on a data signal that never fires for these stages.
+  const MANUAL_STAGE_KEYS = ["home_office_document_dispatch", "payment_confirmation"];
+  for (const sk of MANUAL_STAGE_KEYS) {
+    if (completed.has(sk)) continue;
+    const stageRows = byStage.get(sk) || [];
+    if (stageRows.length > 0 && stageRows.every((r) => r.status === "completed")) {
+      completed.add(sk);
+    }
+  }
+  // Recalculate currentKey now that completed may have grown (contiguous from start).
+  let currentKey = null;
+  for (const s of LICENCE_STAGE_DEFINITIONS) {
+    if (!completed.has(s.key)) { currentKey = s.key; break; }
   }
 
   const stages = LICENCE_STAGE_DEFINITIONS.map((def) => {

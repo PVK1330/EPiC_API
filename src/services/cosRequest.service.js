@@ -301,6 +301,7 @@ export async function reviewCosRequest({ tenantDb, id, action, approvedAmount, r
   // ── Outer transaction (ISSUE-004) ────────────────────────────────────────
   const t = await tenantDb.sequelize.transaction();
   let request, previousStatus;
+  let txCommitted = false;
 
   try {
     // Lock the CosRequest row FOR UPDATE — concurrent callers queue here.
@@ -310,6 +311,7 @@ export async function reviewCosRequest({ tenantDb, id, action, approvedAmount, r
     });
     if (!request) {
       await t.rollback();
+      txCommitted = true; // rolled back — don't rollback again in catch
       throw httpError("CoS request not found", 404);
     }
 
@@ -319,6 +321,7 @@ export async function reviewCosRequest({ tenantDb, id, action, approvedAmount, r
     const reviewCheck = validateTransition(WORKFLOW_TYPES.COS, request.status, newStatus);
     if (!reviewCheck.valid) {
       await t.rollback();
+      txCommitted = true;
       throw httpError(reviewCheck.message, 409, "INVALID_TRANSITION");
     }
 
@@ -329,27 +332,34 @@ export async function reviewCosRequest({ tenantDb, id, action, approvedAmount, r
 
     if (action === "approve") {
       const finalAmount = approvedAmount != null ? toInt(approvedAmount, request.requestedAmount) : request.requestedAmount;
+      // BUG-01 fix: validate before any DB writes so the throw goes into catch
+      // while the transaction is still open and gets rolled back.
       if (finalAmount > request.requestedAmount) {
-        const e = new Error("Approved amount cannot exceed requested amount");
-        e.statusCode = 400;
-        throw e;
+        throw httpError("Approved amount cannot exceed requested amount", 400);
       }
       request.approvedAmount = finalAmount;
 
       await request.save({ transaction: t });
 
       // Lock SponsorProfile to prevent concurrent CoS requests double-crediting.
+      // BUG-02 fix: throw when no SponsorProfile exists — do not silently skip
+      // the quota debit while still creating an allocation record.
       const profile = await tenantDb.SponsorProfile.findOne({
         where: { userId: request.sponsorId },
         transaction: t,
         lock: t.LOCK.UPDATE,
       });
-      if (profile) {
-        profile.cosAllocation = toInt(profile.cosAllocation) + toInt(request.approvedAmount);
-        await profile.save({ transaction: t });
-        request.status = COS_STATUS.ALLOCATED;
-        await request.save({ transaction: t });
+      if (!profile) {
+        throw httpError(
+          "Sponsor profile not found — cannot approve CoS request without an active sponsor profile.",
+          422
+        );
       }
+
+      profile.cosAllocation = toInt(profile.cosAllocation) + toInt(request.approvedAmount);
+      await profile.save({ transaction: t });
+      request.status = COS_STATUS.ALLOCATED;
+      await request.save({ transaction: t });
 
       // CosAllocationRecord has UNIQUE(cosRequestId) — a second concurrent
       // approval attempt throws UniqueConstraintError, caught below → 409.
@@ -364,7 +374,7 @@ export async function reviewCosRequest({ tenantDb, id, action, approvedAmount, r
           allocatedAmount: toInt(request.approvedAmount),
           allocatedById: reviewerId ?? null,
           allocatedAt,
-          expiryDate: profile?.licenceExpiryDate ?? null,
+          expiryDate: profile.licenceExpiryDate ?? null,
           notes: reviewNotes ?? null,
           status: "Active",
         },
@@ -375,10 +385,17 @@ export async function reviewCosRequest({ tenantDb, id, action, approvedAmount, r
     }
 
     await t.commit();
+    txCommitted = true;
   } catch (err) {
-    // Only roll back if the transaction is still open (the 404/422 paths
-    // above already call rollback before re-throwing).
-    if (!err.statusCode) await t.rollback();
+    // BUG-01 fix: always roll back if the transaction has not already been
+    // committed or explicitly rolled back above.
+    if (!txCommitted) {
+      try {
+        await t.rollback();
+      } catch (rErr) {
+        logger.error({ err: rErr }, "reviewCosRequest: rollback failed");
+      }
+    }
 
     if (err instanceof UniqueConstraintError) {
       const conflict = httpError(
@@ -389,7 +406,7 @@ export async function reviewCosRequest({ tenantDb, id, action, approvedAmount, r
       throw conflict;
     }
 
-    if (!err.statusCode) {
+    if (!err.statusCode || err.statusCode >= 500) {
       logger.error({ err, cosRequestId: id }, "reviewCosRequest: transaction failed");
     }
     throw err;

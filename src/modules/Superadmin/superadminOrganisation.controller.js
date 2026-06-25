@@ -1,5 +1,6 @@
 import { Op } from "sequelize";
 import bcrypt from "bcryptjs";
+import { randomBytes } from "crypto";
 import platformDb from "../../models/index.js";
 import { createImpersonationTicket } from "../../services/impersonationTicket.service.js";
 import {
@@ -54,42 +55,49 @@ async function resolveRegistrationConflicts({ email, country_code, mobile }) {
   const emailUser = await User.findOne({
     where: { email: emailNorm },
     include: [orgInclude],
+    paranoid: false,
   });
   if (emailUser) {
     const org = emailUser.organisation;
+    const deleted = Boolean(emailUser.deletedAt ?? emailUser.deleted_at);
     const stale =
-      emailUser.organisation_id != null && (!org || isOrganisationDeleted(org));
+      deleted || (emailUser.organisation_id != null && (!org || isOrganisationDeleted(org)));
     if (!stale && (!emailUser.organisation_id || (org && !isOrganisationDeleted(org)))) {
       return {
         field: "email",
         message: `Email ${emailNorm} is already registered. Use a different email address.`,
       };
     }
-    if (stale) await emailUser.destroy();
+    if (stale) await emailUser.destroy({ force: true });
   }
 
+  // idx_users_mobile_unique has no WHERE deleted_at IS NULL, so soft-deleted rows still
+  // occupy the index slot. Must use paranoid: false here to catch and hard-delete them
+  // before attempting the insert, otherwise the DB throws a SequelizeUniqueConstraintError.
   const mobileUser = await User.findOne({
     where: { country_code: countryCodeNorm, mobile: mobileNorm },
     include: [orgInclude],
+    paranoid: false,
   });
   if (mobileUser) {
     const org = mobileUser.organisation;
+    const deleted = Boolean(mobileUser.deletedAt ?? mobileUser.deleted_at);
     const stale =
-      mobileUser.organisation_id != null && (!org || isOrganisationDeleted(org));
+      deleted || (mobileUser.organisation_id != null && (!org || isOrganisationDeleted(org)));
     if (!stale && (!mobileUser.organisation_id || (org && !isOrganisationDeleted(org)))) {
       return {
         field: "mobile",
         message: `Mobile number ${countryCodeNorm} ${mobileNorm} is already registered. Use a different mobile number.`,
       };
     }
-    if (stale) await mobileUser.destroy();
+    if (stale) await mobileUser.destroy({ force: true });
   }
 
   return null;
 }
 
 async function removeOrganisationUsers(orgId) {
-  await User.destroy({ where: { organisation_id: orgId } });
+  await User.destroy({ where: { organisation_id: orgId }, force: true });
 }
 
 export const listOrganisations = async (req, res) => {
@@ -190,6 +198,14 @@ export const createOrganisation = async (req, res) => {
       databaseName = provisionMeta.databaseName;
     }
 
+    // Read platform trial settings (default: trial enabled, 14 days)
+    const [trialEnabledRow, trialDaysRow] = await Promise.all([
+      platformDb.PlatformSetting.findOne({ where: { key: "free_trial_enabled" } }),
+      platformDb.PlatformSetting.findOne({ where: { key: "free_trial_days" } }),
+    ]);
+    const freeTrialEnabled = trialEnabledRow ? trialEnabledRow.value !== "false" : true;
+    const freeTrialDays = trialDaysRow ? (parseInt(trialDaysRow.value, 10) || 14) : 14;
+
     let org;
     try {
       org = await Organisation.create({
@@ -197,25 +213,36 @@ export const createOrganisation = async (req, res) => {
         slug: finalSlug,
         plan: plan || "starter",
         plan_id: plan_id ? parseInt(plan_id, 10) : null,
-        status: status || "trial",
+        status: freeTrialEnabled ? (status || "trial") : "suspended",
         primaryEmail: String(primaryEmail).trim().toLowerCase(),
         country: country || null,
         database_name: databaseName,
       });
 
-      // Automatically provision a default subscription record for the new tenant
+      // Provision subscription: trial if enabled, otherwise mark as expired
+      // so the admin is directed to pay on first login.
       const now = new Date();
-      const trialEndsAt = new Date(now);
-      trialEndsAt.setDate(trialEndsAt.getDate() + 14);
-
-      await platformDb.Subscription.create({
-        organisation_id: org.id,
-        plan_id: org.plan_id || null,
-        status: org.status || "trial",
-        current_period_start: now,
-        current_period_end: trialEndsAt,
-        trial_ends_at: trialEndsAt,
-      });
+      if (freeTrialEnabled) {
+        const trialEndsAt = new Date(now);
+        trialEndsAt.setDate(trialEndsAt.getDate() + freeTrialDays);
+        await platformDb.Subscription.create({
+          organisation_id: org.id,
+          plan_id: org.plan_id || null,
+          status: "trial",
+          current_period_start: now,
+          current_period_end: trialEndsAt,
+          trial_ends_at: trialEndsAt,
+        });
+      } else {
+        await platformDb.Subscription.create({
+          organisation_id: org.id,
+          plan_id: org.plan_id || null,
+          status: "expired",
+          current_period_start: now,
+          current_period_end: now,
+          trial_ends_at: null,
+        });
+      }
     } catch (err) {
       if (physicalEnabled && databaseName) {
         try {
@@ -342,11 +369,19 @@ export const createOrganisationWithAdmin = async (req, res) => {
       databaseName = provisionMeta.databaseName;
     }
 
+    // Read platform trial settings (default: trial enabled, 14 days)
+    const [trialEnabledRow, trialDaysRow] = await Promise.all([
+      platformDb.PlatformSetting.findOne({ where: { key: "free_trial_enabled" } }),
+      platformDb.PlatformSetting.findOne({ where: { key: "free_trial_days" } }),
+    ]);
+    const freeTrialEnabled = trialEnabledRow ? trialEnabledRow.value !== "false" : true;
+    const freeTrialDays = trialDaysRow ? (parseInt(trialDaysRow.value, 10) || 14) : 14;
+
     const plain =
       password && String(password).length >= 8
         ? String(password)
-        : `Temp-${Math.random().toString(36).slice(2, 10)}!1Aa`;
-    const hashed = await bcrypt.hash(plain, 10);
+        : `T-${randomBytes(12).toString('base64url')}`; // S-09 fix: CSPRNG temp password
+    const hashed = await bcrypt.hash(plain, 12); // S-29 fix: uniform cost factor
 
     await sequelize.transaction(async (transaction) => {
       org = await Organisation.create(
@@ -355,7 +390,7 @@ export const createOrganisationWithAdmin = async (req, res) => {
           slug: finalSlug,
           plan: plan || "starter",
           plan_id: plan_id ? parseInt(plan_id, 10) : null,
-          status: status || "trial",
+          status: freeTrialEnabled ? (status || "trial") : "suspended",
           primaryEmail: String(primaryEmail).trim().toLowerCase(),
           country: country || null,
           database_name: databaseName,
@@ -364,20 +399,33 @@ export const createOrganisationWithAdmin = async (req, res) => {
       );
 
       const now = new Date();
-      const trialEndsAt = new Date(now);
-      trialEndsAt.setDate(trialEndsAt.getDate() + 14);
-
-      await platformDb.Subscription.create(
-        {
-          organisation_id: org.id,
-          plan_id: org.plan_id || null,
-          status: org.status || "trial",
-          current_period_start: now,
-          current_period_end: trialEndsAt,
-          trial_ends_at: trialEndsAt,
-        },
-        { transaction },
-      );
+      if (freeTrialEnabled) {
+        const trialEndsAt = new Date(now);
+        trialEndsAt.setDate(trialEndsAt.getDate() + freeTrialDays);
+        await platformDb.Subscription.create(
+          {
+            organisation_id: org.id,
+            plan_id: org.plan_id || null,
+            status: "trial",
+            current_period_start: now,
+            current_period_end: trialEndsAt,
+            trial_ends_at: trialEndsAt,
+          },
+          { transaction },
+        );
+      } else {
+        await platformDb.Subscription.create(
+          {
+            organisation_id: org.id,
+            plan_id: org.plan_id || null,
+            status: "expired",
+            current_period_start: now,
+            current_period_end: now,
+            trial_ends_at: null,
+          },
+          { transaction },
+        );
+      }
 
       await User.create(
         {
@@ -509,11 +557,16 @@ export const createOrganisationWithAdmin = async (req, res) => {
     }
 
     if (err.name === "SequelizeUniqueConstraintError") {
-      return res.status(400).json({
-        status: "error",
-        message: "Email or mobile is already registered. Use different admin details.",
-        data: null,
-      });
+      const fields = Object.keys(err.fields || {});
+      const constraint = String(err.parent?.constraint || err.message || '').toLowerCase();
+      const isSlug = fields.includes('slug') || constraint.includes('slug');
+      const isMobile = fields.includes('mobile') || constraint.includes('mobile');
+      const message = isSlug
+        ? "An organisation with this subdomain already exists. Try a different subdomain."
+        : isMobile
+          ? "This mobile number is already registered. Use a different mobile."
+          : "Email or mobile is already registered. Use different admin details.";
+      return res.status(400).json({ status: "error", message, data: null });
     }
 
     const msg = err?.message || "Failed to create organisation with admin";
@@ -787,8 +840,8 @@ export const createOrganisationAdmin = async (req, res) => {
     const plain =
       password && String(password).length >= 8
         ? String(password)
-        : `Temp-${Math.random().toString(36).slice(2, 10)}!1Aa`;
-    const hashed = await bcrypt.hash(plain, 10);
+        : `T-${randomBytes(12).toString('base64url')}`; // S-09 fix: CSPRNG temp password
+    const hashed = await bcrypt.hash(plain, 12); // S-29 fix: uniform cost factor
 
     const admin = await User.create({
       email: emailNorm,
@@ -937,6 +990,23 @@ export const impersonateOrganisationAdmin = async (req, res) => {
       role_id: admin.role_id,
       organisation_id: admin.organisation_id,
     });
+
+    // S-15 fix: every impersonation must be traceable. Record who impersonated
+    // which org admin and from which IP so the event survives even if the
+    // impersonation token is later revoked or expires without being used.
+    platformDb.PlatformAuditLog.create({
+      user_id: req.user?.userId ?? req.user?.id ?? null,
+      action: 'IMPERSONATE_ORG_ADMIN',
+      details: JSON.stringify({
+        actorId: req.user?.userId ?? req.user?.id,
+        targetOrgId: orgId,
+        targetOrgSlug: org.slug,
+        targetAdminId: admin.id,
+        targetAdminEmail: admin.email,
+      }),
+      ip_address: req.ip || req.socket?.remoteAddress || null,
+      status: 'Success',
+    }).catch((e) => logger.error({ err: e }, 'Failed to write impersonation audit log'));
 
     return res.status(200).json({
       status: "success",

@@ -33,3 +33,21 @@ export const generateCredentialsSchema = z.object({
     smsPortalUsername: z.string().trim().max(255).optional(),
   }),
 });
+
+// POST /business/licence/:id/submit-credentials
+// Sponsor submits the UKVI portal credentials they received via email from UKVI.
+export const submitCredentialsSchema = z.object({
+  params: idParams,
+  body: z.object({
+    ukviPortalUserId: z.string().trim().min(1, "UKVI User ID is required").max(255),
+    ukviPortalPassword: z.string().min(1, "UKVI Password is required").max(255),
+  }),
+});
+
+// POST /caseworker/licence/:id/home-office-dispatch
+export const homeOfficeDispatchSchema = z.object({
+  params: idParams,
+  body: z.object({
+    dispatchRef: z.string().trim().max(255).optional(),
+  }),
+});

@@ -30,7 +30,14 @@ export const ensureAssignedCaseworker = (options = {}) => {
         return ApiResponse.unauthorized(res, "Authentication required");
       }
 
-      const applicationId = req.params?.[idParam];
+      // BUG-15 fix: validate param is a positive integer before hitting the DB.
+      // A non-numeric value (e.g. "abc", "undefined") passed to findByPk causes
+      // a DB driver TypeError (500) instead of a clean 400.
+      const rawId = req.params?.[idParam];
+      const applicationId = parseInt(rawId, 10);
+      if (!Number.isInteger(applicationId) || applicationId <= 0) {
+        return ApiResponse.badRequest(res, `Invalid application ID: ${rawId}`);
+      }
       const application = await req.tenantDb.LicenceApplication.findByPk(applicationId);
       if (!application) {
         return ApiResponse.notFound(res, "Licence application not found");

@@ -11,7 +11,12 @@ import {
     uploadLicenceDocument,
     deleteLicenceDocument
 } from './sponsorLicence.controller.js';
-import { confirmGovernmentCredentialsReceived, getGovernmentCredentials } from './sponsorLicenceGovernment.controller.js';
+import {
+  confirmGovernmentCredentialsReceived,
+  getGovernmentCredentials,
+  submitSponsorUkviCredentials,
+  confirmSponsorUkviPayment,
+} from './sponsorLicenceGovernment.controller.js';
 import { listDispatchDocumentsHandler, downloadDispatchDocumentHandler } from '../../Shared/Licence/licenceDispatch.controller.js';
 import {
     getSponsorIntakeSummary,
@@ -19,6 +24,7 @@ import {
     submitSponsorIntakeForm,
     uploadSponsorIntakeDocument,
     deleteSponsorIntakeDocument,
+    downloadSponsorIntakeDocument,
 } from './sponsorLicenceIntake.controller.js';
 // CoS logic now lives in the single CoS controller/service. These licence-router
 // CoS routes are kept as DEPRECATED backward-compatible aliases that delegate to
@@ -32,6 +38,7 @@ import {
 import { verifyTokenAndTenant } from '../../../middlewares/authStack.middleware.js';
 import { upload } from '../../../middlewares/upload.middleware.js';
 import { validate } from '../../../middlewares/validate.middleware.js';
+import { submitCredentialsSchema } from '../../../validations/licenceGovernment.validation.js';
 import {
   sponsorSubmitLicenceSchema,
   sponsorUpdateLicenceSchema,
@@ -57,9 +64,11 @@ router.get("/summary", getLicenceSummary);
 router.post("/documents/upload", upload.array("documents", 10), uploadLicenceDocument);
 router.delete("/documents/:applicationId/:docIndex", deleteLicenceDocument);
 
-// Government credentials — view (GET) and confirm receipt (POST).
+// Government credentials — view (GET) and confirm receipt / submit (POST).
 router.get("/:id/government-credentials", getGovernmentCredentials);
-router.post("/:id/government-credentials", confirmGovernmentCredentialsReceived);
+router.post("/:id/government-credentials", confirmGovernmentCredentialsReceived); // legacy
+router.post("/:id/submit-credentials", validate(submitCredentialsSchema), submitSponsorUkviCredentials);
+router.post("/:id/confirm-payment", confirmSponsorUkviPayment);
 
 // Documents dispatched to sponsor by admin/caseworker.
 router.get("/:id/dispatch-documents", listDispatchDocumentsHandler);
@@ -69,6 +78,7 @@ router.get("/:id/dispatch-documents/:docId/download", downloadDispatchDocumentHa
 router.get("/:id/intake", getSponsorIntakeSummary);
 router.put("/:id/intake", updateSponsorIntakeForm);
 router.post("/:id/intake/submit", submitSponsorIntakeForm);
+router.get("/:id/intake/documents/:documentKey/download", downloadSponsorIntakeDocument);
 router.post("/:id/intake/documents/:documentKey/upload", upload.single("document"), uploadSponsorIntakeDocument);
 router.delete("/:id/intake/documents/:documentKey", deleteSponsorIntakeDocument);
 

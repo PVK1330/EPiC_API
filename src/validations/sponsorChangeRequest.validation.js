@@ -9,12 +9,15 @@ export const createSponsorChangeRequestSchema = z.object({
   }).strict(),
 });
 
+// BUG-03 follow-up: `status` removed from the schema entirely.
+// Sponsors may only set dateReported, notes, evidence, and reportedBy.
+// Status is always computed server-side — accepting it from the body would
+// allow a sponsor to self-approve/reject their own change request.
 export const updateSponsorChangeRequestSchema = z.object({
   params: z.object({
     id: z.coerce.number().int().positive(),
   }),
   body: z.object({
-    status: z.string().trim().optional(),
     notes: z.string().trim().optional().nullable(),
     dateReported: z.string().optional().nullable(),
     reportedBy: z.coerce.number().int().positive().optional().nullable(),

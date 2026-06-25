@@ -81,13 +81,15 @@ router.get('/dashboard/stats', requirePlatformPermission('platform.dashboard.vie
 router.get('/audit-log', requirePlatformPermission('platform.audit.view'), platformAuditLogController.listPlatformAuditLogs);
 router.get('/audit-log/export-csv', requirePlatformPermission('platform.audit.view'), platformAuditLogController.exportPlatformAuditLogsCsv);
 
-router.get('/notification-preferences', platformNotificationPrefsController.getNotificationPreferences);
-router.put('/notification-preferences', platformNotificationPrefsController.updateNotificationPreferences);
+// RE-05 fix: notification routes now require the same platform permission gate
+// used by every other route on this router.
+router.get('/notification-preferences', requirePlatformPermission('platform.dashboard.view'), platformNotificationPrefsController.getNotificationPreferences);
+router.put('/notification-preferences', requirePlatformPermission('platform.dashboard.view'), platformNotificationPrefsController.updateNotificationPreferences);
 
-router.get('/notifications', platformNotificationController.listPlatformNotifications);
-router.get('/notifications/unread-count', platformNotificationController.getUnreadCount);
-router.post('/notifications/:id/read', platformNotificationController.markPlatformNotificationRead);
-router.post('/notifications/mark-all-read', platformNotificationController.markAllPlatformNotificationsRead);
+router.get('/notifications', requirePlatformPermission('platform.dashboard.view'), platformNotificationController.listPlatformNotifications);
+router.get('/notifications/unread-count', requirePlatformPermission('platform.dashboard.view'), platformNotificationController.getUnreadCount);
+router.post('/notifications/:id/read', requirePlatformPermission('platform.dashboard.view'), platformNotificationController.markPlatformNotificationRead);
+router.post('/notifications/mark-all-read', requirePlatformPermission('platform.dashboard.view'), platformNotificationController.markAllPlatformNotificationsRead);
 
 router.get('/analytics', requirePlatformPermission('platform.dashboard.view'), (req, res) => {
   res.json({ status: 'success', message: 'Platform analytics (scaffold)' });
