@@ -146,6 +146,12 @@ const fullIncludes = (tenantDb) => [
     order: [["id", "ASC"]],
   },
   { model: tenantDb.LicenceDeclaration, as: "declaration" },
+  {
+    model: tenantDb.LicenceGrantRecord,
+    as: "grantRecord",
+    required: false,
+    attributes: ["licenceNumber", "expiryDate", "cosAllocation", "rating", "grantDate"],
+  },
 ];
 
 /**
@@ -593,6 +599,12 @@ export function serializeApplication(app) {
     reviewNotes: j.adminNotes || null,
     ukviPaymentConfirmedAt: j.ukviPaymentConfirmedAt || null,
     rejectionCooldownUntil: j.rejectionCooldownUntil || null,
+    rejectionReason: j.rejectionReason || null,
+    licenceNumber: j.grantRecord?.licenceNumber || null,
+    licenceExpiryDate: j.grantRecord?.expiryDate || null,
+    licenceGrantDate: j.grantRecord?.grantDate || null,
+    licenceCosAllocation: j.grantRecord?.cosAllocation ?? null,
+    licenceRating: j.grantRecord?.rating || null,
   };
 }
 
