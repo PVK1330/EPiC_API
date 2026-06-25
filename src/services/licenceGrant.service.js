@@ -12,7 +12,7 @@ import {
   licenceRejected as notifyLicenceRejected,
   licenceActivatedCaseworkers,
 } from "./sponsorshipNotification.service.js";
-import { ensureStageTasks } from "./licenceStageTask.service.js";
+import { ensureStageTasks, completeStageTask } from "./licenceStageTask.service.js";
 
 /**
  * Grant a sponsor licence.
@@ -167,6 +167,26 @@ export async function grantLicence(
     );
   }
 
+  // Mark the decision_activation stage complete so the pipeline tracker advances.
+  completeStageTask(tenantDb, {
+    applicationId,
+    stageKey: "decision_activation",
+    role: "admin",
+    actorUser,
+    req,
+  }).catch((err) => logger.warn({ err, applicationId }, "grantLicence: decision_activation stage failed"));
+
+  // Create a sponsor-facing task so the outcome surfaces in their task list.
+  tenantDb.Task.create({
+    title: `Your sponsor licence application has been approved — Licence No. ${licenceNumber || "pending"}.`,
+    description: "Congratulations! Your sponsor licence has been granted by UKVI. Log in to your EPiC portal to view your licence details and begin issuing Certificates of Sponsorship.",
+    assigned_to: application.userId,
+    case_id: null,
+    priority: "high",
+    status: "pending",
+    created_by: actorId,
+  }).catch((err) => logger.warn({ err, applicationId }, "grantLicence: sponsor task creation failed"));
+
   logger.info({ applicationId, licenceNumber, actorId }, "Sponsor licence granted");
   return { application, grantRecord, licenceNumber, activation };
 }
@@ -272,6 +292,29 @@ export async function rejectLicence(
     adminNotes: rejectionReason,
     req,
   }).catch((err) => logger.warn({ err, applicationId }, "rejectLicence: notification failed"));
+
+  // Mark the decision_activation stage complete so the pipeline tracker reflects the final outcome.
+  completeStageTask(tenantDb, {
+    applicationId,
+    stageKey: "decision_activation",
+    role: "admin",
+    actorUser,
+    req,
+  }).catch((err) => logger.warn({ err, applicationId }, "rejectLicence: decision_activation stage failed"));
+
+  // Create a sponsor-facing task so the rejection surfaces in their task list.
+  const cooldownFormatted = application.rejectionCooldownUntil
+    ? new Date(application.rejectionCooldownUntil).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })
+    : "6 months from today";
+  tenantDb.Task.create({
+    title: "Your sponsor licence application has been rejected by UKVI.",
+    description: `UKVI has rejected this sponsor licence application. The reason given: "${rejectionReason.trim()}". You may reapply after ${cooldownFormatted}. Please contact your caseworker for guidance on next steps.`,
+    assigned_to: application.userId,
+    case_id: null,
+    priority: "high",
+    status: "pending",
+    created_by: actorId,
+  }).catch((err) => logger.warn({ err, applicationId }, "rejectLicence: sponsor task creation failed"));
 
   logger.info({ applicationId, actorId, previousStatus }, "Sponsor licence rejected");
   return { application };
