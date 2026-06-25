@@ -54,6 +54,18 @@ export default (sequelize, DataTypes) => {
         allowNull: true,
         field: "ukvi_credentials_submitted_at",
       },
+      // Set when the caseworker verifies the sponsor-submitted credentials.
+      ukviCredentialsCaseworkerVerifiedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: "ukvi_credentials_caseworker_verified_at",
+      },
+      // Set when the admin verifies the sponsor-submitted credentials.
+      ukviCredentialsAdminVerifiedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: "ukvi_credentials_admin_verified_at",
+      },
       governmentRegistrationRef: {
         type: DataTypes.STRING(100),
         allowNull: true,

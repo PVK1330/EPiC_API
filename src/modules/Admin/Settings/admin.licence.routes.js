@@ -23,6 +23,9 @@ import {
 import {
     generateLicenceCredentials,
     resendLicenceCredentials,
+    getAdminSubmittedCredentials,
+    verifyAdminCredentials,
+    requestAdminCredentialResubmission,
 } from './adminLicenceGovernment.controller.js';
 import { verifyTokenAndTenant } from '../../../middlewares/authStack.middleware.js';
 import { checkRole, ADMIN_ROLES } from '../../../middlewares/role.middleware.js';
@@ -96,6 +99,9 @@ router.patch("/:id/appendix-documents/:documentId/reject", rejectAdminAppendixDo
 // Government credential management (Phase 3).
 router.post("/:id/generate-credentials", validate(generateCredentialsSchema), generateLicenceCredentials);
 router.post("/:id/resend-credentials", resendLicenceCredentials);
+router.get("/:id/submitted-credentials", getAdminSubmittedCredentials);
+router.post("/:id/verify-credentials", verifyAdminCredentials);
+router.post("/:id/request-credentials-resubmission", requestAdminCredentialResubmission);
 
 // Dispatch documents to sponsor (upload + email + portal).
 router.post("/:id/dispatch-document", upload.single("document"), dispatchDocumentHandler);

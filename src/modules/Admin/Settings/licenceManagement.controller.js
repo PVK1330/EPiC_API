@@ -114,6 +114,18 @@ export const getAllLicenceApplications = async (req, res) => {
             "governmentRegistrationRef", "governmentSubmissionRef", "governmentSubmissionDate",
           ],
         },
+        {
+          model: req.tenantDb.LicenceIntakeForm,
+          as: "intakeForm",
+          required: false,
+          attributes: [
+            "id", "tradingName", "premisesAddress", "owningLimitedCompany",
+            "namedPersonOnLicence", "phoneNumber", "niNumber", "emailAddress",
+            "jobTitlesRequired", "companyWebsite", "totalEmployees",
+            "employeesUnderImmigrationRules", "numberOfCosRequired",
+            "conditions", "isComplete",
+          ],
+        },
       ],
       order: [["createdAt", "DESC"]],
     });
@@ -245,6 +257,18 @@ export const getAdminLicenceApplicationDetails = async (req, res) => {
           model: req.tenantDb.User,
           as: "user",
           attributes: ["id", "first_name", "last_name", "email"],
+        },
+        {
+          model: req.tenantDb.LicenceIntakeForm,
+          as: "intakeForm",
+          required: false,
+          attributes: [
+            "id", "tradingName", "premisesAddress", "owningLimitedCompany",
+            "namedPersonOnLicence", "phoneNumber", "niNumber", "emailAddress",
+            "jobTitlesRequired", "companyWebsite", "totalEmployees",
+            "employeesUnderImmigrationRules", "numberOfCosRequired",
+            "conditions", "isComplete",
+          ],
         },
       ],
     });

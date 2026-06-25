@@ -4,6 +4,7 @@ import { deliver } from "./sponsorshipNotification.service.js";
 import { NotificationTypes, NotificationPriority } from "./notification.service.js";
 import { extractCaseworkerIds } from "./licenceAssignment.service.js";
 import { loadFullApplication, serializeApplication } from "./licenceApplicationV2.service.js";
+import { emitToUser, EVENT_TYPES } from "../realtime/messagingRealtime.js";
 
 /**
  * Licence Stage Task engine.
@@ -1134,16 +1135,16 @@ export async function getStagesForApplication(tenantDb, applicationOrId, { req =
     byStage.get(r.stageKey).push(r);
   }
 
-  // Supplement the data-signal completed set with DB task-row state for stages
-  // that have no data signal (manual-completion only). This allows the timeline
-  // to advance past stages 16 and 17 once all task rows are actually completed,
-  // without relying on a data signal that never fires for these stages.
-  const MANUAL_STAGE_KEYS = ["home_office_document_dispatch", "payment_confirmation"];
-  for (const sk of MANUAL_STAGE_KEYS) {
-    if (completed.has(sk)) continue;
-    const stageRows = byStage.get(sk) || [];
+  // Supplement the data-signal completed set with DB task-row state for ALL stages.
+  // This prevents stage regression when the status is "Licence Rejected" — deriveStageCompletion
+  // has no data signal for govActive stages (9-15) under that status, so without this supplement
+  // the contiguous scan stops at stage 9. Any stage whose DB task rows are all completed
+  // is treated as done regardless of whether a data signal fired.
+  for (const s of LICENCE_STAGE_DEFINITIONS) {
+    if (completed.has(s.key)) continue;
+    const stageRows = byStage.get(s.key) || [];
     if (stageRows.length > 0 && stageRows.every((r) => r.status === "completed")) {
-      completed.add(sk);
+      completed.add(s.key);
     }
   }
   // Recalculate currentKey now that completed may have grown (contiguous from start).
@@ -1484,6 +1485,15 @@ async function notifyStageTaskCompleted({ tenantDb, application, stageDef, role,
         "notifyStageTaskCompleted: deliver failed — task still complete, remaining recipients will still be notified",
       ),
     );
+  }
+
+  // Push a lightweight socket event to every portal user so their page can
+  // re-fetch without a manual refresh.
+  const livePayload = { applicationId: application.id, stageKey: stageDef.key };
+  if (recipients.sponsor?.userId)  emitToUser(recipients.sponsor.userId,  EVENT_TYPES.LICENCE_STAGE_UPDATED, livePayload);
+  if (recipients.admin?.userId)    emitToUser(recipients.admin.userId,    EVENT_TYPES.LICENCE_STAGE_UPDATED, livePayload);
+  for (const cw of recipients.caseworkers) {
+    if (cw.userId) emitToUser(cw.userId, EVENT_TYPES.LICENCE_STAGE_UPDATED, livePayload);
   }
 }
 

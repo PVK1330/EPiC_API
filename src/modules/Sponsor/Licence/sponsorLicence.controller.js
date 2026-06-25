@@ -473,9 +473,16 @@ export const getLicenceDocuments = async (req, res) => {
                                 app.status === 'Information Requested' ? 'Action Required' : 'Pending';
                 }
 
+                // Prefer the human-readable document name from the appendix
+                // checklist (e.g. "Certificate of Incorporation") over the raw
+                // uploaded file/image name. Fall back to the filename for legacy
+                // V1 evidence that has no appendix record.
+                const documentName = matchedAppDoc?.documentName?.trim() || filename || 'Unnamed Document';
+
                 allDocuments.push({
                     id: docIdCounter++,
-                    name: filename || 'Unnamed Document',
+                    name: documentName,
+                    fileName: filename || null,
                     path: docPath,
                     uploadDate: app.createdAt,
                     expiryDate: 'N/A',

@@ -13,6 +13,7 @@ import {
   licenceActivatedCaseworkers,
 } from "./sponsorshipNotification.service.js";
 import { ensureStageTasks, completeStageTask } from "./licenceStageTask.service.js";
+import { emitToUser, EVENT_TYPES } from "../realtime/messagingRealtime.js";
 
 /**
  * Grant a sponsor licence.
@@ -30,7 +31,7 @@ import { ensureStageTasks, completeStageTask } from "./licenceStageTask.service.
  */
 export async function grantLicence(
   tenantDb,
-  { applicationId, approvedById, notes, expiryDate, sponsorType, rating, cosAllocation },
+  { applicationId, approvedById, notes, expiryDate, sponsorType, rating, cosAllocation, licenceNumber: providedLicenceNumber = null },
   actorUser,
   req = null,
 ) {
@@ -76,6 +77,7 @@ export async function grantLicence(
       approvedByUserId: actorId,
       req,
       transaction: t,
+      licenceNumber: providedLicenceNumber,
     });
 
     const licenceNumber = activation?.licenceNumber ?? null;
@@ -186,6 +188,14 @@ export async function grantLicence(
     status: "pending",
     created_by: actorId,
   }).catch((err) => logger.warn({ err, applicationId }, "grantLicence: sponsor task creation failed"));
+
+  // Push live update so all open pages re-fetch without a manual refresh.
+  const livePayload = { applicationId, stageKey: "decision_activation", status: "Licence Granted" };
+  if (application.userId) emitToUser(application.userId, EVENT_TYPES.LICENCE_STAGE_UPDATED, livePayload);
+  for (const cwId of cwIds) {
+    const id = typeof cwId === "object" ? (cwId.id ?? cwId.userId) : cwId;
+    if (id) emitToUser(id, EVENT_TYPES.LICENCE_STAGE_UPDATED, livePayload);
+  }
 
   logger.info({ applicationId, licenceNumber, actorId }, "Sponsor licence granted");
   return { application, grantRecord, licenceNumber, activation };
@@ -315,6 +325,15 @@ export async function rejectLicence(
     status: "pending",
     created_by: actorId,
   }).catch((err) => logger.warn({ err, applicationId }, "rejectLicence: sponsor task creation failed"));
+
+  // Push live update so all open pages re-fetch without a manual refresh.
+  const rejectPayload = { applicationId, stageKey: "decision_activation", status: "Licence Rejected" };
+  if (application.userId) emitToUser(application.userId, EVENT_TYPES.LICENCE_STAGE_UPDATED, rejectPayload);
+  const rejectedCwIds = extractCaseworkerIds(application.assignedcaseworkerId);
+  for (const cwId of rejectedCwIds) {
+    const id = typeof cwId === "object" ? (cwId.id ?? cwId.userId) : cwId;
+    if (id) emitToUser(id, EVENT_TYPES.LICENCE_STAGE_UPDATED, rejectPayload);
+  }
 
   logger.info({ applicationId, actorId, previousStatus }, "Sponsor licence rejected");
   return { application };

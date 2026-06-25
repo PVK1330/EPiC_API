@@ -1,6 +1,7 @@
 import { Op } from "sequelize";
 import { ROLES } from "../middlewares/role.middleware.js";
 import { getWorkflowState } from "./caseWorkflowProcess.service.js";
+import logger from "../utils/logger.js";
 
 function parseBiometricDateTime(bookedSlot) {
   const dateStr = bookedSlot?.appointmentDate;
@@ -181,8 +182,91 @@ async function loadCasesForBiometrics(tenantDb, userId, roleId) {
   return [];
 }
 
+async function loadLicenceStageTasks(tenantDb, userId, roleId) {
+  try {
+    if (!tenantDb.LicenceStageTask) return [];
+
+    let taskRole;
+    let appWhere = null;
+
+    if (roleId === ROLES.BUSINESS) {
+      taskRole = "sponsor";
+      appWhere = { userId };
+    } else if (roleId === ROLES.CASEWORKER) {
+      taskRole = "caseworker";
+      appWhere = tenantDb.sequelize.literal(
+        `"assignedcaseworkerId"::jsonb @> '[${Number(userId)}]'::jsonb`,
+      );
+    } else if (roleId === ROLES.ADMIN || roleId === ROLES.SUPERADMIN) {
+      taskRole = "admin";
+    } else {
+      return [];
+    }
+
+    let applicationIds = null;
+    if (appWhere !== null) {
+      const apps = await tenantDb.LicenceApplication.findAll({
+        where: appWhere,
+        attributes: ["id"],
+      });
+      applicationIds = apps.map((a) => a.id);
+      if (!applicationIds.length) return [];
+    }
+
+    const where = {
+      role: taskRole,
+      status: { [Op.ne]: "completed" },
+    };
+    if (applicationIds) {
+      where.licenceApplicationId = { [Op.in]: applicationIds };
+    }
+
+    const rows = await tenantDb.LicenceStageTask.findAll({
+      where,
+      order: [
+        ["due_date", "ASC"],
+        ["stage_order", "ASC"],
+      ],
+      limit: 100,
+    });
+
+    const now = new Date();
+    return rows
+      .map((r) => {
+        const plain = r.get({ plain: true });
+        const due = plain.dueDate ? new Date(plain.dueDate) : null;
+        if (!due) return null;
+        const end = new Date(due.getTime() + 60 * 60 * 1000);
+        const isOverdue = due < now;
+        const stageName = (plain.stageKey || "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+        return {
+          id: `licence-stage-${plain.id}`,
+          title: plain.description || stageName || "Licence stage task",
+          start: due.toISOString(),
+          end: end.toISOString(),
+          type: "licence_task",
+          location: `Licence Application #${plain.licenceApplicationId}`,
+          attendees: [plain.assigneeName || plain.role],
+          description: stageName,
+          color: isOverdue ? "bg-red-600" : "bg-violet-600",
+          completed: false,
+          caseId: `#LIC-${plain.licenceApplicationId}`,
+          isTask: true,
+          isLicenceTask: true,
+          licenceStageKey: plain.stageKey,
+          licenceApplicationId: plain.licenceApplicationId,
+          taskId: plain.id,
+        };
+      })
+      .filter(Boolean);
+  } catch (err) {
+    logger.warn({ err, userId, roleId }, "loadLicenceStageTasks: failed, returning empty");
+    return [];
+  }
+}
+
 /**
- * Tasks + biometric bookings for calendar views (all roles).
+ * Tasks + biometric bookings + licence stage tasks for calendar views (all roles).
  */
 export async function getWorkflowCalendarEvents(tenantDb, userId, roleId) {
   const events = [];
@@ -203,6 +287,9 @@ export async function getWorkflowCalendarEvents(tenantDb, userId, roleId) {
       if (ev) events.push(ev);
     }
   }
+
+  const stageTasks = await loadLicenceStageTasks(tenantDb, userId, roleId);
+  events.push(...stageTasks);
 
   return events;
 }

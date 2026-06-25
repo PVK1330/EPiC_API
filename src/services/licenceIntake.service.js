@@ -196,10 +196,16 @@ export async function getOrCreateIntakeForm(tenantDb, licenceApplicationId, orga
     where: { licenceApplicationId },
     defaults: { licenceApplicationId, organisationId },
   });
-  // On first creation, prefill from data the sponsor already provided in the
-  // wizard / profile so they don't have to re-type it. Best-effort: a prefill
-  // failure must never block the intake summary from loading.
-  if (created) {
+  // Prefill from data the sponsor already provided in the wizard / profile so
+  // they don't have to re-type it. Runs on first creation AND on any not-yet-
+  // submitted form that still has blank prefillable fields (e.g. the NI number
+  // captured on the Step 5 Authorising Officer page, which earlier intake forms
+  // were created before we pulled through). setIfBlank never overwrites a value
+  // the sponsor has typed, so re-running on an incomplete form is safe.
+  // Best-effort: a prefill failure must never block the intake summary loading.
+  const needsBackfill =
+    !form.isComplete && (!form.niNumber || !form.namedPersonOnLicence || !form.emailAddress);
+  if (created || needsBackfill) {
     try {
       await prefillIntakeForm(tenantDb, licenceApplicationId, form);
     } catch (err) {
@@ -263,8 +269,11 @@ async function prefillIntakeForm(tenantDb, licenceApplicationId, form) {
   setIfBlank("tradingName", profile?.tradingName || profile?.companyName);
   setIfBlank("owningLimitedCompany", profile?.companyName);
   setIfBlank("namedPersonOnLicence", aoName || profile?.authorisingName);
-  setIfBlank("phoneNumber", profile?.authorisingPhone || profile?.keyContactPhone);
-  setIfBlank("emailAddress", profile?.authorisingEmail || profile?.keyContactEmail || application.contactEmail);
+  setIfBlank("phoneNumber", ao?.phone || profile?.authorisingPhone || profile?.keyContactPhone);
+  // NI number is captured on the Step 5 Authorising Officer wizard page — pull it
+  // through so the sponsor isn't asked to re-enter it on the intake form.
+  setIfBlank("niNumber", ao?.niNumber);
+  setIfBlank("emailAddress", ao?.email || profile?.authorisingEmail || profile?.keyContactEmail || application.contactEmail);
   setIfBlank("companyWebsite", profile?.website);
   setIfBlank("jobTitlesRequired", jobTitles);
   setIfBlank("numberOfCosRequired", cosTotal > 0 ? cosTotal : null);

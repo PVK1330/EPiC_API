@@ -5,7 +5,7 @@ import multer from 'multer';
 import { ROLES } from '../../../middlewares/role.middleware.js';
 import { rowsToXlsxBuffer, sendXlsxDownload } from '../../../utils/excelExport.util.js';
 import { generateStrongPassword } from '../../../utils/passwordGenerator.js';
-import { createUserOnPlatformAndTenant } from '../../../services/userSync.service.js';
+import { createUserOnPlatformAndTenant, syncUserToPlatformOnly } from '../../../services/userSync.service.js';
 import { sendTenantCaseworkerWelcomeEmail } from '../../../services/tenantUserMail.service.js';
 import platformDb from '../../../models/index.js';
 import { isPlatformEmailTaken, normalizePlatformEmail } from '../../../utils/platformUserEmail.js';
@@ -956,14 +956,25 @@ export const updateCaseworker = async (req, res) => {
       }
     }
 
+    const resolvedStatus = status !== undefined ? status : caseworker.status;
     await caseworker.update({
       first_name,
       last_name,
       email,
       country_code,
       mobile,
-      status: status !== undefined ? status : caseworker.status,
+      status: resolvedStatus,
     });
+    // Mirror identity + status to the platform registry so login/auth stay in
+    // sync with the tenant row (email is the login key; status gates access).
+    await syncUserToPlatformOnly(caseworker.id, {
+      first_name,
+      last_name,
+      email,
+      status: resolvedStatus,
+    }).catch((err) =>
+      logger.warn({ err, caseworkerId: caseworker.id }, "updateCaseworker: platform sync failed"),
+    );
 
     const profile = caseworker.caseworkerProfile;
     if (profile) {
@@ -1021,6 +1032,12 @@ export const deleteCaseworker = async (req, res) => {
     }
 
     await caseworker.update({ status: "inactive" });
+    // Mirror the status to the platform registry — login and the auth middleware
+    // both gate on platformDb.User.status, so a tenant-only update would leave the
+    // caseworker able to log in. Best-effort; never block the response.
+    await syncUserToPlatformOnly(caseworker.id, { status: "inactive" }).catch((err) =>
+      logger.warn({ err, caseworkerId: caseworker.id }, "deleteCaseworker: platform status sync failed"),
+    );
 
     res.status(200).json({
       status: "success",
@@ -1118,6 +1135,11 @@ export const toggleCaseworkerStatus = async (req, res) => {
 
     const newStatus = caseworker.status === "active" ? "inactive" : "active";
     await caseworker.update({ status: newStatus });
+    // Keep the platform registry in sync — login / auth middleware gate on the
+    // platform copy of `status`, not the tenant row. Best-effort.
+    await syncUserToPlatformOnly(caseworker.id, { status: newStatus }).catch((err) =>
+      logger.warn({ err, caseworkerId: caseworker.id }, "toggleCaseworkerStatus: platform status sync failed"),
+    );
 
     res.status(200).json({
       status: "success",

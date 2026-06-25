@@ -10,6 +10,9 @@ router.use(verifyTokenAndTenant);
 // Sponsors can only fetch their own assigned tasks
 router.get("/assign", checkRole([ROLES.ADMIN, ROLES.CASEWORKER, ROLES.SPONSOR]), taskController.getTasksByUserId);
 
+// Licence stage tasks for the current user's role (sponsor, caseworker, admin)
+router.get("/my-stage-tasks", checkRole([ROLES.ADMIN, ROLES.CASEWORKER, ROLES.SPONSOR]), taskController.getMyLicenceStageTasks);
+
 // All other task operations require Admin or Caseworker
 router.use(checkRole([ROLES.ADMIN, ROLES.CASEWORKER]));
 

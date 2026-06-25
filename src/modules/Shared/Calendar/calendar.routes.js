@@ -6,7 +6,7 @@ import * as calendarController from "./calendar.controller.js";
 const router = Router();
 
 router.use(verifyTokenAndTenant);
-router.use(checkRole([ROLES.ADMIN, ROLES.CASEWORKER, ROLES.CANDIDATE]));
+router.use(checkRole([ROLES.ADMIN, ROLES.CASEWORKER, ROLES.CANDIDATE, ROLES.BUSINESS]));
 
 router.get("/workflow-events", calendarController.getWorkflowEvents);
 

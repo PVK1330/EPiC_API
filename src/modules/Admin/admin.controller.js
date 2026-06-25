@@ -6,7 +6,7 @@ import { generateStrongPassword } from '../../utils/passwordGenerator.js';
 import { ROLES } from '../../middlewares/role.middleware.js';
 import platformDb from '../../models/index.js';
 import { isPlatformEmailTaken } from '../../utils/platformUserEmail.js';
-import { createUserOnPlatformAndTenant } from '../../services/userSync.service.js';
+import { createUserOnPlatformAndTenant, syncUserToPlatformOnly } from '../../services/userSync.service.js';
 import { sendTenantAdminWelcomeEmail } from '../../services/tenantUserMail.service.js';
 import { ensureAdminHasAllPermissions } from '../../seeders/permission.seeder.js';
 import { rowsToXlsxBuffer, sendXlsxDownload } from '../../utils/excelExport.util.js';
@@ -272,6 +272,16 @@ export const updateAdmin = catchAsync(async (req, res) => {
   };
 
   await admin.update(updateData);
+  // Mirror identity + status to the platform registry so login/auth stay in sync
+  // with the tenant row (email is the login key; status gates access). Best-effort.
+  await syncUserToPlatformOnly(admin.id, {
+    first_name: updateData.first_name,
+    last_name: updateData.last_name,
+    email: updateData.email,
+    status: updateData.status,
+  }).catch((err) =>
+    logger.warn({ err, adminId: admin.id }, "updateAdmin: platform sync failed"),
+  );
 
   const updatedAdmin = await req.tenantDb.User.findOne({
     where: { id },
@@ -308,6 +318,11 @@ export const deleteAdmin = catchAsync(async (req, res) => {
   }
 
   await admin.update({ status: 'inactive' });
+  // Login / auth middleware gate on the platform copy of `status`; mirror it so
+  // a deactivated admin can no longer authenticate. Best-effort.
+  await syncUserToPlatformOnly(admin.id, { status: 'inactive' }).catch((err) =>
+    logger.warn({ err, adminId: admin.id }, "deleteAdmin: platform status sync failed"),
+  );
 
   return ApiResponse.success(res, "Admin deleted successfully");
 });
@@ -372,6 +387,11 @@ export const toggleAdminStatus = catchAsync(async (req, res) => {
   }
 
   await admin.update({ status: newStatus });
+  // Keep the platform registry in sync — login / auth middleware read the
+  // platform copy of `status`, not the tenant row. Best-effort.
+  await syncUserToPlatformOnly(admin.id, { status: newStatus }).catch((err) =>
+    logger.warn({ err, adminId: admin.id }, "toggleAdminStatus: platform status sync failed"),
+  );
 
   return ApiResponse.success(res, `Admin ${newStatus === 'active' ? 'activated' : 'deactivated'} successfully`, {
     admin_id: admin.id,

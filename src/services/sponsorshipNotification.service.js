@@ -117,7 +117,6 @@ export async function deliver({
             priority,
             notificationType: type,
             actionUrl: actionUrl ? `${frontend()}${actionUrl}` : undefined,
-            metadata: { entityType, entityId },
             branding,
           }),
         });
@@ -333,19 +332,73 @@ export async function licenceRejected({
   adminNotes = null,
   req = null,
 }) {
+  const company = application.companyName || `#LIC-${application.id}`;
+  const reason = adminNotes ? ` Reason: ${adminNotes}` : "";
+  const org = orgFrom(req);
+
+  // 1. Notify sponsor
   await deliver({
     tenantDb,
     recipientUserId: application.userId,
     type: NotificationTypes.ERROR,
     priority: NotificationPriority.HIGH,
-    title: "Licence Application Rejected",
-    message: `Your sponsorship licence application for ${application.companyName} has been rejected.${adminNotes ? ` Reason: ${adminNotes}` : ""}`,
+    title: "Licence Application Rejected by UKVI",
+    message: `Your sponsor licence application for ${company} has been rejected by UKVI.${reason} Please log in to your portal to view the outcome and next steps.`,
     entityType: "licence_application",
     entityId: application.id,
     actionType: "licence_rejected",
     actionUrl: "/business/licence",
+    emailSubject: `Sponsor licence application rejected — ${company}`,
+    audit: {
+      actorId: req?.user?.userId ?? null,
+      action: "LICENCE_REJECTED",
+      resource: "licence_application",
+      details: { applicationId: application.id, company, reason: adminNotes },
+    },
     req,
+    organisationId: org,
   });
+
+  // 2. Notify each assigned caseworker
+  const cwIds = Array.isArray(application.assignedcaseworkerId)
+    ? application.assignedcaseworkerId
+    : [];
+  for (const cwId of cwIds) {
+    const id = typeof cwId === "object" ? (cwId.id ?? cwId.userId) : cwId;
+    if (!id) continue;
+    await deliver({
+      tenantDb,
+      recipientUserId: id,
+      type: NotificationTypes.ERROR,
+      priority: NotificationPriority.HIGH,
+      title: `Licence Rejected by UKVI — ${company}`,
+      message: `UKVI has rejected the sponsor licence application for ${company}.${reason} Please log in to review the outcome and advise the sponsor on next steps.`,
+      entityType: "licence_application",
+      entityId: application.id,
+      actionType: "licence_rejected",
+      actionUrl: `/caseworker/licence-reviews`,
+      emailSubject: `Licence application rejected — ${company}`,
+      req,
+      organisationId: org,
+    });
+  }
+
+  // 3. Notify all tenant admins (in-app + email)
+  try {
+    await notifyAdmins(tenantDb, {
+      type: NotificationTypes.ERROR,
+      priority: NotificationPriority.HIGH,
+      title: `Licence Rejected by UKVI — ${company}`,
+      message: `UKVI has rejected the sponsor licence application for ${company}.${reason}`,
+      entityType: "licence_application",
+      entityId: application.id,
+      actionType: "licence_rejected",
+      actionUrl: `/admin/licence-applications`,
+      sendEmail: true,
+    });
+  } catch (err) {
+    logger.error({ err }, "licenceRejected: admin notify failed");
+  }
 }
 
 /**
@@ -792,6 +845,48 @@ export async function governmentCredentialsReceived({
       organisationId: org,
     });
     auditRecorded = true;
+  }
+}
+
+/**
+ * Staff (caseworker / admin) verified the sponsor-submitted UKVI portal
+ * credentials. Notifies the SPONSOR so they have visibility that their
+ * credentials were confirmed and the application is moving forward.
+ */
+export async function credentialsVerified({
+  tenantDb,
+  application,
+  role = "caseworker",
+  req = null,
+}) {
+  const company = application.companyName || `#LIC-${application.id}`;
+  const actorId = req?.user?.userId ?? null;
+  const org = orgFrom(req);
+  const roleLabel = role === "admin" ? "an administrator" : "your caseworker";
+
+  try {
+    await deliver({
+      tenantDb,
+      recipientUserId: application.userId,
+      type: NotificationTypes.SUCCESS,
+      priority: NotificationPriority.MEDIUM,
+      title: "UKVI Portal Credentials Verified",
+      message: `The UKVI portal credentials you submitted for ${company} have been reviewed and verified by ${roleLabel}. No further action is needed on the credentials — your application is progressing.`,
+      entityType: "licence_application",
+      entityId: application.id,
+      actionType: "government_credentials_verified",
+      actionUrl: "/business/licence-process",
+      audit: {
+        actorId,
+        action: "LICENCE_CREDENTIALS_VERIFIED",
+        resource: "licence_application",
+        details: { applicationId: application.id, company, role },
+      },
+      req,
+      organisationId: org,
+    });
+  } catch (err) {
+    logger.error({ err }, "credentialsVerified: sponsor notify failed");
   }
 }
 

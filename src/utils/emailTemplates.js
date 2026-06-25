@@ -216,33 +216,87 @@ export function generateCandidateWelcomeTemplate({
   });
 }
 
+// Maps internal notification type/priority to a human-readable badge and colour.
+function resolveBadge(notificationType, priority) {
+  const t = String(notificationType).toLowerCase();
+  const p = String(priority).toLowerCase();
+  if (t === "error" || p === "critical") return { label: "Urgent Notice",      color: "#D4351C" };
+  if (t === "success")                   return { label: "Completed",           color: "#00703C" };
+  if (t === "warning" || p === "high")   return { label: "Action Required",     color: "#B04A00" };
+  return                                        { label: "Application Update",  color: "#1D70B8" };
+}
+
+// Converts plain text paragraphs separated by newlines into HTML <p> tags so
+// the email body is readable prose rather than one collapsed line.
+function messageToParagraphsHtml(message) {
+  if (!message) return "";
+  return String(message)
+    .split(/\n{1,}/)
+    .map((para) => para.trim())
+    .filter(Boolean)
+    .map(
+      (para) =>
+        `<p style="margin:0 0 14px 0; font-size:15px; color:#33414F; line-height:1.7;">${para}</p>`,
+    )
+    .join("");
+}
+
 export function generateNotificationEmailTemplate({
   branding = {},
-  recipientName = "User",
+  recipientName = "there",
   title,
   message,
   priority = "medium",
   notificationType = "info",
   actionUrl = null,
-  metadata = {},
 }) {
-  const isAlert =
-    priority.toLowerCase() === "high" ||
-    notificationType.toLowerCase() === "error";
-  const blockHtml = isAlert ? alertBlockHtml(message) : infoBlockHtml(message);
+  const org = brandName(branding);
+  const { label: badgeLabel, color: badgeColor } = resolveBadge(notificationType, priority);
+  const isUrgent =
+    String(notificationType).toLowerCase() === "error" ||
+    String(priority).toLowerCase() === "critical";
+
+  // Urgent emails get a prominent coloured notice strip; others get prose only.
+  const urgentStrip = isUrgent
+    ? `<div style="background:#FBE9E6; border:1px solid #F3B6AC; border-radius:8px; padding:14px 18px; margin-bottom:22px; font-size:14px; color:#D4351C; line-height:1.55; font-weight:600;">
+        ⚠ This notification requires your immediate attention. Please log in to your portal to take action.
+       </div>`
+    : "";
+
+  const paragraphsHtml = messageToParagraphsHtml(message);
+
+  const ctaLabel = (() => {
+    const t = String(notificationType).toLowerCase();
+    const p = String(priority).toLowerCase();
+    if (!actionUrl) return "";
+    if (t === "error" || p === "high" || p === "critical") return "Take action now →";
+    if (t === "success") return "View in portal →";
+    return "View in your portal →";
+  })();
 
   return wrapEpicEmail({
     branding,
-    pageTitle: `${brandName(branding)} — ${title || "Notification"}`,
-    badge: String(notificationType).toUpperCase(),
-    title: title || "New Notification",
+    pageTitle: `${org} — ${title || "Notification"}`,
+    badge: badgeLabel,
+    badgeColor,
+    title: title || "Portal Notification",
     messageHtml: `Hi ${recipientName},`,
     bodyHtml: `
-      ${blockHtml}
-      ${metadataBlockHtml(metadata)}
+      ${urgentStrip}
+      <div style="margin-bottom:24px;">
+        ${paragraphsHtml}
+      </div>
+      ${
+        actionUrl
+          ? `<div style="background:#EAF0F7; border:1px solid #C4D4E8; border-radius:8px; padding:14px 18px; margin-bottom:8px; font-size:13px; color:#1D70B8; line-height:1.55;">
+              Log in to your ${org} portal to view the full details and take any required action.
+             </div>`
+          : ""
+      }
     `,
     ctaUrl: actionUrl,
-    ctaLabel: actionUrl ? "Open in portal" : "",
+    ctaLabel,
+    securityHtml: `This is an automated message from <strong>${org}</strong>. If you were not expecting this notification or believe it was sent in error, please contact your caseworker or administrator.`,
   });
 }
 
@@ -351,6 +405,65 @@ export function generateFailureNoticeTemplate({
     `,
     securityHtml:
       "You are receiving this automated failure receipt because you are the designated SMTP account owner.",
+  });
+}
+
+/**
+ * Dedicated email template for Sponsor Licence Granted / Renewed events.
+ * Renders a styled "licence details" block (licence number, issued, expiry, CoS)
+ * with a green accent — visually distinct from the generic notification template.
+ */
+export function generateLicenceGrantedTemplate({
+  branding = {},
+  recipientName = "there",
+  companyName,
+  licenceNumber,
+  issuedDate,
+  expiryDate,
+  cosAllocation = null,
+  isRenewal = false,
+  actionUrl = null,
+}) {
+  const org = brandName(branding);
+  const issuedStr  = issuedDate  ? new Date(issuedDate).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) : null;
+  const expiryStr  = expiryDate  ? new Date(expiryDate).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) : null;
+
+  const C = {
+    ink: "#0B0C0C", muted: "#6B7785", border: "#DDE3EA", pageBg: "#EEF1F5",
+    success: "#00703C", successBg: "#E7F2EC", successBorder: "#B7DCC6",
+  };
+
+  // Licence details block — mirrors the credentialsBlockHtml style
+  const rows = [
+    { label: "Licence Number", value: `<span style="font-family:'SFMono-Regular',Consolas,'Liberation Mono',monospace;font-size:16px;font-weight:800;color:${C.success};letter-spacing:1px;">${licenceNumber}</span>` },
+    { label: "Company",        value: companyName },
+    ...(issuedStr  ? [{ label: "Date Issued",    value: issuedStr  }] : []),
+    ...(expiryStr  ? [{ label: "Expiry Date",     value: expiryStr  }] : []),
+    ...(cosAllocation != null ? [{ label: "CoS Allocation", value: String(cosAllocation) }] : []),
+  ];
+  const detailsBlock = `<div style="border:1px solid ${C.border};border-radius:10px;overflow:hidden;margin-bottom:24px;">
+    <div style="background:${C.pageBg};padding:12px 16px;font-size:11px;font-weight:700;color:${C.muted};text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid ${C.border};">Licence Details</div>
+    ${rows.map((r, i) => `<div style="padding:14px 16px;${i < rows.length - 1 ? `border-bottom:1px solid ${C.border};` : ""}">
+      <div style="font-size:11px;color:${C.muted};margin-bottom:4px;font-weight:600;">${r.label}</div>
+      <div style="font-size:14px;color:${C.ink};font-weight:700;">${r.value}</div>
+    </div>`).join("")}
+  </div>`;
+
+  const successBox = `<div style="background:${C.successBg};border:1px solid ${C.successBorder};border-radius:8px;padding:14px 16px;font-size:14px;color:${C.success};line-height:1.55;margin-bottom:8px;font-weight:600;">
+    You can now request Certificates of Sponsorship (CoS) and add sponsored workers through your ${org} portal.
+  </div>`;
+
+  return wrapEpicEmail({
+    branding,
+    pageTitle: `${org} — ${isRenewal ? "Sponsor Licence Renewed" : "Sponsor Licence Granted"}`,
+    badge: isRenewal ? "Licence Renewed" : "Licence Granted",
+    badgeColor: "#00703C",
+    title: isRenewal ? "Your Sponsor Licence Has Been Renewed" : "Your Sponsor Licence Has Been Granted",
+    messageHtml: `Hi ${recipientName},<br/><br/>Congratulations — your ${isRenewal ? "sponsor licence has been renewed" : "sponsor licence application for <strong>" + companyName + "</strong> has been approved"} by UKVI.`,
+    bodyHtml: detailsBlock + successBox,
+    ctaUrl: actionUrl,
+    ctaLabel: actionUrl ? (isRenewal ? "View renewed licence →" : "View in your portal →") : "",
+    securityHtml: `This is an automated message from <strong>${org}</strong>. If you were not expecting this notification, please contact your caseworker or administrator.`,
   });
 }
 
