@@ -192,6 +192,20 @@ export default (sequelize, DataTypes) => {
                 allowNull: true,
                 field: "info_received_at",
             },
+            // ── Flow v2 fields ─────────────────────────────────────────────────
+            // Set when the sponsor marks payment confirmed on the UKVI portal.
+            ukviPaymentConfirmedAt: {
+                type: DataTypes.DATE,
+                allowNull: true,
+                field: "ukvi_payment_confirmed_at",
+            },
+            // Set to rejectedAt + 6 months when UKVI rejects the application.
+            // Sponsor must wait until this date before reapplying on UKVI.
+            rejectionCooldownUntil: {
+                type: DataTypes.DATEONLY,
+                allowNull: true,
+                field: "rejection_cooldown_until",
+            },
             // Soft-delete timestamp. Non-null means the row has been soft-deleted
             // via Sequelize paranoid mode; hard-deleted rows are gone from the DB.
             // Restored via LicenceApplication.restore() or the restore endpoint.

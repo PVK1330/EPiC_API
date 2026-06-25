@@ -12,6 +12,7 @@ import {
     completeLicenceGovernmentRegistration,
     requestLicenceGovernmentCredentials,
     recordLicenceGovernmentSubmission,
+    recordHomeOfficeDispatch,
 } from '../caseworkerLicenceGovernment.controller.js';
 import {
     getCaseworkerIntakeSummary,
@@ -46,6 +47,7 @@ import { upload } from '../../../middlewares/upload.middleware.js';
 import {
     completeRegistrationSchema,
     governmentSubmissionSchema,
+    homeOfficeDispatchSchema,
 } from '../../../validations/licenceGovernment.validation.js';
 
 const router = Router();
@@ -111,5 +113,6 @@ router.post("/:id/government-registration/start", ensureAssignedCaseworker(), st
 router.post("/:id/government-registration/complete", ensureAssignedCaseworker(), validate(completeRegistrationSchema), completeLicenceGovernmentRegistration);
 router.post("/:id/request-government-credentials", ensureAssignedCaseworker(), requestLicenceGovernmentCredentials);
 router.post("/:id/government-submission", ensureAssignedCaseworker(), validate(governmentSubmissionSchema), recordLicenceGovernmentSubmission);
+router.post("/:id/home-office-dispatch", ensureAssignedCaseworker(), validate(homeOfficeDispatchSchema), recordHomeOfficeDispatch);
 
 export default router;

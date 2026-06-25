@@ -448,6 +448,17 @@ export async function saveDraft({
       { transaction: t },
     );
   });
+  // Fire-and-forget: push any filled wizard data back into the sponsor's profile
+  // so the Business Profile section is populated without them having to do it twice.
+  if (
+    body.organisationInfo ||
+    body.authorisingOfficer ||
+    body.keyContact ||
+    body.level1Users
+  ) {
+    syncWizardDataToProfile(tenantDb, application).catch(() => {});
+  }
+
   return loadFullApplication(tenantDb, appId, {
     ownerUserId: application.userId,
   });
@@ -536,6 +547,9 @@ export async function submitApplication({ tenantDb, application }) {
     feeCurrency: fee.currency,
   });
 
+  // Definitive sync on submission — profile gets the full wizard picture.
+  syncWizardDataToProfile(tenantDb, application).catch(() => {});
+
   return loadFullApplication(tenantDb, appId, {
     ownerUserId: application.userId,
   });
@@ -577,6 +591,8 @@ export function serializeApplication(app) {
     level1Users: j.level1Users || [],
     declaration: j.declaration || null,
     reviewNotes: j.adminNotes || null,
+    ukviPaymentConfirmedAt: j.ukviPaymentConfirmedAt || null,
+    rejectionCooldownUntil: j.rejectionCooldownUntil || null,
   };
 }
 
@@ -585,6 +601,66 @@ export function splitFullName(name) {
   const firstName = parts[0] || "";
   const lastName = parts.slice(1).join(" ") || "";
   return { firstName, lastName };
+}
+
+/**
+ * Reverse sync: push wizard data INTO the sponsor's Business Profile.
+ * Called non-blocking (fire-and-forget) on saveDraft and submitApplication.
+ * Non-destructive: only fills fields that are currently null/empty so existing
+ * profile data is never overwritten.
+ */
+async function syncWizardDataToProfile(tenantDb, application) {
+  try {
+    const profile = await tenantDb.SponsorProfile.findOne({
+      where: { userId: application.userId },
+    });
+    if (!profile) return;
+
+    const full = await loadFullApplication(tenantDb, application.id, {
+      ownerUserId: application.userId,
+    });
+
+    const orgInfo = full.organisationInfo || {};
+    const ao = full.authorisingOfficer || {};
+    const rawKc = full.keyContact || {};
+    const kc = rawKc.sameAsAuthorisingOfficer ? ao : rawKc;
+    const level1 = full.level1Users || [];
+
+    const patch = {};
+
+    if (!profile.registrationNumber && orgInfo.companiesHouseNumber)
+      patch.registrationNumber = orgInfo.companiesHouseNumber;
+
+    const aoName = [ao.firstName, ao.lastName].filter(Boolean).join(" ").trim();
+    if (!profile.authorisingName && aoName) patch.authorisingName = aoName;
+    if (!profile.authorisingEmail && ao.email) patch.authorisingEmail = ao.email;
+    if (!profile.authorisingPhone && ao.phone) patch.authorisingPhone = ao.phone;
+    if (!profile.authorisingJobTitle && ao.jobTitle)
+      patch.authorisingJobTitle = ao.jobTitle;
+
+    const kcName = [kc.firstName, kc.lastName].filter(Boolean).join(" ").trim();
+    if (!profile.keyContactName && kcName) patch.keyContactName = kcName;
+    if (!profile.keyContactEmail && kc.email) patch.keyContactEmail = kc.email;
+    if (!profile.keyContactPhone && kc.phone) patch.keyContactPhone = kc.phone;
+    if (!profile.keyContactDepartment && kc.jobTitle)
+      patch.keyContactDepartment = kc.jobTitle;
+
+    if (
+      (!Array.isArray(profile.level1Users) || profile.level1Users.length === 0) &&
+      level1.length > 0
+    ) {
+      patch.level1Users = level1.map((u) => ({
+        name: [u.firstName, u.lastName].filter(Boolean).join(" ").trim(),
+        email: u.email || null,
+        phone: u.phone || null,
+        jobTitle: u.jobTitle || null,
+      }));
+    }
+
+    if (Object.keys(patch).length > 0) await profile.update(patch);
+  } catch (_) {
+    // Never propagate — this is a background best-effort sync.
+  }
 }
 
 /**

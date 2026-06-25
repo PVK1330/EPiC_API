@@ -52,7 +52,7 @@ export const listMyApplications = async (req, res) => {
     const apps = await req.tenantDb.LicenceApplication.findAll({
       where: { userId, applicationVersion: APPLICATION_VERSION_V2 },
       order: [["updatedAt", "DESC"]],
-      attributes: ["id", "status", "type", "currentStep", "companyName", "licenceType", "submittedAt", "feeTotal", "feeCurrency", "createdAt", "updatedAt"],
+      attributes: ["id", "applicationVersion", "status", "type", "currentStep", "companyName", "licenceType", "submittedAt", "feeTotal", "feeCurrency", "createdAt", "updatedAt"],
     });
     return res.status(200).json({ status: "success", data: apps });
   } catch (error) {
