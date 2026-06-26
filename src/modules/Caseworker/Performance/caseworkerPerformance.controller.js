@@ -2,6 +2,7 @@ import { Op } from 'sequelize';
 import logger from '../../../utils/logger.js';
 import { rowsToXlsxBuffer, sendXlsxDownload } from '../../../utils/excelExport.util.js';
 import { buildCaseworkerAssignmentWhere } from '../../../utils/caseworkerScope.js';
+import { getPaginationParams, buildPaginationMeta } from '../../../utils/paginate.js';
 
 
 /**
@@ -225,9 +226,13 @@ export const getCaseworkerActivityLog = async (req, res) => {
         message: 'User not authenticated' 
       });
     }
-    const { limit = 20, offset = 0 } = req.query;
+    // Server-side pagination. Supports ?page & ?limit (via shared helper);
+    // also honours a legacy explicit ?offset for backwards compatibility.
+    const { page, limit, offset: pageOffset } = getPaginationParams(req.query);
+    const rawOffset = Number.parseInt(req.query.offset, 10);
+    const offset = Number.isNaN(rawOffset) || rawOffset < 0 ? pageOffset : rawOffset;
 
-    const timeline = await req.tenantDb.CaseTimeline.findAll({
+    const { count, rows: timeline } = await req.tenantDb.CaseTimeline.findAndCountAll({
       where: {
         performedBy: userId,
       },
@@ -239,11 +244,15 @@ export const getCaseworkerActivityLog = async (req, res) => {
         },
       ],
       order: [['actionDate', 'DESC']],
-      limit: parseInt(limit),
-      offset: parseInt(offset),
+      limit,
+      offset,
     });
 
-    res.json({ success: true, data: timeline });
+    res.json({
+      success: true,
+      data: timeline,
+      pagination: buildPaginationMeta(count, page, limit),
+    });
   } catch (error) {
     logger.error({ err: error }, 'Error fetching activity log');
     res.status(500).json({

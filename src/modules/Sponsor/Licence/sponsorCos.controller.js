@@ -2,6 +2,7 @@ import logger from "../../../utils/logger.js";
 import catchAsync from "../../../utils/catchAsync.js";
 import apiResponse from "../../../utils/apiResponse.js";
 import { rowsToXlsxBuffer, sendXlsxDownload } from "../../../utils/excelExport.util.js";
+import { getPaginationParams, buildPaginationMeta } from "../../../utils/paginate.js";
 import {
   createCosRequest,
   listSponsorCosRequests,
@@ -61,8 +62,15 @@ export const getCosRequests = async (req, res) => {
   try {
     const userId = uid(req);
     if (!userId) return res.status(401).json({ status: "error", message: "Invalid session" });
-    const requests = await listSponsorCosRequests(req.tenantDb, userId);
-    res.status(200).json({ status: "success", data: requests });
+    const { page, limit, offset } = getPaginationParams(req.query);
+    const { rows, count } = await listSponsorCosRequests(req.tenantDb, userId, {
+      pagination: { limit, offset },
+    });
+    res.status(200).json({
+      status: "success",
+      data: rows,
+      pagination: buildPaginationMeta(count, page, limit),
+    });
   } catch (err) {
     handleError(res, err, "Failed to fetch CoS requests");
   }

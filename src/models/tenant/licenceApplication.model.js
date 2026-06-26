@@ -199,6 +199,13 @@ export default (sequelize, DataTypes) => {
                 allowNull: true,
                 field: "ukvi_payment_confirmed_at",
             },
+            // Optional proof-of-payment file the sponsor may attach when confirming
+            // the UKVI licence fee. Stored under storage/private; null when none.
+            ukviPaymentProofPath: {
+                type: DataTypes.TEXT,
+                allowNull: true,
+                field: "ukvi_payment_proof_path",
+            },
             // Set to rejectedAt + 6 months when UKVI rejects the application.
             // Sponsor must wait until this date before reapplying on UKVI.
             rejectionCooldownUntil: {

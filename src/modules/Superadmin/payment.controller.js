@@ -5,6 +5,7 @@ import ApiResponse from "../../utils/apiResponse.js";
 import { rowsToXlsxBuffer, sendXlsxDownload } from "../../utils/excelExport.util.js";
 import { generatePdfBufferFromDefinition } from "../../services/pdfGenerator.service.js";
 import { getSettingsByNamespace } from "../../services/settings.service.js";
+import { getPaginationParams, buildPaginationMeta } from "../../utils/paginate.js";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
@@ -349,7 +350,9 @@ export const getAllTransactions = catchAsync(async (req, res) => {
   if (status) where.status = status;
   if (gateway) where.gateway = gateway;
 
-  const transactions = await platformDb.PaymentTransaction.findAll({
+  const { page, limit, offset } = getPaginationParams(req.query);
+
+  const { count, rows: transactions } = await platformDb.PaymentTransaction.findAndCountAll({
     where,
     include: [
       {
@@ -364,9 +367,14 @@ export const getAllTransactions = catchAsync(async (req, res) => {
       },
     ],
     order: [["createdAt", "DESC"]],
+    limit,
+    offset,
   });
 
-  return ApiResponse.success(res, "Transactions retrieved successfully", { transactions });
+  return ApiResponse.success(res, "Transactions retrieved successfully", {
+    transactions,
+    pagination: buildPaginationMeta(count, page, limit),
+  });
 });
 
 /**

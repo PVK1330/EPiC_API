@@ -1,4 +1,5 @@
 import logger from '../../../utils/logger.js';
+import { getPaginationParams, buildPaginationMeta } from '../../../utils/paginate.js';
 
 const addDays = (dateString, days) => {
   const date = new Date(dateString);
@@ -57,13 +58,17 @@ export const createChangeRequest = async (req, res) => {
 export const getChangeRequestsBySponsor = async (req, res) => {
   try {
     const sponsorId = req.user.userId;
-    const requests = await req.tenantDb.SponsorChangeRequest.findAll({
+    const { page, limit, offset } = getPaginationParams(req.query);
+
+    const { count, rows: requests } = await req.tenantDb.SponsorChangeRequest.findAndCountAll({
       where: { sponsorId },
       include: [
         { model: req.tenantDb.User, as: "requester", attributes: ["id", "first_name", "last_name", "email"] },
         { model: req.tenantDb.User, as: "reporter", attributes: ["id", "first_name", "last_name", "email"] },
       ],
       order: [["eventDate", "DESC"]],
+      limit,
+      offset,
     });
 
     // BUG-08 fix: GET handlers must be idempotent. Overdue status is computed
@@ -77,7 +82,11 @@ export const getChangeRequestsBySponsor = async (req, res) => {
       };
     });
 
-    return res.status(200).json({ status: "success", data });
+    return res.status(200).json({
+      status: "success",
+      data,
+      pagination: buildPaginationMeta(count, page, limit),
+    });
   } catch (error) {
     logger.error({ err: error }, "Error fetching sponsor change requests");
     return res.status(500).json({ status: "error", message: "Internal server error" });

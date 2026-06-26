@@ -8,6 +8,7 @@ import { validateTransition, WORKFLOW_TYPES } from '../../../services/workflowEn
 import * as sponsorshipNotify from '../../../services/sponsorshipNotification.service.js';
 import { resolveLicenceDocumentPaths } from '../../../utils/licenceDocuments.util.js';
 import { recordLicenceAudit } from '../../../services/licenceAssignment.service.js';
+import { getPaginationParams, buildPaginationMeta } from '../../../utils/paginate.js';
 
 /**
  * Notification matrix for Licence Documents (Sponsor side)
@@ -77,9 +78,13 @@ export const submitLicenceApplication = async (req, res) => {
 export const getMyLicenceApplications = async (req, res) => {
     try {
         const userId = req.user.userId;
-        const applications = await req.tenantDb.LicenceApplication.findAll({
+        const { page, limit, offset } = getPaginationParams(req.query);
+
+        const { count, rows: applications } = await req.tenantDb.LicenceApplication.findAndCountAll({
             where: { userId },
-            order: [['createdAt', 'DESC']]
+            order: [['createdAt', 'DESC']],
+            limit,
+            offset
         });
 
         // V2-aware: surface the real uploaded evidence. V2 applications keep their
@@ -95,7 +100,8 @@ export const getMyLicenceApplications = async (req, res) => {
 
         res.status(200).json({
             status: 'success',
-            data
+            data,
+            pagination: buildPaginationMeta(count, page, limit)
         });
     } catch (error) {
         logger.error({ err: error }, 'Error fetching my licence applications');
@@ -430,11 +436,16 @@ export const renewLicenceApplication = async (req, res) => {
 export const getLicenceDocuments = async (req, res) => {
     try {
         const userId = req.user.userId;
+        const { page, limit, offset } = getPaginationParams(req.query);
 
-        // Find all applications for this user
-        const applications = await req.tenantDb.LicenceApplication.findAll({
+        // Find this user's applications (paginated). Documents are flattened
+        // per application, so pagination is applied to the underlying
+        // application rows and the meta reports the total application count.
+        const { count, rows: applications } = await req.tenantDb.LicenceApplication.findAndCountAll({
             where: { userId },
-            order: [['createdAt', 'DESC']]
+            order: [['createdAt', 'DESC']],
+            limit,
+            offset
         });
 
         const allDocuments = [];
@@ -497,7 +508,8 @@ export const getLicenceDocuments = async (req, res) => {
 
         res.status(200).json({
             status: 'success',
-            data: allDocuments
+            data: allDocuments,
+            pagination: buildPaginationMeta(count, page, limit)
         });
     } catch (error) {
         logger.error({ err: error }, 'Error fetching licence documents');

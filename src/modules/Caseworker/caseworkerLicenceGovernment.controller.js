@@ -4,7 +4,6 @@ import {
   startReview,
   startGovernmentRegistration,
   completeGovernmentRegistration,
-  requestGovernmentCredentials,
   recordGovernmentSubmission,
   confirmHomeOfficeDispatch,
   getSubmittedCredentials,
@@ -50,17 +49,6 @@ export const completeLicenceGovernmentRegistration = async (req, res) => {
     if (err.statusCode === 400) return ApiResponse.badRequest(res, err.message);
     logger.error({ err }, "completeLicenceGovernmentRegistration failed");
     return ApiResponse.error(res, "Failed to complete government registration", 500, err);
-  }
-};
-
-export const requestLicenceGovernmentCredentials = async (req, res) => {
-  try {
-    const data = await requestGovernmentCredentials(req.tenantDb, req.licenceApplication, req.user, req);
-    return ApiResponse.success(res, "Prompt sent to sponsor to submit UKVI credentials", data);
-  } catch (err) {
-    if (err.statusCode === 400) return ApiResponse.badRequest(res, err.message);
-    logger.error({ err }, "requestLicenceGovernmentCredentials failed");
-    return ApiResponse.error(res, "Failed to send credentials prompt", 500, err);
   }
 };
 

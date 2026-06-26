@@ -150,11 +150,36 @@ export async function createCosRequest({ tenantDb, sponsorId, organisationId, vi
   return request;
 }
 
-export async function listSponsorCosRequests(tenantDb, sponsorId) {
-  return tenantDb.CosRequest.findAll({
+/**
+ * List a sponsor's own CoS requests.
+ *
+ * Backwards compatible: by default returns a plain array (findAll).
+ * When `pagination` ({ limit, offset }) is supplied, it switches to
+ * findAndCountAll and returns { rows, count } so callers can build
+ * pagination meta. The where/order are identical in both modes.
+ *
+ * @param {object} tenantDb
+ * @param {number} sponsorId
+ * @param {object} [opts]
+ * @param {{ limit: number, offset: number }} [opts.pagination]
+ * @returns {Promise<Array|{rows: Array, count: number}>}
+ */
+export async function listSponsorCosRequests(tenantDb, sponsorId, { pagination } = {}) {
+  const queryOptions = {
     where: { sponsorId },
     order: [["created_at", "DESC"]],
-  });
+  };
+
+  if (pagination) {
+    const { rows, count } = await tenantDb.CosRequest.findAndCountAll({
+      ...queryOptions,
+      limit: pagination.limit,
+      offset: pagination.offset,
+    });
+    return { rows, count };
+  }
+
+  return tenantDb.CosRequest.findAll(queryOptions);
 }
 
 export async function updateSponsorCosRequest({ tenantDb, sponsorId, id, visaType, requestedAmount, reason }) {
@@ -182,18 +207,51 @@ export async function deleteSponsorCosRequest({ tenantDb, sponsorId, id }) {
 
 // ─── Reviewer (admin / caseworker) operations ────────────────────────────────
 
-export async function listCosRequests(tenantDb, { status, sponsorId, assignedCaseworkerId } = {}) {
+/**
+ * List CoS requests for reviewers (admin / caseworker).
+ *
+ * Backwards compatible: by default returns a plain array (findAll).
+ * When `pagination` ({ limit, offset }) is supplied, it switches to
+ * findAndCountAll and returns { rows, count } so callers can build
+ * pagination meta. All filters/sorts are preserved in both modes.
+ *
+ * @param {object} tenantDb
+ * @param {object} [opts]
+ * @param {string} [opts.status]
+ * @param {number} [opts.sponsorId]
+ * @param {number} [opts.assignedCaseworkerId]
+ * @param {{ limit: number, offset: number }} [opts.pagination]
+ * @returns {Promise<Array|{rows: Array, count: number}>}
+ */
+export async function listCosRequests(
+  tenantDb,
+  { status, sponsorId, assignedCaseworkerId, pagination } = {}
+) {
   const where = {};
   if (status) where.status = status;
   if (sponsorId) where.sponsorId = Number(sponsorId);
   if (assignedCaseworkerId) {
     where.assignedCaseworkerIds = { [Op.contains]: [Number(assignedCaseworkerId)] };
   }
-  return tenantDb.CosRequest.findAll({
+
+  const queryOptions = {
     where,
     include: sponsorInclude(tenantDb),
     order: [["created_at", "DESC"]],
-  });
+  };
+
+  if (pagination) {
+    // findAndCountAll → { count, rows }. With the to-one sponsor/reviewer
+    // includes here, count stays the number of CosRequest rows (no fan-out).
+    const { rows, count } = await tenantDb.CosRequest.findAndCountAll({
+      ...queryOptions,
+      limit: pagination.limit,
+      offset: pagination.offset,
+    });
+    return { rows, count };
+  }
+
+  return tenantDb.CosRequest.findAll(queryOptions);
 }
 
 export async function getCosRequestById(tenantDb, id) {

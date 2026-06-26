@@ -72,10 +72,10 @@ function assertBlocked(err, expectedCode, labelSubstring) {
 
 // ─── 1. STAGE_PHASE_MAP ───────────────────────────────────────────────────────
 
-test("STAGE_PHASE_MAP: all 18 stage keys have a phase entry", () => {
+test("STAGE_PHASE_MAP: all 19 stage keys have a phase entry", () => {
   const definedKeys = LICENCE_STAGE_DEFINITIONS.map((s) => s.key);
   const mappedKeys = Object.keys(STAGE_PHASE_MAP);
-  assert.equal(mappedKeys.length, 18, "Expected exactly 18 entries in STAGE_PHASE_MAP");
+  assert.equal(mappedKeys.length, 19, "Expected exactly 19 entries in STAGE_PHASE_MAP");
   for (const key of definedKeys) {
     assert.ok(
       Object.hasOwn(STAGE_PHASE_MAP, key),
@@ -84,22 +84,23 @@ test("STAGE_PHASE_MAP: all 18 stage keys have a phase entry", () => {
   }
 });
 
-test("STAGE_PHASE_MAP: stages 1–10 map to phase 2 (Application)", () => {
+test("STAGE_PHASE_MAP: stages 1–9 map to phase 2 (Application)", () => {
   const phase2Keys = [
     "enquiry_onboarding", "licence_routes", "organisation_details",
     "cos_requirements", "supporting_documents", "key_personnel",
-    "declarations", "payment", "intake_information_form", "intake_document_checklist",
+    "declarations", "intake_information_form", "intake_document_checklist",
   ];
   for (const key of phase2Keys) {
     assert.equal(STAGE_PHASE_MAP[key], 2, `Expected ${key} → phase 2`);
   }
 });
 
-test("STAGE_PHASE_MAP: stages 11–18 map to phase 3 (Review & Approval)", () => {
+test("STAGE_PHASE_MAP: stages 10–19 map to phase 3 (Review & Approval)", () => {
   const phase3Keys = [
     "sponsor_information_provision", "government_sms_registration",
     "sponsor_portal_onboarding", "government_portal_credentials",
     "government_application_forms", "government_submission",
+    "home_office_document_dispatch", "payment_confirmation",
     "submission", "decision_activation",
   ];
   for (const key of phase3Keys) {
@@ -133,9 +134,13 @@ test("stageRoleOrder: government_sms_registration uses caseworker-first order", 
   assert.equal(order[2], "admin");
 });
 
-test("stageRoleOrder: government_portal_credentials uses caseworker-first order", () => {
+test("stageRoleOrder: government_portal_credentials uses sponsor-first order (flow v2)", () => {
+  // Flow v2: UKVI emails credentials to the sponsor, who submits them first; the
+  // caseworker then reviews and the admin confirms.
   const order = stageRoleOrder("government_portal_credentials");
-  assert.equal(order[0], "caseworker");
+  assert.equal(order[0], "sponsor");
+  assert.equal(order[1], "caseworker");
+  assert.equal(order[2], "admin");
 });
 
 test("stageRoleOrder: unknown stage key falls back to default order", () => {
@@ -202,7 +207,7 @@ test("checkStatusGate: sponsor_information_provision blocked when status is Pend
 test("checkStatusGate: data-entry stages have no status gate (always pass)", () => {
   const noGateStages = [
     "enquiry_onboarding", "licence_routes", "organisation_details",
-    "supporting_documents", "payment",
+    "supporting_documents", "cos_requirements",
   ];
   const app = { status: "Draft", id: 1 };
   for (const key of noGateStages) {
@@ -499,7 +504,7 @@ test("validatePhaseGate: string phase number is coerced correctly", () => {
 
 // ─── 8. STAGE_STATUS_GATE coverage ───────────────────────────────────────────
 
-test("STAGE_STATUS_GATE: all 8 government-pipeline stage keys are gated", () => {
+test("STAGE_STATUS_GATE: all 10 government-pipeline stage keys are gated", () => {
   const expectedGatedStages = [
     "sponsor_information_provision",
     "government_sms_registration",
@@ -507,6 +512,8 @@ test("STAGE_STATUS_GATE: all 8 government-pipeline stage keys are gated", () => 
     "government_portal_credentials",
     "government_application_forms",
     "government_submission",
+    "home_office_document_dispatch",
+    "payment_confirmation",
     "submission",
     "decision_activation",
   ];
@@ -523,11 +530,11 @@ test("STAGE_STATUS_GATE: all 8 government-pipeline stage keys are gated", () => 
   }
 });
 
-test("STAGE_STATUS_GATE: data-entry stages (1–10) are NOT in the gate", () => {
+test("STAGE_STATUS_GATE: data-entry stages (1–9) are NOT in the gate", () => {
   const dataEntryStages = [
     "enquiry_onboarding", "licence_routes", "organisation_details",
     "cos_requirements", "supporting_documents", "key_personnel",
-    "declarations", "payment", "intake_information_form", "intake_document_checklist",
+    "declarations", "intake_information_form", "intake_document_checklist",
   ];
   for (const key of dataEntryStages) {
     assert.ok(

@@ -1,5 +1,6 @@
 import { Op } from "sequelize";
 import { localDateStr } from "../../../utils/dateHelpers.js";
+import { getPaginationParams, buildPaginationMeta } from "../../../utils/paginate.js";
 import catchAsync from "../../../utils/catchAsync.js";
 import ApiResponse from "../../../utils/apiResponse.js";
 import { rowsToXlsxBuffer, sendXlsxDownload } from "../../../utils/excelExport.util.js";
@@ -846,7 +847,9 @@ export const getWorkloadAlerts = async (req, res) => {
 // Get Pending Tasks
 export const getPendingTasks = async (req, res) => {
   try {
-    const tasks = await req.tenantDb.Task.findAll({
+    const { page, limit, offset } = getPaginationParams(req.query);
+
+    const { count, rows: tasks } = await req.tenantDb.Task.findAndCountAll({
       where: {
         status: { [Op.notIn]: ["completed"] },
       },
@@ -863,6 +866,9 @@ export const getPendingTasks = async (req, res) => {
         },
       ],
       order: [["due_date", "ASC"]],
+      limit,
+      offset,
+      distinct: true,
     });
 
     const formattedTasks = tasks.map((t) => ({
@@ -878,9 +884,13 @@ export const getPendingTasks = async (req, res) => {
         : "Unassigned",
     }));
 
-    res
-      .status(200)
-      .json({ status: "success", data: { tasks: formattedTasks } });
+    res.status(200).json({
+      status: "success",
+      data: {
+        tasks: formattedTasks,
+        pagination: buildPaginationMeta(count, page, limit),
+      },
+    });
   } catch (error) {
     logger.error({ err: error }, "Get Pending Tasks Error");
     res.status(500).json({ status: "error", message: "Internal server error" });
@@ -890,7 +900,9 @@ export const getPendingTasks = async (req, res) => {
 // Get Deadline Monitor
 export const getDeadlineMonitor = async (req, res) => {
   try {
-    const cases = await req.tenantDb.Case.findAll({
+    const { page, limit, offset } = getPaginationParams(req.query);
+
+    const { count, rows: cases } = await req.tenantDb.Case.findAndCountAll({
       where: {
         status: { [Op.notIn]: ["Completed", "Closed", "Cancelled"] },
       },
@@ -902,6 +914,9 @@ export const getDeadlineMonitor = async (req, res) => {
         },
       ],
       order: [["targetSubmissionDate", "ASC"]],
+      limit,
+      offset,
+      distinct: true,
     });
 
     const users = await req.tenantDb.User.findAll({ where: { role_id: 2 } });
@@ -932,9 +947,13 @@ export const getDeadlineMonitor = async (req, res) => {
       };
     });
 
-    res
-      .status(200)
-      .json({ status: "success", data: { cases: formattedCases } });
+    res.status(200).json({
+      status: "success",
+      data: {
+        cases: formattedCases,
+        pagination: buildPaginationMeta(count, page, limit),
+      },
+    });
   } catch (error) {
     logger.error({ err: error }, "Get Deadline Monitor Error");
     res.status(500).json({ status: "error", message: "Internal server error" });

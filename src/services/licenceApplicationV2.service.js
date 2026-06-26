@@ -152,6 +152,14 @@ const fullIncludes = (tenantDb) => [
     required: false,
     attributes: ["licenceNumber", "expiryDate", "cosAllocation", "rating", "grantDate"],
   },
+  {
+    // Government tracking — only the non-sensitive SMS registration reference is
+    // exposed so the sponsor can see it (never the encrypted portal credentials).
+    model: tenantDb.LicenceGovernmentTracking,
+    as: "governmentTracking",
+    required: false,
+    attributes: ["smsRegistrationRef"],
+  },
 ];
 
 /**
@@ -598,6 +606,16 @@ export function serializeApplication(app) {
     declaration: j.declaration || null,
     reviewNotes: j.adminNotes || null,
     ukviPaymentConfirmedAt: j.ukviPaymentConfirmedAt || null,
+    // Whether an optional proof-of-payment file is on record (path itself is
+    // never exposed — it is streamed via the payment-proof download endpoint).
+    hasUkviPaymentProof: !!j.ukviPaymentProofPath,
+    // Government processing references shown to the sponsor (read-only). The SMS
+    // registration reference lives on the government tracking record; the rest are
+    // columns on the application itself.
+    smsRegistrationRef: j.governmentTracking?.smsRegistrationRef || null,
+    governmentRegistrationRef: j.governmentRegistrationRef || null,
+    governmentSubmissionRef: j.governmentSubmissionRef || null,
+    governmentSubmissionDate: j.governmentSubmissionDate || null,
     rejectionCooldownUntil: j.rejectionCooldownUntil || null,
     rejectionReason: j.rejectionReason || null,
     licenceNumber: j.grantRecord?.licenceNumber || null,

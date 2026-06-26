@@ -742,6 +742,17 @@ export const getMyLicenceStageTasks = async (req, res) => {
       limit: 50,
     });
 
+    // Resolve company names so the UI can group the tasks per licence application.
+    const stageAppIds = [...new Set(rows.map((r) => r.licenceApplicationId).filter(Boolean))];
+    const companyByAppId = new Map();
+    if (stageAppIds.length) {
+      const apps = await req.tenantDb.LicenceApplication.findAll({
+        where: { id: { [Op.in]: stageAppIds } },
+        attributes: ["id", "companyName"],
+      });
+      apps.forEach((a) => companyByAppId.set(a.id, a.companyName));
+    }
+
     const today = new Date().toISOString().split("T")[0];
     const tasks = rows.map((r) => {
       const p = r.get({ plain: true });
@@ -755,7 +766,9 @@ export const getMyLicenceStageTasks = async (req, res) => {
         status: p.status,
         priority: isOverdue ? "high" : "medium",
         stageKey: p.stageKey,
+        role: p.role,
         licenceApplicationId: p.licenceApplicationId,
+        companyName: companyByAppId.get(p.licenceApplicationId) || null,
         isLicenceStageTask: true,
         section: isOverdue
           ? "overdue"

@@ -1,5 +1,6 @@
 import logger from "../../../utils/logger.js";
 import { hasFullAccessRole } from "../../../middlewares/role.middleware.js";
+import { getPaginationParams, buildPaginationMeta } from "../../../utils/paginate.js";
 import {
   listCosRequests,
   getCosRequestById,
@@ -13,11 +14,17 @@ import {
 export const getMyAssignedCosRequests = async (req, res) => {
   try {
     const caseworkerId = req.user.userId;
-    const requests = await listCosRequests(req.tenantDb, {
+    const { page, limit, offset } = getPaginationParams(req.query);
+    const { rows, count } = await listCosRequests(req.tenantDb, {
       assignedCaseworkerId: caseworkerId,
       status: req.query.status,
+      pagination: { limit, offset },
     });
-    res.status(200).json({ status: "success", data: requests });
+    res.status(200).json({
+      status: "success",
+      data: rows,
+      pagination: buildPaginationMeta(count, page, limit),
+    });
   } catch (error) {
     logger.error({ err: error }, "Error fetching assigned CoS requests");
     res.status(500).json({ status: "error", message: "Failed to fetch assigned CoS requests" });

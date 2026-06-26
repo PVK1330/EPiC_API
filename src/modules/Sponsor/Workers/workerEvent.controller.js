@@ -1,4 +1,5 @@
 import logger from '../../../utils/logger.js';
+import { getPaginationParams, buildPaginationMeta } from '../../../utils/paginate.js';
 import {
   notifyAdmins,
   notifyUser,
@@ -109,10 +110,14 @@ const notifyInvolvedParties = async ({ tenantDb, workerCase, workerId, title, me
 export const listWorkerEvents = async (req, res) => {
   try {
     const sponsorId = req.user.userId;
-    const events = await req.tenantDb.WorkerEvent.findAll({
+    const { page, limit, offset } = getPaginationParams(req.query);
+
+    const { count, rows: events } = await req.tenantDb.WorkerEvent.findAndCountAll({
       where: { sponsorId },
       include: [{ model: req.tenantDb.User, as: "worker", attributes: ["id", "first_name", "last_name"] }],
       order: [["eventDate", "DESC"]],
+      limit,
+      offset,
     });
 
     const data = events.map((event) => {
@@ -132,7 +137,11 @@ export const listWorkerEvents = async (req, res) => {
       };
     });
 
-    return res.status(200).json({ status: "success", data });
+    return res.status(200).json({
+      status: "success",
+      data,
+      pagination: buildPaginationMeta(count, page, limit),
+    });
   } catch (error) {
     logger.error({ err: error }, "Error fetching worker events");
     return res.status(500).json({ status: "error", message: "Internal server error" });

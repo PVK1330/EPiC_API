@@ -1033,6 +1033,32 @@ export async function ensureStageTasks(tenantDb, applicationOrId, { req = null, 
     }
   }
 
+  // Self-heal: a sponsor "payment confirmation" task that was completed by someone
+  // OTHER than the sponsor (e.g. an admin/caseworker ticked it by mistake before this
+  // was locked down) while the sponsor has NOT actually confirmed the UKVI fee payment
+  // (ukviPaymentConfirmedAt is null) is reopened — only the sponsor may confirm payment.
+  // A genuine sponsor confirmation always sets ukviPaymentConfirmedAt first (and is
+  // completedByUserId === the sponsor), so this never reverts a legitimate completion.
+  if (!application.ukviPaymentConfirmedAt) {
+    const sponsorPayment = await tenantDb.LicenceStageTask.findOne({
+      where: {
+        licenceApplicationId: application.id,
+        stageKey: "payment_confirmation",
+        role: "sponsor",
+        status: "completed",
+      },
+      attributes: ["id", "completedByUserId"],
+    });
+    if (sponsorPayment && sponsorPayment.completedByUserId !== application.userId) {
+      await tenantDb.LicenceStageTask.update(
+        { status: "pending", completedAt: null, completedByUserId: null },
+        { where: { id: sponsorPayment.id } },
+      ).catch((err) =>
+        logger.warn({ err, applicationId: application.id }, "ensureStageTasks: reopen sponsor payment task failed"),
+      );
+    }
+  }
+
   // Re-fetch after potential updates
   const freshRows = await tenantDb.LicenceStageTask.findAll({
     where: { licenceApplicationId: application.id },
@@ -1228,9 +1254,19 @@ function actorRoleKey(actorUser) {
   return null;
 }
 
-function canCompleteRole(actorUser, role) {
+function canCompleteRole(actorUser, role, stageKey) {
   const key = actorRoleKey(actorUser);
-  if (key === "admin") return true; // admins may complete any role's task
+  // Sponsor-manual stages (e.g. payment confirmation) must be completed by the
+  // sponsor themselves — staff cannot tick them off on the sponsor's behalf,
+  // because the sponsor is attesting to a real-world action (the UKVI fee payment).
+  if (role === "sponsor" && SPONSOR_MANUAL_STAGES.has(stageKey)) {
+    return key === "sponsor";
+  }
+  if (key === "admin") return true; // admins may complete any other role's task
+  // Caseworkers may complete sponsor and caseworker tasks to drive the workflow
+  // (only on applications they're assigned to — enforced by ensureAssignedCaseworker),
+  // but NOT admin tasks: admin sign-off stays admin-only. Stage ordering still applies.
+  if (key === "caseworker") return role !== "admin";
   return key === role;
 }
 
@@ -1248,7 +1284,7 @@ export async function completeStageTask(tenantDb, { applicationId, stageKey, rol
   if (!STAGE_ROLE_KEYS.includes(role)) {
     const e = new Error("Unknown role"); e.statusCode = 400; throw e;
   }
-  if (!canCompleteRole(actorUser, role)) {
+  if (!canCompleteRole(actorUser, role, stageKey)) {
     const e = new Error("You are not permitted to complete this task"); e.statusCode = 403; throw e;
   }
 

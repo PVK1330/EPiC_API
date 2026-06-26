@@ -1,4 +1,5 @@
 import logger from '../../../utils/logger.js';
+import { getPaginationParams, buildPaginationMeta } from '../../../utils/paginate.js';
 
 const toISODate = (value) => {
   if (!value) return null;
@@ -41,16 +42,23 @@ export const createRtwRecord = async (req, res) => {
 export const getAllRtwRecordsForSponsor = async (req, res) => {
   try {
     const sponsorId = req.user.userId;
+    const { page, limit, offset } = getPaginationParams(req.query);
 
-    const records = await req.tenantDb.RightToWorkRecord.findAll({
+    const { count, rows } = await req.tenantDb.RightToWorkRecord.findAndCountAll({
       where: { sponsorId },
       include: [
         { model: req.tenantDb.User, as: "worker", attributes: ["id", "first_name", "last_name", "email"] },
       ],
       order: [["initialCheckDate", "DESC"]],
+      limit,
+      offset,
     });
 
-    return res.status(200).json({ status: "success", data: records });
+    return res.status(200).json({
+      status: "success",
+      data: rows,
+      pagination: buildPaginationMeta(count, page, limit),
+    });
   } catch (error) {
     logger.error({ err: error }, "Error fetching all right to work records for sponsor");
     return res.status(500).json({ status: "error", message: "Internal server error" });
