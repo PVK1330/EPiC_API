@@ -123,15 +123,24 @@ const reviewIncludes = (tenantDb) => [
   { model: tenantDb.User, as: "reviewer", attributes: ["id", "first_name", "last_name", "email"], required: false },
 ];
 
-export async function listForReview(tenantDb, cfg, { reviewStatus, sponsorId } = {}) {
+export async function listForReview(tenantDb, cfg, { reviewStatus, sponsorId, limit, offset } = {}) {
   const where = {};
   if (reviewStatus && reviewStatus !== "All") where.reviewStatus = reviewStatus;
   if (sponsorId) where.sponsorId = Number(sponsorId);
-  return tenantDb[cfg.model].findAll({
+
+  const query = {
     where,
     include: reviewIncludes(tenantDb),
     order: [["created_at", "DESC"]],
-  });
+    // distinct keeps the count accurate even though reviewIncludes() joins
+    // related User rows; without it findAndCountAll can over-count.
+    distinct: true,
+  };
+  if (Number.isInteger(limit)) query.limit = limit;
+  if (Number.isInteger(offset)) query.offset = offset;
+
+  const { count, rows } = await tenantDb[cfg.model].findAndCountAll(query);
+  return { rows, total: count };
 }
 
 export async function getRecordWithHistory(tenantDb, cfg, id) {

@@ -59,6 +59,7 @@ function brandMark(branding) {
 export function wrapEpicEmail({
   pageTitle = "",
   badge = "",
+  badgeColor = null,
   title = "",
   messageHtml = "",
   bodyHtml = "",
@@ -72,8 +73,12 @@ export function wrapEpicEmail({
   const year = new Date().getFullYear();
   const resolvedPageTitle = esc(pageTitle || branding?.orgName || "EPiC");
 
+  // When badgeColor is supplied (e.g. from notification emails) use it; otherwise
+  // fall back to the default blue-tint style for welcome/credential/OTP emails.
+  const badgeBg   = badgeColor ? `${badgeColor}18` : C.blueTint; // 18 = ~10% alpha hex
+  const badgeFg   = badgeColor || C.navy;
   const badgeBlock = badge
-    ? `<div style="display:inline-block; background-color:${C.blueTint}; color:${C.navy}; font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; padding:5px 11px; border-radius:6px; margin-bottom:18px;">${badge}</div>`
+    ? `<div style="display:inline-block; background-color:${badgeBg}; color:${badgeFg}; font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; padding:5px 11px; border-radius:6px; margin-bottom:18px; border:1px solid ${badgeFg}22;">${badge}</div>`
     : "";
 
   const ctaBlock =
@@ -111,8 +116,8 @@ export function wrapEpicEmail({
       <td align="center">
         <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px; max-width:600px; background-color:${C.surface}; border-radius:14px; box-shadow:0 6px 24px rgba(11,46,94,0.08); overflow:hidden;">
 
-          <!-- UK accent bar -->
-          <tr><td style="height:4px; line-height:4px; font-size:0; background-color:${C.navy};">&nbsp;</td></tr>
+          <!-- Top accent bar — navy for standard emails, notification-type colour when set -->
+          <tr><td style="height:4px; line-height:4px; font-size:0; background-color:${badgeColor || C.navy};">&nbsp;</td></tr>
 
           <!-- Header / brand mark -->
           <tr>

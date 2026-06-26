@@ -16,6 +16,7 @@ import {
   getGovernmentCredentials,
   submitSponsorUkviCredentials,
   confirmSponsorUkviPayment,
+  downloadSponsorPaymentProof,
 } from './sponsorLicenceGovernment.controller.js';
 import { listDispatchDocumentsHandler, downloadDispatchDocumentHandler } from '../../Shared/Licence/licenceDispatch.controller.js';
 import {
@@ -68,7 +69,10 @@ router.delete("/documents/:applicationId/:docIndex", deleteLicenceDocument);
 router.get("/:id/government-credentials", getGovernmentCredentials);
 router.post("/:id/government-credentials", confirmGovernmentCredentialsReceived); // legacy
 router.post("/:id/submit-credentials", validate(submitCredentialsSchema), submitSponsorUkviCredentials);
-router.post("/:id/confirm-payment", confirmSponsorUkviPayment);
+// Optional `paymentProof` file may accompany the confirmation (multipart). Plain
+// JSON (no file) still works — multer passes non-multipart requests straight through.
+router.post("/:id/confirm-payment", upload.single("paymentProof"), confirmSponsorUkviPayment);
+router.get("/:id/payment-proof/download", downloadSponsorPaymentProof);
 
 // Documents dispatched to sponsor by admin/caseworker.
 router.get("/:id/dispatch-documents", listDispatchDocumentsHandler);

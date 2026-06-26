@@ -1,3 +1,5 @@
+import path from "path";
+import fs from "fs";
 import logger from "../../../utils/logger.js";
 import ApiResponse from "../../../utils/apiResponse.js";
 import {
@@ -6,6 +8,9 @@ import {
   submitUkviCredentials,
   confirmUkviPayment,
 } from "../../../services/licenceGovernment.service.js";
+
+const PRIVATE_STORAGE_DIR = path.resolve(process.cwd(), "storage/private");
+const INLINE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".webp", ".gif", ".pdf"];
 
 const ownedApp = (req) =>
   req.tenantDb.LicenceApplication.findOne({
@@ -87,15 +92,52 @@ export const submitSponsorUkviCredentials = async (req, res) => {
 
 // POST /:id/confirm-payment
 // Sponsor confirms they have paid the UKVI licence fee on the UKVI portal.
+// An optional `paymentProof` file (multipart) may be attached.
 export const confirmSponsorUkviPayment = async (req, res) => {
   try {
     const application = await ownedApp(req);
     if (!application) return ApiResponse.notFound(res, "Licence application not found");
 
-    const data = await confirmUkviPayment(req.tenantDb, application, req.user, req);
+    const data = await confirmUkviPayment(req.tenantDb, application, req.user, req, req.file || null);
     return ApiResponse.success(res, "UKVI payment confirmation recorded", data);
   } catch (err) {
     logger.error({ err }, "confirmSponsorUkviPayment failed");
     return ApiResponse.error(res, "Failed to confirm payment", 500, err);
+  }
+};
+
+// GET /:id/payment-proof/download
+// Stream the sponsor's optional UKVI payment proof (owner-guarded, path-confined).
+export const downloadSponsorPaymentProof = async (req, res) => {
+  try {
+    const application = await ownedApp(req);
+    if (!application) return ApiResponse.notFound(res, "Licence application not found");
+    if (!application.ukviPaymentProofPath) {
+      return ApiResponse.notFound(res, "No payment proof has been uploaded");
+    }
+
+    const absolute = path.resolve(String(application.ukviPaymentProofPath));
+    if (absolute !== PRIVATE_STORAGE_DIR && !absolute.startsWith(PRIVATE_STORAGE_DIR + path.sep)) {
+      return ApiResponse.badRequest(res, "Invalid document path");
+    }
+    if (!fs.existsSync(absolute)) {
+      return ApiResponse.notFound(res, "File no longer exists on the server");
+    }
+
+    const filename = path.basename(absolute);
+    const ext = path.extname(filename).toLowerCase();
+    const forceDownload = req.query.download === "1";
+    const disposition = forceDownload || !INLINE_EXTENSIONS.includes(ext) ? "attachment" : "inline";
+
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Content-Disposition", `${disposition}; filename="${filename}"`);
+    return res.sendFile(absolute, (err) => {
+      if (err && !res.headersSent) {
+        res.status(500).json({ status: "error", message: "Error streaming document" });
+      }
+    });
+  } catch (err) {
+    logger.error({ err }, "downloadSponsorPaymentProof failed");
+    return ApiResponse.error(res, "Failed to download payment proof", 500, err);
   }
 };

@@ -16,6 +16,7 @@ import { recordPlatformAuditLog, createPlatformNotification } from "../../servic
 import { reactivateOrgManually } from "../../services/orgBilling.service.js";
 import { invalidateOrgCache } from "../../services/orgCache.service.js";
 import logger from "../../utils/logger.js";
+import { getPaginationParams, buildPaginationMeta } from "../../utils/paginate.js";
 
 const Organisation = platformDb.Organisation;
 const User = platformDb.User;
@@ -102,7 +103,8 @@ async function removeOrganisationUsers(orgId) {
 
 export const listOrganisations = async (req, res) => {
   try {
-    const rows = await Organisation.findAll({
+    const { page, limit, offset } = getPaginationParams(req.query);
+    const { count, rows } = await Organisation.findAndCountAll({
       order: [["id", "ASC"]],
       include: [
         {
@@ -112,11 +114,16 @@ export const listOrganisations = async (req, res) => {
           required: false,
         },
       ],
+      limit,
+      offset,
+      // hasMany "users" join would multiply rows; distinct counts organisations only.
+      distinct: true,
     });
     return res.status(200).json({
       status: "success",
       message: "Organisations retrieved",
       data: { organisations: rows },
+      pagination: buildPaginationMeta(count, page, limit),
     });
   } catch (err) {
     logger.error({ err }, "listOrganisations");

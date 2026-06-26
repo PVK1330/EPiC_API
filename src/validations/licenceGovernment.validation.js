@@ -24,16 +24,6 @@ export const governmentSubmissionSchema = z.object({
   }),
 });
 
-// POST /admin/:id/generate-credentials
-export const generateCredentialsSchema = z.object({
-  params: idParams,
-  body: z.object({
-    ukviPortalUserId: z.string().trim().min(1).max(255),
-    ukviPortalPassword: z.string().min(8).max(255),
-    smsPortalUsername: z.string().trim().max(255).optional(),
-  }),
-});
-
 // POST /business/licence/:id/submit-credentials
 // Sponsor submits the UKVI portal credentials they received via email from UKVI.
 export const submitCredentialsSchema = z.object({

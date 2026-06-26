@@ -5,6 +5,7 @@ import { generatePdfBufferFromDefinition } from "../../services/pdfGenerator.ser
 import { buildBrandedPdfDocDefinition, generateBrandedPdfBuffer } from "../../services/pdfGenerator.service.js";
 import { multiSheetXlsxBuffer, sendXlsxDownload } from "../../utils/excelExport.util.js";
 import { getSettingsByNamespace } from "../../services/settings.service.js";
+import { getPaginationParams, buildPaginationMeta } from "../../utils/paginate.js";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
@@ -353,7 +354,10 @@ async function buildUkInvoiceDocDef(invoice, platformSettings) {
 }
 
 export const getAllInvoices = catchAsync(async (req, res) => {
-  const invoices = await platformDb.Invoice.findAll({
+  // Server-side pagination. Supports ?page & ?limit (via shared helper).
+  const { page, limit, offset } = getPaginationParams(req.query);
+
+  const { count, rows: invoices } = await platformDb.Invoice.findAndCountAll({
     include: [
       {
         model: platformDb.Organisation,
@@ -373,8 +377,15 @@ export const getAllInvoices = catchAsync(async (req, res) => {
       },
     ],
     order: [["createdAt", "DESC"]],
+    limit,
+    offset,
+    distinct: true,
   });
-  return ApiResponse.success(res, "Invoices retrieved successfully", { invoices });
+
+  return ApiResponse.success(res, "Invoices retrieved successfully", {
+    invoices,
+    pagination: buildPaginationMeta(count, page, limit),
+  });
 });
 
 export const getInvoiceById = catchAsync(async (req, res) => {

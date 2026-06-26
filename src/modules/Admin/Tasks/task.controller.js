@@ -1,3 +1,4 @@
+import { Op } from 'sequelize';
 import { ROLES } from '../../../middlewares/role.middleware.js';
 import { notifyTaskAssigned } from '../../../services/notification.service.js';
 import { localDateStr, localDateAfterDays } from '../../../utils/dateHelpers.js';
@@ -681,6 +682,112 @@ export const deleteTask = async (req, res) => {
   }
 };
 
+
+/**
+ * GET /tasks/my-stage-tasks
+ * Returns pending LicenceStageTask records for the authenticated user's role,
+ * shaped as a flat task list for display in Tasks and Calendar pages.
+ */
+export const getMyLicenceStageTasks = async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+    const roleId = req.user?.role_id;
+    if (!userId || !req.tenantDb.LicenceStageTask) {
+      return res.status(200).json({ status: "success", data: { tasks: [] } });
+    }
+
+    let taskRole;
+    let applicationIds = null;
+
+    if (roleId === ROLES.BUSINESS) {
+      taskRole = "sponsor";
+      const apps = await req.tenantDb.LicenceApplication.findAll({
+        where: { userId },
+        attributes: ["id"],
+      });
+      applicationIds = apps.map((a) => a.id);
+    } else if (roleId === ROLES.CASEWORKER) {
+      taskRole = "caseworker";
+      const apps = await req.tenantDb.LicenceApplication.findAll({
+        where: req.tenantDb.sequelize.literal(
+          `"assignedcaseworkerId"::jsonb @> '[${Number(userId)}]'::jsonb`,
+        ),
+        attributes: ["id"],
+      });
+      applicationIds = apps.map((a) => a.id);
+    } else if (roleId === ROLES.ADMIN || roleId === ROLES.SUPERADMIN) {
+      taskRole = "admin";
+    } else {
+      return res.status(200).json({ status: "success", data: { tasks: [] } });
+    }
+
+    if (applicationIds !== null && !applicationIds.length) {
+      return res.status(200).json({ status: "success", data: { tasks: [] } });
+    }
+
+    const where = {
+      role: taskRole,
+      status: { [Op.ne]: "completed" },
+    };
+    if (applicationIds) {
+      where.licenceApplicationId = { [Op.in]: applicationIds };
+    }
+
+    const rows = await req.tenantDb.LicenceStageTask.findAll({
+      where,
+      order: [
+        ["due_date", "ASC"],
+        ["stage_order", "ASC"],
+      ],
+      limit: 50,
+    });
+
+    // Resolve company names so the UI can group the tasks per licence application.
+    const stageAppIds = [...new Set(rows.map((r) => r.licenceApplicationId).filter(Boolean))];
+    const companyByAppId = new Map();
+    if (stageAppIds.length) {
+      const apps = await req.tenantDb.LicenceApplication.findAll({
+        where: { id: { [Op.in]: stageAppIds } },
+        attributes: ["id", "companyName"],
+      });
+      apps.forEach((a) => companyByAppId.set(a.id, a.companyName));
+    }
+
+    const today = new Date().toISOString().split("T")[0];
+    const tasks = rows.map((r) => {
+      const p = r.get({ plain: true });
+      const dueIso = p.dueDate ? String(p.dueDate).slice(0, 10) : null;
+      const isOverdue = dueIso && dueIso < today;
+      const stageName = (p.stageKey || "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+      return {
+        id: `lst-${p.id}`,
+        title: p.description || stageName,
+        due_date: dueIso,
+        status: p.status,
+        priority: isOverdue ? "high" : "medium",
+        stageKey: p.stageKey,
+        role: p.role,
+        licenceApplicationId: p.licenceApplicationId,
+        companyName: companyByAppId.get(p.licenceApplicationId) || null,
+        isLicenceStageTask: true,
+        section: isOverdue
+          ? "overdue"
+          : !dueIso
+            ? "upcoming"
+            : dueIso === today
+              ? "today"
+              : dueIso <= new Date(Date.now() + 2 * 86400000).toISOString().split("T")[0]
+                ? "due_soon"
+                : "upcoming",
+      };
+    });
+
+    return res.status(200).json({ status: "success", data: { tasks } });
+  } catch (err) {
+    logger.error({ err }, "getMyLicenceStageTasks error");
+    return res.status(500).json({ status: "error", message: "Failed to fetch licence stage tasks" });
+  }
+};
 
 export const getTasksByUserId = async (req, res) => {
   try {

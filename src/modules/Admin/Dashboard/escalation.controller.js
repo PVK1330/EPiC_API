@@ -2,6 +2,7 @@ import { Op } from 'sequelize';
 import { notifyEscalationCreated, notifyEscalationResolved } from '../../../services/notification.service.js';
 import { rowsToXlsxBuffer, sendXlsxDownload } from '../../../utils/excelExport.util.js';
 import { localDateStr } from '../../../utils/dateHelpers.js';
+import { getPaginationParams, buildPaginationMeta } from '../../../utils/paginate.js';
 import logger from '../../../utils/logger.js';
 
 
@@ -171,17 +172,25 @@ export const createEscalation = async (req, res) => {
 export const getAllEscalations = async (req, res) => {
   try {
     const whereClause = buildEscalationWhereClause(req.query);
+    const { page, limit, offset } = getPaginationParams(req.query);
 
-    const [escalations, kpiSourceRows] = await Promise.all([
-      req.tenantDb.Escalation.findAll({
+    const [escalationsResult, kpiSourceRows] = await Promise.all([
+      req.tenantDb.Escalation.findAndCountAll({
         where: whereClause,
         order: [["created_at", "DESC"]],
         include: getEscalationListIncludes(req),
+        limit,
+        offset,
+        // Without distinct, count is inflated by the included (hasMany-style) joins.
+        // The includes here are belongsTo, but distinct keeps the total correct and safe.
+        distinct: true,
       }),
       req.tenantDb.Escalation.findAll({
         attributes: ["severity", "status", "resolvedAt", "created_at"],
       }),
     ]);
+
+    const { rows: escalations, count: total } = escalationsResult;
 
     const escalationsWithDaysOpen = escalations.map((esc) => {
       const escalationData = esc.toJSON();
@@ -197,6 +206,7 @@ export const getAllEscalations = async (req, res) => {
       data: {
         escalations: escalationsWithDaysOpen,
         kpi,
+        pagination: buildPaginationMeta(total, page, limit),
       },
     });
   } catch (error) {

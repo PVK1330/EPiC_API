@@ -699,6 +699,33 @@ export const login = catchAsync(async (req, res) => {
     return ApiResponse.forbidden(res, 'Account is inactive or suspended.');
   }
 
+  // Defence-in-depth: the admin UI deactivates users in the TENANT database, and
+  // a stale/failed sync could leave the platform row 'active' while the tenant
+  // row is 'inactive'. The tenant copy is the source of truth for org-scoped
+  // accounts, so cross-check it and block login on any drift. (Superadmin /
+  // platform staff have no tenant row and are skipped.)
+  if (user.organisation_id && !isSuperAdminRole(user.role_id) && !isPlatformStaffUser(user)) {
+    try {
+      const dbName =
+        req.organisationContext?.organisation?.database_name ||
+        (await platformDb.Organisation.findByPk(user.organisation_id, { attributes: ['database_name'] }))?.database_name;
+      if (dbName) {
+        const tenantDb = getTenantDb(dbName);
+        const tenantUser = await tenantDb.User.findOne({
+          where: { email: emailNorm },
+          attributes: ['status'],
+        });
+        if (tenantUser && tenantUser.status !== 'active') {
+          // Self-heal the platform registry so future checks are consistent.
+          platformDb.User.update({ status: tenantUser.status }, { where: { id: user.id } }).catch(() => {});
+          return ApiResponse.forbidden(res, 'Account is inactive or suspended.');
+        }
+      }
+    } catch (err) {
+      logger.warn({ err, userId: user.id }, 'login: tenant status cross-check skipped');
+    }
+  }
+
   if (user.locked_until && new Date(user.locked_until) > new Date()) {
     platformDb.PlatformAuditLog.create({
       user_id: user.id, action: 'FAILED_LOGIN',

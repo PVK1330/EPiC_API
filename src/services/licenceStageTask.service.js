@@ -4,6 +4,7 @@ import { deliver } from "./sponsorshipNotification.service.js";
 import { NotificationTypes, NotificationPriority } from "./notification.service.js";
 import { extractCaseworkerIds } from "./licenceAssignment.service.js";
 import { loadFullApplication, serializeApplication } from "./licenceApplicationV2.service.js";
+import { emitToUser, EVENT_TYPES } from "../realtime/messagingRealtime.js";
 
 /**
  * Licence Stage Task engine.
@@ -1032,6 +1033,32 @@ export async function ensureStageTasks(tenantDb, applicationOrId, { req = null, 
     }
   }
 
+  // Self-heal: a sponsor "payment confirmation" task that was completed by someone
+  // OTHER than the sponsor (e.g. an admin/caseworker ticked it by mistake before this
+  // was locked down) while the sponsor has NOT actually confirmed the UKVI fee payment
+  // (ukviPaymentConfirmedAt is null) is reopened — only the sponsor may confirm payment.
+  // A genuine sponsor confirmation always sets ukviPaymentConfirmedAt first (and is
+  // completedByUserId === the sponsor), so this never reverts a legitimate completion.
+  if (!application.ukviPaymentConfirmedAt) {
+    const sponsorPayment = await tenantDb.LicenceStageTask.findOne({
+      where: {
+        licenceApplicationId: application.id,
+        stageKey: "payment_confirmation",
+        role: "sponsor",
+        status: "completed",
+      },
+      attributes: ["id", "completedByUserId"],
+    });
+    if (sponsorPayment && sponsorPayment.completedByUserId !== application.userId) {
+      await tenantDb.LicenceStageTask.update(
+        { status: "pending", completedAt: null, completedByUserId: null },
+        { where: { id: sponsorPayment.id } },
+      ).catch((err) =>
+        logger.warn({ err, applicationId: application.id }, "ensureStageTasks: reopen sponsor payment task failed"),
+      );
+    }
+  }
+
   // Re-fetch after potential updates
   const freshRows = await tenantDb.LicenceStageTask.findAll({
     where: { licenceApplicationId: application.id },
@@ -1134,16 +1161,16 @@ export async function getStagesForApplication(tenantDb, applicationOrId, { req =
     byStage.get(r.stageKey).push(r);
   }
 
-  // Supplement the data-signal completed set with DB task-row state for stages
-  // that have no data signal (manual-completion only). This allows the timeline
-  // to advance past stages 16 and 17 once all task rows are actually completed,
-  // without relying on a data signal that never fires for these stages.
-  const MANUAL_STAGE_KEYS = ["home_office_document_dispatch", "payment_confirmation"];
-  for (const sk of MANUAL_STAGE_KEYS) {
-    if (completed.has(sk)) continue;
-    const stageRows = byStage.get(sk) || [];
+  // Supplement the data-signal completed set with DB task-row state for ALL stages.
+  // This prevents stage regression when the status is "Licence Rejected" — deriveStageCompletion
+  // has no data signal for govActive stages (9-15) under that status, so without this supplement
+  // the contiguous scan stops at stage 9. Any stage whose DB task rows are all completed
+  // is treated as done regardless of whether a data signal fired.
+  for (const s of LICENCE_STAGE_DEFINITIONS) {
+    if (completed.has(s.key)) continue;
+    const stageRows = byStage.get(s.key) || [];
     if (stageRows.length > 0 && stageRows.every((r) => r.status === "completed")) {
-      completed.add(sk);
+      completed.add(s.key);
     }
   }
   // Recalculate currentKey now that completed may have grown (contiguous from start).
@@ -1227,9 +1254,19 @@ function actorRoleKey(actorUser) {
   return null;
 }
 
-function canCompleteRole(actorUser, role) {
+function canCompleteRole(actorUser, role, stageKey) {
   const key = actorRoleKey(actorUser);
-  if (key === "admin") return true; // admins may complete any role's task
+  // Sponsor-manual stages (e.g. payment confirmation) must be completed by the
+  // sponsor themselves — staff cannot tick them off on the sponsor's behalf,
+  // because the sponsor is attesting to a real-world action (the UKVI fee payment).
+  if (role === "sponsor" && SPONSOR_MANUAL_STAGES.has(stageKey)) {
+    return key === "sponsor";
+  }
+  if (key === "admin") return true; // admins may complete any other role's task
+  // Caseworkers may complete sponsor and caseworker tasks to drive the workflow
+  // (only on applications they're assigned to — enforced by ensureAssignedCaseworker),
+  // but NOT admin tasks: admin sign-off stays admin-only. Stage ordering still applies.
+  if (key === "caseworker") return role !== "admin";
   return key === role;
 }
 
@@ -1247,7 +1284,7 @@ export async function completeStageTask(tenantDb, { applicationId, stageKey, rol
   if (!STAGE_ROLE_KEYS.includes(role)) {
     const e = new Error("Unknown role"); e.statusCode = 400; throw e;
   }
-  if (!canCompleteRole(actorUser, role)) {
+  if (!canCompleteRole(actorUser, role, stageKey)) {
     const e = new Error("You are not permitted to complete this task"); e.statusCode = 403; throw e;
   }
 
@@ -1484,6 +1521,15 @@ async function notifyStageTaskCompleted({ tenantDb, application, stageDef, role,
         "notifyStageTaskCompleted: deliver failed — task still complete, remaining recipients will still be notified",
       ),
     );
+  }
+
+  // Push a lightweight socket event to every portal user so their page can
+  // re-fetch without a manual refresh.
+  const livePayload = { applicationId: application.id, stageKey: stageDef.key };
+  if (recipients.sponsor?.userId)  emitToUser(recipients.sponsor.userId,  EVENT_TYPES.LICENCE_STAGE_UPDATED, livePayload);
+  if (recipients.admin?.userId)    emitToUser(recipients.admin.userId,    EVENT_TYPES.LICENCE_STAGE_UPDATED, livePayload);
+  for (const cw of recipients.caseworkers) {
+    if (cw.userId) emitToUser(cw.userId, EVENT_TYPES.LICENCE_STAGE_UPDATED, livePayload);
   }
 }
 

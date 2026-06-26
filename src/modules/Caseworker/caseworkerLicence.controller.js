@@ -12,20 +12,49 @@ import { loadFullApplication as loadFullApplicationV2, serializeApplication as s
 import { ensureStageTasks } from '../../services/licenceStageTask.service.js';
 import { resolveLicenceDocumentPaths } from '../../utils/licenceDocuments.util.js';
 import { validateTransition, WORKFLOW_TYPES } from '../../services/workflowEngine.service.js';
+import { getPaginationParams, buildPaginationMeta } from '../../utils/paginate.js';
 
 export const getAssignedLicenceApplications = async (req, res) => {
     try {
         const caseworkerId = req.user.userId;
-        
-        // Find applications where caseworkerId array contains this caseworkerId
-        const applications = await req.tenantDb.LicenceApplication.findAll({
+
+        // Server-side pagination (?page & ?limit). Defaults/clamping are handled
+        // by the shared helper so the contract matches other paginated endpoints.
+        const { page, limit, offset } = getPaginationParams(req.query);
+
+        // Find applications where caseworkerId array contains this caseworkerId.
+        // findAndCountAll gives us the total for the pagination meta.
+        const { rows: applications, count } = await req.tenantDb.LicenceApplication.findAndCountAll({
             where: {
                 assignedcaseworkerId: {
                     [Op.contains]: [caseworkerId]
                 }
             },
-            order: [['createdAt', 'DESC']]
+            // Include government tracking so the UI can show saved values (e.g. the
+            // SMS registration reference) instead of always offering "Save" again.
+            // Encrypted credential fields are intentionally excluded.
+            include: [{
+                model: req.tenantDb.LicenceGovernmentTracking,
+                as: "governmentTracking",
+                required: false,
+                attributes: [
+                    "id", "ukviPortalUserId", "smsPortalUsername", "smsRegistrationRef",
+                    "credentialsGeneratedAt", "credentialsSentAt",
+                    "governmentRegistrationRef", "governmentSubmissionRef", "governmentSubmissionDate",
+                ],
+            }],
+            order: [['createdAt', 'DESC']],
+            limit,
+            offset,
+            // A hasMany include can multiply rows; distinct keeps the count = number
+            // of distinct LicenceApplication rows so totalPages is correct.
+            distinct: true
         });
+
+        // findAndCountAll returns count as a number for a single-model count, but
+        // can return an array of group rows when grouping is used. Normalise to a
+        // plain integer for the pagination meta.
+        const total = Array.isArray(count) ? count.length : count;
 
         // V2-aware: merge V2 appendix evidence (file_path) into each app's
         // documents array so the caseworker sees uploaded V2 documents, not just V1.
@@ -39,7 +68,8 @@ export const getAssignedLicenceApplications = async (req, res) => {
 
         res.status(200).json({
             status: 'success',
-            data
+            data,
+            pagination: buildPaginationMeta(total, page, limit)
         });
     } catch (error) {
         logger.error({ err: error }, 'Error fetching assigned licence applications');

@@ -6,7 +6,7 @@ import {
   NotificationPriority,
 } from "./notification.service.js";
 import { sendTransactionalEmail } from "./mail.service.js";
-import { generateNotificationEmailTemplate } from "../utils/emailTemplates.js";
+import { generateLicenceGrantedTemplate } from "../utils/emailTemplates.js";
 import { getOrganisationEmailBranding } from "../utils/emailBranding.js";
 import { recordLicenceAudit } from "./licenceAssignment.service.js";
 
@@ -63,6 +63,7 @@ export async function activateSponsorLicence({
   approvedByUserId = null,
   req = null,
   transaction = null,
+  licenceNumber: providedLicenceNumber = null,
 }) {
   // findOrCreate ensures a SponsorProfile row always exists before activation.
   // Sponsors who registered before visiting account settings may not have a row;
@@ -93,8 +94,12 @@ export async function activateSponsorLicence({
     return { profile, licenceNumber: profile.sponsorLicenceNumber, wasActive: true };
   }
 
+  // Use the UKVI-assigned number supplied by the admin; fall back to the
+  // existing number (renewals) or auto-generate one if neither is available.
   const licenceNumber =
-    profile.sponsorLicenceNumber || generateLicenceNumber(profile, application);
+    providedLicenceNumber?.trim() ||
+    profile.sponsorLicenceNumber ||
+    generateLicenceNumber(profile, application);
   const wasActive = alreadyActive;
 
   // For renewals, extend from the existing expiry date so no time is lost
@@ -189,6 +194,7 @@ export async function activateSponsorLicence({
     licenceNumber,
     issuedDate,
     expiryDate,
+    cosAllocation: profile.cosAllocation ?? seedCosPool ?? null,
     isRenewal,
   }).catch((err) => logger.error({ err, applicationId: application.id }, "notifySponsorLicenceActivated failed"));
 
@@ -220,15 +226,17 @@ async function notifySponsorLicenceActivated({
   licenceNumber,
   issuedDate,
   expiryDate,
+  cosAllocation = null,
   isRenewal = false,
 }) {
   const userId = application.userId;
-  const notifTitle = isRenewal ? "Sponsor Licence Renewed" : "Sponsor Licence Approved";
+  const notifTitle = isRenewal ? "Sponsor Licence Renewed" : "Sponsor Licence Granted";
+  const expiryFormatted = expiryDate ? new Date(expiryDate).toLocaleDateString("en-GB") : null;
   const notifMessage = isRenewal
-    ? `Your sponsor licence has been renewed (Licence No. ${licenceNumber}). New expiry: ${new Date(expiryDate).toLocaleDateString("en-GB")}.`
-    : `Your sponsor licence is now Active (Licence No. ${licenceNumber}). You can now request CoS and sponsor workers.`;
+    ? `Your sponsor licence has been renewed (Licence No. ${licenceNumber}).${expiryFormatted ? ` New expiry: ${expiryFormatted}.` : ""}`
+    : `Your sponsor licence has been granted by UKVI (Licence No. ${licenceNumber}). You can now request CoS and add sponsored workers.`;
 
-  // Portal notification (sendEmail:false — the email is sent explicitly below).
+  // Portal notification — email is sent separately below.
   try {
     await notifyUser(tenantDb, userId, {
       type: NotificationTypes.SUCCESS,
@@ -240,28 +248,23 @@ async function notifySponsorLicenceActivated({
       entityId: application.id,
       actionType: isRenewal ? "licence_renewed" : "licence_activated",
       sendEmail: false,
-      metadata: {
-        licenceNumber,
-        issuedDate,
-        expiryDate,
-        licenceStatus: LICENCE_STATUS.ACTIVE,
-        isRenewal,
-      },
     });
   } catch (err) {
     logger.error({ err }, "Failed to create licence portal notification");
   }
 
-  // Transactional email.
+  // Rich transactional grant email with licence details block.
   try {
     let recipientEmail =
       profile.keyContactEmail ||
       profile.authorisingEmail ||
       profile.billingEmail ||
       null;
+    let recipientName = profile.companyName || "there";
     if (!recipientEmail) {
-      const user = await tenantDb.User.findByPk(userId, { attributes: ["email"] });
+      const user = await tenantDb.User.findByPk(userId, { attributes: ["email", "first_name"] });
       recipientEmail = user?.email || null;
+      if (user?.first_name) recipientName = user.first_name;
     }
 
     if (recipientEmail) {
@@ -271,32 +274,23 @@ async function notifySponsorLicenceActivated({
         to: recipientEmail,
         subject: isRenewal
           ? `Your sponsor licence has been renewed — ${licenceNumber}`
-          : `Your sponsor licence is now active — ${licenceNumber}`,
-        html: generateNotificationEmailTemplate({
-          recipientName: profile.companyName || "Sponsor",
-          title: notifTitle,
-          message: isRenewal
-            ? `Congratulations — your sponsor licence has been successfully renewed.\n\n` +
-              `Licence Number: ${licenceNumber}\n` +
-              `Renewed On: ${new Date(issuedDate).toLocaleDateString("en-GB")}\n` +
-              `New Expiry: ${new Date(expiryDate).toLocaleDateString("en-GB")}\n\n` +
-              `Your CoS allocation and sponsorship rights remain in force.`
-            : `Congratulations — your sponsor licence application has been approved and your licence is now ACTIVE.\n\n` +
-              `Licence Number: ${licenceNumber}\n` +
-              `Issued: ${new Date(issuedDate).toLocaleDateString("en-GB")}\n` +
-              `Expires: ${new Date(expiryDate).toLocaleDateString("en-GB")}\n\n` +
-              `You can now request Certificates of Sponsorship (CoS) and add sponsored workers.`,
-          priority: NotificationPriority.HIGH,
-          notificationType: NotificationTypes.SUCCESS,
-          actionUrl: `${process.env.FRONTEND_URL || ""}/business/licence`,
-          metadata: { licenceNumber },
+          : `Sponsor licence granted — ${licenceNumber}`,
+        html: generateLicenceGrantedTemplate({
           branding,
+          recipientName,
+          companyName: profile.companyName || application.companyName || "your company",
+          licenceNumber,
+          issuedDate,
+          expiryDate,
+          cosAllocation,
+          isRenewal,
+          actionUrl: `${process.env.FRONTEND_URL || ""}/business/licence`,
         }),
       });
     } else {
       logger.warn({ userId }, "Licence notification: no email address found for sponsor");
     }
   } catch (err) {
-    logger.error({ err }, "Failed to send licence email");
+    logger.error({ err }, "Failed to send licence granted email");
   }
 }

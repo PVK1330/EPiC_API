@@ -13,6 +13,7 @@ import {
   NotificationTypes,
   NotificationPriority,
 } from '../../../services/notification.service.js';
+import { getPaginationParams, buildPaginationMeta } from '../../../utils/paginate.js';
 
 const toISODate = (value) => {
   if (!value) return null;
@@ -34,7 +35,10 @@ export const getDocumentsBySponsor = async (req, res) => {
       where.status = normalized;
     }
 
-    const documents = await req.tenantDb.ComplianceDocument.findAll({
+    // Server-side pagination. Supports ?page & ?limit (via shared helper).
+    const { page, limit, offset } = getPaginationParams(req.query);
+
+    const { count, rows: documents } = await req.tenantDb.ComplianceDocument.findAndCountAll({
       where,
       include: [
         {
@@ -44,9 +48,15 @@ export const getDocumentsBySponsor = async (req, res) => {
         },
       ],
       order: [['upload_date', 'DESC']],
+      limit,
+      offset,
     });
 
-    return res.status(200).json({ status: 'success', data: documents });
+    return res.status(200).json({
+      status: 'success',
+      data: documents,
+      pagination: buildPaginationMeta(count, page, limit),
+    });
   } catch (error) {
     logger.error({ err: error }, 'getDocumentsBySponsor error');
     return res.status(500).json({ status: 'error', message: error.message || 'Internal server error' });

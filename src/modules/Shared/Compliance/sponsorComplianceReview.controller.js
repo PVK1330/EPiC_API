@@ -1,4 +1,5 @@
 import logger from "../../../utils/logger.js";
+import { getPaginationParams, buildPaginationMeta } from "../../../utils/paginate.js";
 import {
   resolveEntity,
   loadRecord,
@@ -14,15 +15,22 @@ const handle = (res, err, fallback) => {
   return res.status(code).json({ status: "error", message: err.message || fallback });
 };
 
-/** List items of one entity type for the review queue (optional ?status, ?sponsorId). */
+/** List items of one entity type for the review queue (optional ?status, ?sponsorId, ?page, ?limit). */
 export const listComplianceReview = async (req, res) => {
   try {
     const cfg = resolveEntity(req.params.entityType);
-    const data = await listForReview(req.tenantDb, cfg, {
+    const { page, limit, offset } = getPaginationParams(req.query);
+    const { rows, total } = await listForReview(req.tenantDb, cfg, {
       reviewStatus: req.query.status,
       sponsorId: req.query.sponsorId,
+      limit,
+      offset,
     });
-    res.status(200).json({ status: "success", data });
+    res.status(200).json({
+      status: "success",
+      data: rows,
+      pagination: buildPaginationMeta(total, page, limit),
+    });
   } catch (err) {
     handle(res, err, "Failed to list compliance items");
   }

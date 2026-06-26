@@ -27,6 +27,7 @@ import { ensureStageTasks } from "../../../services/licenceStageTask.service.js"
 import { verifyAppendixDocument, bulkVerifyAppendixDocuments, rejectAppendixDocument } from "../../../services/licenceIntake.service.js";
 import { resolveLicenceDocumentPaths } from "../../../utils/licenceDocuments.util.js";
 import { validateTransition, WORKFLOW_TYPES } from "../../../services/workflowEngine.service.js";
+import { getPaginationParams, buildPaginationMeta } from "../../../utils/paginate.js";
 
 // Licence documents are stored as raw disk paths in LicenceApplication.documents
 // (e.g. storage/private/temp/<uuid>.pdf). The /uploads dir is no longer served
@@ -88,14 +89,21 @@ export const downloadLicenceDocument = async (req, res) => {
 export const getAllLicenceApplications = async (req, res) => {
   try {
     const { status, type } = req.query;
+    const { page, limit, offset } = getPaginationParams(req.query);
     const whereClause = {};
     // Unsubmitted V2 drafts are private to the sponsor — never surface them to reviewers.
     if (status) whereClause.status = status;
     else whereClause.status = { [Op.ne]: "Draft" };
     if (type) whereClause.type = type;
 
-    const applications = await req.tenantDb.LicenceApplication.findAll({
+    const { rows: applications, count } = await req.tenantDb.LicenceApplication.findAndCountAll({
       where: whereClause,
+      limit,
+      offset,
+      // With required:false (LEFT JOIN) to-one/to-many includes, distinct keeps
+      // the count equal to the number of LicenceApplication rows, not the joined
+      // row total — so pagination totals stay correct.
+      distinct: true,
       include: [
         {
           model: req.tenantDb.User,
@@ -112,6 +120,18 @@ export const getAllLicenceApplications = async (req, res) => {
             "id", "ukviPortalUserId", "smsPortalUsername", "smsRegistrationRef",
             "credentialsGeneratedAt", "credentialsSentAt",
             "governmentRegistrationRef", "governmentSubmissionRef", "governmentSubmissionDate",
+          ],
+        },
+        {
+          model: req.tenantDb.LicenceIntakeForm,
+          as: "intakeForm",
+          required: false,
+          attributes: [
+            "id", "tradingName", "premisesAddress", "owningLimitedCompany",
+            "namedPersonOnLicence", "phoneNumber", "niNumber", "emailAddress",
+            "jobTitlesRequired", "companyWebsite", "totalEmployees",
+            "employeesUnderImmigrationRules", "numberOfCosRequired",
+            "conditions", "isComplete",
           ],
         },
       ],
@@ -131,6 +151,7 @@ export const getAllLicenceApplications = async (req, res) => {
     res.status(200).json({
       status: "success",
       data,
+      pagination: buildPaginationMeta(count, page, limit),
     });
   } catch (error) {
     logger.error({ err: error }, "Error fetching all licence applications");
@@ -245,6 +266,18 @@ export const getAdminLicenceApplicationDetails = async (req, res) => {
           model: req.tenantDb.User,
           as: "user",
           attributes: ["id", "first_name", "last_name", "email"],
+        },
+        {
+          model: req.tenantDb.LicenceIntakeForm,
+          as: "intakeForm",
+          required: false,
+          attributes: [
+            "id", "tradingName", "premisesAddress", "owningLimitedCompany",
+            "namedPersonOnLicence", "phoneNumber", "niNumber", "emailAddress",
+            "jobTitlesRequired", "companyWebsite", "totalEmployees",
+            "employeesUnderImmigrationRules", "numberOfCosRequired",
+            "conditions", "isComplete",
+          ],
         },
       ],
     });
@@ -559,11 +592,16 @@ export const updateLicenceApplicationByAdmin = async (req, res) => {
 
 export const getCosRequests = async (req, res) => {
   try {
-    const requests = await listCosRequests(req.tenantDb, { status: req.query.status });
+    const { page, limit, offset } = getPaginationParams(req.query);
+    const { rows, count } = await listCosRequests(req.tenantDb, {
+      status: req.query.status,
+      pagination: { limit, offset },
+    });
     res.status(200).json({
       status: "success",
       message: "CoS requests fetched successfully",
-      data: requests,
+      data: rows,
+      pagination: buildPaginationMeta(count, page, limit),
     });
   } catch (error) {
     logger.error({ err: error }, "Error fetching CoS requests");

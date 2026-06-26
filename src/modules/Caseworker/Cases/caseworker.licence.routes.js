@@ -10,9 +10,11 @@ import {
     startLicenceReview,
     startLicenceGovernmentRegistration,
     completeLicenceGovernmentRegistration,
-    requestLicenceGovernmentCredentials,
     recordLicenceGovernmentSubmission,
     recordHomeOfficeDispatch,
+    getSubmittedLicenceCredentials,
+    verifyLicenceCredentials,
+    requestCredentialsResubmission,
 } from '../caseworkerLicenceGovernment.controller.js';
 import {
     getCaseworkerIntakeSummary,
@@ -111,7 +113,9 @@ router.get("/:id/dispatch-documents/:docId/download", ensureAssignedCaseworker()
 router.post("/:id/start-review", ensureAssignedCaseworker(), startLicenceReview);
 router.post("/:id/government-registration/start", ensureAssignedCaseworker(), startLicenceGovernmentRegistration);
 router.post("/:id/government-registration/complete", ensureAssignedCaseworker(), validate(completeRegistrationSchema), completeLicenceGovernmentRegistration);
-router.post("/:id/request-government-credentials", ensureAssignedCaseworker(), requestLicenceGovernmentCredentials);
+router.get("/:id/submitted-credentials", ensureAssignedCaseworker(), getSubmittedLicenceCredentials);
+router.post("/:id/verify-credentials", ensureAssignedCaseworker(), verifyLicenceCredentials);
+router.post("/:id/request-credentials-resubmission", ensureAssignedCaseworker(), requestCredentialsResubmission);
 router.post("/:id/government-submission", ensureAssignedCaseworker(), validate(governmentSubmissionSchema), recordLicenceGovernmentSubmission);
 router.post("/:id/home-office-dispatch", ensureAssignedCaseworker(), validate(homeOfficeDispatchSchema), recordHomeOfficeDispatch);
 

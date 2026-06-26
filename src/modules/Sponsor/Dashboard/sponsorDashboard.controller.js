@@ -1,8 +1,9 @@
 import logger from '../../../utils/logger.js';
-import { Op } from 'sequelize';
+import { Op, fn, col } from 'sequelize';
 import { mergeCaseWhere } from '../../../utils/tenantScope.js';
 import { toPublicImagePath } from '../../../utils/storagePath.util.js';
 import { computeSponsorPayables } from '../Payments/sponsorPayment.controller.js';
+import { getPaginationParams, buildPaginationMeta } from '../../../utils/paginate.js';
 
 const INACTIVE = ['Cancelled', 'Closed', 'Rejected'];
 
@@ -235,17 +236,24 @@ export const getBusinessPayments = async (req, res) => {
     const userId = uid(req);
     if (!userId) return res.status(401).json({ status: 'error', message: 'Invalid session' });
 
+    // Pagination applies to the `payments` (case_payments) list — the primary
+    // paginated table the portal renders. Summary totals are computed over the
+    // FULL set (via aggregation) so they stay correct regardless of page.
+    const { page, limit, offset } = getPaginationParams(req.query);
+
     const sponsorCases = await req.tenantDb.Case.findAll({
       where: mergeCaseWhere(req, { sponsorId: userId }),
       attributes: ['id', 'caseId']
     });
     const caseIds = sponsorCases.map((c) => c.id);
 
+    const paymentsWhere = { caseId: { [Op.in]: caseIds } };
+
     // Outstanding payables (licence fee / ISC / case balances) the sponsor can
     // pay online, plus the sponsor's licence-fee/ISC ledger. Case-fee payments
     // remain in case_payments (the `payments` list) — the single source of truth
     // for case balances, also consumed by Invoices/Reports.
-    const [payables, sponsorPayments, payments] = await Promise.all([
+    const [payables, sponsorPayments, paymentsPage, summaryRows] = await Promise.all([
       computeSponsorPayables(req).catch((err) => {
         logger.warn({ err }, 'computeSponsorPayables failed');
         return [];
@@ -255,8 +263,8 @@ export const getBusinessPayments = async (req, res) => {
         order: [['created_at', 'DESC']],
       }).catch(() => []),
       caseIds.length
-        ? req.tenantDb.CasePayment.findAll({
-            where: { caseId: { [Op.in]: caseIds } },
+        ? req.tenantDb.CasePayment.findAndCountAll({
+            where: paymentsWhere,
             include: [
               {
                 model: req.tenantDb.Case,
@@ -265,14 +273,35 @@ export const getBusinessPayments = async (req, res) => {
               },
             ],
             order: [['created_at', 'DESC']],
+            limit,
+            offset,
+            // distinct keeps `count` accurate when the include would otherwise
+            // multiply rows.
+            distinct: true,
           })
+        : Promise.resolve({ count: 0, rows: [] }),
+      // Summary totals over the FULL payment set (all pages), grouped by status
+      // so totalFee / totalPaid do not depend on the current page.
+      caseIds.length
+        ? req.tenantDb.CasePayment.findAll({
+            where: paymentsWhere,
+            attributes: [
+              'paymentStatus',
+              [fn('SUM', col('amount')), 'sumAmount'],
+            ],
+            group: ['paymentStatus'],
+            raw: true,
+          }).catch(() => [])
         : Promise.resolve([]),
     ]);
 
-    const totalFee = payments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
-    const totalPaid = payments
-      .filter((p) => p.paymentStatus === 'completed')
-      .reduce((sum, p) => sum + Number(p.amount || 0), 0);
+    const payments = paymentsPage.rows;
+    const paymentsTotal = paymentsPage.count;
+
+    const totalFee = summaryRows.reduce((sum, r) => sum + Number(r.sumAmount || 0), 0);
+    const totalPaid = summaryRows
+      .filter((r) => r.paymentStatus === 'completed')
+      .reduce((sum, r) => sum + Number(r.sumAmount || 0), 0);
     const outstandingPayables = payables.reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
     res.status(200).json({
@@ -287,6 +316,7 @@ export const getBusinessPayments = async (req, res) => {
         payments,
         sponsorPayments,
         payables,
+        pagination: buildPaginationMeta(paymentsTotal, page, limit),
       }
     });
   } catch (err) {

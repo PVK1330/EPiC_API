@@ -6,6 +6,7 @@ export const EVENT_TYPES = Object.freeze({
   MESSAGE_NEW: 'message:new',
   CONVERSATION_UPDATED: 'conversation:updated',
   MESSAGES_READ: 'messages:read',
+  LICENCE_STAGE_UPDATED: 'licence:stage_updated',
 });
 
 /**

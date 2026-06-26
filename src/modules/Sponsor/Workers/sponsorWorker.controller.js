@@ -13,6 +13,7 @@ import { pickLeastLoadedCaseworker, recordCaseAssignmentOutcome } from '../../..
 import * as sponsorshipNotify from '../../../services/sponsorshipNotification.service.js';
 import logger from '../../../utils/logger.js';
 import { toPublicImagePath } from '../../../utils/storagePath.util.js';
+import { getPaginationParams, buildPaginationMeta } from '../../../utils/paginate.js';
 
 const REQUIRED_DOCUMENT_KEYS = ['passport', 'visaCopy', 'cosCopy', 'contract', 'payslips'];
 
@@ -235,7 +236,10 @@ export const getSponsoredWorkers = async (req, res) => {
   try {
     const sponsorId = req.user.userId;
 
-    const workers = await req.tenantDb.Case.findAll({
+    // Server-side pagination via shared helper (?page & ?limit).
+    const { page, limit, offset } = getPaginationParams(req.query);
+
+    const { count, rows: workers } = await req.tenantDb.Case.findAndCountAll({
       where: { sponsorId },
       include: [
         {
@@ -251,7 +255,10 @@ export const getSponsoredWorkers = async (req, res) => {
           ]
         }
       ],
-      order: [['created_at', 'DESC']]
+      order: [['created_at', 'DESC']],
+      limit,
+      offset,
+      distinct: true
     });
 
 
@@ -277,7 +284,8 @@ export const getSponsoredWorkers = async (req, res) => {
 
     res.status(200).json({
       status: 'success',
-      data: transformed
+      data: transformed,
+      pagination: buildPaginationMeta(count, page, limit)
     });
   } catch (err) {
     logger.error({ err }, 'getSponsoredWorkers error');
@@ -295,6 +303,14 @@ export const getSponsoredWorkers = async (req, res) => {
 export const getEmployeeRecords = async (req, res) => {
   try {
     const sponsorId = req.user.userId;
+
+    // Server-side pagination via shared helper (?page & ?limit). Pagination is
+    // applied to the sponsored-worker (Case) query; the synthetic internal
+    // employees derived from the sponsor profile are only included on page 1 so
+    // the combined list stays stable across pages, and the pagination meta
+    // reflects the full combined total.
+    const { page, limit, offset } = getPaginationParams(req.query);
+
     const sponsorProfile = await req.tenantDb.SponsorProfile.findOne({ where: { userId: sponsorId } });
     if (!sponsorProfile) {
       return res.status(404).json({
@@ -410,7 +426,7 @@ export const getEmployeeRecords = async (req, res) => {
     });
 
     // --- 2. Add Sponsored Workers (Candidates) ---
-    const workers = await req.tenantDb.Case.findAll({
+    const { count: workersCount, rows: workers } = await req.tenantDb.Case.findAndCountAll({
       where: { sponsorId },
       include: [
         {
@@ -423,7 +439,10 @@ export const getEmployeeRecords = async (req, res) => {
           as: 'application',
           attributes: ['id', 'nationality', 'visaType', 'niNumber', 'startDate']
         }
-      ]
+      ],
+      limit,
+      offset,
+      distinct: true
     });
 
     const candidateIds = workers.map(w => w.candidateId);
@@ -468,10 +487,17 @@ export const getEmployeeRecords = async (req, res) => {
       };
     });
 
+    // Internal (profile-derived) employees are not part of the paginated DB
+    // query, so only surface them on the first page to avoid duplicating them
+    // on every page. The combined total counts both sets.
+    const pageInternalEmployees = page === 1 ? internalEmployees : [];
+    const combinedTotal = internalEmployees.length + workersCount;
+
     res.status(200).json({
       status: 'success',
       message: 'Employee records fetched successfully',
-      data: [...internalEmployees, ...workerEmployees]
+      data: [...pageInternalEmployees, ...workerEmployees],
+      pagination: buildPaginationMeta(combinedTotal, page, limit)
     });
   } catch (err) {
     logger.error({ err }, 'getEmployeeRecords error');

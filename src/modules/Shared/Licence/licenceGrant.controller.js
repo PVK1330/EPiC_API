@@ -8,7 +8,7 @@ import {
 /** POST /:id/grant — admin grants the licence (Decision Pending → Licence Granted) */
 export const grantLicenceHandler = async (req, res) => {
   try {
-    const { notes, expiryDate, sponsorType, rating, cosAllocation } = req.body;
+    const { notes, expiryDate, sponsorType, rating, cosAllocation, licenceNumber } = req.body;
     const result = await grantLicence(
       req.tenantDb,
       {
@@ -19,6 +19,7 @@ export const grantLicenceHandler = async (req, res) => {
         sponsorType,
         rating,
         cosAllocation,
+        licenceNumber: licenceNumber?.trim() || null,
       },
       req.user,
       req,

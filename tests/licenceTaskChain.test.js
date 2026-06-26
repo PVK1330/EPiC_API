@@ -210,9 +210,9 @@ test("getChainSequence: government_sms_registration starts with caseworker", () 
   assert.equal(seq[0], "caseworker", "Government stage should lead with caseworker");
 });
 
-test("getChainSequence: government_portal_credentials starts with caseworker", () => {
+test("getChainSequence: government_portal_credentials starts with sponsor (flow v2)", () => {
   const seq = getChainSequence(stageDef("government_portal_credentials"));
-  assert.equal(seq[0], "caseworker");
+  assert.equal(seq[0], "sponsor");
 });
 
 // ─── 3. nextChainNode ────────────────────────────────────────────────────────
@@ -305,13 +305,13 @@ test("chain ordering: government_sms_registration has caseworker before sponsor 
   assert.ok(sIdx < aIdx, "sponsor must precede admin");
 });
 
-test("chain ordering: government_portal_credentials has caseworker before sponsor before admin", () => {
+test("chain ordering: government_portal_credentials has sponsor before caseworker before admin (flow v2)", () => {
   const seq = getChainSequence(stageDef("government_portal_credentials"));
   const cIdx = seq.indexOf("caseworker");
   const sIdx = seq.indexOf("sponsor");
   const aIdx = seq.indexOf("admin");
-  assert.ok(cIdx < sIdx, "caseworker must precede sponsor");
-  assert.ok(sIdx < aIdx, "sponsor must precede admin");
+  assert.ok(sIdx < cIdx, "sponsor must precede caseworker");
+  assert.ok(cIdx < aIdx, "caseworker must precede admin");
 });
 
 test("chain ordering: no stage has a duplicate role in its sequence", () => {
