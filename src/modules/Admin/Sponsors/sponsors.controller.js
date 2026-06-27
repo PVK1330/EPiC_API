@@ -2,6 +2,8 @@ import { Op } from 'sequelize';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
 import platformDb from '../../../models/index.js';
 import { isPlatformEmailTaken, normalizePlatformEmail } from '../../../utils/platformUserEmail.js';
 import { ROLES } from '../../../middlewares/role.middleware.js';
@@ -328,13 +330,21 @@ export const getSponsorById = async (req, res) => {
 
     const sponsor = await req.tenantDb.User.findOne({
       where: { id, role_id: 4 },
-      attributes: { 
-        exclude: ['password', 'otp_code', 'otp_expiry', 'password_reset_otp', 'password_reset_otp_expiry', 'temp_password'] 
+      attributes: {
+        exclude: ['password', 'otp_code', 'otp_expiry', 'password_reset_otp', 'password_reset_otp_expiry', 'temp_password']
       },
       include: [{
         model: req.tenantDb.Role,
         as: 'role',
         attributes: ['id', 'name']
+      }, {
+        // Include the profile so callers of the detail endpoint also receive the
+        // company info, licence fields and registration document paths (the
+        // Documents tab) — the list endpoint already includes this; the detail
+        // path was the only read path omitting it.
+        model: req.tenantDb.SponsorProfile,
+        as: 'sponsorProfile',
+        required: false
       }]
     });
 
@@ -362,6 +372,80 @@ export const getSponsorById = async (req, res) => {
     });
   }
 } // Added closing bracket here
+
+// Registration documents are stored as relative paths on the sponsor's profile,
+// pointing at private trees that are NOT publicly served — so an admin viewing
+// a sponsor's Documents tab must stream them through this authenticated route
+// instead of a direct asset URL. The sponsor-self download endpoint keys off the
+// logged-in user, so admins need this :id-keyed variant.
+// Mirrors the guards in Sponsor/Account/sponsorAccount.controller.js.
+const SPONSOR_DOC_FIELDS = new Set([
+  'sponsorLetter',
+  'insuranceCertificate',
+  'hrPolicies',
+  'organisationalChart',
+  'recruitmentDocs',
+]);
+const SPONSOR_DOC_DOWNLOAD_DIRS = [
+  path.resolve(process.cwd(), 'storage', 'private'),
+  path.resolve(process.cwd(), 'uploads', 'sponsor_docs'),
+];
+const SPONSOR_DOC_INLINE_EXTENSIONS = new Set([
+  '.png', '.jpg', '.jpeg', '.webp', '.gif', '.pdf',
+]);
+
+// Admin downloads a specific registration document for a given sponsor.
+export const downloadSponsorDocument = async (req, res) => {
+  try {
+    const { id, field } = req.params;
+
+    if (!SPONSOR_DOC_FIELDS.has(field)) {
+      return res.status(400).json({ status: 'error', message: 'Invalid document field', data: null });
+    }
+
+    // Confirm the target user is actually a sponsor in this tenant before serving.
+    const sponsor = await req.tenantDb.User.findOne({ where: { id, role_id: ROLES.BUSINESS } });
+    if (!sponsor) {
+      return res.status(404).json({ status: 'error', message: 'Sponsor not found', data: null });
+    }
+
+    const profile = await req.tenantDb.SponsorProfile.findOne({ where: { userId: id } });
+    const filePath = profile?.[field];
+    if (!filePath) {
+      return res.status(404).json({ status: 'error', message: 'Document not found', data: null });
+    }
+
+    const absolute = path.resolve(String(filePath));
+    // Prefix check (dir + sep) keeps a crafted "../" path from escaping the roots.
+    const isAllowed = SPONSOR_DOC_DOWNLOAD_DIRS.some(
+      (dir) => absolute === dir || absolute.startsWith(dir + path.sep),
+    );
+    if (!isAllowed) {
+      return res.status(400).json({ status: 'error', message: 'Invalid path', data: null });
+    }
+    if (!fs.existsSync(absolute)) {
+      return res.status(404).json({ status: 'error', message: 'File no longer exists', data: null });
+    }
+
+    const filename = path.basename(absolute);
+    const ext = path.extname(filename).toLowerCase();
+    const disposition = SPONSOR_DOC_INLINE_EXTENSIONS.has(ext) ? 'inline' : 'attachment';
+
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Disposition', `${disposition}; filename="${filename}"`);
+    return res.sendFile(absolute, (err) => {
+      if (err && !res.headersSent) {
+        res.status(500).json({ status: 'error', message: 'Error streaming file', data: null });
+      }
+    });
+  } catch (error) {
+    logger.error({ err: error }, 'Download Sponsor Document Error');
+    if (!res.headersSent) {
+      res.status(500).json({ status: 'error', message: 'Internal server error', data: null });
+    }
+  }
+};
+
 export const updateSponsor = async (req, res) => {
   try {
     const { id } = req.params;

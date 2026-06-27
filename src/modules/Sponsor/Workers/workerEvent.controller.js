@@ -1,3 +1,5 @@
+import path from 'path';
+import fs from 'fs';
 import logger from '../../../utils/logger.js';
 import { getPaginationParams, buildPaginationMeta } from '../../../utils/paginate.js';
 import {
@@ -272,6 +274,66 @@ export const updateWorkerEvent = async (req, res) => {
   } catch (error) {
     logger.error({ err: error }, "Error updating worker event");
     return res.status(500).json({ status: "error", message: "Internal server error" });
+  }
+};
+
+// Worker-event evidence is stored under storage/private/temp and is NOT served
+// statically, so it must be streamed through this authenticated, sponsor-scoped
+// route. Older rows stored an absolute disk path in `evidenceFile`; newer ones a
+// relative path — path.resolve() normalises both, and the prefix guard below
+// confines reads to the allowed upload roots regardless.
+const EVIDENCE_ALLOWED_DIRS = [
+  path.resolve(process.cwd(), 'storage', 'private', 'temp'),
+  path.resolve(process.cwd(), 'storage', 'private'),
+  path.resolve(process.cwd(), 'uploads'),
+];
+const EVIDENCE_INLINE_EXTENSIONS = new Set([
+  '.png', '.jpg', '.jpeg', '.webp', '.gif', '.pdf',
+]);
+
+export const downloadWorkerEventEvidence = async (req, res) => {
+  try {
+    const sponsorId = req.user.userId;
+    const { id } = req.params;
+
+    // Scope to the caller's own events so one sponsor can't read another's file.
+    const event = await req.tenantDb.WorkerEvent.findOne({ where: { id, sponsorId } });
+    if (!event || !event.evidenceFile) {
+      return res.status(404).json({ status: 'error', message: 'Evidence not found' });
+    }
+
+    const absolute = path.resolve(String(event.evidenceFile));
+    // Prefix check (dir + sep) stops a crafted "../" path escaping the roots.
+    const isAllowed = EVIDENCE_ALLOWED_DIRS.some(
+      (dir) => absolute === dir || absolute.startsWith(dir + path.sep),
+    );
+    if (!isAllowed) {
+      return res.status(400).json({ status: 'error', message: 'Invalid evidence path' });
+    }
+    if (!fs.existsSync(absolute)) {
+      return res.status(404).json({ status: 'error', message: 'File no longer exists' });
+    }
+
+    // Strip the "<uuid>_<timestamp>" prefix multer adds so the user sees a clean
+    // name; fall back to the raw basename if the pattern doesn't match.
+    const rawName = path.basename(absolute);
+    const friendlyName = rawName.replace(/^[0-9a-f-]+_\d+/i, '').replace(/^[-_]+/, '') || rawName;
+    const safeName = friendlyName.replace(/[^A-Za-z0-9._-]/g, '_');
+    const ext = path.extname(absolute).toLowerCase();
+    const disposition = EVIDENCE_INLINE_EXTENSIONS.has(ext) ? 'inline' : 'attachment';
+
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Disposition', `${disposition}; filename="${safeName}"`);
+    return res.sendFile(absolute, (err) => {
+      if (err && !res.headersSent) {
+        res.status(500).json({ status: 'error', message: 'Error streaming file' });
+      }
+    });
+  } catch (error) {
+    logger.error({ err: error }, 'Error downloading worker event evidence');
+    if (!res.headersSent) {
+      res.status(500).json({ status: 'error', message: 'Internal server error' });
+    }
   }
 };
 

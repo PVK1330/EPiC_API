@@ -18,7 +18,14 @@ export function sendXlsxDownload(res, buffer, filename) {
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   );
   res.setHeader("Content-Disposition", `attachment; filename="${name}"`);
-  res.send(buffer);
+  // Exports are generated fresh per request. Express's res.send() auto-adds a
+  // weak ETag, so a repeat download returns a 304 with an EMPTY body — which a
+  // responseType:'blob' client turns into a 0-byte / corrupt .xlsx file. Mark
+  // the response uncacheable and use res.end() (which, unlike res.send(), does
+  // NOT add an ETag or run conditional-GET handling) so no 304 can ever fire.
+  res.setHeader("Cache-Control", "no-store");
+  res.setHeader("Content-Length", buffer.length);
+  res.end(buffer);
 }
 
 export function rowsToXlsxBuffer(rows, columns) {
