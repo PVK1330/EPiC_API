@@ -32,16 +32,6 @@ export const ROUTE_LABELS = Object.freeze({
   GAE: "Government Authorised Exchange",
 });
 
-// Appendix A document checklist seeded per application. `base` is always required;
-// route-specific entries are added when that route is selected.
-//
-// The base list mirrors the 10 mandatory documents the caseworker later verifies at
-// the Sponsor Intake stage (MANDATORY_DOCUMENTS in licenceIntake.service.js) so Step 4
-// of the wizard asks for exactly the same evidence — and an upload here auto-flows onto
-// the intake checklist via INTAKE_TO_APPENDIX_MAP, so the sponsor is never asked twice.
-// Two keys keep their historical appendix name (proof_of_registration, annual_accounts)
-// while the intake side maps to them under certificate_of_incorporation /
-// company_financials. Order matches the intake sortOrder for a consistent display.
 const APPENDIX_BASE = [
   {
     key: "employer_liability_insurance",
@@ -162,28 +152,6 @@ const fullIncludes = (tenantDb) => [
   },
 ];
 
-/**
- * Load the full normalized V2 application graph.
- *
- * @param {object}  tenantDb
- * @param {number}  id            - Application primary key.
- * @param {object}  [opts]
- * @param {number}  [opts.ownerUserId]
- *   When provided, the query is owner-scoped: only the application whose
- *   `userId` matches is returned.  Pass a positive integer for sponsor-owned
- *   access, or omit / pass `undefined` for admin/caseworker access (no filter).
- *
- *   Passing `null` (which happens when the session token is missing a userId)
- *   is treated as a programming error rather than "no filter": it throws a
- *   401 error instead of silently exposing every application in the tenant.
- *   The distinction is:
- *     loadFullApplication(db, id)                → no filter (admin path)
- *     loadFullApplication(db, id, {})             → no filter (admin path)
- *     loadFullApplication(db, id, { ownerUserId: undefined }) → no filter (admin path)
- *     loadFullApplication(db, id, { ownerUserId: null })      → throws 401
- *     loadFullApplication(db, id, { ownerUserId: 0 })         → throws 401
- *     loadFullApplication(db, id, { ownerUserId: 123 })       → filtered  (sponsor path)
- */
 export async function loadFullApplication(
   tenantDb,
   id,
@@ -192,9 +160,6 @@ export async function loadFullApplication(
   const where = { id, applicationVersion: APPLICATION_VERSION_V2 };
 
   if (ownerUserId !== undefined) {
-    // Caller requested an ownership-scoped fetch. A null, zero, or non-integer
-    // ownerUserId means the session is invalid — throw rather than silently
-    // dropping the WHERE clause and returning data for any user.
     if (
       typeof ownerUserId !== "number" ||
       !Number.isFinite(ownerUserId) ||
@@ -248,13 +213,7 @@ export async function seedAppendixDocuments(
     });
 }
 
-/** Create a new V2 draft application (status Draft) and seed the base Appendix A list. */
 export async function createDraft({ tenantDb, userId, organisationId }) {
-  // CRIT-002: Wrap check-and-create in a SERIALIZABLE transaction so that two
-  // concurrent requests from the same sponsor cannot both pass the blocking check
-  // and both create a Draft application (TOCTOU race window eliminated).
-  // The partial unique index `uq_active_v2_application_per_user` provides a DB-level
-  // last-resort guard; its UniqueConstraintError is caught and returned as HTTP 409.
   try {
     return await tenantDb.sequelize.transaction(
       {
