@@ -641,8 +641,15 @@ export function splitFullName(name) {
  */
 async function syncWizardDataToProfile(tenantDb, application) {
   try {
-    const profile = await tenantDb.SponsorProfile.findOne({
+    // findOrCreate (not findOne): a brand-new sponsor may fill the licence wizard
+    // before ever opening their Business Profile page (which is what otherwise
+    // lazily creates the row). Without this, the Authorising Officer / Key Contact
+    // / Level 1 Users entered in the application would never reach the profile and
+    // the Key Personnel / Business Profile views would show blank. Mirrors the
+    // findOrCreate pattern in sponsorAccount.controller.js getProfile().
+    const [profile] = await tenantDb.SponsorProfile.findOrCreate({
       where: { userId: application.userId },
+      defaults: { userId: application.userId },
     });
     if (!profile) return;
 

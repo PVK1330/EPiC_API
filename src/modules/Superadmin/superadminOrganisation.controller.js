@@ -191,6 +191,23 @@ export const createOrganisation = async (req, res) => {
         data: null,
       });
     }
+    // Lightweight input validation (this is a superadmin-only route, but malformed
+    // input should still be rejected before it reaches the DB / tenant provisioning).
+    const emailNorm = String(primaryEmail).trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailNorm)) {
+      return res.status(400).json({
+        status: "error",
+        message: "primaryEmail is not a valid email address",
+        data: null,
+      });
+    }
+    if (String(name).trim().length > 200) {
+      return res.status(400).json({
+        status: "error",
+        message: "name is too long (maximum 200 characters)",
+        data: null,
+      });
+    }
     let finalSlug = slug ? String(slug).trim().toLowerCase() : slugify(name);
     const exists = await Organisation.findOne({ where: { slug: finalSlug } });
     if (exists) {
@@ -530,7 +547,10 @@ export const createOrganisationWithAdmin = async (req, res) => {
               organisation_id: admin.organisation_id,
             }
           : null,
-        ...(password ? {} : { temporary_password: plain }),
+        // Only surface the generated password as a fallback when the credential
+        // email could NOT be delivered. On success it is delivered by email only
+        // and never echoed in the API response (avoids plaintext-credential leak).
+        ...(!password && !mailResult.sent ? { temporary_password: plain } : {}),
         email_sent: Boolean(mailResult.sent),
         email_error: mailResult.sent ? null : mailResult.error || mailResult.reason,
         mail_source: mailResult.usedSource || null,
@@ -916,7 +936,9 @@ export const createOrganisationAdmin = async (req, res) => {
           role_id: admin.role_id,
           organisation_id: admin.organisation_id,
         },
-        ...(password ? {} : { temporary_password: plain }),
+        // Only surface the generated password as a fallback when the credential
+        // email could NOT be delivered (otherwise email-only delivery).
+        ...(!password && !mailResult.sent ? { temporary_password: plain } : {}),
         email_sent: Boolean(mailResult.sent),
         email_error: mailResult.sent
           ? null

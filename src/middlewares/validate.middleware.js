@@ -27,7 +27,9 @@ const replaceInPlace = (target, source) => {
  * @param {z.ZodSchema} schema
  */
 export const validate = (schema, schemaName = null) => async (req, res, next) => {
-  logger.info({
+  // Debug-level: this fires on every validated request. Keeping it at INFO
+  // floods production logs and needlessly records request structure.
+  logger.debug({
     url: req.originalUrl,
     method: req.method,
     schema: schemaName || schema?.description || schema?.name || 'unknown',

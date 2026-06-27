@@ -1,12 +1,13 @@
 import { z } from 'zod';
-import { emailSchema, passwordSchema, phoneSchema } from './common.validation.js';
+import { emailSchema, strongPasswordSchema, phoneSchema } from './common.validation.js';
 
 export const registerSchema = z.object({
   body: z.object({
     first_name: z.string().trim().min(1, 'First name is required').max(100),
     last_name: z.string().trim().min(1, 'Last name is required').max(100),
     email: emailSchema,
-    password: passwordSchema,
+    // Strong policy (12+ chars, upper/lower/digit/special) for new accounts.
+    password: strongPasswordSchema,
     country_code: z.string().trim().max(10).optional(),
     mobile: phoneSchema.optional(),
     role_id: z.coerce.number().int().optional(),
@@ -60,7 +61,8 @@ export const setPasswordSchema = z.object({
   // enforces the password match / length itself.
   body: z.object({
     email: emailSchema,
-    password: passwordSchema,
+    // Enforce the strong policy on password resets too (was the weak 8-char rule).
+    password: strongPasswordSchema,
     confirmPassword: z.string().min(1, 'Confirm password is required'),
     resetToken: z.string().min(1, 'Reset token is required'),
     organisationId: z.string().optional(),
