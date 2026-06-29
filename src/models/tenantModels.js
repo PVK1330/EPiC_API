@@ -87,6 +87,7 @@ import CosAllocationRecordModel from "./tenant/cosAllocationRecord.model.js";
 import SponsoredWorkerModel from "./tenant/sponsoredWorker.model.js";
 import SponsoredWorkerAuditModel from "./tenant/sponsoredWorkerAudit.model.js";
 import SponsorPaymentModel from "./tenant/sponsorPayment.model.js";
+import EsignatureRequestModel from "./tenant/esignatureRequest.model.js";
 
 /**
  * Register all models and associations on a Sequelize instance (main or tenant DB).
@@ -181,6 +182,7 @@ export function buildDb(sequelize) {
   db.SponsoredWorker = SponsoredWorkerModel(sequelize, Sequelize.DataTypes);
   db.SponsoredWorkerAudit = SponsoredWorkerAuditModel(sequelize, Sequelize.DataTypes);
   db.SponsorPayment = SponsorPaymentModel(sequelize, Sequelize.DataTypes);
+  db.EsignatureRequest = EsignatureRequestModel(sequelize, Sequelize.DataTypes);
 
   // Associations (Same as before)
   db.Conversation.belongsTo(db.User, { foreignKey: "participantOneId", as: "participantOne" });

@@ -68,6 +68,9 @@ import cron from "node-cron";
 import { processScheduledNotifications } from "../services/licenceScheduled.service.js";
 import { runComplianceAlerts } from "../services/complianceAlerts.service.js";
 import { checkAndExpireSubscriptions } from "../services/subscriptionExpiry.service.js";
+import { enforceRetentionPolicy } from "../services/gdpr.service.js";
+import { sendTrialDripEmails } from "../services/onboardingEmail.service.js";
+import { resetSandboxEnvironments } from "../services/sandbox.service.js";
 import logger from "../utils/logger.js";
 
 const TZ = "Asia/Kolkata";
@@ -91,6 +94,24 @@ const JOBS = [
     schedule:    "0 */6 * * *", // every 6 hours
     description: "Suspend organisations whose subscription has lapsed",
     fn:          checkAndExpireSubscriptions,
+  },
+  {
+    name:        "gdpr-retention",
+    schedule:    "0 3 * * *",   // 03:00 IST daily
+    description: "GDPR data retention: hard-delete records older than retention period for suspended orgs",
+    fn:          enforceRetentionPolicy,
+  },
+  {
+    name:        "trial-drip-emails",
+    schedule:    "0 10 * * *",  // 10:00 IST daily
+    description: "Send trial reminder emails: Day 7 reminder, Day 14 expiry, conversion nudge",
+    fn:          sendTrialDripEmails,
+  },
+  {
+    name:        "sandbox-reset",
+    schedule:    "0 0 * * *",   // midnight IST daily
+    description: "Reset sandbox/demo tenant environments (pre-populated, auto-reset every 24h)",
+    fn:          resetSandboxEnvironments,
   },
 ];
 

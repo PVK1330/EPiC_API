@@ -28,6 +28,8 @@ import caseworkerLicenceRoutes from '../modules/Caseworker/Cases/caseworker.lice
 import caseworkerCosRoutes from '../modules/Caseworker/Cos/caseworkerCos.routes.js';
 import caseworkerWorkerRoutes from '../modules/Caseworker/Workers/caseworkerWorker.routes.js';
 import adminWorkerRoutes from '../modules/Admin/Settings/admin.worker.routes.js';
+import adminEsignatureRoutes from '../modules/Admin/ESignature/adminEsignature.routes.js';
+import onboardingRoutes from '../modules/Onboarding/onboarding.routes.js';
 import caseworkerTimelineRoutes from '../modules/Caseworker/Cases/caseTimeline.routes.js';
 import caseworkerPerformanceRoutes from '../modules/Caseworker/Performance/caseworkerPerformance.routes.js';
 import rescheduleRoutes from '../modules/Caseworker/Cases/reschedule.routes.js';
@@ -56,8 +58,12 @@ import orgBillingRoutes from '../modules/Billing/orgBilling.routes.js';
 import superadminRoutes from '../modules/Superadmin/superadmin.routes.js';
 
 import { globalAuthLimiter } from '../middlewares/authRateLimiter.js';
+import publicApiV1Routes from './api/v1/index.js';
 
 const router = Router();
+
+// Public REST API v1 — authenticated via API key (Week 9)
+router.use('/v1', publicApiV1Routes);
 
 // Auth & User
 // globalAuthLimiter is a catch-all (50 req / 15 min per IP) for the entire
@@ -78,6 +84,7 @@ router.use('/admin/candidates', adminCandidateRoutes);
 router.use('/admin/document-checklists', adminDocumentChecklistRoutes);
 router.use('/admin/licence', adminLicenceRoutes);
 router.use('/admin/workers', adminWorkerRoutes);
+router.use('/admin/esignature', adminEsignatureRoutes);
 router.use('/admin/announcements', adminAnnouncementRoutes);
 router.use('/admin', adminRoutes);
 
@@ -126,6 +133,9 @@ router.use('/reports', reportingRoutes);
 
 // Org-admin self-service subscription billing
 router.use('/billing', orgBillingRoutes);
+
+// Self-serve onboarding wizard (Week 8)
+router.use('/onboarding', onboardingRoutes);
 
 // Superadmin
 router.use('/superadmin', superadminRoutes);

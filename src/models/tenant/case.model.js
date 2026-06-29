@@ -202,6 +202,12 @@ const CaseModel = (sequelize, DataTypes) => {
       field: "workflow_meta",
       comment: "Draft review, biometric availability/slot, visa portal notes",
     },
+    closed_at: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      field: "closed_at",
+      comment: "Timestamp when case status was set to Closed — used for 30-day portal access rule",
+    },
     deleted_at: {
       type: DataTypes.DATE,
       allowNull: true,
