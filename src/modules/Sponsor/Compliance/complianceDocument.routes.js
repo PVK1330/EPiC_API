@@ -4,6 +4,7 @@ import {
   uploadComplianceDocument,
   updateDocumentMetadata,
   deleteComplianceDocument,
+  downloadComplianceDocument,
 } from './complianceDocument.controller.js';
 import { upload } from '../../../middlewares/upload.middleware.js';
 import { validate } from '../../../middlewares/validate.middleware.js';
@@ -19,6 +20,7 @@ const router = Router();
 // edit document details only; status/review fields are reviewer-controlled and
 // are rejected by the validation schemas below.
 router.get('/', getDocumentsBySponsor);
+router.get('/:id/download', downloadComplianceDocument);
 router.post(
   '/upload',
   upload.single('file'),

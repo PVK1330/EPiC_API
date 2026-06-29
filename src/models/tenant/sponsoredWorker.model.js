@@ -35,6 +35,8 @@ export default (sequelize, DataTypes) => {
         references: { model: "organisations", key: "id" },
         onDelete: "SET NULL",
       },
+
+      // ── Core identity ───────────────────────────────────────────────────────
       workerFirstName: {
         type: DataTypes.STRING(100),
         allowNull: false,
@@ -55,11 +57,112 @@ export default (sequelize, DataTypes) => {
         allowNull: true,
         field: "worker_nationality",
       },
+
+      // ── UKVI personal details ───────────────────────────────────────────────
+      dob: {
+        type: DataTypes.DATEONLY,
+        allowNull: true,
+      },
+      gender: {
+        type: DataTypes.STRING(20),
+        allowNull: true,
+      },
+      maritalStatus: {
+        type: DataTypes.STRING(30),
+        allowNull: true,
+        field: "marital_status",
+      },
+
+      // ── Passport / travel document ──────────────────────────────────────────
+      passportNumber: {
+        type: DataTypes.STRING(50),
+        allowNull: true,
+        field: "passport_number",
+      },
+      passportIssueDate: {
+        type: DataTypes.DATEONLY,
+        allowNull: true,
+        field: "passport_issue_date",
+      },
+      passportExpiryDate: {
+        type: DataTypes.DATEONLY,
+        allowNull: true,
+        field: "passport_expiry_date",
+      },
+      passportCountry: {
+        type: DataTypes.STRING(100),
+        allowNull: true,
+        field: "passport_country",
+      },
+
+      // ── Contact ─────────────────────────────────────────────────────────────
+      phone: {
+        type: DataTypes.STRING(30),
+        allowNull: true,
+      },
+      address: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
+      city: {
+        type: DataTypes.STRING(100),
+        allowNull: true,
+      },
+
+      // ── Employment / UKVI job details ───────────────────────────────────────
+      jobTitle: {
+        type: DataTypes.STRING(150),
+        allowNull: true,
+        field: "job_title",
+      },
+      department: {
+        type: DataTypes.STRING(150),
+        allowNull: true,
+      },
+      socCode: {
+        type: DataTypes.STRING(20),
+        allowNull: true,
+        field: "soc_code",
+      },
+      startDate: {
+        type: DataTypes.DATEONLY,
+        allowNull: true,
+        field: "start_date",
+      },
+      salary: {
+        type: DataTypes.DECIMAL(12, 2),
+        allowNull: true,
+      },
+      weeklyHours: {
+        type: DataTypes.DECIMAL(5, 2),
+        allowNull: true,
+        field: "weekly_hours",
+      },
+
+      // ── Immigration history ─────────────────────────────────────────────────
+      previousUkVisa: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+        field: "previous_uk_visa",
+      },
+
+      // ── CoS reference number (auto-generated at assignment time) ────────────
+      workerCosNumber: {
+        type: DataTypes.STRING(60),
+        allowNull: true,
+        unique: true,
+        field: "worker_cos_number",
+      },
+
+      // ── Visa type ───────────────────────────────────────────────────────────
       visaType: {
         type: DataTypes.STRING(100),
         allowNull: true,
         field: "visa_type",
       },
+
+      // ── Workflow ────────────────────────────────────────────────────────────
       status: {
         type: DataTypes.STRING(60),
         allowNull: false,

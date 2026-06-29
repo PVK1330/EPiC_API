@@ -28,7 +28,7 @@ import {
 import { verifyTokenAndTenant } from '../../../middlewares/authStack.middleware.js';
 import { checkRole, ADMIN_ROLES } from '../../../middlewares/role.middleware.js';
 import { validate } from '../../../middlewares/validate.middleware.js';
-import { getLicenceStages, completeLicenceStageTask, getLicenceWorkflowTimeline } from '../../Shared/Licence/licenceStage.controller.js';
+import { getLicenceStages, completeLicenceStageTask, getLicenceWorkflowTimeline, downloadPaymentProof, downloadDecisionLetter } from '../../Shared/Licence/licenceStage.controller.js';
 import {
     createInfoRequestHandler,
     listInfoRequestsHandler,
@@ -58,6 +58,10 @@ router.get("/all", getAllLicenceApplications);
 router.get("/v2/:id", getLicenceApplicationV2);
 router.get("/details/:id", getAdminLicenceApplicationDetails);
 router.get("/:id/documents/:index/download", downloadLicenceDocument);
+// Sponsor-uploaded UKVI payment slip (proof attached when confirming the fee payment).
+router.get("/:id/payment-proof/download", downloadPaymentProof);
+// Sponsor-uploaded UKVI decision/grant letter (attached when confirming the outcome).
+router.get("/:id/decision-letter/download", downloadDecisionLetter);
 
 // Stages panel (per-stage, per-role tasks) — admin can view and complete any task.
 router.get("/:id/stages", getLicenceStages);

@@ -583,32 +583,91 @@ export async function getCosAllocationRecord(tenantDb, cosRequestId) {
  * List all allocation records for a sponsor (Phase 4 summary; not worker-level).
  */
 export async function listSponsorAllocationRecords(tenantDb, sponsorId) {
-  return tenantDb.CosAllocationRecord.findAll({
-    where: { sponsorId },
-    include: [
-      {
-        model: tenantDb.User,
-        as: "allocatedBy",
-        attributes: ["id", "first_name", "last_name", "email"],
-      },
-      {
-        model: tenantDb.CosRequest,
-        as: "cosRequest",
-        attributes: ["id", "visaType", "requestedAmount", "reason", "created_at"],
-      },
-    ],
-    order: [["allocated_at", "DESC"]],
+  // Fetch real allocation records + profile CoS total in parallel.
+  const [records, profile] = await Promise.all([
+    tenantDb.CosAllocationRecord.findAll({
+      where: { sponsorId },
+      include: [
+        { model: tenantDb.User, as: "allocatedBy", attributes: ["id", "first_name", "last_name", "email"] },
+        { model: tenantDb.CosRequest, as: "cosRequest", attributes: ["id", "visaType", "requestedAmount", "reason", "created_at"] },
+      ],
+      order: [["allocated_at", "DESC"]],
+    }),
+    tenantDb.SponsorProfile.findOne({ where: { userId: sponsorId } }).catch(() => null),
+  ]);
+
+  // Attach usedSlots + remainingSlots per allocation record.
+  const counts = await Promise.all(
+    records.map((r) =>
+      tenantDb.SponsoredWorker.count({ where: { cosAllocationRecordId: r.id } }).catch(() => 0)
+    )
+  );
+
+  const enriched = records.map((r, i) => {
+    const plain = typeof r.toJSON === "function" ? r.toJSON() : { ...r };
+    plain.usedSlots = counts[i] ?? 0;
+    plain.remainingSlots = Math.max((plain.allocatedAmount || 0) - plain.usedSlots, 0);
+    return plain;
   });
+
+  // ── Virtual "Licence Grant" entry ─────────────────────────────────────────
+  // The initial CoS pool granted with the licence is stored only on
+  // SponsorProfile.cosAllocation. It has no CosAllocationRecord row. Compute
+  // how many of those slots are not yet covered by explicit request records and
+  // surface the remainder as a virtual entry so the dropdown is always populated.
+  const profileCos = toInt(profile?.cosAllocation);
+  const requestTotal = enriched.reduce((s, r) => s + (r.allocatedAmount || 0), 0);
+  const licenceGrantPool = profileCos - requestTotal;
+
+  if (licenceGrantPool > 0) {
+    // Workers assigned CoS without any cosAllocationRecordId = drawing from the
+    // general licence-grant pool.
+    const generalUsed = await tenantDb.SponsoredWorker.count({
+      where: {
+        sponsorId,
+        cosAllocationRecordId: null,
+        workerCosNumber: { [Op.ne]: null },
+        status: { [Op.notIn]: ["Visa Rejected", "deleted"] },
+      },
+    }).catch(() => 0);
+
+    const generalRemaining = Math.max(licenceGrantPool - generalUsed, 0);
+
+    // Prepend the virtual entry — id: null signals "general pool" to the frontend.
+    enriched.unshift({
+      id: null,
+      isLicenceGrant: true,
+      allocationNumber: `LICENCE-GRANT-${profile?.sponsorLicenceNumber || sponsorId}`,
+      visaType: null,
+      allocatedAmount: licenceGrantPool,
+      usedSlots: generalUsed,
+      remainingSlots: generalRemaining,
+      status: "Active",
+      cosRequest: null,
+      notes: "CoS slots granted with your Sponsor Licence",
+    });
+  }
+
+  return enriched;
 }
 
 // ─── Summary ─────────────────────────────────────────────────────────────────
 
 /**
- * CoS allocation summary for a sponsor. Total allocation is the sum of approved
- * CoS request amounts; usage is the count of active cases.
+ * CoS allocation summary for a sponsor.
+ *
+ * Total allocation comes from SponsorProfile.cosAllocation — the single source
+ * of truth. It is set at licence-grant time (initial allocation) and incremented
+ * on every subsequent approved CoS request, so it always reflects the running
+ * total. Summing CosRequest rows alone would miss the initial grant allocation.
+ *
+ * The per-visa-type breakdown is derived from approved CosRequest rows (which
+ * carry a visaType), supplemented by a "General" bucket for any allocation that
+ * pre-dates the CoS-request workflow (i.e. profile.cosAllocation - sum of
+ * approved requests).
  */
 export async function getCosSummary(tenantDb, sponsorId) {
-  const [approved, profile, activeCases] = await Promise.all([
+  const [approved, profile, activeCases, activeWorkers] = await Promise.all([
     tenantDb.CosRequest.findAll({ where: { sponsorId, status: { [Op.in]: [COS_STATUS.APPROVED, COS_STATUS.ALLOCATED] } } }),
     tenantDb.SponsorProfile.findOne({ where: { userId: sponsorId } }),
     tenantDb.Case.findAll({
@@ -616,13 +675,32 @@ export async function getCosSummary(tenantDb, sponsorId) {
       include: [{ model: tenantDb.CandidateApplication, as: "application", attributes: ["visaType"] }],
       attributes: ["id"],
     }),
+    // Phase 5 sponsored_workers — count workers who have a CoS assigned
+    // (workerCosNumber is set at CoS assignment time).
+    tenantDb.SponsoredWorker
+      ? tenantDb.SponsoredWorker.findAll({
+          where: {
+            sponsorId,
+            workerCosNumber: { [Op.ne]: null },
+            status: { [Op.notIn]: ["Visa Rejected", "deleted"] },
+          },
+          attributes: ["id", "visaType"],
+        })
+      : Promise.resolve([]),
   ]);
 
-  const totalAllocated = approved.reduce(
+  // profile.cosAllocation is the authoritative total — includes initial grant +
+  // all subsequently approved CoS requests.
+  const totalAllocated = toInt(profile?.cosAllocation);
+
+  // Sum of CosRequest approvals (used for the per-visa breakdown only).
+  const requestsTotal = approved.reduce(
     (sum, r) => sum + toInt(r.approvedAmount != null ? r.approvedAmount : r.requestedAmount),
     0
   );
-  const used = activeCases.length;
+
+  // Combined used count: legacy Cases + new SponsoredWorker rows with CoS assigned.
+  const used = activeCases.length + (activeWorkers?.length || 0);
 
   const byMap = {};
   approved.forEach((r) => {
@@ -635,6 +713,20 @@ export async function getCosSummary(tenantDb, sponsorId) {
     if (!byMap[vt]) byMap[vt] = { visaType: vt, allocated: 0, used: 0, allocationDate: null };
     byMap[vt].used += 1;
   });
+  (activeWorkers || []).forEach((w) => {
+    const vt = w.visaType || "General";
+    if (!byMap[vt]) byMap[vt] = { visaType: vt, allocated: 0, used: 0, allocationDate: null };
+    byMap[vt].used += 1;
+  });
+
+  // If there is an initial licence-grant allocation not covered by CosRequest
+  // rows (e.g. the licence was granted before the CoS-request workflow), surface
+  // it as a "General" bucket so the breakdown total matches the summary total.
+  const grantOnlyAllocation = totalAllocated - requestsTotal;
+  if (grantOnlyAllocation > 0) {
+    if (!byMap["General"]) byMap["General"] = { visaType: "General", allocated: 0, used: 0, allocationDate: null };
+    byMap["General"].allocated += grantOnlyAllocation;
+  }
 
   return {
     summary: { total: totalAllocated, used, remaining: Math.max(totalAllocated - used, 0) },

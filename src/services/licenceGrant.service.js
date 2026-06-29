@@ -68,6 +68,16 @@ export async function grantLicence(
       throw err;
     }
 
+    // Gate: the sponsor must first confirm they received the UKVI decision
+    // (UKVI emails it to them directly). Only then may the case team grant/close.
+    if (!application.ukviDecisionConfirmedAt) {
+      const err = new Error(
+        "The sponsor has not yet confirmed they received the UKVI decision. The licence can only be granted once the sponsor confirms the outcome on their portal.",
+      );
+      err.statusCode = 409;
+      throw err;
+    }
+
     const previousStatus = application.status;
 
     // Activate the SponsorProfile inside the same transaction (ISSUE-001).
@@ -102,6 +112,31 @@ export async function grantLicence(
       cosAllocation: resolvedCos,
       notes: notes ?? null,
     }, { transaction: t });
+
+    // Create a CosAllocationRecord for the initial licence grant so sponsors
+    // can assign these slots to workers immediately — without needing to go
+    // through a separate CoS request flow first.
+    if (resolvedCos && Number(resolvedCos) > 0) {
+      const grantYear = new Date().getFullYear();
+      const grantNum = `EPIC-LIC-${grantYear}-${String(grantRecord.id).padStart(6, "0")}`;
+      await tenantDb.CosAllocationRecord.create({
+        cosRequestId: null,               // no request — direct licence grant
+        sponsorId: application.userId,
+        organisationId: application.organisation_id ?? null,
+        allocationNumber: grantNum,
+        visaType: null,                   // general — any visa type
+        allocatedAmount: Number(resolvedCos),
+        allocatedById: actorId,
+        allocatedAt: new Date(),
+        expiryDate: resolvedExpiry ?? null,
+        status: "Active",
+        notes: `Initial CoS grant on licence ${licenceNumber ?? applicationId}`,
+      }, { transaction: t }).catch(() => {
+        // Non-fatal: if the record already exists or CosAllocationRecord model
+        // is not yet available in this tenant, log and continue.
+        logger.warn({ applicationId }, "grantLicence: CosAllocationRecord creation skipped");
+      });
+    }
 
     // Audit row — best-effort inside the transaction (swallowed errors do not
     // rollback; a failed audit must not block the grant itself).

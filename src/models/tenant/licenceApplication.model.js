@@ -206,6 +206,21 @@ export default (sequelize, DataTypes) => {
                 allowNull: true,
                 field: "ukvi_payment_proof_path",
             },
+            // Set when the sponsor confirms they received the UKVI decision (sent to
+            // their registered email). The case team may only grant/close the licence
+            // once this is set — see grantLicence() gating.
+            ukviDecisionConfirmedAt: {
+                type: DataTypes.DATE,
+                allowNull: true,
+                field: "ukvi_decision_confirmed_at",
+            },
+            // Optional UKVI decision/grant letter the sponsor may attach when
+            // confirming the outcome. Stored under storage/private; null when none.
+            ukviDecisionLetterPath: {
+                type: DataTypes.TEXT,
+                allowNull: true,
+                field: "ukvi_decision_letter_path",
+            },
             // Set to rejectedAt + 6 months when UKVI rejects the application.
             // Sponsor must wait until this date before reapplying on UKVI.
             rejectionCooldownUntil: {

@@ -21,6 +21,8 @@ router.post("/", checkPermission('admin.sponsors.create'), validate(schema.creat
 router.get("/", checkPermission('admin.sponsors.view'), sponsorsController.getAllSponsors);
 router.get("/export", checkPermission('admin.sponsors.view'), sponsorsController.exportSponsors);
 router.get("/:id", checkPermission('admin.sponsors.view'), validate(schema.getSponsorSchema), sponsorsController.getSponsorById);
+// Stream a sponsor's uploaded registration document (admin Documents tab).
+router.get("/:id/documents/:field/download", checkPermission('admin.sponsors.view'), sponsorsController.downloadSponsorDocument);
 
 // UPDATE Operations
 router.put("/:id", checkPermission('admin.sponsors.update'), validate(schema.updateSponsorSchema), sponsorsController.updateSponsor);

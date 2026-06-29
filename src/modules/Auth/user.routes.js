@@ -15,8 +15,10 @@ router.get("/profile", verifyTokenAndTenant, userController.profile);
 // Change own password - all authenticated users
 router.post("/change-password", verifyTokenAndTenant, validate(schema.changeOwnPasswordSchema), userController.changeOwnPassword);
 
-// Edit user profile - accessible for all authenticated users
-router.put("/profile", handleProfilePicUpload, verifyTokenAndTenant, validate(schema.editProfileSchema), userController.editProfile);
+// Edit user profile - accessible for all authenticated users.
+// Authenticate BEFORE the multipart upload middleware so an unauthenticated
+// request can never reach the file-upload pipeline (resource-exhaustion vector).
+router.put("/profile", verifyTokenAndTenant, handleProfilePicUpload, validate(schema.editProfileSchema), userController.editProfile);
 
 // Get all users with role-wise grouping - RE-04 fix: restricted to admin/caseworker
 router.get("/all", verifyTokenAndTenant, checkRole([ROLES.ADMIN, ROLES.CASEWORKER, ROLES.SUPERADMIN]), userController.getAllUsers);

@@ -31,7 +31,7 @@ import { verifyTokenAndTenant } from '../../../middlewares/authStack.middleware.
 import { checkRole, STAFF_ROLES } from '../../../middlewares/role.middleware.js';
 import { ensureAssignedCaseworker } from '../../../middlewares/ensureAssignedCaseworker.middleware.js';
 import { validate } from '../../../middlewares/validate.middleware.js';
-import { getLicenceStages, completeLicenceStageTask, downloadLicenceDocument, getLicenceWorkflowTimeline } from '../../Shared/Licence/licenceStage.controller.js';
+import { getLicenceStages, completeLicenceStageTask, downloadLicenceDocument, getLicenceWorkflowTimeline, downloadPaymentProof, downloadDecisionLetter } from '../../Shared/Licence/licenceStage.controller.js';
 import {
     createInfoRequestHandler,
     listInfoRequestsHandler,
@@ -39,7 +39,7 @@ import {
     addCommentHandler,
     closeInfoRequestHandler,
 } from '../../Shared/Licence/licenceInformationRequest.controller.js';
-import { getGrantRecordHandler } from '../../Shared/Licence/licenceGrant.controller.js';
+import { getGrantRecordHandler, grantLicenceHandler, rejectLicenceHandler } from '../../Shared/Licence/licenceGrant.controller.js';
 import {
     dispatchDocumentHandler,
     listDispatchDocumentsHandler,
@@ -80,6 +80,10 @@ router.post("/:id/stages/:stageKey/complete", ensureAssignedCaseworker(), comple
 
 // Stream an uploaded evidence document (assignment-guarded).
 router.get("/:id/documents/:index/download", ensureAssignedCaseworker(), downloadLicenceDocument);
+// Sponsor-uploaded UKVI payment slip (proof attached when confirming the fee payment).
+router.get("/:id/payment-proof/download", ensureAssignedCaseworker(), downloadPaymentProof);
+// Sponsor-uploaded UKVI decision/grant letter (attached when confirming the outcome).
+router.get("/:id/decision-letter/download", ensureAssignedCaseworker(), downloadDecisionLetter);
 
 // Intake: information form + document checklist review.
 router.get("/:id/intake", ensureAssignedCaseworker(), getCaseworkerIntakeSummary);
@@ -96,6 +100,10 @@ router.patch("/:id/appendix-documents/:documentId/reject", ensureAssignedCasewor
 
 // Licence Grant — caseworker may view the grant record (read-only).
 router.get("/:id/grant-record", ensureAssignedCaseworker(), getGrantRecordHandler);
+// Final decision — caseworker may grant/close or reject once the sponsor has
+// confirmed the UKVI outcome (the grant gate is enforced in grantLicence()).
+router.post("/:id/grant", ensureAssignedCaseworker(), grantLicenceHandler);
+router.post("/:id/reject-final", ensureAssignedCaseworker(), rejectLicenceHandler);
 
 // Information Request workflow — caseworker may raise, comment on, and close requests.
 router.post("/:id/info-requests",                           ensureAssignedCaseworker(), createInfoRequestHandler);

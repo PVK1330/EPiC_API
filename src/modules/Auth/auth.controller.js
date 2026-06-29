@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import { randomInt } from 'crypto';
+import { randomInt, timingSafeEqual } from 'crypto';
 import speakeasy from 'speakeasy';
 import QRCode from 'qrcode';
 import catchAsync from '../../utils/catchAsync.js';
@@ -35,6 +35,20 @@ import logger from '../../utils/logger.js';
 
 const RESET_TOKEN_EXPIRY = '10m';
 const RESET_TOKEN_PURPOSE = 'password_reset';
+
+/**
+ * Constant-time comparison for short secrets (OTP codes). Avoids the micro-timing
+ * signal of `===`/`!==` short-circuiting on the first differing byte. Returns
+ * false for null/undefined or length mismatch without throwing — so an already
+ * consumed (null) OTP can never match a supplied value.
+ */
+function timingSafeEqualStr(a, b) {
+  if (a == null || b == null) return false;
+  const ab = Buffer.from(String(a), 'utf8');
+  const bb = Buffer.from(String(b), 'utf8');
+  if (ab.length !== bb.length) return false;
+  return timingSafeEqual(ab, bb);
+}
 
 const ROLE_NAMES = {
   1: 'candidate',
@@ -304,6 +318,23 @@ export const register = catchAsync(async (req, res) => {
 
   const parsedRoleId = Number(role_id);
 
+  // ── Self-registration role guard (CRITICAL fix) ───────────────────────────
+  // Public /register may only create candidate (1) or business/sponsor (4)
+  // accounts. Privileged roles — caseworker (2), admin (3), superadmin (5) —
+  // are provisioned by staff and must NEVER be self-assigned from the request
+  // body. Without this gate a client could escalate straight to admin simply by
+  // posting `role_id: 3`. (See ROLE_NAMES map above.)
+  const SELF_REGISTRABLE_ROLE_IDS = [1, 4];
+  if (!SELF_REGISTRABLE_ROLE_IDS.includes(parsedRoleId)) {
+    return ApiResponse.forbidden(res, "This account type cannot be self-registered.");
+  }
+
+  // `mobile` is optional; normalise to a trimmed string or null. This also fixes
+  // a ReferenceError — the duplicate-mobile checks below previously referenced an
+  // undefined `mobileStr`, throwing a 500 on every registration attempt (CRITICAL).
+  const mobileStr =
+    mobile != null && String(mobile).trim() !== "" ? String(mobile).trim() : null;
+
   // ── Resolve organisation / tenant DB ──────────────────────────────────────
   // If a body organisation_id is supplied (e.g. from a plain /register call
   // without a subdomain), inject it into the organisation context so
@@ -348,11 +379,13 @@ export const register = catchAsync(async (req, res) => {
     return ApiResponse.badRequest(res, "An account with this email already exists for this organisation");
   }
 
-  const mobileExists = await platformDb.User.findOne({
-    where: { country_code: String(country_code).trim(), mobile: mobileStr },
-  });
-  if (mobileExists) {
-    return ApiResponse.badRequest(res, "An account with this mobile number already exists");
+  if (mobileStr) {
+    const mobileExists = await platformDb.User.findOne({
+      where: { country_code: String(country_code).trim(), mobile: mobileStr },
+    });
+    if (mobileExists) {
+      return ApiResponse.badRequest(res, "An account with this mobile number already exists");
+    }
   }
 
   const { UnverifiedUser } = tenantDb;
@@ -365,11 +398,13 @@ export const register = catchAsync(async (req, res) => {
     );
   }
 
-  const unverifiedMobileExists = await UnverifiedUser.findOne({
-    where: { country_code: String(country_code).trim(), mobile: mobileStr },
-  });
-  if (unverifiedMobileExists) {
-    return ApiResponse.badRequest(res, "This mobile number is already pending OTP verification.");
+  if (mobileStr) {
+    const unverifiedMobileExists = await UnverifiedUser.findOne({
+      where: { country_code: String(country_code).trim(), mobile: mobileStr },
+    });
+    if (unverifiedMobileExists) {
+      return ApiResponse.badRequest(res, "This mobile number is already pending OTP verification.");
+    }
   }
 
   // ── Create unverified user & send OTP ─────────────────────────────────────
@@ -449,7 +484,7 @@ export const verifyOTP = catchAsync(async (req, res) => {
     return ApiResponse.notFound(res, "User not found or already verified");
   }
 
-  if (unverifiedUser.otp_code !== otp) {
+  if (!timingSafeEqualStr(unverifiedUser.otp_code, otp)) {
     return ApiResponse.badRequest(res, "Invalid OTP");
   }
 
@@ -1039,7 +1074,7 @@ export const verifyResetOTP = catchAsync(async (req, res) => {
     return ApiResponse.notFound(res, "No account found with this email for this organisation");
   }
 
-  if (user.password_reset_otp !== otp) {
+  if (!timingSafeEqualStr(user.password_reset_otp, otp)) {
     return ApiResponse.badRequest(res, "Invalid OTP");
   }
 
@@ -1182,7 +1217,7 @@ export const verifyOtpUser = catchAsync(async (req, res) => {
     return ApiResponse.notFound(res, "User not found");
   }
 
-  if (user.otp_code !== otp) {
+  if (!timingSafeEqualStr(user.otp_code, otp)) {
     return ApiResponse.badRequest(res, "Invalid OTP");
   }
 

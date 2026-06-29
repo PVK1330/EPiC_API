@@ -230,6 +230,57 @@ export const updateDocumentMetadata = async (req, res) => {
   }
 };
 
+// Compliance files live under uploads/business/<sponsorId>/compliance and are
+// NOT served statically (the /uploads static mount was removed for security), so
+// downloads must stream through this authenticated, sponsor-scoped route.
+const COMPLIANCE_UPLOAD_ROOT = path.resolve(process.cwd(), 'uploads', 'business');
+const COMPLIANCE_INLINE_EXTENSIONS = new Set([
+  '.png', '.jpg', '.jpeg', '.webp', '.gif', '.pdf',
+]);
+
+export const downloadComplianceDocument = async (req, res) => {
+  try {
+    const sponsorId = req.user.userId;
+    const { id } = req.params;
+
+    // Scope to the caller's own documents — a sponsor can never fetch another
+    // sponsor's compliance file by guessing an id.
+    const document = await req.tenantDb.ComplianceDocument.findOne({ where: { id, sponsorId } });
+    if (!document || !document.documentPath) {
+      return res.status(404).json({ status: 'error', message: 'Document not found' });
+    }
+
+    const absolute = path.resolve(String(document.documentPath));
+    // Prefix check (root + sep) stops a crafted "../" path escaping the tree.
+    if (absolute !== COMPLIANCE_UPLOAD_ROOT && !absolute.startsWith(COMPLIANCE_UPLOAD_ROOT + path.sep)) {
+      return res.status(400).json({ status: 'error', message: 'Invalid document path' });
+    }
+    if (!fs.existsSync(absolute)) {
+      return res.status(404).json({ status: 'error', message: 'File no longer exists' });
+    }
+
+    // Strip the leading "<timestamp>-" so the user gets the original filename.
+    const rawName = path.basename(absolute);
+    const friendlyName = rawName.replace(/^\d+-/, '') || rawName;
+    const safeName = friendlyName.replace(/[^A-Za-z0-9._-]/g, '_');
+    const ext = path.extname(absolute).toLowerCase();
+    const disposition = COMPLIANCE_INLINE_EXTENSIONS.has(ext) ? 'inline' : 'attachment';
+
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Disposition', `${disposition}; filename="${safeName}"`);
+    return res.sendFile(absolute, (err) => {
+      if (err && !res.headersSent) {
+        res.status(500).json({ status: 'error', message: 'Error streaming file' });
+      }
+    });
+  } catch (error) {
+    logger.error({ err: error }, 'downloadComplianceDocument error');
+    if (!res.headersSent) {
+      res.status(500).json({ status: 'error', message: error.message || 'Internal server error' });
+    }
+  }
+};
+
 export const deleteComplianceDocument = async (req, res) => {
   try {
     const sponsorId = req.user.userId;

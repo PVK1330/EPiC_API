@@ -51,7 +51,7 @@ describe('Auth Validation', () => {
           first_name: 'John',
           last_name: 'Doe',
           email: 'john.doe@example.com',
-          password: 'StrongPassword123',
+          password: 'StrongPassword123!',
           country_code: '+44',
           mobile: '7123456789',
         }

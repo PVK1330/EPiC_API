@@ -4,6 +4,7 @@ import {
   deleteWorkerEvent,
   listWorkerEvents,
   updateWorkerEvent,
+  downloadWorkerEventEvidence,
 } from './workerEvent.controller.js';
 import { upload } from '../../../middlewares/upload.middleware.js';
 import { verifyTokenAndTenant } from '../../../middlewares/authStack.middleware.js';
@@ -15,6 +16,7 @@ const router = Router();
 router.use(verifyTokenAndTenant, checkRole([ROLES.SPONSOR]));
 
 router.get("/", listWorkerEvents);
+router.get("/:id/evidence", downloadWorkerEventEvidence);
 router.post("/", upload.single('evidenceFile'), createWorkerEvent);
 router.put("/:id", upload.single('evidenceFile'), updateWorkerEvent);
 router.delete("/:id", deleteWorkerEvent);
