@@ -17,6 +17,8 @@ import { reactivateOrgManually } from "../../services/orgBilling.service.js";
 import { invalidateOrgCache } from "../../services/orgCache.service.js";
 import logger from "../../utils/logger.js";
 import { getPaginationParams, buildPaginationMeta } from "../../utils/paginate.js";
+import { rowsToXlsxBuffer, sendXlsxDownload } from "../../utils/excelExport.util.js";
+import { generatePdfBufferFromDefinition } from "../../services/pdfGenerator.service.js";
 
 const Organisation = platformDb.Organisation;
 const User = platformDb.User;
@@ -30,6 +32,28 @@ function slugify(name) {
     .replace(/[^a-z0-9-]/g, "")
     .slice(0, 90);
   return s || "org";
+}
+
+/**
+ * Resolve the human-readable plan name to store on the organisation's `plan`
+ * string column. Prefers the actual Plan row referenced by plan_id so the Tier
+ * shown in the UI always matches the selected plan; falls back to an explicit
+ * name string, then "starter".
+ */
+async function resolvePlanName(planId, fallbackName) {
+  if (planId) {
+    const parsed = parseInt(planId, 10);
+    if (Number.isFinite(parsed)) {
+      const plan = await platformDb.Plan.findByPk(parsed, {
+        attributes: ["name"],
+      });
+      if (plan?.name) return plan.name;
+    }
+  }
+  if (fallbackName && String(fallbackName).trim()) {
+    return String(fallbackName).trim();
+  }
+  return "starter";
 }
 
 /** True when organisation row is soft-deleted. */
@@ -135,6 +159,188 @@ export const listOrganisations = async (req, res) => {
   }
 };
 
+// ── Exports (Excel / PDF) ────────────────────────────────────────────────────
+
+// Fetch every organisation (no pagination) with the plan + users needed so the
+// export rows mirror exactly what the table shows.
+async function fetchAllOrganisationsForExport() {
+  return Organisation.findAll({
+    order: [["id", "ASC"]],
+    include: [
+      {
+        model: User,
+        as: "users",
+        attributes: ["id"],
+        required: false,
+      },
+      {
+        model: platformDb.Plan,
+        as: "plan",
+        attributes: ["id", "name"],
+        required: false,
+      },
+    ],
+  });
+}
+
+const ORG_EXPORT_COLUMNS = [
+  { key: "name", header: "Organisation" },
+  { key: "slug", header: "Slug" },
+  { key: "email", header: "Primary Email" },
+  { key: "country", header: "Country" },
+  { key: "tier", header: "Tier" },
+  { key: "users", header: "Users" },
+  { key: "status", header: "Status" },
+];
+
+const titleCase = (s) =>
+  typeof s === "string" && s
+    ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()
+    : "—";
+
+function organisationToExportRow(org) {
+  // `plan` may be the joined Plan object (when associated) or the raw string col.
+  const planName =
+    (org.plan && typeof org.plan === "object" ? org.plan.name : org.plan) || "—";
+  return {
+    name: org.name || "—",
+    slug: org.slug || "—",
+    email: org.primaryEmail || "—",
+    country: org.country || "—",
+    tier: titleCase(planName),
+    users: Array.isArray(org.users) ? org.users.length : 0,
+    status: titleCase(org.status || "trial"),
+  };
+}
+
+export const exportOrganisationsExcel = async (req, res) => {
+  try {
+    const orgs = await fetchAllOrganisationsForExport();
+    const rows = orgs.map(organisationToExportRow);
+    const buffer = rowsToXlsxBuffer(rows, ORG_EXPORT_COLUMNS);
+    return sendXlsxDownload(
+      res,
+      buffer,
+      `organisations_${new Date().toISOString().split("T")[0]}.xlsx`,
+    );
+  } catch (err) {
+    logger.error({ err }, "exportOrganisationsExcel");
+    return res.status(500).json({
+      status: "error",
+      message: "Failed to export organisations",
+      data: null,
+    });
+  }
+};
+
+export const exportOrganisationsPdf = async (req, res) => {
+  try {
+    const orgs = await fetchAllOrganisationsForExport();
+    const rows = orgs.map(organisationToExportRow);
+
+    const headerCells = ORG_EXPORT_COLUMNS.map((c) => ({
+      text: c.header,
+      style: "th",
+    }));
+    const bodyRows = rows.map((row) =>
+      ORG_EXPORT_COLUMNS.map((c) => ({
+        text: String(row[c.key] ?? ""),
+        style: "td",
+      })),
+    );
+
+    const generatedAt = new Date().toLocaleString("en-GB", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
+
+    const docDefinition = {
+      pageSize: "A4",
+      pageOrientation: "landscape",
+      pageMargins: [32, 40, 32, 44],
+      content: [
+        { text: "Organisations", style: "title" },
+        {
+          text: `Client organisations, plans and access — ${rows.length} record${rows.length === 1 ? "" : "s"}`,
+          style: "subtitle",
+          margin: [0, 2, 0, 2],
+        },
+        { text: `Generated: ${generatedAt}`, style: "meta", margin: [0, 0, 0, 14] },
+        rows.length
+          ? {
+              table: {
+                headerRows: 1,
+                widths: ["*", "auto", "*", "auto", "auto", "auto", "auto"],
+                body: [headerCells, ...bodyRows],
+              },
+              layout: {
+                hLineWidth: (i, node) =>
+                  i === 0 || i === 1 || i === node.table.body.length ? 1 : 0.5,
+                vLineWidth: () => 0,
+                hLineColor: (i) => (i <= 1 ? "#1d4ed8" : "#e2e8f0"),
+                fillColor: (rowIndex) =>
+                  rowIndex === 0
+                    ? "#1d4ed8"
+                    : rowIndex % 2 === 0
+                      ? "#f8fafc"
+                      : null,
+                paddingLeft: () => 7,
+                paddingRight: () => 7,
+                paddingTop: () => 6,
+                paddingBottom: () => 6,
+              },
+            }
+          : {
+              text: "No organisations found.",
+              style: "td",
+              margin: [0, 20, 0, 0],
+            },
+      ],
+      footer: (currentPage, pageCount) => ({
+        margin: [32, 4, 32, 0],
+        columns: [
+          {
+            text: "EPiC CRM — Organisations Export",
+            style: "footer",
+            width: "*",
+          },
+          {
+            text: `Page ${currentPage} of ${pageCount}`,
+            style: "footer",
+            alignment: "right",
+            width: "auto",
+          },
+        ],
+      }),
+      styles: {
+        title: { fontSize: 17, bold: true, color: "#1e3a5f" },
+        subtitle: { fontSize: 10, color: "#475569" },
+        meta: { fontSize: 8, color: "#64748b" },
+        th: { fontSize: 9, bold: true, color: "#ffffff" },
+        td: { fontSize: 9, color: "#1e293b" },
+        footer: { fontSize: 8, color: "#64748b" },
+      },
+      defaultStyle: { fontSize: 9, color: "#334155" },
+    };
+
+    const buffer = await generatePdfBufferFromDefinition(docDefinition);
+    const filename = `organisations_${new Date().toISOString().split("T")[0]}.pdf`;
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader("Cache-Control", "no-store");
+    return res.status(200).send(buffer);
+  } catch (err) {
+    logger.error({ err }, "exportOrganisationsPdf");
+    if (!res.headersSent) {
+      return res.status(500).json({
+        status: "error",
+        message: "Failed to export organisations",
+        data: null,
+      });
+    }
+  }
+};
+
 export const getOrganisationById = async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
@@ -230,14 +436,19 @@ export const createOrganisation = async (req, res) => {
     const freeTrialEnabled = trialEnabledRow ? trialEnabledRow.value !== "false" : true;
     const freeTrialDays = trialDaysRow ? (parseInt(trialDaysRow.value, 10) || 14) : 14;
 
+    const planName = await resolvePlanName(plan_id, plan);
+
     let org;
     try {
       org = await Organisation.create({
         name: String(name).trim(),
         slug: finalSlug,
-        plan: plan || "starter",
+        plan: planName,
         plan_id: plan_id ? parseInt(plan_id, 10) : null,
-        status: freeTrialEnabled ? (status || "trial") : "suspended",
+        // Trial ON → trial (unless an explicit status was passed). Trial OFF →
+        // active so a newly created/paid org can sign in immediately instead of
+        // being parked in "suspended".
+        status: freeTrialEnabled ? (status || "trial") : (status || "active"),
         primaryEmail: String(primaryEmail).trim().toLowerCase(),
         country: country || null,
         database_name: databaseName,
@@ -407,14 +618,19 @@ export const createOrganisationWithAdmin = async (req, res) => {
         : `T-${randomBytes(12).toString('base64url')}`; // S-09 fix: CSPRNG temp password
     const hashed = await bcrypt.hash(plain, 12); // S-29 fix: uniform cost factor
 
+    const planName = await resolvePlanName(plan_id, plan);
+
     await sequelize.transaction(async (transaction) => {
       org = await Organisation.create(
         {
           name: String(name).trim(),
           slug: finalSlug,
-          plan: plan || "starter",
+          plan: planName,
           plan_id: plan_id ? parseInt(plan_id, 10) : null,
-          status: freeTrialEnabled ? (status || "trial") : "suspended",
+          // Trial ON → trial. Trial OFF → active so the new org can sign in
+          // immediately (billing guard still redirects to pay via the expired
+          // subscription) rather than being parked in "suspended".
+          status: freeTrialEnabled ? (status || "trial") : (status || "active"),
           primaryEmail: String(primaryEmail).trim().toLowerCase(),
           country: country || null,
           database_name: databaseName,
@@ -617,11 +833,19 @@ export const updateOrganisation = async (req, res) => {
     if (!org) {
       return res.status(404).json({ status: "error", message: "Organisation not found", data: null });
     }
-    const { name, slug, plan, status, primaryEmail, country } = req.body;
+    const { name, slug, plan, plan_id, status, primaryEmail, country } = req.body;
     const updates = {};
     if (name !== undefined) updates.name = String(name).trim();
     if (slug !== undefined) updates.slug = String(slug).trim().toLowerCase();
-    if (plan !== undefined) updates.plan = plan;
+    if (plan_id !== undefined) {
+      const parsedPlanId = parseInt(plan_id, 10);
+      updates.plan_id = Number.isFinite(parsedPlanId) ? parsedPlanId : null;
+      // Keep the `plan` name string in sync with the chosen plan so the Tier
+      // column reflects the real plan, not a stale/hardcoded value.
+      updates.plan = await resolvePlanName(updates.plan_id, plan);
+    } else if (plan !== undefined) {
+      updates.plan = plan;
+    }
     if (status !== undefined) updates.status = status;
     if (primaryEmail !== undefined) updates.primaryEmail = String(primaryEmail).trim().toLowerCase();
     if (country !== undefined) updates.country = country;
@@ -1023,9 +1247,14 @@ export const impersonateOrganisationAdmin = async (req, res) => {
     // S-15 fix: every impersonation must be traceable. Record who impersonated
     // which org admin and from which IP so the event survives even if the
     // impersonation token is later revoked or expires without being used.
-    platformDb.PlatformAuditLog.create({
+    recordPlatformAuditLog({
+      category: 'Authentication',
+      action: 'Login As Organisation Admin',
+      user: req.user?.email || 'superadmin@epic.com',
+      org: org.name,
+      description: `Impersonated organisation admin ${admin.email} of ${org.name}`,
+      status: 'Success',
       user_id: req.user?.userId ?? req.user?.id ?? null,
-      action: 'IMPERSONATE_ORG_ADMIN',
       details: JSON.stringify({
         actorId: req.user?.userId ?? req.user?.id,
         targetOrgId: orgId,
@@ -1034,8 +1263,7 @@ export const impersonateOrganisationAdmin = async (req, res) => {
         targetAdminEmail: admin.email,
       }),
       ip_address: req.ip || req.socket?.remoteAddress || null,
-      status: 'Success',
-    }).catch((e) => logger.error({ err: e }, 'Failed to write impersonation audit log'));
+    });
 
     return res.status(200).json({
       status: "success",

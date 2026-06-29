@@ -1,7 +1,14 @@
 -- Week 6: E-signature support integration
 -- Stores signature requests sent to candidates + their completions.
 
-CREATE TYPE IF NOT EXISTS esig_status AS ENUM ('pending', 'signed', 'declined', 'expired');
+-- Postgres has no "CREATE TYPE IF NOT EXISTS", so guard it idempotently.
+DO $$
+BEGIN
+  CREATE TYPE esig_status AS ENUM ('pending', 'signed', 'declined', 'expired');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END
+$$;
 
 CREATE TABLE IF NOT EXISTS esignature_requests (
   id               SERIAL PRIMARY KEY,

@@ -17,6 +17,7 @@ import {
 import platformDb from '../../../models/index.js';
 import { getTenantDb } from '../../../services/tenantDb.service.js';
 import { activateOrgSubscriptionAfterPayment } from '../../../services/orgBilling.service.js';
+import { sendOrgSubscriptionInvoiceEmail } from '../../../services/orgInvoiceMail.service.js';
 import {
   getStripeForRequest,
   getStripeForTenant,
@@ -964,18 +965,25 @@ const processStripeWebhookEvent = async (event, tenantDb, req) => {
             /* malformed snapshot — activation falls back to a fresh compute */
           }
           try {
-            await activateOrgSubscriptionAfterPayment({
-              organisationId: orgId,
-              paymentRef: session.id,
-              amount:
-                session.amount_total != null ? session.amount_total / 100 : undefined,
-              currency: session.currency,
-              paymentIntentId:
-                typeof session.payment_intent === "string"
-                  ? session.payment_intent
-                  : session.payment_intent?.id || null,
-              breakdown,
-            });
+            const { invoice, alreadyProcessed } =
+              await activateOrgSubscriptionAfterPayment({
+                organisationId: orgId,
+                paymentRef: session.id,
+                amount:
+                  session.amount_total != null ? session.amount_total / 100 : undefined,
+                currency: session.currency,
+                paymentIntentId:
+                  typeof session.payment_intent === "string"
+                    ? session.payment_intent
+                    : session.payment_intent?.id || null,
+                breakdown,
+              });
+            // Send the invoice email if THIS path performed the activation. If
+            // verify-session already did it, alreadyProcessed is true and no
+            // invoice is returned — so the customer never gets two emails.
+            if (!alreadyProcessed && invoice) {
+              await sendOrgSubscriptionInvoiceEmail({ invoiceId: invoice.id });
+            }
           } catch (e) {
             // Do NOT swallow: rethrow so the outer handler marks the event failed
             // and enqueues a retry. Activation is idempotent on session.id, so a

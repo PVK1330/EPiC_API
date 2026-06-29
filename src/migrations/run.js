@@ -89,6 +89,104 @@ function migrationKey(file) {
   return String(file).replace(/\\/g, "/");
 }
 
+/**
+ * Split a SQL file into top-level statements, ignoring semicolons inside
+ * single/double-quoted strings, line comments (--) and block comments.
+ * Good enough for our migration SQL (no PL/pgSQL bodies / dollar-quoting here).
+ */
+function splitSqlStatements(sql) {
+  const statements = [];
+  let current = "";
+  let inSingle = false;
+  let inDouble = false;
+  let inLineComment = false;
+  let inBlockComment = false;
+
+  for (let i = 0; i < sql.length; i++) {
+    const ch = sql[i];
+    const next = sql[i + 1];
+
+    if (inLineComment) {
+      current += ch;
+      if (ch === "\n") inLineComment = false;
+      continue;
+    }
+    if (inBlockComment) {
+      current += ch;
+      if (ch === "*" && next === "/") {
+        current += next;
+        i++;
+        inBlockComment = false;
+      }
+      continue;
+    }
+    if (inSingle) {
+      current += ch;
+      if (ch === "'") inSingle = false;
+      continue;
+    }
+    if (inDouble) {
+      current += ch;
+      if (ch === '"') inDouble = false;
+      continue;
+    }
+
+    if (ch === "-" && next === "-") {
+      inLineComment = true;
+      current += ch;
+      continue;
+    }
+    if (ch === "/" && next === "*") {
+      inBlockComment = true;
+      current += ch;
+      continue;
+    }
+    if (ch === "'") {
+      inSingle = true;
+      current += ch;
+      continue;
+    }
+    if (ch === '"') {
+      inDouble = true;
+      current += ch;
+      continue;
+    }
+
+    if (ch === ";") {
+      const trimmed = current.trim();
+      if (trimmed) statements.push(trimmed);
+      current = "";
+      continue;
+    }
+
+    current += ch;
+  }
+
+  const tail = current.trim();
+  if (tail) statements.push(tail);
+  return statements;
+}
+
+/**
+ * Execute a SQL file. Statements using CREATE/DROP INDEX CONCURRENTLY cannot
+ * run inside a transaction block, and Sequelize wraps multi-statement query
+ * strings in an implicit transaction. So when a file contains CONCURRENTLY we
+ * split it and run each statement as its own autocommit query.
+ */
+async function executeSqlFile(sequelize, sql) {
+  if (!/\bCONCURRENTLY\b/i.test(sql)) {
+    await sequelize.query(sql);
+    return;
+  }
+
+  const statements = splitSqlStatements(sql);
+  for (const statement of statements) {
+    // Each query() call is its own implicit autocommit transaction, so a lone
+    // CONCURRENTLY statement is no longer inside a transaction block.
+    await sequelize.query(statement);
+  }
+}
+
 async function runSqlFiles(sequelize, files, label) {
   if (!files.length) {
     logger.info(`No ${label} migrations found.`);
@@ -129,7 +227,7 @@ async function runSqlFiles(sequelize, files, label) {
     const sql = readFileSync(join(__dirname, file), "utf8");
     logger.info({ key }, `[${label}] Running`);
 
-    await sequelize.query(sql);
+    await executeSqlFile(sequelize, sql);
 
     await sequelize.query(
       `INSERT INTO migration_history (filename) VALUES ($1)

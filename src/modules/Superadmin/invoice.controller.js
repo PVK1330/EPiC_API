@@ -73,7 +73,7 @@ function formatLongString(str, maxLength = 25) {
  * UK requirements: supplier name/address, customer name/address, invoice number,
  * invoice date, supply date, itemised amounts, VAT number if applicable, total.
  */
-async function buildUkInvoiceDocDef(invoice, platformSettings) {
+export async function buildUkInvoiceDocDef(invoice, platformSettings) {
   const org = invoice.organisation || {};
   const plan = invoice.subscription?.plan || {};
 

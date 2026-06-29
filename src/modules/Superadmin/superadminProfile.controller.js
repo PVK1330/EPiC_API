@@ -8,6 +8,8 @@ import platformDb from '../../models/index.js';
 import { mirrorUserToTenant } from '../../services/userSync.service.js';
 import { getTenantDb } from '../../services/tenantDb.service.js';
 import { toPublicImagePath } from '../../utils/storagePath.util.js';
+import { buildJwtPayload } from '../../utils/tenantScope.js';
+import { signToken, verifyToken, getCookieConfig } from '../../config/jwt.config.js';
 
 async function mirrorSuperadminById(userId) {
   const user = await platformDb.User.findByPk(userId);
@@ -96,9 +98,13 @@ export const uploadSuperadminAvatar = catchAsync(async (req, res) => {
   return ApiResponse.success(res, 'Avatar uploaded', { profile_pic: avatarUrl });
 });
 
+// Minimum days that must pass before the password can be changed again.
+const PASSWORD_CHANGE_COOLDOWN_DAYS = 15;
+const PASSWORD_CHANGE_COOLDOWN_MS = PASSWORD_CHANGE_COOLDOWN_DAYS * 24 * 60 * 60 * 1000;
+
 export const changeSuperadminPassword = catchAsync(async (req, res) => {
   const userId = req.user.id;
-  const { currentPassword, newPassword } = req.body;
+  const { currentPassword, newPassword, confirmPassword } = req.body;
 
   if (!currentPassword || !newPassword) {
     return ApiResponse.badRequest(res, 'currentPassword and newPassword are required');
@@ -108,22 +114,68 @@ export const changeSuperadminPassword = catchAsync(async (req, res) => {
     return ApiResponse.badRequest(res, 'New password must be at least 8 characters');
   }
 
+  // New and confirm passwords must match. confirmPassword is optional for
+  // backward compatibility, but when supplied it is enforced server-side too.
+  if (confirmPassword !== undefined && newPassword !== confirmPassword) {
+    return ApiResponse.badRequest(res, 'New password and confirm password do not match');
+  }
+
+  // New password must be different from the current one.
+  if (currentPassword === newPassword) {
+    return ApiResponse.badRequest(res, 'New password must be different from your current password');
+  }
+
   const user = await platformDb.User.findByPk(userId);
   if (!user) return ApiResponse.notFound(res, 'User not found');
 
   const isMatch = await bcrypt.compare(currentPassword, user.password);
-  if (!isMatch) return ApiResponse.badRequest(res, 'Current password is incorrect');
+  if (!isMatch) return ApiResponse.badRequest(res, 'Your old password does not match');
+
+  // Defense-in-depth: also reject if the new password equals the stored hash's
+  // plaintext (covers the case where currentPassword was typed differently but
+  // resolves to the same secret).
+  const sameAsCurrent = await bcrypt.compare(newPassword, user.password);
+  if (sameAsCurrent) {
+    return ApiResponse.badRequest(res, 'New password must be different from your current password');
+  }
+
+  // 15-day cooldown: once changed, the password cannot be changed again for 15 days.
+  if (user.password_changed_at) {
+    const lastChanged = new Date(user.password_changed_at).getTime();
+    const elapsed = Date.now() - lastChanged;
+    if (elapsed < PASSWORD_CHANGE_COOLDOWN_MS) {
+      const daysLeft = Math.ceil((PASSWORD_CHANGE_COOLDOWN_MS - elapsed) / (24 * 60 * 60 * 1000));
+      return ApiResponse.badRequest(
+        res,
+        `You can only change your password once every ${PASSWORD_CHANGE_COOLDOWN_DAYS} days. Please try again in ${daysLeft} day${daysLeft === 1 ? '' : 's'}.`,
+      );
+    }
+  }
 
   const hashedPassword = await bcrypt.hash(newPassword, 12);
 
+  // Sign the replacement token FIRST so we can align password_changed_at to its
+  // issued-at (iat) second. auth.middleware.js rejects any JWT whose iat predates
+  // password_changed_at; JWT iat is whole-seconds while new Date() is ms, so a
+  // naive `new Date()` would be a few ms AFTER the freshly-signed token's iat and
+  // would (incorrectly) invalidate the very token we just issued. Pinning
+  // password_changed_at to iat*1000 keeps this new token valid while still
+  // invalidating every older token (other devices/sessions stay logged out).
+  const freshToken = signToken(buildJwtPayload(user, { name: req.user?.role_name }));
+  const { iat } = verifyToken(freshToken);
+
   await user.update({
     password: hashedPassword,
-    password_changed_at: new Date(),
+    password_changed_at: new Date(iat * 1000),
   });
 
   await mirrorSuperadminById(userId).catch((err) =>
     logger.warn({ err, userId }, 'Failed to mirror superadmin profile to tenant'),
   );
+
+  // Re-issue the fresh token cookie so the user who just changed their own
+  // password stays logged in seamlessly.
+  res.cookie('token', freshToken, getCookieConfig({ maxAge: 7 * 24 * 60 * 60 * 1000 }));
 
   return ApiResponse.success(res, 'Password updated successfully');
 });
@@ -134,10 +186,33 @@ export const setup2FAForSuperadmin = catchAsync(async (req, res) => {
 
   if (!user) return ApiResponse.notFound(res, 'User not found');
 
-  const secret = speakeasy.generateSecret({ name: `ElitePic (${user.email})` });
-  const dataURL = await QRCode.toDataURL(secret.otpauth_url);
+  const label = `ElitePic (${user.email})`;
+  const issuer = 'ElitePic SuperAdmin';
 
-  await user.update({ two_factor_secret: secret.base32 });
+  // Idempotent setup: if 2FA is NOT yet enabled and a pending secret already
+  // exists (e.g. the user clicked "Activate" twice, refreshed, or React dev
+  // StrictMode double-invoked the handler), REUSE that secret instead of minting
+  // a new one. Regenerating would clobber the secret the user already scanned
+  // into their authenticator, so their codes would never match the DB — the
+  // exact "Invalid verification token" symptom. We only mint a fresh secret when
+  // 2FA is already enabled (re-enrolment) or none exists yet.
+  let base32 = user.two_factor_secret;
+  let otpauthUrl;
+  if (user.two_factor_enabled || !base32) {
+    const secret = speakeasy.generateSecret({ name: label, issuer });
+    base32 = secret.base32;
+    otpauthUrl = secret.otpauth_url;
+    await user.update({ two_factor_secret: base32 });
+  } else {
+    otpauthUrl = speakeasy.otpauthURL({
+      secret: base32,
+      encoding: 'base32',
+      label,
+      issuer,
+    });
+  }
+
+  const dataURL = await QRCode.toDataURL(otpauthUrl);
 
   return ApiResponse.success(res, '2FA setup initiated', {
     qrCode: dataURL,
@@ -148,7 +223,7 @@ export const setup2FAForSuperadmin = catchAsync(async (req, res) => {
 
 export const verify2FASetupForSuperadmin = catchAsync(async (req, res) => {
   const userId = req.user.id;
-  const { token } = req.body;
+  const token = String(req.body?.token ?? '').replace(/\s+/g, '');
 
   if (!token) return ApiResponse.badRequest(res, 'Verification token is required');
 
@@ -161,6 +236,10 @@ export const verify2FASetupForSuperadmin = catchAsync(async (req, res) => {
     secret: user.two_factor_secret,
     encoding: 'base32',
     token,
+    // window:1 tolerates ±30s of clock drift between the server and the user's
+    // phone (a code from the previous/next 30s step still verifies). Without it,
+    // even a correct code fails when clocks are slightly out of sync.
+    window: 1,
   });
 
   if (!verified) return ApiResponse.badRequest(res, 'Invalid verification token');
@@ -175,7 +254,8 @@ export const verify2FASetupForSuperadmin = catchAsync(async (req, res) => {
 
 export const disable2FAForSuperadmin = catchAsync(async (req, res) => {
   const userId = req.user.id;
-  const { token, password } = req.body;
+  const { password } = req.body;
+  const token = String(req.body?.token ?? '').replace(/\s+/g, '');
 
   if (!token && !password) {
     return ApiResponse.badRequest(res, 'Either a TOTP token or current password is required');
@@ -193,6 +273,7 @@ export const disable2FAForSuperadmin = catchAsync(async (req, res) => {
       secret: user.two_factor_secret,
       encoding: 'base32',
       token,
+      window: 1,
     });
     if (!verified) return ApiResponse.badRequest(res, 'Invalid TOTP token');
   } else {

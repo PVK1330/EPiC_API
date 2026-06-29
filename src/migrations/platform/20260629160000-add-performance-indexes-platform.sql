@@ -9,5 +9,6 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_invoices_status             ON invoi
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_payment_transactions_org_id ON payment_transactions(organisation_id);
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_users_org_role              ON users(organisation_id, role_id);
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_users_email                 ON users(email);
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_platform_audit_log_org_id   ON platform_audit_logs(organisation_id);
+-- NB: platform_audit_logs has no organisation_id column (org reference is the
+-- legacy free-text "org" VARCHAR), so there is no useful FK index to add here.
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_platform_audit_log_created  ON platform_audit_logs(created_at DESC);

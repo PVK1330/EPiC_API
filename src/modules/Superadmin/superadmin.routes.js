@@ -36,6 +36,8 @@ router.use('/gdpr', gdprRoutes);
 router.use('/sandbox', sandboxRoutes);
 
 router.get('/team/modules', requirePlatformPermission('platform.team.view', 'platform.team.manage'), teamController.listPlatformModules);
+router.get('/team/export/excel', requirePlatformPermission('platform.team.view', 'platform.team.manage'), teamController.exportTeamMembersExcel);
+router.get('/team/export/pdf', requirePlatformPermission('platform.team.view', 'platform.team.manage'), teamController.exportTeamMembersPdf);
 router.get('/team', requirePlatformPermission('platform.team.view', 'platform.team.manage'), teamController.listTeamMembers);
 router.post('/team', requirePlatformPermission('platform.team.manage'), teamController.inviteTeamMember);
 router.patch('/team/:id', requirePlatformPermission('platform.team.manage'), teamController.updateTeamMember);
@@ -49,6 +51,8 @@ router.delete('/platform-roles/:id', requirePlatformPermission('platform.team.ma
 router.post('/announcements', requirePlatformPermission('platform.dashboard.view'), announcementController.createPlatformAnnouncement);
 
 router.get('/organisations', requirePlatformPermission('platform.organisations.view', 'platform.organisations.manage'), orgController.listOrganisations);
+router.get('/organisations/export/excel', requirePlatformPermission('platform.organisations.view', 'platform.organisations.manage'), orgController.exportOrganisationsExcel);
+router.get('/organisations/export/pdf', requirePlatformPermission('platform.organisations.view', 'platform.organisations.manage'), orgController.exportOrganisationsPdf);
 router.get('/organisations/:id', requirePlatformPermission('platform.organisations.view', 'platform.organisations.manage'), orgController.getOrganisationById);
 router.post('/organisations', requirePlatformPermission('platform.organisations.manage'), orgController.createOrganisation);
 router.post('/organisations/with-admin', requirePlatformPermission('platform.organisations.manage'), orgController.createOrganisationWithAdmin);

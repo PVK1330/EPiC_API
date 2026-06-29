@@ -16,6 +16,8 @@ import { isPlatformEmailTaken, normalizePlatformEmail } from "../../utils/platfo
 import { generateOrganisationAdminPassword } from "../../services/organisationMail.service.js";
 import { sendPlatformStaffWelcomeEmail } from "../../services/platformMail.service.js";
 import { isPlatformSuperAdminRole } from "../../utils/tenantScope.js";
+import { rowsToXlsxBuffer, sendXlsxDownload } from "../../utils/excelExport.util.js";
+import { generatePdfBufferFromDefinition } from "../../services/pdfGenerator.service.js";
 
 const { User, Role, Permission } = platformDb;
 
@@ -82,8 +84,10 @@ export const listPlatformModules = catchAsync(async (req, res) => {
   });
 });
 
-export const listTeamMembers = catchAsync(async (req, res) => {
-  const members = await User.findAll({
+// Shared query so the list endpoint and the export endpoints always return the
+// exact same set of team members in the same order.
+async function fetchTeamMembers() {
+  return User.findAll({
     where: { organisation_id: { [Op.is]: null } },
     include: [
       {
@@ -102,6 +106,10 @@ export const listTeamMembers = catchAsync(async (req, res) => {
     ],
     order: [["id", "ASC"]],
   });
+}
+
+export const listTeamMembers = catchAsync(async (req, res) => {
+  const members = await fetchTeamMembers();
 
   return ApiResponse.success(res, "Platform team retrieved", {
     members: members.map(formatMember),
@@ -111,6 +119,140 @@ export const listTeamMembers = catchAsync(async (req, res) => {
       mfa_enabled: members.filter((m) => m.two_factor_enabled).length,
     },
   });
+});
+
+// Columns shared by both exports — keyed against the formatMember() output so
+// the spreadsheet and the PDF show identical, accurate data.
+const TEAM_EXPORT_COLUMNS = [
+  { key: "name", header: "Name" },
+  { key: "email", header: "Email" },
+  { key: "role", header: "Primary Role" },
+  { key: "modules", header: "Access Level" },
+  { key: "status", header: "Status" },
+  { key: "mfa", header: "2FA" },
+  { key: "lastActive", header: "Last Active" },
+];
+
+function teamMemberToExportRow(member) {
+  const m = formatMember(member);
+  return {
+    name: m.name || "—",
+    email: m.email || "—",
+    role: m.role || "—",
+    modules: `${m.modules} / ${PLATFORM_MODULE_COUNT}`,
+    status: m.status,
+    mfa: m.mfa ? "On" : "Off",
+    lastActive: m.lastActive
+      ? new Date(m.lastActive).toLocaleString("en-GB")
+      : "—",
+  };
+}
+
+/**
+ * GET /api/superadmin/team/export/excel
+ */
+export const exportTeamMembersExcel = catchAsync(async (req, res) => {
+  const members = await fetchTeamMembers();
+  const rows = members.map(teamMemberToExportRow);
+  const buffer = rowsToXlsxBuffer(rows, TEAM_EXPORT_COLUMNS);
+  sendXlsxDownload(
+    res,
+    buffer,
+    `team_members_${new Date().toISOString().split("T")[0]}.xlsx`,
+  );
+});
+
+/**
+ * GET /api/superadmin/team/export/pdf
+ */
+export const exportTeamMembersPdf = catchAsync(async (req, res) => {
+  const members = await fetchTeamMembers();
+  const rows = members.map(teamMemberToExportRow);
+
+  const headerCells = TEAM_EXPORT_COLUMNS.map((c) => ({
+    text: c.header,
+    style: "th",
+  }));
+  const bodyRows = rows.map((row) =>
+    TEAM_EXPORT_COLUMNS.map((c) => ({
+      text: String(row[c.key] ?? ""),
+      style: "td",
+    })),
+  );
+
+  const generatedAt = new Date().toLocaleString("en-GB", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+
+  const docDefinition = {
+    pageSize: "A4",
+    pageOrientation: "landscape",
+    pageMargins: [32, 40, 32, 44],
+    content: [
+      { text: "Administrative Team", style: "title" },
+      {
+        text: `Internal accounts and access levels — ${rows.length} member${rows.length === 1 ? "" : "s"}`,
+        style: "subtitle",
+        margin: [0, 2, 0, 2],
+      },
+      { text: `Generated: ${generatedAt}`, style: "meta", margin: [0, 0, 0, 14] },
+      rows.length
+        ? {
+            table: {
+              headerRows: 1,
+              // Email + Name wider; the rest auto-fit.
+              widths: ["*", "*", "auto", "auto", "auto", "auto", "auto"],
+              body: [headerCells, ...bodyRows],
+            },
+            layout: {
+              hLineWidth: (i, node) =>
+                i === 0 || i === 1 || i === node.table.body.length ? 1 : 0.5,
+              vLineWidth: () => 0,
+              hLineColor: (i) => (i <= 1 ? "#1d4ed8" : "#e2e8f0"),
+              fillColor: (rowIndex) =>
+                rowIndex === 0
+                  ? "#1d4ed8"
+                  : rowIndex % 2 === 0
+                    ? "#f8fafc"
+                    : null,
+              paddingLeft: () => 7,
+              paddingRight: () => 7,
+              paddingTop: () => 6,
+              paddingBottom: () => 6,
+            },
+          }
+        : { text: "No team members found.", style: "td", margin: [0, 20, 0, 0] },
+    ],
+    footer: (currentPage, pageCount) => ({
+      margin: [32, 4, 32, 0],
+      columns: [
+        { text: "EPiC CRM — Platform Team Export", style: "footer", width: "*" },
+        {
+          text: `Page ${currentPage} of ${pageCount}`,
+          style: "footer",
+          alignment: "right",
+          width: "auto",
+        },
+      ],
+    }),
+    styles: {
+      title: { fontSize: 17, bold: true, color: "#1e3a5f" },
+      subtitle: { fontSize: 10, color: "#475569" },
+      meta: { fontSize: 8, color: "#64748b" },
+      th: { fontSize: 9, bold: true, color: "#ffffff" },
+      td: { fontSize: 9, color: "#1e293b" },
+      footer: { fontSize: 8, color: "#64748b" },
+    },
+    defaultStyle: { fontSize: 9, color: "#334155" },
+  };
+
+  const buffer = await generatePdfBufferFromDefinition(docDefinition);
+  const filename = `team_members_${new Date().toISOString().split("T")[0]}.pdf`;
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  res.setHeader("Cache-Control", "no-store");
+  res.status(200).send(buffer);
 });
 
 export const inviteTeamMember = catchAsync(async (req, res) => {

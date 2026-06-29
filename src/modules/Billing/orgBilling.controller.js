@@ -21,6 +21,7 @@ import {
   computeOrgCharge,
   buildChargeLineItems,
 } from "../../services/orgCharge.service.js";
+import { sendOrgSubscriptionInvoiceEmail } from "../../services/orgInvoiceMail.service.js";
 
 function frontendBase() {
   return (process.env.FRONTEND_URL || "http://localhost:5173")
@@ -128,13 +129,17 @@ export const createCheckoutSession = catchAsync(async (req, res) => {
 
   // Nothing to charge (free plan with no fee/VAT) — activate immediately.
   if (charge.total <= 0) {
-    await activateOrgSubscriptionAfterPayment({
-      organisationId: orgId,
-      paymentRef: `free-${subscription.id}-${Date.now()}`,
-      amount: 0,
-      currency: charge.currency,
-      paymentMethod: "free",
-    });
+    const { invoice, alreadyProcessed } =
+      await activateOrgSubscriptionAfterPayment({
+        organisationId: orgId,
+        paymentRef: `free-${subscription.id}-${Date.now()}`,
+        amount: 0,
+        currency: charge.currency,
+        paymentMethod: "free",
+      });
+    if (!alreadyProcessed && invoice) {
+      sendOrgSubscriptionInvoiceEmail({ invoiceId: invoice.id }).catch(() => {});
+    }
     return ApiResponse.success(res, "Subscription activated", {
       activated: true,
     });
@@ -231,14 +236,23 @@ export const verifySession = catchAsync(async (req, res) => {
     /* malformed snapshot — activation falls back to a fresh compute */
   }
 
-  const { subscription } = await activateOrgSubscriptionAfterPayment({
-    organisationId: orgId,
-    paymentRef: session.id,
-    amount: session.amount_total != null ? session.amount_total / 100 : undefined,
-    currency: session.currency,
-    paymentIntentId,
-    breakdown,
-  });
+  const { subscription, invoice, alreadyProcessed } =
+    await activateOrgSubscriptionAfterPayment({
+      organisationId: orgId,
+      paymentRef: session.id,
+      amount: session.amount_total != null ? session.amount_total / 100 : undefined,
+      currency: session.currency,
+      paymentIntentId,
+      breakdown,
+    });
+
+  // Email the invoice (PDF attached) once, only for a fresh activation — the
+  // idempotent replay path (webhook + this verify call racing) returns
+  // alreadyProcessed and no invoice, so this won't double-send. Fire-and-forget
+  // so a slow/failed SMTP never blocks the success response.
+  if (!alreadyProcessed && invoice) {
+    sendOrgSubscriptionInvoiceEmail({ invoiceId: invoice.id }).catch(() => {});
+  }
 
   return ApiResponse.success(res, "Subscription activated", {
     paid: true,

@@ -19,6 +19,7 @@ import {
   normalizePlatformEmail,
 } from '../../utils/platformUserEmail.js';
 import { getTenantDb } from '../../services/tenantDb.service.js';
+import { recordPlatformAuditLog } from '../../services/platformActivity.service.js';
 import { assertLoginAllowedForOrganisationContext } from '../../utils/organisationHost.js';
 import {
   createUserOnPlatformAndTenant,
@@ -762,10 +763,12 @@ export const login = catchAsync(async (req, res) => {
   }
 
   if (user.locked_until && new Date(user.locked_until) > new Date()) {
-    platformDb.PlatformAuditLog.create({
-      user_id: user.id, action: 'FAILED_LOGIN',
-      details: 'Attempted login on locked account', ip_address: req.ip || req.connection?.remoteAddress, status: 'Failed'
-    }).catch(() => { });
+    recordPlatformAuditLog({
+      category: 'Authentication', action: 'Failed Login',
+      user: user.email, org: 'Global System',
+      description: 'Attempted login on locked account',
+      status: 'Failed', user_id: user.id, ip_address: req.ip || req.connection?.remoteAddress,
+    });
     return ApiResponse.forbidden(res, 'Account is locked due to multiple failed attempts. Please try again later.');
   }
 
@@ -778,16 +781,20 @@ export const login = catchAsync(async (req, res) => {
     user.failed_login_attempts = (user.failed_login_attempts || 0) + 1;
     if (user.failed_login_attempts >= 5) {
       user.locked_until = new Date(Date.now() + 30 * 60 * 1000);
-      platformDb.PlatformAuditLog.create({
-        user_id: user.id, action: 'ACCOUNT_LOCKED',
-        details: 'Account locked due to 5 failed attempts', ip_address: req.ip || req.connection?.remoteAddress, status: 'Success'
-      }).catch(() => { });
+      recordPlatformAuditLog({
+        category: 'Authentication', action: 'Account Locked',
+        user: user.email, org: 'Global System',
+        description: 'Account locked due to 5 failed attempts',
+        status: 'Success', user_id: user.id, ip_address: req.ip || req.connection?.remoteAddress,
+      });
     }
     await user.save();
-    platformDb.PlatformAuditLog.create({
-      user_id: user.id, action: 'FAILED_LOGIN',
-      details: 'Invalid password', ip_address: req.ip || req.connection?.remoteAddress, status: 'Failed'
-    }).catch(() => { });
+    recordPlatformAuditLog({
+      category: 'Authentication', action: 'Failed Login',
+      user: user.email, org: 'Global System',
+      description: 'Invalid password',
+      status: 'Failed', user_id: user.id, ip_address: req.ip || req.connection?.remoteAddress,
+    });
     return ApiResponse.unauthorized(res, 'Invalid credentials.');
   }
 
@@ -832,10 +839,12 @@ export const login = catchAsync(async (req, res) => {
     logger.warn({ err: sessionErr }, 'UserSession.create failed — continuing login');
   }
 
-  platformDb.PlatformAuditLog.create({
-    user_id: user.id, action: 'LOGIN',
-    details: 'User logged in successfully', ip_address: req.ip || req.connection?.remoteAddress, status: 'Success'
-  }).catch(() => { });
+  recordPlatformAuditLog({
+    category: 'Authentication', action: 'Login',
+    user: user.email, org: 'Global System',
+    description: 'User logged in successfully',
+    status: 'Success', user_id: user.id, ip_address: req.ip || req.connection?.remoteAddress,
+  });
 
   // Set httpOnly cookie for secure token storage — XSS-resistant.
   // maxAge matches the JWT (7d) + refresh token so the cookie isn't deleted
@@ -897,10 +906,12 @@ export const logout = catchAsync(async (req, res) => {
     }
   }
 
-  platformDb.PlatformAuditLog.create({
-    user_id: req.user?.id || null, action: 'LOGOUT',
-    details: 'User logged out', ip_address: req.ip || req.connection?.remoteAddress, status: 'Success'
-  }).catch(() => { });
+  recordPlatformAuditLog({
+    category: 'Authentication', action: 'Logout',
+    user: req.user?.email || 'System', org: 'Global System',
+    description: 'User logged out',
+    status: 'Success', user_id: req.user?.id || null, ip_address: req.ip || req.connection?.remoteAddress,
+  });
 
   res.clearCookie('token', getCookieConfig());
   res.clearCookie('refreshToken', getCookieConfig());
@@ -963,10 +974,12 @@ export const refreshToken = catchAsync(async (req, res) => {
   currentSession.last_active = new Date();
   await currentSession.save();
 
-  platformDb.PlatformAuditLog.create({
-    user_id: user.id, action: 'REFRESH_TOKEN_ROTATED',
-    details: 'Token rotated', ip_address: req.ip || req.connection?.remoteAddress, status: 'Success'
-  }).catch(() => { });
+  recordPlatformAuditLog({
+    category: 'Authentication', action: 'Token Refreshed',
+    user: user.email, org: 'Global System',
+    description: 'Token rotated',
+    status: 'Success', user_id: user.id, ip_address: req.ip || req.connection?.remoteAddress,
+  });
 
   res.cookie('token', newToken, getCookieConfig({ maxAge: 7 * 24 * 60 * 60 * 1000 }));
   res.cookie('refreshToken', newRefreshString, getCookieConfig({ maxAge: 7 * 24 * 60 * 60 * 1000 }));
@@ -1305,7 +1318,9 @@ export const verify2FASetup = catchAsync(async (req, res) => {
   const verified = speakeasy.totp.verify({
     secret: user.two_factor_secret,
     encoding: 'base32',
-    token,
+    token: String(token ?? '').replace(/\s+/g, ''),
+    // ±30s clock-drift tolerance so a correct code is not rejected on minor skew.
+    window: 1,
   });
 
   if (!verified) return ApiResponse.badRequest(res, 'Invalid verification token');
@@ -1328,7 +1343,9 @@ export const verify2FA = catchAsync(async (req, res) => {
   const verified = speakeasy.totp.verify({
     secret: user.two_factor_secret,
     encoding: 'base32',
-    token,
+    token: String(token ?? '').replace(/\s+/g, ''),
+    // ±30s clock-drift tolerance so a correct code is not rejected on minor skew.
+    window: 1,
   });
 
   if (!verified) return ApiResponse.unauthorized(res, 'Invalid 2FA token');
