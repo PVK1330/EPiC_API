@@ -5,6 +5,7 @@ import {
   listSponsorWorkers,
   getWorkerAuditTrail,
   softDeleteWorker,
+  assignCosToWorker,
 } from "../../../services/sponsoredWorker.service.js";
 
 const uid = (req) => {
@@ -53,8 +54,14 @@ export const registerWorker = async (req, res) => {
     const userId = uid(req);
     if (!userId) return res.status(401).json({ status: "error", message: "Invalid session" });
     const {
-      cosRequestId, cosAllocationRecordId,
+      cosRequestId, cosAllocationRecordId, useGeneralPool,
       workerFirstName, workerLastName, workerEmail, workerNationality, visaType, notes,
+      // UKVI fields
+      dob, gender, maritalStatus,
+      passportNumber, passportIssueDate, passportExpiryDate, passportCountry,
+      phone, address, city,
+      jobTitle, department, socCode, startDate, salary, weeklyHours,
+      previousUkVisa,
     } = req.body;
     const worker = await createSponsoredWorker(
       req.tenantDb,
@@ -63,18 +70,45 @@ export const registerWorker = async (req, res) => {
         organisationId: orgId(req),
         cosRequestId,
         cosAllocationRecordId,
+        useGeneralPool: !!useGeneralPool,
         workerFirstName,
         workerLastName,
         workerEmail,
         workerNationality,
         visaType,
         notes,
+        // UKVI fields
+        dob, gender, maritalStatus,
+        passportNumber, passportIssueDate, passportExpiryDate, passportCountry,
+        phone, address, city,
+        jobTitle, department, socCode, startDate, salary, weeklyHours,
+        previousUkVisa,
       },
       userId
     );
     res.status(201).json({ status: "success", message: "Worker registered", data: worker });
   } catch (err) {
     handle(res, err, "Failed to register worker");
+  }
+};
+
+/** POST /workers/:id/assign-cos — assign a CoS allocation to an existing worker. */
+export const assignWorkerCos = async (req, res) => {
+  try {
+    const userId = uid(req);
+    if (!userId) return res.status(401).json({ status: "error", message: "Invalid session" });
+    const { cosAllocationRecordId, cosRequestId } = req.body;
+    if (!cosAllocationRecordId) {
+      return res.status(400).json({ status: "error", message: "cosAllocationRecordId is required" });
+    }
+    const worker = await assignCosToWorker(
+      req.tenantDb,
+      { workerId: req.params.id, sponsorId: userId, cosAllocationRecordId, cosRequestId },
+      userId
+    );
+    res.status(200).json({ status: "success", message: "CoS assigned", data: worker });
+  } catch (err) {
+    handle(res, err, "Failed to assign CoS");
   }
 };
 

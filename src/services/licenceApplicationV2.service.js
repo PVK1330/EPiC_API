@@ -568,6 +568,10 @@ export function serializeApplication(app) {
     // Whether an optional proof-of-payment file is on record (path itself is
     // never exposed — it is streamed via the payment-proof download endpoint).
     hasUkviPaymentProof: !!j.ukviPaymentProofPath,
+    // Sponsor confirmation of the UKVI decision (gates the grant). The optional
+    // decision letter is streamed via the decision-letter download endpoint.
+    ukviDecisionConfirmedAt: j.ukviDecisionConfirmedAt || null,
+    hasUkviDecisionLetter: !!j.ukviDecisionLetterPath,
     // Government processing references shown to the sponsor (read-only). The SMS
     // registration reference lives on the government tracking record; the rest are
     // columns on the application itself.

@@ -17,6 +17,8 @@ import {
   submitSponsorUkviCredentials,
   confirmSponsorUkviPayment,
   downloadSponsorPaymentProof,
+  confirmSponsorUkviDecision,
+  downloadSponsorDecisionLetter,
 } from './sponsorLicenceGovernment.controller.js';
 import { listDispatchDocumentsHandler, downloadDispatchDocumentHandler } from '../../Shared/Licence/licenceDispatch.controller.js';
 import {
@@ -73,6 +75,9 @@ router.post("/:id/submit-credentials", validate(submitCredentialsSchema), submit
 // JSON (no file) still works — multer passes non-multipart requests straight through.
 router.post("/:id/confirm-payment", upload.single("paymentProof"), confirmSponsorUkviPayment);
 router.get("/:id/payment-proof/download", downloadSponsorPaymentProof);
+// Sponsor confirms the UKVI decision they received; optional `decisionLetter` file.
+router.post("/:id/confirm-decision", upload.single("decisionLetter"), confirmSponsorUkviDecision);
+router.get("/:id/decision-letter/download", downloadSponsorDecisionLetter);
 
 // Documents dispatched to sponsor by admin/caseworker.
 router.get("/:id/dispatch-documents", listDispatchDocumentsHandler);

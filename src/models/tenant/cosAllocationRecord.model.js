@@ -9,7 +9,7 @@ export default (sequelize, DataTypes) => {
       },
       cosRequestId: {
         type: DataTypes.INTEGER,
-        allowNull: false,
+        allowNull: true,   // NULL for initial licence-grant allocations (no request)
         unique: true,
         field: "cos_request_id",
         references: { model: "cos_requests", key: "id" },

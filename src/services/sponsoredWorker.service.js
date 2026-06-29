@@ -12,6 +12,8 @@ function ownershipError(message, code) {
 // ─── Status constants ─────────────────────────────────────────────────────────
 
 export const WORKER_STATUS = Object.freeze({
+  // Initial state — worker registered but no CoS assigned yet.
+  REGISTERED:             "Registered",
   // Phase-5 user-facing aliases matching the request.
   VISA_PENDING:           "CoS Assigned",
   VISA_GRANTED:           "Visa Granted",
@@ -173,20 +175,50 @@ function baseIncludes(tenantDb) {
 // ─── Public service functions ─────────────────────────────────────────────────
 
 /**
+ * Generate a unique CoS reference number for an individual sponsored worker.
+ * Format: COS-{YYYY}-{workerId zero-padded to 6 digits}
+ * e.g. COS-2026-000042
+ */
+function buildWorkerCosNumber(workerId) {
+  const year = new Date().getFullYear();
+  return `COS-${year}-${String(workerId).padStart(6, "0")}`;
+}
+
+/**
  * Register a new sponsored worker against a CoS allocation.
  * Status begins at 'CoS Assigned' (VISA_PENDING).
+ * When cosAllocationRecordId is supplied a unique workerCosNumber is generated.
  */
 export async function createSponsoredWorker(tenantDb, {
   sponsorId,
   organisationId,
   cosRequestId,
   cosAllocationRecordId,
+  useGeneralPool,   // true when sponsor selects "Licence Grant" pool (no allocation record)
   workerFirstName,
   workerLastName,
   workerEmail,
   workerNationality,
   visaType,
   notes,
+  // UKVI fields
+  dob,
+  gender,
+  maritalStatus,
+  passportNumber,
+  passportIssueDate,
+  passportExpiryDate,
+  passportCountry,
+  phone,
+  address,
+  city,
+  jobTitle,
+  department,
+  socCode,
+  startDate,
+  salary,
+  weeklyHours,
+  previousUkVisa,
 }, actorId) {
   if (!workerFirstName?.trim() || !workerLastName?.trim()) {
     const err = new Error("Worker first name and last name are required.");
@@ -283,7 +315,29 @@ export async function createSponsoredWorker(tenantDb, {
         visaType: visaType?.trim() ?? null,
         status: WORKER_STATUS.COS_ASSIGNED,
         notes: notes?.trim() ?? null,
+        // UKVI fields
+        dob: dob ?? null,
+        gender: gender ?? null,
+        maritalStatus: maritalStatus ?? null,
+        passportNumber: passportNumber?.trim() ?? null,
+        passportIssueDate: passportIssueDate ?? null,
+        passportExpiryDate: passportExpiryDate ?? null,
+        passportCountry: passportCountry?.trim() ?? null,
+        phone: phone?.trim() ?? null,
+        address: address?.trim() ?? null,
+        city: city?.trim() ?? null,
+        jobTitle: jobTitle?.trim() ?? null,
+        department: department?.trim() ?? null,
+        socCode: socCode?.trim() ?? null,
+        startDate: startDate ?? null,
+        salary: salary ?? null,
+        weeklyHours: weeklyHours ?? null,
+        previousUkVisa: previousUkVisa === true || previousUkVisa === "yes" || previousUkVisa === "true",
       }, { transaction: t });
+
+      // Auto-generate per-worker CoS reference number now that we have the ID.
+      worker.workerCosNumber = buildWorkerCosNumber(worker.id);
+      await worker.save({ transaction: t });
 
       await tenantDb.SponsoredWorkerAudit.create({
         sponsoredWorkerId: worker.id,
@@ -301,6 +355,13 @@ export async function createSponsoredWorker(tenantDb, {
   }
 
   // ── No-allocation path: simpler, no locking required ───────────────────────
+  // - useGeneralPool: worker draws a CoS from the initial licence-grant pool
+  //   (no CosAllocationRecord row). Gets a CoS number + "CoS Assigned" status.
+  // - cosRequestId only: worker is linked to a specific CoS request.
+  // - Neither: worker is registered without CoS ("Registered" status).
+  const assignCoS = useGeneralPool || !!cosRequestId;
+  const initialStatus = assignCoS ? WORKER_STATUS.COS_ASSIGNED : WORKER_STATUS.REGISTERED;
+
   const worker = await tenantDb.SponsoredWorker.create({
     sponsorId,
     organisationId: organisationId ?? null,
@@ -311,15 +372,40 @@ export async function createSponsoredWorker(tenantDb, {
     workerEmail: workerEmail?.trim() ?? null,
     workerNationality: workerNationality?.trim() ?? null,
     visaType: visaType?.trim() ?? null,
-    status: WORKER_STATUS.COS_ASSIGNED,
+    status: initialStatus,
     notes: notes?.trim() ?? null,
+    // UKVI fields
+    dob: dob ?? null,
+    gender: gender ?? null,
+    maritalStatus: maritalStatus ?? null,
+    passportNumber: passportNumber?.trim() ?? null,
+    passportIssueDate: passportIssueDate ?? null,
+    passportExpiryDate: passportExpiryDate ?? null,
+    passportCountry: passportCountry?.trim() ?? null,
+    phone: phone?.trim() ?? null,
+    address: address?.trim() ?? null,
+    city: city?.trim() ?? null,
+    jobTitle: jobTitle?.trim() ?? null,
+    department: department?.trim() ?? null,
+    socCode: socCode?.trim() ?? null,
+    startDate: startDate ?? null,
+    salary: salary ?? null,
+    weeklyHours: weeklyHours ?? null,
+    previousUkVisa: previousUkVisa === true || previousUkVisa === "yes" || previousUkVisa === "true",
+    workerCosNumber: assignCoS ? buildWorkerCosNumber(0) : null,
   });
+
+  // Finalise CoS number with the real worker ID now that the row exists.
+  if (assignCoS) {
+    worker.workerCosNumber = buildWorkerCosNumber(worker.id);
+    await worker.save();
+  }
 
   await recordWorkerAudit(tenantDb, {
     sponsoredWorkerId: worker.id,
     action: WORKER_AUDIT_ACTIONS.CREATED,
     fromStatus: null,
-    toStatus: WORKER_STATUS.COS_ASSIGNED,
+    toStatus: initialStatus,
     actorId,
     notes,
   });
@@ -371,6 +457,81 @@ export async function rejectWorkerVisa(tenantDb, { workerId, rejectionReason, no
     auditAction: WORKER_AUDIT_ACTIONS.VISA_REJECTED,
     actorId,
     notes: notes ?? rejectionReason,
+  });
+}
+
+/**
+ * Assign a CoS allocation to an already-registered sponsored worker.
+ * Generates the unique workerCosNumber and pre-fills visaType from the allocation.
+ * Uses SELECT FOR UPDATE on the allocation record to prevent over-allocation.
+ */
+export async function assignCosToWorker(tenantDb, { workerId, sponsorId, cosAllocationRecordId, cosRequestId }, actorId) {
+  const worker = await tenantDb.SponsoredWorker.findByPk(workerId);
+  if (!worker) {
+    const err = new Error("Sponsored worker not found.");
+    err.statusCode = 404;
+    throw err;
+  }
+  if (Number(worker.sponsorId) !== Number(sponsorId)) {
+    throw ownershipError("Worker does not belong to this sponsor.", "WORKER_OWNERSHIP_VIOLATION");
+  }
+  if (worker.workerCosNumber) {
+    const err = new Error("Worker already has a CoS assigned.");
+    err.statusCode = 409;
+    err.code = "COS_ALREADY_ASSIGNED";
+    throw err;
+  }
+
+  return tenantDb.sequelize.transaction(async (t) => {
+    const allocation = await tenantDb.CosAllocationRecord.findByPk(cosAllocationRecordId, {
+      attributes: ["id", "allocatedAmount", "sponsorId", "visaType", "cosRequestId"],
+      lock: t.LOCK.UPDATE,
+      transaction: t,
+    });
+    if (!allocation) {
+      const err = new Error("CoS allocation record not found.");
+      err.statusCode = 404;
+      throw err;
+    }
+    if (Number(allocation.sponsorId) !== Number(sponsorId)) {
+      throw ownershipError("CoS allocation does not belong to this sponsor.", "ALLOCATION_OWNERSHIP_VIOLATION");
+    }
+
+    const usedCount = await tenantDb.SponsoredWorker.count({
+      where: { cosAllocationRecordId },
+      transaction: t,
+    });
+    if (usedCount >= allocation.allocatedAmount) {
+      const err = new Error(
+        `CoS allocation exhausted. Allocated: ${allocation.allocatedAmount}, already assigned: ${usedCount}.`
+      );
+      err.statusCode = 409;
+      err.code = "ALLOCATION_EXCEEDED";
+      throw err;
+    }
+
+    const cosNum = buildWorkerCosNumber(workerId);
+    const visaType = allocation.visaType || worker.visaType;
+    const prevStatus = worker.status;
+    const nextStatus = WORKER_STATUS.COS_ASSIGNED;
+
+    worker.cosAllocationRecordId = cosAllocationRecordId;
+    worker.cosRequestId = cosRequestId ?? allocation.cosRequestId ?? null;
+    worker.visaType = visaType;
+    worker.workerCosNumber = cosNum;
+    worker.status = nextStatus;
+    await worker.save({ transaction: t });
+
+    await tenantDb.SponsoredWorkerAudit.create({
+      sponsoredWorkerId: worker.id,
+      action: "cos_assigned",
+      fromStatus: prevStatus,
+      toStatus: nextStatus,
+      actorId: actorId ?? null,
+      notes: `CoS assigned: ${cosNum} (allocation #${cosAllocationRecordId})`,
+    }, { transaction: t });
+
+    return worker;
   });
 }
 
@@ -483,7 +644,7 @@ export async function softDeleteWorker(tenantDb, workerId, actorId) {
       sponsoredWorkerId: worker.id,
       action: WORKER_AUDIT_ACTIONS.DELETED,
       fromStatus: prevStatus,
-      toStatus: null,
+      toStatus: "deleted",
       actorId: actorId ?? null,
       notes: null,
     }, { transaction: t });

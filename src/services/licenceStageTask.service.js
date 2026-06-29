@@ -1297,11 +1297,11 @@ export async function completeStageTask(tenantDb, { applicationId, stageKey, rol
   // have reached a specific status before any role can act on them.
   checkStatusGate(application, stageDef);
 
+  const taskWhere = { licenceApplicationId: applicationId, stageKey, role };
+
   await ensureStageTasks(tenantDb, application, { req });
 
-  const task = await tenantDb.LicenceStageTask.findOne({
-    where: { licenceApplicationId: applicationId, stageKey, role },
-  });
+  let task = await tenantDb.LicenceStageTask.findOne({ where: taskWhere });
 
   if (!task) {
     // Distinguish "future stage not yet unlocked" from "invalid stage/role combo".
@@ -1319,15 +1319,35 @@ export async function completeStageTask(tenantDb, { applicationId, stageKey, rol
 
   if (task.status === "completed") return task; // idempotent
 
-  // Sequential enforcement: all of this role's earlier-stage tasks must be
-  // completed before this task can be marked done. Other roles' tasks in
-  // earlier stages do not block — each role advances through their own chain
-  // independently. Within-stage ordering is handled by checkIntraStageOrder.
-  await checkSequentialOrder(tenantDb, applicationId, stageDef, role);
-
-  // Within-stage role ordering: earlier roles in the execution sequence must
-  // complete their task before later roles can complete theirs.
-  await checkIntraStageOrder(tenantDb, applicationId, stageDef, role);
+  // Sequential + within-stage ordering enforcement.
+  //   - Sequential: all of this role's earlier-stage tasks must be completed
+  //     before this task. Other roles' earlier-stage tasks do not block — each
+  //     role advances through their own chain independently.
+  //   - Intra-stage: earlier roles in the stage's execution order must complete
+  //     their task before later roles can complete theirs.
+  //
+  // These checks read predecessor task rows that a CONCURRENT request may be
+  // updating at the same instant — e.g. a parallel stages-panel refresh running
+  // ensureStageTasks (which auto-completes/repairs predecessors), or another
+  // role completing their task. A first click could then see a predecessor as
+  // still-pending and 409, while an immediate second click succeeds. To remove
+  // that flakiness, on a 409 we re-run the seeding/repair pass and re-read once
+  // before surfacing the error. A genuinely-incomplete predecessor still fails
+  // the re-check, so this never yields a false completion.
+  try {
+    await checkSequentialOrder(tenantDb, applicationId, stageDef, role);
+    await checkIntraStageOrder(tenantDb, applicationId, stageDef, role);
+  } catch (err) {
+    if (err?.statusCode !== 409) throw err;
+    await ensureStageTasks(tenantDb, application, { req });
+    const refreshed = await tenantDb.LicenceStageTask.findOne({ where: taskWhere });
+    if (refreshed?.status === "completed") return refreshed; // completed concurrently
+    if (refreshed) task = refreshed;
+    // Re-validate against the freshly-repaired state; a real ordering violation
+    // throws again here and is returned to the caller as a legitimate 409.
+    await checkSequentialOrder(tenantDb, applicationId, stageDef, role);
+    await checkIntraStageOrder(tenantDb, applicationId, stageDef, role);
+  }
 
   // Ensure actor is mirrored in tenant DB to avoid foreign key constraint violations
   if (actorUser && tenantDb) {

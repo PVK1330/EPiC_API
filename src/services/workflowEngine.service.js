@@ -29,8 +29,10 @@ const CASE_TRANSITIONS = {
 
 // Role IDs permitted to record a final 'Approved' decision on a licence.
 // Defined inline to avoid a circular import from role.middleware.js.
-//   3 = ROLES.ADMIN   5 = ROLES.SUPERADMIN
-const LICENCE_APPROVER_ROLE_IDS = new Set([3, 5]);
+//   2 = ROLES.CASEWORKER   3 = ROLES.ADMIN   5 = ROLES.SUPERADMIN
+// Caseworkers may record the final grant/close once the sponsor has confirmed the
+// UKVI decision (that prerequisite is enforced separately in grantLicence()).
+const LICENCE_APPROVER_ROLE_IDS = new Set([2, 3, 5]);
 
 const LICENCE_TRANSITIONS = {
   'Draft':                  ['Pending'],

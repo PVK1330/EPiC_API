@@ -554,6 +554,88 @@ export async function confirmUkviPayment(tenantDb, application, actorUser, req, 
   };
 }
 
+// ─── Sponsor: confirm UKVI decision received ──────────────────────────────────
+// UKVI sends the decision (grant/refusal) directly to the sponsor's email. The
+// sponsor confirms receipt here — and may attach the decision letter — so the
+// case team can grant/close the licence. The case team CANNOT grant until this
+// confirmation exists (enforced in grantLicence()).
+export async function confirmUkviDecision(tenantDb, application, actorUser, req, file = null) {
+  const actorId = actorUser?.userId ?? actorUser?.id ?? null;
+
+  application.ukviDecisionConfirmedAt = new Date();
+  if (file?.path) {
+    application.ukviDecisionLetterPath = file.path;
+  }
+  await application.save();
+
+  await recordLicenceAudit({
+    tenantDb,
+    application,
+    actorId,
+    action: "UKVI_DECISION_CONFIRMED",
+    previousStatus: application.status,
+    newStatus: application.status,
+    notes: file?.path
+      ? "Sponsor confirmed UKVI decision received (decision letter attached)"
+      : "Sponsor confirmed UKVI decision received",
+    req,
+  });
+
+  // Notify caseworkers + admin so they can grant/close the case.
+  resolveRoleRecipients(tenantDb, application)
+    .then(async (recipients) => {
+      const company = application.companyName || `#LIC-${application.id}`;
+
+      if (recipients.sponsor?.userId) {
+        await notify.deliver({
+          tenantDb,
+          recipientUserId: recipients.sponsor.userId,
+          type: "SUCCESS",
+          priority: "MEDIUM",
+          category: "sponsorship",
+          title: "UKVI Decision Confirmation Recorded",
+          message: `Thank you — your confirmation that UKVI has communicated their decision for ${company} has been recorded. Your case team will now finalise and close your application.`,
+          entityType: "licence_application",
+          entityId: application.id,
+          actionType: "ukvi_decision_confirmed",
+          actionUrl: "/business/licence-process",
+          req,
+          organisationId: application.organisationId ?? null,
+        });
+      }
+
+      const staffMsg = `${company} — the sponsor has confirmed they received the UKVI decision. You can now record the outcome and close the case.`;
+      const staffTargets = [
+        ...(recipients.admin ? [{ ...recipients.admin, url: "/admin/licence-applications" }] : []),
+        ...recipients.caseworkers.map((cw) => ({ ...cw, url: "/caseworker/licence-reviews" })),
+      ];
+      for (const tgt of staffTargets) {
+        await notify.deliver({
+          tenantDb,
+          recipientUserId: tgt.userId,
+          type: "INFO",
+          priority: "HIGH",
+          category: "sponsorship",
+          title: "UKVI Decision Confirmed by Sponsor — Action Required",
+          message: staffMsg,
+          entityType: "licence_application",
+          entityId: application.id,
+          actionType: "ukvi_decision_confirmed",
+          actionUrl: tgt.url,
+          req,
+          organisationId: application.organisationId ?? null,
+        });
+      }
+    })
+    .catch((err) => logger.error({ err }, "confirmUkviDecision: notification failed"));
+
+  return {
+    confirmed: true,
+    ukviDecisionConfirmedAt: application.ukviDecisionConfirmedAt,
+    ukviDecisionLetterUploaded: !!application.ukviDecisionLetterPath,
+  };
+}
+
 // ─── Sponsor: confirm credentials received ────────────────────────────────────
 
 export async function confirmCredentialsReceived(tenantDb, application, actorUser, req) {

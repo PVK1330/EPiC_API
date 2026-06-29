@@ -5,6 +5,8 @@ import { toPublicImagePath } from '../../../utils/storagePath.util.js';
 import { computeSponsorPayables } from '../Payments/sponsorPayment.controller.js';
 import { getPaginationParams, buildPaginationMeta } from '../../../utils/paginate.js';
 
+const WORKER_COS_INACTIVE = ['Visa Rejected', 'deleted'];
+
 const INACTIVE = ['Cancelled', 'Closed', 'Rejected'];
 
 const uid = (req) => {
@@ -37,7 +39,7 @@ export const getDashboard = async (req, res) => {
     const userId = uid(req);
     if (!userId) return res.status(401).json({ status: 'error', message: 'Invalid session' });
 
-    const [profile, activeCases, totalCases, pendingLicences, overdueCount, recentCases, approvedLicence, pendingCosRequests, complianceAlerts] =
+    const [profile, activeCases, totalCases, pendingLicences, overdueCount, recentCases, approvedLicence, pendingCosRequests, complianceAlerts, activeWorkerCosCount] =
       await Promise.all([
         req.tenantDb.SponsorProfile.findOne({ where: { userId } }),
         req.tenantDb.Case.count({ where: mergeCaseWhere(req, { sponsorId: userId, status: { [Op.notIn]: INACTIVE } }) }),
@@ -54,10 +56,21 @@ export const getDashboard = async (req, res) => {
         // Sponsor's own CoS requests still awaiting a reviewer decision.
         safeCount(req.tenantDb.CosRequest?.count({ where: { sponsorId: userId, status: { [Op.in]: ['Pending', 'Under Review'] } } })),
         // Compliance submissions where the reviewer requested more info / action.
-        countSponsorComplianceAlerts(req.tenantDb, userId)
+        countSponsorComplianceAlerts(req.tenantDb, userId),
+        // New-system sponsored workers that have a CoS number assigned (active only).
+        safeCount(
+          req.tenantDb.SponsoredWorker?.count({
+            where: {
+              sponsorId: userId,
+              workerCosNumber: { [Op.ne]: null },
+              status: { [Op.notIn]: WORKER_COS_INACTIVE },
+            },
+          })
+        ),
       ]);
 
     const cosTotal = parseInt(profile?.cosAllocation || approvedLicence?.cosAllocation || 0);
+    const cosUsed = activeCases + (activeWorkerCosCount || 0);
     const licenceExpiry = profile?.licenceExpiryDate || approvedLicence?.proposedStartDate;
     const daysRemaining = licenceExpiry
       ? Math.ceil((new Date(licenceExpiry) - new Date()) / 86400000)
@@ -83,7 +96,7 @@ export const getDashboard = async (req, res) => {
         stats: { activeCases, totalWorkers: totalCases, pendingLicenceApplications: pendingLicences, overdueCount },
         pendingCosRequests,
         complianceAlerts,
-        cos: { total: cosTotal, used: activeCases, available: Math.max(cosTotal - activeCases, 0) },
+        cos: { total: cosTotal, used: cosUsed, available: Math.max(cosTotal - cosUsed, 0) },
         licenceExpiry: { date: licenceExpiry, daysRemaining, renewalDue: daysRemaining !== null && daysRemaining < 90 },
         recentCases: recentCases.map(c => ({
           id: c.id, caseId: c.caseId,

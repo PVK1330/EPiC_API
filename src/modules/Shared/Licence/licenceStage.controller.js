@@ -117,6 +117,96 @@ export const downloadLicenceDocument = async (req, res) => {
 };
 
 /**
+ * GET .../:id/payment-proof/download — stream the sponsor's uploaded UKVI payment
+ * slip. Shared by admin, caseworker (assignment-guarded) and sponsor (owner-guarded)
+ * so the case team can verify the proof the sponsor attached when confirming the
+ * UKVI licence fee payment. Path-confined to storage/private to block traversal.
+ */
+export const downloadPaymentProof = async (req, res) => {
+  try {
+    const application = await loadAccessibleApplication(req);
+    if (!application) {
+      return res.status(404).json({ status: "error", message: "Licence application not found" });
+    }
+    assertScopeAccess(req, application);
+
+    if (!application.ukviPaymentProofPath) {
+      return res.status(404).json({ status: "error", message: "No payment slip has been uploaded" });
+    }
+
+    const absolute = path.resolve(String(application.ukviPaymentProofPath));
+    if (absolute !== PRIVATE_STORAGE_DIR && !absolute.startsWith(PRIVATE_STORAGE_DIR + path.sep)) {
+      return res.status(400).json({ status: "error", message: "Invalid document path" });
+    }
+    if (!fs.existsSync(absolute)) {
+      return res.status(404).json({ status: "error", message: "File no longer exists on the server" });
+    }
+
+    const filename = path.basename(absolute);
+    const ext = path.extname(filename).toLowerCase();
+    const forceDownload = req.query.download === "1";
+    const disposition = forceDownload || !INLINE_EXTENSIONS.includes(ext) ? "attachment" : "inline";
+
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Content-Disposition", `${disposition}; filename="${filename}"`);
+    return res.sendFile(absolute, (err) => {
+      if (err && !res.headersSent) {
+        res.status(500).json({ status: "error", message: "Error streaming payment slip" });
+      }
+    });
+  } catch (error) {
+    const code = error?.statusCode || 500;
+    if (code >= 500) logger.error({ err: error }, "downloadPaymentProof (shared) failed");
+    return res.status(code).json({ status: "error", message: error.message || "Failed to download payment slip" });
+  }
+};
+
+/**
+ * GET .../:id/decision-letter/download — stream the sponsor's uploaded UKVI
+ * decision/grant letter. Shared by admin, caseworker (assignment-guarded) and
+ * sponsor (owner-guarded) so the case team can verify the outcome the sponsor
+ * confirmed. Path-confined to storage/private to block traversal.
+ */
+export const downloadDecisionLetter = async (req, res) => {
+  try {
+    const application = await loadAccessibleApplication(req);
+    if (!application) {
+      return res.status(404).json({ status: "error", message: "Licence application not found" });
+    }
+    assertScopeAccess(req, application);
+
+    if (!application.ukviDecisionLetterPath) {
+      return res.status(404).json({ status: "error", message: "No decision letter has been uploaded" });
+    }
+
+    const absolute = path.resolve(String(application.ukviDecisionLetterPath));
+    if (absolute !== PRIVATE_STORAGE_DIR && !absolute.startsWith(PRIVATE_STORAGE_DIR + path.sep)) {
+      return res.status(400).json({ status: "error", message: "Invalid document path" });
+    }
+    if (!fs.existsSync(absolute)) {
+      return res.status(404).json({ status: "error", message: "File no longer exists on the server" });
+    }
+
+    const filename = path.basename(absolute);
+    const ext = path.extname(filename).toLowerCase();
+    const forceDownload = req.query.download === "1";
+    const disposition = forceDownload || !INLINE_EXTENSIONS.includes(ext) ? "attachment" : "inline";
+
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Content-Disposition", `${disposition}; filename="${filename}"`);
+    return res.sendFile(absolute, (err) => {
+      if (err && !res.headersSent) {
+        res.status(500).json({ status: "error", message: "Error streaming decision letter" });
+      }
+    });
+  } catch (error) {
+    const code = error?.statusCode || 500;
+    if (code >= 500) logger.error({ err: error }, "downloadDecisionLetter (shared) failed");
+    return res.status(code).json({ status: "error", message: error.message || "Failed to download decision letter" });
+  }
+};
+
+/**
  * GET .../:id/workflow-timeline — the full cross-entity workflow timeline
  * (licence + CoS + sponsored workers) for one application, chronologically.
  * Shared across admin, caseworker (assignment-guarded) and sponsor (owner-guarded).
@@ -160,8 +250,17 @@ export const completeLicenceStageTask = async (req, res) => {
       req,
     });
 
-    // Return the refreshed panel so the client can re-render in one round-trip.
-    const data = await getStagesForApplication(req.tenantDb, application, { req });
+    // The task is now committed. Build the refreshed panel so the client can
+    // re-render in one round-trip — but never let a failure HERE mask the fact
+    // that the completion already succeeded. If rebuilding the panel throws
+    // (e.g. a transient error during a concurrent seed/refresh), still return
+    // success with data:null; the client falls back to refetching the stages.
+    let data = null;
+    try {
+      data = await getStagesForApplication(req.tenantDb, application, { req });
+    } catch (refreshErr) {
+      logger.warn({ err: refreshErr }, "completeLicenceStageTask: panel refresh after completion failed");
+    }
     return res.status(200).json({ status: "success", message: "Task completed", data });
   } catch (error) {
     const code = error?.statusCode || 500;
