@@ -43,7 +43,7 @@ export const EMAIL_PALETTE = Object.freeze({
   unionRed: "#C8102E",
 });
 
-const PLATFORM_NAME_FALLBACK = "EPiC";
+const PLATFORM_NAME_FALLBACK = "ImCamHub";
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 /** orgId(or "platform") -> { value, expires } */

@@ -13,7 +13,7 @@ import { mirrorUserToTenant } from "../../services/userSync.service.js";
 import { seedTenantOrganisation } from "../../services/tenantSeed.service.js";
 import { getTenantDb } from "../../services/tenantDb.service.js";
 import { recordPlatformAuditLog, createPlatformNotification } from "../../services/platformActivity.service.js";
-import { reactivateOrgManually } from "../../services/orgBilling.service.js";
+import { reactivateOrgManually, generateManualInvoice } from "../../services/orgBilling.service.js";
 import { invalidateOrgCache } from "../../services/orgCache.service.js";
 import logger from "../../utils/logger.js";
 import { getPaginationParams, buildPaginationMeta } from "../../utils/paginate.js";
@@ -122,6 +122,17 @@ async function resolveRegistrationConflicts({ email, country_code, mobile }) {
 }
 
 async function removeOrganisationUsers(orgId) {
+  const orgUsers = await User.findAll({
+    where: { organisation_id: orgId },
+    attributes: ["id"],
+  });
+  if (orgUsers.length > 0) {
+    const ids = orgUsers.map((u) => u.id);
+    await platformDb.PlatformAuditLog.update(
+      { user_id: null },
+      { where: { user_id: ids } },
+    );
+  }
   await User.destroy({ where: { organisation_id: orgId }, force: true });
 }
 
@@ -135,6 +146,12 @@ export const listOrganisations = async (req, res) => {
           model: User,
           as: "users",
           attributes: ["id", "email", "role_id", "status"],
+          required: false,
+        },
+        {
+          model: platformDb.Plan,
+          as: "plan",
+          attributes: ["id", "name"],
           required: false,
         },
       ],
@@ -865,6 +882,8 @@ export const updateOrganisation = async (req, res) => {
     // sub doesn't keep the org blocked.
     if (updates.status === "active") {
       await reactivateOrgManually(id);
+      // Generate and email an invoice for the manual activation (best-effort).
+      generateManualInvoice(id, "superadmin_activation").catch(() => {});
     } else if (updates.status !== undefined) {
       invalidateOrgCache(id);
     }
@@ -1011,6 +1030,7 @@ export const activateOrganisation = async (req, res) => {
     // (Activating the org alone leaves an expired subscription that the auth
     // middleware would still block on, and the cache would mask it for ~5 min.)
     await reactivateOrgManually(id);
+    generateManualInvoice(id, "superadmin_activation").catch(() => {});
     await org.reload();
 
     await recordPlatformAuditLog({
@@ -1038,6 +1058,52 @@ export const activateOrganisation = async (req, res) => {
     return res.status(500).json({
       status: "error",
       message: err?.message || "Failed to activate organisation",
+      data: null,
+    });
+  }
+};
+
+/**
+ * POST /api/superadmin/organisations/:id/mark-paid
+ * Superadmin manually records a payment for an org: activates subscription,
+ * generates an invoice with the chosen payment method, and emails it to the org.
+ */
+export const markOrganisationAsPaid = async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (Number.isNaN(id)) {
+      return res.status(400).json({ status: "error", message: "Invalid id", data: null });
+    }
+    const org = await Organisation.findByPk(id);
+    if (!org) {
+      return res.status(404).json({ status: "error", message: "Organisation not found", data: null });
+    }
+
+    const paymentMethod = String(req.body?.payment_method || "manual").trim();
+
+    await reactivateOrgManually(id);
+    const invoiceResult = await generateManualInvoice(id, paymentMethod);
+    await org.reload();
+
+    await recordPlatformAuditLog({
+      category: "Organisation",
+      action: "Organisation Marked as Paid",
+      user: req.user?.email || "superadmin@epic.com",
+      org: org.name,
+      description: `Superadmin manually marked ${org.name} (${org.slug}) as paid via ${paymentMethod}. Invoice: ${invoiceResult?.invoiceId ? `INV-${invoiceResult.invoiceId}` : "not generated"}.`,
+      status: "Success",
+    });
+
+    return res.status(200).json({
+      status: "success",
+      message: "Organisation marked as paid. Invoice generated and emailed.",
+      data: { organisation: org, invoiceId: invoiceResult?.invoiceId ?? null },
+    });
+  } catch (err) {
+    logger.error({ err }, "markOrganisationAsPaid");
+    return res.status(500).json({
+      status: "error",
+      message: err?.message || "Failed to mark organisation as paid",
       data: null,
     });
   }

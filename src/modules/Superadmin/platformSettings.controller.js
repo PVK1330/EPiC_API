@@ -78,7 +78,7 @@ export const getIdentitySettings = catchAsync(async (req, res) => {
 
   // Build a flat object with only identity keys; provide sensible defaults
   const data = {
-    platform_name:      raw["platform_name"]      ?? "ElitePic",
+    platform_name:      raw["platform_name"]      ?? "ImCamHub",
     support_email:      raw["support_email"]       ?? "",
     platform_address:   raw["platform_address"]    ?? "",
     default_locale:     raw["default_locale"]      ?? "en-GB",

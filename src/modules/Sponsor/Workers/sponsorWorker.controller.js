@@ -926,6 +926,7 @@ export const createAbsenceRecord = async (req, res) => {
       startDate: toISODate(startDate),
       endDate: toISODate(endDate),
       totalWorkingDays: days,
+      reportingRequired: days > 10,
       attendanceRecordPath,
       reportedToSms: reportedToSms === true || reportedToSms === 'true',
       notes: notes || null,
@@ -951,9 +952,9 @@ export const getAbsenceByWorker = async (req, res) => {
       where: { workerId: parseInt(workerId, 10), sponsorId },
       include: [
         {
-          model: req.tenantDb.User,
+          model: req.tenantDb.SponsoredWorker,
           as: 'worker',
-          attributes: ['id', 'first_name', 'last_name', 'email']
+          attributes: ['id', 'workerFirstName', 'workerLastName', 'workerEmail']
         }
       ],
       order: [['start_date', 'DESC']]
@@ -983,7 +984,11 @@ export const updateAbsenceRecord = async (req, res) => {
     if (absenceType !== undefined) record.absenceType = absenceType;
     if (startDate !== undefined) record.startDate = toISODate(startDate);
     if (endDate !== undefined) record.endDate = toISODate(endDate);
-    if (totalWorkingDays !== undefined) record.totalWorkingDays = parseInt(totalWorkingDays, 10);
+    if (totalWorkingDays !== undefined) {
+      const updatedDays = parseInt(totalWorkingDays, 10);
+      record.totalWorkingDays = updatedDays;
+      record.reportingRequired = updatedDays > 10;
+    }
     if (reportedToSms !== undefined) record.reportedToSms = reportedToSms === true || reportedToSms === 'true';
     if (notes !== undefined) record.notes = notes;
     if (req.file) record.attendanceRecordPath = req.file.path.replace(/\\/g, '/');
@@ -993,6 +998,47 @@ export const updateAbsenceRecord = async (req, res) => {
     return res.status(200).json({ status: 'success', data: record });
   } catch (err) {
     logger.error({ err }, 'updateAbsenceRecord error');
+    return res.status(500).json({ status: 'error', message: 'Internal server error' });
+  }
+};
+
+export const deleteAbsenceRecord = async (req, res) => {
+  try {
+    const sponsorId = req.user.userId;
+    const { id } = req.params;
+
+    const record = await req.tenantDb.AbsenceRecord.findOne({ where: { id, sponsorId } });
+    if (!record) {
+      return res.status(404).json({ status: 'error', message: 'Absence record not found' });
+    }
+
+    await record.destroy();
+    return res.status(200).json({ status: 'success', message: 'Absence record deleted' });
+  } catch (err) {
+    logger.error({ err }, 'deleteAbsenceRecord error');
+    return res.status(500).json({ status: 'error', message: 'Internal server error' });
+  }
+};
+
+export const listAllAbsences = async (req, res) => {
+  try {
+    const sponsorId = req.user.userId;
+
+    const records = await req.tenantDb.AbsenceRecord.findAll({
+      where: { sponsorId },
+      include: [
+        {
+          model: req.tenantDb.SponsoredWorker,
+          as: 'worker',
+          attributes: ['id', 'workerFirstName', 'workerLastName', 'workerEmail']
+        }
+      ],
+      order: [['start_date', 'DESC']]
+    });
+
+    return res.status(200).json({ status: 'success', data: records });
+  } catch (err) {
+    logger.error({ err }, 'listAllAbsences error');
     return res.status(500).json({ status: 'error', message: 'Internal server error' });
   }
 };

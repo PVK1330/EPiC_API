@@ -537,7 +537,8 @@ export const verifyOTP = catchAsync(async (req, res) => {
   await unverifiedUser.destroy();
 
   const role = { name: ROLE_NAMES[verifiedUser.role_id] ?? null };
-  const payload = buildJwtPayload(verifiedUser, role);
+  const allowedModulesVerify = await resolveAllowedModules(verifiedUser);
+  const payload = buildJwtPayload(verifiedUser, role, allowedModulesVerify);
   const token = signToken(payload);
 
   // Set httpOnly cookie for secure token storage — XSS-resistant
@@ -558,15 +559,13 @@ export const verifyOTP = catchAsync(async (req, res) => {
     createdAt: verifiedUser.createdAt,
   };
 
-  const allowedModules = await resolveAllowedModules(verifiedUser);
-
   return ApiResponse.success(res, "Email verified successfully. You are now logged in!", {
     email: email,
     is_verified: true,
     credentials_sent: true,
     token: token,
     user: userResponse,
-    allowedModules,
+    allowedModules: allowedModulesVerify,
   });
 });
 
@@ -818,7 +817,8 @@ export const login = catchAsync(async (req, res) => {
   }
 
   const roleMeta = await resolveAuthRole(user);
-  const payload = buildJwtPayload(user, { name: roleMeta.name });
+  const allowedModules = await resolveAllowedModules(user);
+  const payload = buildJwtPayload(user, { name: roleMeta.name }, allowedModules);
   const token = signToken(payload);
 
   const crypto = await import('crypto');
@@ -874,8 +874,6 @@ export const login = catchAsync(async (req, res) => {
       };
     }
   }
-
-  const allowedModules = await resolveAllowedModules(user);
 
   return ApiResponse.success(res, 'Login successful.', {
     user: {
@@ -963,7 +961,8 @@ export const refreshToken = catchAsync(async (req, res) => {
   }
 
   const roleMeta = await resolveAuthRole(user);
-  const payload = buildJwtPayload(user, { name: roleMeta.name });
+  const allowedModulesRefresh = await resolveAllowedModules(user);
+  const payload = buildJwtPayload(user, { name: roleMeta.name }, allowedModulesRefresh);
   const newToken = signToken(payload);
 
   const crypto = await import('crypto');
@@ -1290,7 +1289,13 @@ export const setup2FA = catchAsync(async (req, res) => {
 
   if (!user) return ApiResponse.notFound(res, 'User not found');
 
-  const secret = speakeasy.generateSecret({ name: `ElitePic (${user.email})` });
+  const branding = await getOrganisationEmailBranding(user.organisation_id ?? null);
+  const issuerName = branding.orgName;
+
+  const fullName = [user.first_name, user.last_name].filter(Boolean).join(' ');
+  const accountLabel = fullName ? `${fullName} (${user.email})` : user.email;
+
+  const secret = speakeasy.generateSecret({ name: `${issuerName}:${accountLabel}` });
   const dataURL = await QRCode.toDataURL(secret.otpauth_url);
 
   await user.update({
@@ -1357,7 +1362,8 @@ export const verify2FA = catchAsync(async (req, res) => {
   }
 
   const role = { name: ROLE_NAMES[user.role_id] ?? null };
-  const payload = buildJwtPayload(user, role);
+  const allowedModules = await resolveAllowedModules(user);
+  const payload = buildJwtPayload(user, role, allowedModules);
   const jwtToken = signToken(payload);
 
   // Set httpOnly cookie for secure token storage — XSS-resistant
@@ -1381,8 +1387,6 @@ export const verify2FA = catchAsync(async (req, res) => {
       };
     }
   }
-
-  const allowedModules = await resolveAllowedModules(user);
 
   return ApiResponse.success(res, '2FA verified, login successful', {
     user: {

@@ -1,4 +1,4 @@
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 
 /**
  * Public API rate limiter — 1000 requests per 15 minutes per API key.
@@ -10,9 +10,10 @@ export const publicApiLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => {
-    return req.apiKey?.key_prefix
-      ? `apikey:${req.apiKey.key_prefix}:${req.apiOrganisation?.id}`
-      : `ip:${req.ip}`;
+    if (req.apiKey?.key_prefix) {
+      return `apikey:${req.apiKey.key_prefix}:${req.apiOrganisation?.id}`;
+    }
+    return `ip:${ipKeyGenerator(req)}`;
   },
   handler: (req, res) => {
     res.status(429).json({
@@ -32,9 +33,10 @@ export const publicApiWriteLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => {
-    return req.apiKey?.key_prefix
-      ? `apikey:${req.apiKey.key_prefix}:write`
-      : `ip:${req.ip}:write`;
+    if (req.apiKey?.key_prefix) {
+      return `apikey:${req.apiKey.key_prefix}:write`;
+    }
+    return `ip:${ipKeyGenerator(req)}:write`;
   },
   handler: (req, res) => {
     res.status(429).json({

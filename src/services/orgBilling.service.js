@@ -266,3 +266,62 @@ export async function activateOrgSubscriptionAfterPayment({
     throw err;
   }
 }
+
+/**
+ * Generate a manual invoice when a superadmin activates or reassigns a plan for
+ * an org (no Stripe payment involved). Creates the Invoice row and emails it to
+ * the org's primary contact.
+ *
+ * Best-effort: never throws — a failed invoice must not block the org update.
+ *
+ * @param {number} organisationId
+ * @param {string} [triggeredBy]  Label for payment_method field (default: 'manual')
+ * @returns {Promise<{ ok: boolean, invoiceId?: number, reason?: string }>}
+ */
+export async function generateManualInvoice(organisationId, triggeredBy = "manual") {
+  try {
+    const subscription = await getLatestSubscriptionForOrg(organisationId);
+    if (!subscription) {
+      logger.warn({ organisationId }, "[generateManualInvoice] No subscription found — skipping");
+      return { ok: false, reason: "no_subscription" };
+    }
+
+    const plan = subscription.plan;
+    const currency = (plan?.currency || "GBP").toUpperCase();
+    const charge = await computeOrgCharge({ planPrice: plan?.price ?? 0, currency });
+
+    const lastInvoice = await platformDb.Invoice.findOne({ order: [["id", "DESC"]] });
+    let nextNum = 10001;
+    if (lastInvoice?.invoice_number) {
+      const match = lastInvoice.invoice_number.match(/INV-(\d+)/);
+      if (match) nextNum = parseInt(match[1], 10) + 1;
+    }
+
+    const invoice = await platformDb.Invoice.create({
+      organisation_id: organisationId,
+      subscription_id: subscription.id,
+      invoice_number: `INV-${nextNum}`,
+      amount: charge.total,
+      subtotal: charge.subtotal,
+      platform_fee_amount: charge.platformFee,
+      tax_rate: charge.taxRatePercent,
+      tax_amount: charge.taxAmount,
+      total: charge.total,
+      currency,
+      status: "paid",
+      payment_method: triggeredBy,
+      payment_gateway: "Manual",
+      paid_at: new Date(),
+    });
+
+    // Email is best-effort — import lazily to avoid circular deps.
+    const { sendOrgSubscriptionInvoiceEmail } = await import("./orgInvoiceMail.service.js");
+    await sendOrgSubscriptionInvoiceEmail({ invoiceId: invoice.id });
+
+    logger.info({ organisationId, invoiceId: invoice.id }, "[generateManualInvoice] Invoice created and emailed");
+    return { ok: true, invoiceId: invoice.id };
+  } catch (err) {
+    logger.error({ err, organisationId }, "[generateManualInvoice] Failed");
+    return { ok: false, reason: "exception" };
+  }
+}

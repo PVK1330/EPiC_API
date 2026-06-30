@@ -9,7 +9,7 @@ import {
   exportReportingExcel,
 } from './reporting.controller.js';
 import { verifyTokenAndTenant } from '../../../middlewares/authStack.middleware.js';
-import { checkRole, ROLES } from '../../../middlewares/role.middleware.js';
+import { checkRole, ROLES, requirePlanModule } from '../../../middlewares/role.middleware.js';
 
 const router = Router();
 
@@ -17,6 +17,7 @@ router.use(verifyTokenAndTenant);
 // S-06 fix: financial and personnel data is restricted to Admin and Caseworker.
 // Role-scoped filtering is applied inside each controller via buildRoleWhere(req.user).
 router.use(checkRole([ROLES.ADMIN, ROLES.CASEWORKER]));
+router.use(requirePlanModule('admin.reports'));
 
 // Summary KPIs (all-in-one for dashboard header)
 router.get('/summary', getReportingSummary);

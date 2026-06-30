@@ -1,12 +1,13 @@
 import { Router } from 'express';
 import * as financeController from './adminFinance.controller.js';
 import { verifyTokenAndTenant } from '../../../middlewares/authStack.middleware.js';
-import { checkRole, ROLES } from '../../../middlewares/role.middleware.js';
+import { checkRole, ROLES, requirePlanModule } from '../../../middlewares/role.middleware.js';
 
 const router = Router();
 
 router.use(verifyTokenAndTenant);
 router.use(checkRole([ROLES.ADMIN]));
+router.use(requirePlanModule('admin.finance'));
 
 // Summary KPIs
 router.get('/summary', financeController.getFinanceSummary);

@@ -88,6 +88,10 @@ import SponsoredWorkerModel from "./tenant/sponsoredWorker.model.js";
 import SponsoredWorkerAuditModel from "./tenant/sponsoredWorkerAudit.model.js";
 import SponsorPaymentModel from "./tenant/sponsorPayment.model.js";
 import EsignatureRequestModel from "./tenant/esignatureRequest.model.js";
+// Section K — Multi-Company Handling
+import SponsorLinkedEntityModel from "./tenant/sponsorLinkedEntity.model.js";
+// Section N — Monthly Compliance Review
+import MonthlyComplianceReviewModel from "./tenant/monthlyComplianceReview.model.js";
 
 /**
  * Register all models and associations on a Sequelize instance (main or tenant DB).
@@ -183,6 +187,10 @@ export function buildDb(sequelize) {
   db.SponsoredWorkerAudit = SponsoredWorkerAuditModel(sequelize, Sequelize.DataTypes);
   db.SponsorPayment = SponsorPaymentModel(sequelize, Sequelize.DataTypes);
   db.EsignatureRequest = EsignatureRequestModel(sequelize, Sequelize.DataTypes);
+  // Section K — Multi-Company Handling
+  db.SponsorLinkedEntity = SponsorLinkedEntityModel(sequelize, Sequelize.DataTypes);
+  // Section N — Monthly Compliance Review
+  db.MonthlyComplianceReview = MonthlyComplianceReviewModel(sequelize, Sequelize.DataTypes);
 
   // Associations (Same as before)
   db.Conversation.belongsTo(db.User, { foreignKey: "participantOneId", as: "participantOne" });
@@ -384,13 +392,13 @@ export function buildDb(sequelize) {
   db.ComplianceReviewHistory.belongsTo(db.User, { foreignKey: "actorId", as: "actor" });
   db.ComplianceReviewHistory.belongsTo(db.Organisation, { foreignKey: "organisationId", as: "organisation" });
 
-  db.RightToWorkRecord.belongsTo(db.User, { foreignKey: "workerId", as: "worker" });
+  db.RightToWorkRecord.belongsTo(db.SponsoredWorker, { foreignKey: "workerId", as: "worker" });
   db.RightToWorkRecord.belongsTo(db.User, { foreignKey: "sponsorId", as: "sponsor" });
   db.RightToWorkRecord.belongsTo(db.User, { foreignKey: "checkedBy", as: "checker" });
   db.RightToWorkRecord.belongsTo(db.User, { foreignKey: "reviewedBy", as: "reviewer" });
   db.RightToWorkRecord.belongsTo(db.Organisation, { foreignKey: "organisationId", as: "organisation" });
 
-  db.AbsenceRecord.belongsTo(db.User, { foreignKey: "workerId", as: "worker" });
+  db.AbsenceRecord.belongsTo(db.SponsoredWorker, { foreignKey: "workerId", as: "worker" });
   db.AbsenceRecord.belongsTo(db.User, { foreignKey: "sponsorId", as: "sponsor" });
   db.AbsenceRecord.belongsTo(db.Organisation, { foreignKey: "organisationId", as: "organisation" });
 
@@ -466,6 +474,18 @@ export function buildDb(sequelize) {
   // Charge paid on the tenant Stripe account. (Case-fee payments stay in case_payments.)
   db.SponsorPayment.belongsTo(db.User, { foreignKey: "sponsorUserId", as: "sponsor" });
   db.User.hasMany(db.SponsorPayment, { foreignKey: "sponsorUserId", as: "sponsorPayments" });
+
+  // Section K — Multi-Company Handling: parent/subsidiary relationships between sponsor profiles.
+  db.SponsorLinkedEntity.belongsTo(db.SponsorProfile, { foreignKey: "parentSponsorProfileId", as: "parentProfile" });
+  db.SponsorLinkedEntity.belongsTo(db.SponsorProfile, { foreignKey: "childSponsorProfileId", as: "childProfile" });
+  db.SponsorProfile.hasMany(db.SponsorLinkedEntity, { foreignKey: "parentSponsorProfileId", as: "subsidiaries" });
+  db.SponsorProfile.hasOne(db.SponsorLinkedEntity, { foreignKey: "childSponsorProfileId", as: "parentLink" });
+
+  // Section N — Monthly Compliance Review associations.
+  db.MonthlyComplianceReview.belongsTo(db.Organisation, { foreignKey: "organisationId", as: "organisation" });
+  db.MonthlyComplianceReview.belongsTo(db.User, { foreignKey: "sponsorId", as: "sponsor" });
+  db.Organisation.hasMany(db.MonthlyComplianceReview, { foreignKey: "organisationId", as: "monthlyComplianceReviews" });
+  db.User.hasMany(db.MonthlyComplianceReview, { foreignKey: "sponsorId", as: "monthlyComplianceReviews" });
 
   return db;
 }

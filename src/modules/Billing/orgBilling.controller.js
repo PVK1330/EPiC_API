@@ -22,6 +22,9 @@ import {
   buildChargeLineItems,
 } from "../../services/orgCharge.service.js";
 import { sendOrgSubscriptionInvoiceEmail } from "../../services/orgInvoiceMail.service.js";
+import { buildUkInvoiceDocDef } from "../Superadmin/invoice.controller.js";
+import { getSettingsByNamespace } from "../../services/settings.service.js";
+import { generatePdfBufferFromDefinition } from "../../services/pdfGenerator.service.js";
 
 function frontendBase() {
   return (process.env.FRONTEND_URL || "http://localhost:5173")
@@ -258,4 +261,67 @@ export const verifySession = catchAsync(async (req, res) => {
     paid: true,
     subscription: serializeSubscription(subscription),
   });
+});
+
+/**
+ * GET /api/billing/invoices
+ * Returns all invoices for the authenticated org admin's organisation.
+ */
+export const getMyInvoices = catchAsync(async (req, res) => {
+  const orgId = req.user.organisation_id;
+  if (!orgId) return ApiResponse.forbidden(res, "No organisation on this account");
+
+  const invoices = await platformDb.Invoice.findAll({
+    where: { organisation_id: orgId },
+    include: [
+      {
+        model: platformDb.Subscription,
+        as: "subscription",
+        include: [{ model: platformDb.Plan, as: "plan", attributes: ["id", "name", "billing_cycle"] }],
+      },
+    ],
+    order: [["createdAt", "DESC"]],
+  });
+
+  return ApiResponse.success(res, "Invoices retrieved", { invoices });
+});
+
+/**
+ * GET /api/billing/invoices/:id/download
+ * Streams the invoice PDF for the authenticated org admin (own org only).
+ */
+export const downloadMyInvoice = catchAsync(async (req, res) => {
+  const orgId = req.user.organisation_id;
+  const invoiceId = parseInt(req.params.id, 10);
+  if (!orgId || Number.isNaN(invoiceId)) return ApiResponse.badRequest(res, "Invalid request");
+
+  const invoice = await platformDb.Invoice.findOne({
+    where: { id: invoiceId, organisation_id: orgId },
+    include: [
+      {
+        model: platformDb.Organisation,
+        as: "organisation",
+        attributes: ["id", "name", "slug", "primaryEmail", "country", "logoUrl"],
+      },
+      {
+        model: platformDb.Subscription,
+        as: "subscription",
+        include: [{ model: platformDb.Plan, as: "plan", attributes: ["id", "name", "price", "billing_cycle"] }],
+      },
+    ],
+  });
+
+  if (!invoice) return ApiResponse.notFound(res, "Invoice not found");
+
+  const platformSettings = await getSettingsByNamespace(null);
+  const docDefinition = await buildUkInvoiceDocDef(invoice, platformSettings);
+  const pdfBuffer = await generatePdfBufferFromDefinition(docDefinition);
+
+  const safeNum = (invoice.invoice_number || `INV-${invoice.id}`).replace(/[^a-zA-Z0-9_-]/g, "_");
+  res.set({
+    "Content-Type": "application/pdf",
+    "Content-Disposition": `attachment; filename="Invoice_${safeNum}.pdf"`,
+    "Content-Length": pdfBuffer.length,
+  });
+  res.send(pdfBuffer);
 });

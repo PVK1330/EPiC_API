@@ -60,6 +60,7 @@ router.patch('/organisations/:id', requirePlatformPermission('platform.organisat
 router.delete('/organisations/:id', requirePlatformPermission('platform.organisations.manage'), orgController.deleteOrganisation);
 router.post('/organisations/:id/suspend', requirePlatformPermission('platform.organisations.manage'), orgController.suspendOrganisation);
 router.post('/organisations/:id/activate', requirePlatformPermission('platform.organisations.manage'), orgController.activateOrganisation);
+router.post('/organisations/:id/mark-paid', requirePlatformPermission('platform.organisations.manage'), orgController.markOrganisationAsPaid);
 router.post('/organisations/:id/admins', requirePlatformPermission('platform.organisations.manage'), orgController.createOrganisationAdmin);
 router.post('/organisations/:id/impersonate', requirePlatformPermission('platform.organisations.manage'), orgController.impersonateOrganisationAdmin);
 

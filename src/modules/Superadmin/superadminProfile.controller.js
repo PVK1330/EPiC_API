@@ -10,6 +10,7 @@ import { getTenantDb } from '../../services/tenantDb.service.js';
 import { toPublicImagePath } from '../../utils/storagePath.util.js';
 import { buildJwtPayload } from '../../utils/tenantScope.js';
 import { signToken, verifyToken, getCookieConfig } from '../../config/jwt.config.js';
+import { getOrganisationEmailBranding } from '../../utils/emailBranding.js';
 
 async function mirrorSuperadminById(userId) {
   const user = await platformDb.User.findByPk(userId);
@@ -186,8 +187,12 @@ export const setup2FAForSuperadmin = catchAsync(async (req, res) => {
 
   if (!user) return ApiResponse.notFound(res, 'User not found');
 
-  const label = `ElitePic (${user.email})`;
-  const issuer = 'ElitePic SuperAdmin';
+  const branding = await getOrganisationEmailBranding(null);
+  const platformName = branding.orgName;
+  const fullName = [user.first_name, user.last_name].filter(Boolean).join(' ');
+  const accountLabel = fullName ? `${fullName} (${user.email})` : user.email;
+  const label = `${platformName}:${accountLabel}`;
+  const issuer = platformName;
 
   // Idempotent setup: if 2FA is NOT yet enabled and a pending secret already
   // exists (e.g. the user clicked "Activate" twice, refreshed, or React dev

@@ -146,6 +146,9 @@ export const verifyToken = async (req, res, next) => {
 
     user.userId = user.id;
     user.role_name = decoded.role_name || null;
+    // Plan modules embedded in JWT (present on tokens issued after the
+    // requirePlanModule middleware was added; absent on older sessions).
+    user.allowedModules = Array.isArray(decoded.allowedModules) ? decoded.allowedModules : null;
     req.user = user;
     next();
   } catch (err) {

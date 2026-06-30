@@ -13,5 +13,7 @@ router.use(verifyToken, checkRole([ROLES.ADMIN]));
 router.get("/subscription", billing.getMySubscription);
 router.post("/checkout", billing.createCheckoutSession);
 router.post("/verify-session/:sessionId", billing.verifySession);
+router.get("/invoices", billing.getMyInvoices);
+router.get("/invoices/:id/download", billing.downloadMyInvoice);
 
 export default router;
