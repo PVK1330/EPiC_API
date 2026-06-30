@@ -459,6 +459,15 @@ export const createCaseworker = async (req, res) => {
       });
     }
 
+    if (!profileInput.department || !String(profileInput.department).trim()) {
+      await t.rollback();
+      return res.status(400).json({
+        status: "error",
+        message: "Department is required",
+        data: null,
+      });
+    }
+
     if (Number.isNaN(role_id) || role_id !== CASEWORKER_ROLE) {
       await t.rollback();
       return res.status(400).json({
@@ -892,6 +901,20 @@ export const updateCaseworker = async (req, res) => {
       return res.status(400).json({
         status: "error",
         message: "First name, last name, email, country code, and mobile are required",
+        data: null,
+      });
+    }
+
+    // Department is required. `pickProfileFields` strips empty strings, so when
+    // the client explicitly sends a blank department, check the raw body here to
+    // reject it rather than silently leaving the old value in place.
+    if (
+      req.body.department !== undefined &&
+      !String(req.body.department).trim()
+    ) {
+      return res.status(400).json({
+        status: "error",
+        message: "Department is required",
         data: null,
       });
     }
