@@ -13,6 +13,19 @@ import {
 // callers keep working unchanged.
 const brandName = (branding) => branding?.orgName || "EPiC";
 
+// Escape user-controlled text before embedding it in email HTML. Callers pass
+// PLAIN TEXT (subjects, names, messages — some with \n line breaks that are split
+// into paragraphs *before* escaping), so this cannot break intended formatting but
+// does neutralise injected markup (e.g. a candidate's <a href> phishing link in an
+// issue-report subject that lands in every admin's inbox).
+const escapeHtml = (value) =>
+  String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
 // Utility for formatting object data into a neat HTML block
 function metadataBlockHtml(metadata) {
   if (!metadata || Object.keys(metadata).length === 0) return "";
@@ -25,7 +38,7 @@ function metadataBlockHtml(metadata) {
       )
         .replace(/([A-Z])/g, " $1")
         .trim()}</span>
-      <span style="font-size: 13px; font-weight: 600; color: #0f172a; text-align: right;">${Array.isArray(val) ? val.join(", ") : val}</span>
+      <span style="font-size: 13px; font-weight: 600; color: #0f172a; text-align: right;">${escapeHtml(Array.isArray(val) ? val.join(", ") : val)}</span>
     </div>
   `,
     )
@@ -236,7 +249,7 @@ function messageToParagraphsHtml(message) {
     .filter(Boolean)
     .map(
       (para) =>
-        `<p style="margin:0 0 14px 0; font-size:15px; color:#33414F; line-height:1.7;">${para}</p>`,
+        `<p style="margin:0 0 14px 0; font-size:15px; color:#33414F; line-height:1.7;">${escapeHtml(para)}</p>`,
     )
     .join("");
 }
@@ -251,6 +264,10 @@ export function generateNotificationEmailTemplate({
   actionUrl = null,
 }) {
   const org = brandName(branding);
+  // title / recipientName can carry user-supplied text (e.g. an issue-report
+  // subject or a candidate's chosen display name) — escape before embedding.
+  const safeTitle = escapeHtml(title);
+  const safeRecipientName = escapeHtml(recipientName);
   const { label: badgeLabel, color: badgeColor } = resolveBadge(notificationType, priority);
   const isUrgent =
     String(notificationType).toLowerCase() === "error" ||
@@ -276,11 +293,11 @@ export function generateNotificationEmailTemplate({
 
   return wrapEpicEmail({
     branding,
-    pageTitle: `${org} — ${title || "Notification"}`,
+    pageTitle: `${org} — ${safeTitle || "Notification"}`,
     badge: badgeLabel,
     badgeColor,
-    title: title || "Portal Notification",
-    messageHtml: `Hi ${recipientName},`,
+    title: safeTitle || "Portal Notification",
+    messageHtml: `Hi ${safeRecipientName},`,
     bodyHtml: `
       ${urgentStrip}
       <div style="margin-bottom:24px;">
