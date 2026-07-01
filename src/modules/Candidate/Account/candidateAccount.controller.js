@@ -238,7 +238,6 @@ export const getAccount = async (req, res) => {
       status: 'error',
       message: 'Internal server error',
       data: null,
-      error: err.message,
     });
   }
 };
@@ -298,7 +297,6 @@ export const patchPreferences = async (req, res) => {
       status: 'error',
       message: 'Internal server error',
       data: null,
-      error: err.message,
     });
   }
 };
@@ -344,12 +342,33 @@ export const postFeedback = async (req, res) => {
     const tags = sanitizeTags(experience_tags);
     const text = typeof comments === 'string' ? comments.trim().slice(0, 8000) : '';
 
-    // Find latest case to link feedback to caseworker/admin
+    // Find latest case to link feedback + validate any chosen caseworker.
     const latestCase = await req.tenantDb.Case.findOne({
       where: { candidateId: idStr },
       order: [['created_at', 'DESC']],
-      attributes: ['id']
+      attributes: ['id', 'assignedcaseworkerId'],
     });
+
+    // A candidate may only attribute feedback to a caseworker actually assigned to
+    // their case — never an arbitrary user id (e.g. an admin's). Blank/absent means
+    // "general service" and is stored as null.
+    let caseworkerId = null;
+    if (
+      caseworker_id !== undefined &&
+      caseworker_id !== null &&
+      String(caseworker_id).trim() !== ''
+    ) {
+      const cwId = Number(caseworker_id);
+      const assigned = normalizeCaseworkerIds(latestCase?.assignedcaseworkerId);
+      if (!Number.isFinite(cwId) || !assigned.includes(cwId)) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Invalid caseworker selection for your case.',
+          data: null,
+        });
+      }
+      caseworkerId = cwId;
+    }
 
     const row = await req.tenantDb.CandidateFeedback.create({
       user_id: idNum,
@@ -357,7 +376,7 @@ export const postFeedback = async (req, res) => {
       experience_tags: tags,
       comments: text || null,
       case_id: latestCase?.id || null,
-      caseworker_id: caseworker_id ? Number(caseworker_id) : null,
+      caseworker_id: caseworkerId,
     });
 
     res.status(201).json({
@@ -387,7 +406,6 @@ export const postFeedback = async (req, res) => {
       status: 'error',
       message: 'Internal server error',
       data: null,
-      error: err.message,
     });
   }
 };
@@ -437,7 +455,6 @@ export const postConsent = async (req, res) => {
       status: 'error',
       message: 'Internal server error',
       data: null,
-      error: err.message,
     });
   }
 };
@@ -487,7 +504,6 @@ export const postDataDeletionRequest = async (req, res) => {
       status: 'error',
       message: 'Internal server error',
       data: null,
-      error: err.message,
     });
   }
 };
@@ -572,23 +588,16 @@ export const postIssueReport = async (req, res) => {
       effectiveCaseId = cid;
     }
 
-    const destRoot = path.join('uploads', 'candidate_reports', String(idNum));
-    fs.mkdirSync(destRoot, { recursive: true });
-
-    const attachmentUrls = [];
-    const files = req.files || [];
-    for (const f of files) {
-      try {
-        const dest = path.join(destRoot, f.filename);
-        if (f.path && fs.existsSync(f.path)) {
-          fs.renameSync(f.path, dest);
-        }
-        const rel = dest.replace(/\\/g, '/');
-        const baseUrl = (process.env.BASE_URL || '').replace(/\/$/, '');
-        attachmentUrls.push(`${baseUrl}/${rel}`);
-      } catch (e) {
-        logger.error({ err: e }, 'postIssueReport file move error');
-      }
+    // Attachments were already written to storage/private/candidate_reports by the
+    // image-only multer instance and sanitized in place. Persist CONFINED RELATIVE
+    // paths — never a public URL and never the removed /uploads mount. They are
+    // retrievable only via the authenticated getIssueReportAttachment endpoint.
+    const attachmentPaths = [];
+    for (const f of req.files || []) {
+      if (!f?.filename) continue;
+      attachmentPaths.push(
+        path.join('storage', 'private', 'candidate_reports', f.filename).replace(/\\/g, '/'),
+      );
     }
 
     const reporter = await req.tenantDb.User.findByPk(idNum, {
@@ -606,7 +615,7 @@ export const postIssueReport = async (req, res) => {
       severity: severityRaw,
       subject,
       description,
-      attachment_urls: attachmentUrls,
+      attachment_urls: attachmentPaths,
       status: 'open',
     });
 
@@ -633,7 +642,11 @@ export const postIssueReport = async (req, res) => {
           severity: row.severity,
           subject: row.subject,
           status: row.status,
-          attachment_urls: row.attachment_urls,
+          // Expose retrievable, authenticated URLs by index — never the raw
+          // internal storage paths held in attachment_urls.
+          attachments: (Array.isArray(row.attachment_urls) ? row.attachment_urls : []).map(
+            (_, i) => `/api/candidate/account/issue-report/${row.id}/attachment/${i}`,
+          ),
           createdAt: row.createdAt,
         },
       },
@@ -644,8 +657,68 @@ export const postIssueReport = async (req, res) => {
       status: 'error',
       message: 'Internal server error',
       data: null,
-      error: err.message,
     });
+  }
+};
+
+/**
+ * Stream one screenshot attached to the candidate's OWN issue report.
+ *
+ * Security: files live under storage/private (never publicly served); access is
+ * gated by report ownership (user_id must match the caller), and the resolved
+ * path is confined to the attachments directory to block traversal. Only image
+ * types are ever stored (image-only upload filter + sharp re-encode), so inline
+ * display with X-Content-Type-Options: nosniff is safe.
+ */
+export const getIssueReportAttachment = async (req, res) => {
+  try {
+    const ids = resolveUserIds(req);
+    if (!ids) {
+      return res.status(401).json({ status: 'error', message: 'Invalid session', data: null });
+    }
+    const { idNum } = ids;
+
+    const reportId = Number(req.params.reportId);
+    const index = Number(req.params.index);
+    if (
+      !Number.isInteger(reportId) || reportId <= 0 ||
+      !Number.isInteger(index) || index < 0
+    ) {
+      return res.status(400).json({ status: 'error', message: 'Invalid attachment request', data: null });
+    }
+
+    const report = await req.tenantDb.CandidateIssueReport.findOne({
+      where: { id: reportId, user_id: idNum },
+      attributes: ['id', 'attachment_urls'],
+    });
+    if (!report) {
+      return res.status(404).json({ status: 'error', message: 'Report not found', data: null });
+    }
+
+    const list = Array.isArray(report.attachment_urls) ? report.attachment_urls : [];
+    const rel = list[index];
+    if (!rel || typeof rel !== 'string') {
+      return res.status(404).json({ status: 'error', message: 'Attachment not found', data: null });
+    }
+
+    // Confine strictly to the attachments directory — defeat any traversal even if
+    // a malformed path ever reached the column.
+    const baseDir = path.resolve(process.cwd(), 'storage', 'private', 'candidate_reports');
+    const abs = path.resolve(process.cwd(), rel);
+    if (abs !== baseDir && !abs.startsWith(baseDir + path.sep)) {
+      return res.status(400).json({ status: 'error', message: 'Invalid attachment path', data: null });
+    }
+    if (!fs.existsSync(abs)) {
+      return res.status(404).json({ status: 'error', message: 'File no longer available', data: null });
+    }
+
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('Content-Disposition', `inline; filename="${path.basename(abs)}"`);
+    return res.sendFile(abs);
+  } catch (err) {
+    logger.error({ err }, 'getIssueReportAttachment error');
+    return res.status(500).json({ status: 'error', message: 'Internal server error', data: null });
   }
 };
 
@@ -741,7 +814,6 @@ export const updateProfile = async (req, res) => {
       status: 'error',
       message: 'Internal server error',
       data: null,
-      error: err.message
     });
   }
 };
@@ -798,7 +870,6 @@ export const changePassword = async (req, res) => {
       status: 'error',
       message: 'Internal server error',
       data: null,
-      error: err.message
     });
   }
 };

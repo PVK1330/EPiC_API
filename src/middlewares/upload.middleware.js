@@ -123,6 +123,18 @@ const avatarUpload = multer({
   fileFilter: imageOnlyFilter
 });
 
+// Candidate issue-report screenshots. IMAGE-ONLY on purpose: every accepted file
+// is therefore re-encoded by the sharp sanitizer in processFileSecurity(), which
+// strips embedded payloads — this is our defence given the malware scanner is a
+// stub/optional. Capped at the shared 5 MB image limit to match the UI, and
+// written under storage/private (NOT the removed public /uploads mount) so the
+// files are reachable only through the authenticated download endpoint.
+const issueReportUpload = multer({
+  storage: createSecureDiskStorage('candidate_reports'),
+  limits: { fileSize: MAX_FILE_SIZES.IMAGE },
+  fileFilter: imageOnlyFilter
+});
+
 /**
  * ── POST-UPLOAD VALIDATION ───────────────────────────────────────────────────
  * Validates magic bytes, checks malware, sanitizes images, and logs audits.
@@ -242,7 +254,10 @@ const withSecurityProcessing = (uploadMiddleware) => {
 // Profile pics go straight to the served avatars dir (see avatarUpload above).
 export const handleProfilePicUpload = withSecurityProcessing(avatarUpload.single('profile_pic'));
 export const handleMessageFileUpload = withSecurityProcessing(upload.single('file'));
-export const handleCandidateIssueReportUpload = withSecurityProcessing(upload.single('evidence'));
+// The candidate issue-report form sends up to 5 screenshots under the `attachments`
+// field, and the controller reads them from req.files (an array). Use the
+// image-only, private-storage instance above (see issueReportUpload).
+export const handleCandidateIssueReportUpload = withSecurityProcessing(issueReportUpload.array('attachments', 5));
 // The sponsor registration form uploads each document under its own field name
 // (profile_pic + the five business documents), so multer must accept those named
 // fields. Using .array('documents') here caused a multer "Unexpected field" error
