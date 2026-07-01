@@ -1,6 +1,6 @@
 import express from 'express';
 import { verifyTokenAndTenant } from '../../../middlewares/authStack.middleware.js';
-import { checkRole, ROLES } from '../../../middlewares/role.middleware.js';
+import { checkRole, ROLES, requirePlanModule } from '../../../middlewares/role.middleware.js';
 import workloadController from './workloadMonitoring.controller.js';
 
 const router = express.Router();
@@ -8,6 +8,7 @@ const router = express.Router();
 // Apply authentication middleware to all workload routes
 router.use(verifyTokenAndTenant);
 router.use(checkRole([ROLES.ADMIN]));
+router.use(requirePlanModule('admin.workload'));
 
 // Export Workload CSV
 router.get("/export", workloadController.exportWorkloadCSV);
