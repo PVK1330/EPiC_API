@@ -1,6 +1,7 @@
 import logger from '../../../utils/logger.js';
 import { Op } from 'sequelize';
 import { ROLES } from '../../../middlewares/role.middleware.js';
+import { excludeSensitiveUserAttrs } from '../../../utils/userAttributes.js';
 
 // Get All Sponsors (Read-only for Caseworkers)
 export const getAllSponsors = async (req, res) => {
@@ -39,9 +40,7 @@ export const getAllSponsors = async (req, res) => {
 
     const { count, rows: sponsors } = await req.tenantDb.User.findAndCountAll({
       where: whereClause,
-      attributes: { 
-        exclude: ['password', 'otp_code', 'otp_expiry', 'password_reset_otp', 'password_reset_otp_expiry', 'temp_password'] 
-      },
+      attributes: excludeSensitiveUserAttrs(),
       include: includeClause,
       order: [["createdAt", "DESC"]],
       limit: parseInt(limit),
@@ -104,9 +103,7 @@ export const getSponsorById = async (req, res) => {
 
     const sponsor = await req.tenantDb.User.findOne({
       where: { id, role_id: 4, status: 'active' },
-      attributes: { 
-        exclude: ['password', 'otp_code', 'otp_expiry', 'password_reset_otp', 'password_reset_otp_expiry', 'temp_password'] 
-      },
+      attributes: excludeSensitiveUserAttrs(),
       include: [
         {
           model: req.tenantDb.Role,

@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import platformDb from '../../models/index.js';
 import logger from '../../utils/logger.js';
 import { toPublicImagePath } from '../../utils/storagePath.util.js';
+import { excludeSensitiveUserAttrs } from '../../utils/userAttributes.js';
 
 // Get user profile
 export const profile = async (req, res) => {
@@ -14,16 +15,7 @@ export const profile = async (req, res) => {
     const user = await req.tenantDb.User.findOne({
       where: { id: userId },
       include: [{ model: req.tenantDb.Role, as: 'role', attributes: ['id', 'name'] }],
-      attributes: {
-        exclude: [
-          "password",
-          "otp_code",
-          "otp_expiry",
-          "password_reset_otp",
-          "password_reset_otp_expiry",
-          "temp_password",
-        ],
-      },
+      attributes: excludeSensitiveUserAttrs(),
     });
 
     if (!user) {
@@ -117,16 +109,7 @@ export const editProfile = async (req, res) => {
     const updatedUser = await req.tenantDb.User.findOne({
       where: { id: userId },
       include: [{ model: req.tenantDb.Role, as: 'role', attributes: ['id', 'name'] }],
-      attributes: {
-        exclude: [
-          "password",
-          "otp_code",
-          "otp_expiry",
-          "password_reset_otp",
-          "password_reset_otp_expiry",
-          "temp_password",
-        ],
-      },
+      attributes: excludeSensitiveUserAttrs(),
     });
 
     // Normalize to the relative public path; the frontend resolves it to a URL.
@@ -205,16 +188,7 @@ export const getAllUsers = async (req, res) => {
   try {
     // Get all users with their roles
     const users = await req.tenantDb.User.findAll({
-      attributes: {
-        exclude: [
-          "password",
-          "otp_code",
-          "otp_expiry",
-          "password_reset_otp",
-          "password_reset_otp_expiry",
-          "temp_password",
-        ],
-      },
+      attributes: excludeSensitiveUserAttrs(),
       include: [
         {
           model: req.tenantDb.Role,
@@ -284,16 +258,7 @@ export const dropdownSponsors = async (req, res) => {
 
     const sponsors = await req.tenantDb.User.findAll({
       where: { role_id: 4 }, // Sponsor/Business role
-      attributes: {
-        exclude: [
-          "password",
-          "otp_code",
-          "otp_expiry",
-          "password_reset_otp",
-          "password_reset_otp_expiry",
-          "temp_password",
-        ],
-      },
+      attributes: excludeSensitiveUserAttrs(),
       include: [
         {
           model: req.tenantDb.Role,

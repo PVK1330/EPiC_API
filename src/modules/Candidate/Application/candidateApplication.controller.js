@@ -1,4 +1,5 @@
 import logger from '../../../utils/logger.js';
+import { excludeSensitiveUserAttrs } from '../../../utils/userAttributes.js';
 import path from 'path';
 import bcrypt from 'bcryptjs';
 import { Op } from 'sequelize';
@@ -868,16 +869,7 @@ export const adminUpdateCandidateApplication = async (req, res) => {
 
     const updatedCandidate = await req.tenantDb.User.findOne({
       where: { id: candidateId },
-      attributes: {
-        exclude: [
-          'password',
-          'otp_code',
-          'otp_expiry',
-          'password_reset_otp',
-          'password_reset_otp_expiry',
-          'temp_password',
-        ],
-      },
+      attributes: excludeSensitiveUserAttrs(),
       include: [
         { model: req.tenantDb.Role, as: 'role', attributes: ['id', 'name'] },
         { model: req.tenantDb.CandidateApplication, as: 'application', required: false },

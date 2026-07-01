@@ -30,8 +30,11 @@ router.use(verifyToken, isPlatformStaff);
 router.use('/api-keys', apiKeyRoutes);
 router.use('/webhooks', webhookRoutes);
 router.use('/usage', usageRoutes);
-// Week 8 — GDPR compliance
-router.use('/gdpr', gdprRoutes);
+// Week 8 — GDPR compliance. Org PII export + erasure must not be reachable by
+// restricted platform staff (support/billing/compliance). No sub-role holds
+// platform.gdpr.*, and requirePlatformPermission bypasses for the superadmin
+// (role_id 5), so this gate makes the whole GDPR module superadmin-only.
+router.use('/gdpr', requirePlatformPermission('platform.gdpr.view', 'platform.gdpr.manage'), gdprRoutes);
 // Week 8 — Demo/sandbox environments
 router.use('/sandbox', sandboxRoutes);
 

@@ -17,6 +17,7 @@ import {
   userBelongsToOrganisation,
 } from '../../../utils/tenantScope.js';
 import logger from '../../../utils/logger.js';
+import { excludeSensitiveUserAttrs, SENSITIVE_USER_FIELDS } from '../../../utils/userAttributes.js';
 
 const CASEWORKER_ROLE = ROLES.CASEWORKER;
 
@@ -619,20 +620,12 @@ export const createCaseworker = async (req, res) => {
 
     const full = await req.tenantDb.User.findOne({
       where: { id: caseworker.id },
-      attributes: {
-        exclude: [
-          "password",
-          "otp_code",
-          "otp_expiry",
-          "password_reset_otp",
-          "password_reset_otp_expiry",
-          "temp_password",
-        ],
-      },
+      attributes: excludeSensitiveUserAttrs(),
       include: caseworkerInclude(req),
     });
 
-    const { password: _, ...caseworkerData } = caseworker.toJSON();
+    const caseworkerData = caseworker.toJSON();
+    SENSITIVE_USER_FIELDS.forEach((f) => delete caseworkerData[f]);
 
     res.status(201).json({
       status: "success",
@@ -704,16 +697,7 @@ export const getAllCaseworkers = async (req, res) => {
 
     const { count, rows: caseworkers } = await req.tenantDb.User.findAndCountAll({
       where: whereClause,
-      attributes: {
-        exclude: [
-          "password",
-          "otp_code",
-          "otp_expiry",
-          "password_reset_otp",
-          "password_reset_otp_expiry",
-          "temp_password",
-        ],
-      },
+      attributes: excludeSensitiveUserAttrs(),
       include: includeClause,
       order: [["createdAt", "DESC"]],
       limit: limitNum,
@@ -808,16 +792,7 @@ export const getCaseworkerById = async (req, res) => {
 
     const caseworker = await req.tenantDb.User.findOne({
       where: mergeUserWhere(req, { id: caseworkerId, role_id: CASEWORKER_ROLE }),
-      attributes: {
-        exclude: [
-          "password",
-          "otp_code",
-          "otp_expiry",
-          "password_reset_otp",
-          "password_reset_otp_expiry",
-          "temp_password",
-        ],
-      },
+      attributes: excludeSensitiveUserAttrs(),
       include: caseworkerInclude(req),
     });
 
@@ -1011,16 +986,7 @@ export const updateCaseworker = async (req, res) => {
 
     const updatedCaseworker = await req.tenantDb.User.findOne({
       where: { id },
-      attributes: {
-        exclude: [
-          "password",
-          "otp_code",
-          "otp_expiry",
-          "password_reset_otp",
-          "password_reset_otp_expiry",
-          "temp_password",
-        ],
-      },
+      attributes: excludeSensitiveUserAttrs(),
       include: caseworkerInclude(req),
     });
 
@@ -1215,16 +1181,7 @@ export const exportCaseworkers = async (req, res) => {
 
     const caseworkers = await req.tenantDb.User.findAll({
       where: whereClause,
-      attributes: {
-        exclude: [
-          "password",
-          "otp_code",
-          "otp_expiry",
-          "password_reset_otp",
-          "password_reset_otp_expiry",
-          "temp_password",
-        ],
-      },
+      attributes: excludeSensitiveUserAttrs(),
       include: includeClause,
       order: [["createdAt", "DESC"]],
     });

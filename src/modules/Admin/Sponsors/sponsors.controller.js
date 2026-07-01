@@ -18,6 +18,7 @@ import catchAsync from '../../../utils/catchAsync.js';
 import ApiResponse from '../../../utils/apiResponse.js';
 import { rowsToXlsxBuffer, sendXlsxDownload } from '../../../utils/excelExport.util.js';
 import logger from '../../../utils/logger.js';
+import { excludeSensitiveUserAttrs, SENSITIVE_USER_FIELDS } from '../../../utils/userAttributes.js';
 
 // Multer configuration for file upload
 const upload = multer({ storage: multer.memoryStorage() });
@@ -213,7 +214,8 @@ export const createSponsor = async (req, res) => {
       logger.error({ err: e }, "sponsorCreated notification failed");
     }
 
-    const { password: _, ...sponsorData } = sponsor.toJSON();
+    const sponsorData = sponsor.toJSON();
+    SENSITIVE_USER_FIELDS.forEach((f) => delete sponsorData[f]);
 
     res.status(201).json({
       status: "success",
@@ -289,9 +291,7 @@ export const getAllSponsors = async (req, res) => {
 
     const { count, rows: sponsors } = await req.tenantDb.User.findAndCountAll({
       where: whereClause,
-      attributes: { 
-        exclude: ['password', 'otp_code', 'otp_expiry', 'password_reset_otp', 'password_reset_otp_expiry', 'temp_password'] 
-      },
+      attributes: excludeSensitiveUserAttrs(),
       include: includeClause,
       order: [["createdAt", "DESC"]],
       limit: parseInt(limit),
@@ -330,9 +330,7 @@ export const getSponsorById = async (req, res) => {
 
     const sponsor = await req.tenantDb.User.findOne({
       where: { id, role_id: 4 },
-      attributes: {
-        exclude: ['password', 'otp_code', 'otp_expiry', 'password_reset_otp', 'password_reset_otp_expiry', 'temp_password']
-      },
+      attributes: excludeSensitiveUserAttrs(),
       include: [{
         model: req.tenantDb.Role,
         as: 'role',
@@ -646,9 +644,7 @@ export const updateSponsor = async (req, res) => {
     // Get updated sponsor with role and profile
     const updatedSponsor = await req.tenantDb.User.findOne({
       where: { id },
-      attributes: { 
-        exclude: ['password', 'otp_code', 'otp_expiry', 'password_reset_otp', 'password_reset_otp_expiry', 'temp_password'] 
-      },
+      attributes: excludeSensitiveUserAttrs(),
       include: [{
         model: req.tenantDb.Role,
         as: 'role',
@@ -1016,9 +1012,7 @@ export const exportSponsors = catchAsync(async (req, res) => {
 
     const sponsors = await req.tenantDb.User.findAll({
       where: whereClause,
-      attributes: {
-        exclude: ['password', 'otp_code', 'otp_expiry', 'password_reset_otp', 'password_reset_otp_expiry', 'temp_password']
-      },
+      attributes: excludeSensitiveUserAttrs(),
       include: [{
         model: req.tenantDb.Role,
         as: 'role',

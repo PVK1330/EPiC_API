@@ -6,6 +6,7 @@ import { Op } from 'sequelize';
 import logger from '../../../utils/logger.js';
 import { toPublicImagePath } from '../../../utils/storagePath.util.js';
 import platformDb from '../../../models/index.js';
+import { excludeSensitiveUserAttrs } from '../../../utils/userAttributes.js';
 
 const ALLOWED_PROFILE_DOC_FIELDS = new Set([
   'sponsorLetter',
@@ -130,24 +131,6 @@ function resolveUserId(req) {
   const num = typeof raw === 'string' ? Number(raw) : raw;
   if (!Number.isFinite(num) || num <= 0) return null;
   return Math.trunc(num);
-}
-
-/**
- * Sensitive attributes to exclude
- */
-function excludeSensitiveUserAttrs() {
-  return {
-    exclude: [
-      'password',
-      'otp_code',
-      'otp_expiry',
-      'password_reset_otp',
-      'password_reset_otp_expiry',
-      'temp_password',
-      'two_factor_secret',
-      'two_factor_backup_codes',
-    ],
-  };
 }
 
 /**

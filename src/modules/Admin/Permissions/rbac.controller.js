@@ -1,4 +1,5 @@
 import { Op } from 'sequelize';
+import { excludeSensitiveUserAttrs } from '../../../utils/userAttributes.js';
 
 
 // Get RBAC overview - summary of roles, permissions, and assignments
@@ -167,9 +168,7 @@ export const getUsersWithRolesAndPermissions = async (req, res) => {
 
     const users = await req.tenantDb.User.findAll({
       where: whereClause,
-      attributes: {
-        exclude: ["password", "otp_code", "otp_expiry", "password_reset_otp", "password_reset_otp_expiry", "temp_password"],
-      },
+      attributes: excludeSensitiveUserAttrs(),
       include: [
         {
           model: req.tenantDb.Role,

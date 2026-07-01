@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { requirePlatformPermission } from '../../../middlewares/isPlatformStaff.js';
 import {
   exportOrgData,
   deleteOrgData,
@@ -32,6 +33,6 @@ router.get('/:orgId/retention-report', getOrgRetentionReportById);
  * DELETE /api/superadmin/gdpr/:orgId
  * GDPR erasure: anonymise all PII and suspend the organisation.
  */
-router.delete('/:orgId', deleteOrgData);
+router.delete('/:orgId', requirePlatformPermission('platform.gdpr.manage'), deleteOrgData);
 
 export default router;

@@ -9,6 +9,7 @@ import {
   NotificationPriority,
 } from '../../../services/notification.service.js';
 import { toPublicImagePath } from '../../../utils/storagePath.util.js';
+import { excludeSensitiveUserAttrs } from '../../../utils/userAttributes.js';
 
 const ALLOWED_EXP_TAG_IDS = new Set(['easy', 'fast', 'support', 'guidance']);
 
@@ -117,21 +118,6 @@ async function notifyStakeholdersOfIssueReport(tenantDb, {
     },
     sendEmail: true,
   });
-}
-
-function excludeSensitiveUserAttrs() {
-  return {
-    exclude: [
-      'password',
-      'otp_code',
-      'otp_expiry',
-      'password_reset_otp',
-      'password_reset_otp_expiry',
-      'temp_password',
-      'two_factor_secret',
-      'two_factor_backup_codes',
-    ],
-  };
 }
 
 export const getAccount = async (req, res) => {

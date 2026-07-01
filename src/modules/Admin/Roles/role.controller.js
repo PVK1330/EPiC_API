@@ -1,4 +1,5 @@
 import { Op } from 'sequelize';
+import { excludeSensitiveUserAttrs } from '../../../utils/userAttributes.js';
 
 
 /**
@@ -504,7 +505,7 @@ export const updateUserRole = async (req, res) => {
     }
 
     const user = await req.tenantDb.User.findByPk(userId, {
-      attributes: { exclude: ['password', 'otp_code', 'otp_expiry', 'password_reset_otp', 'password_reset_otp_expiry', 'temp_password'] },
+      attributes: excludeSensitiveUserAttrs(),
     });
 
     if (!user) {

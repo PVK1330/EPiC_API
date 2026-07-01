@@ -28,6 +28,65 @@ import {
   notifyCandidatePaymentEvent,
 } from '../../../services/stripeTenant.service.js';
 
+/**
+ * Ownership guard for candidate payment operations (refund / cancel / status).
+ *
+ * Prevents a cross-candidate financial IDOR: the org shares one tenant Stripe
+ * account, so without this any candidate could pass an arbitrary/enumerated
+ * payment_intent_id and act on another candidate's payment.
+ *
+ * A PaymentIntent is "owned" by the caller when EITHER:
+ *   (a) pi.metadata.userId === req.user.userId — stamped at creation for direct
+ *       PaymentIntents (mirrors the verifyCheckoutSession ownership check), or
+ *   (b) a CasePayment row (transactionId === pi.id) belongs to a Case whose
+ *       candidateId === req.user.userId — covers Checkout-created PaymentIntents
+ *       whose metadata lives on the session, not on the PI itself.
+ *
+ * On success returns the retrieved PaymentIntent. On failure it sends the
+ * 404/403 response and returns null — the caller MUST `return` when null.
+ */
+async function loadOwnedPaymentIntent(req, res, stripe, paymentIntentId) {
+  let paymentIntent;
+  try {
+    paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+  } catch (err) {
+    logger.warn({ err, paymentIntentId }, 'loadOwnedPaymentIntent: retrieve failed');
+    res.status(404).json({ status: 'error', message: 'Payment not found', data: null });
+    return null;
+  }
+
+  const userId = String(req.user?.userId || '');
+  if (userId && String(paymentIntent.metadata?.userId || '') === userId) {
+    return paymentIntent;
+  }
+
+  // Checkout-created PaymentIntents carry no metadata.userId (it is on the
+  // session), so verify ownership through the recorded CasePayment -> Case.
+  try {
+    const casePayment = await req.tenantDb?.CasePayment.findOne({
+      where: { transactionId: String(paymentIntentId) },
+      attributes: ['id', 'caseId'],
+    });
+    if (casePayment) {
+      const caseRow = await req.tenantDb.Case.findByPk(casePayment.caseId, {
+        attributes: ['id', 'candidateId'],
+      });
+      if (caseRow && userId && String(caseRow.candidateId || '') === userId) {
+        return paymentIntent;
+      }
+    }
+  } catch (err) {
+    logger.warn({ err, paymentIntentId }, 'loadOwnedPaymentIntent: DB ownership check failed');
+  }
+
+  res.status(403).json({
+    status: 'error',
+    message: 'This payment does not belong to your account',
+    data: null,
+  });
+  return null;
+}
+
 async function getActiveAdminIds(tenantDb) {
   const adminRole = await tenantDb.Role.findOne({
     where: { name: { [Op.iLike]: 'admin' } },
@@ -658,9 +717,8 @@ export const confirmPayment = async (req, res) => {
       });
     }
 
-    // Retrieve payment intent
-    const paymentIntent =
-      await stripe.paymentIntents.retrieve(payment_intent_id);
+    const paymentIntent = await loadOwnedPaymentIntent(req, res, stripe, payment_intent_id);
+    if (!paymentIntent) return;
 
     if (paymentIntent.status === "succeeded") {
       await finalizeStripePaymentForUser({
@@ -734,8 +792,8 @@ export const getPaymentStatus = async (req, res) => {
       });
     }
 
-    const paymentIntent =
-      await stripe.paymentIntents.retrieve(payment_intent_id);
+    const paymentIntent = await loadOwnedPaymentIntent(req, res, stripe, payment_intent_id);
+    if (!paymentIntent) return;
 
     if (paymentIntent.status === "succeeded") {
       await finalizeStripePaymentForUser({
@@ -783,6 +841,9 @@ export const cancelPayment = async (req, res) => {
         data: null,
       });
     }
+
+    const owned = await loadOwnedPaymentIntent(req, res, stripe, payment_intent_id);
+    if (!owned) return;
 
     const canceledPayment =
       await stripe.paymentIntents.cancel(payment_intent_id);
@@ -1299,9 +1360,19 @@ export const createRefund = async (req, res) => {
       });
     }
 
+    const owned = await loadOwnedPaymentIntent(req, res, stripe, payment_intent_id);
+    if (!owned) return;
+
+    // Clamp a client-supplied partial-refund amount to what was actually
+    // captured, so a candidate cannot request more than their own payment.
+    const requestedCents = amount ? Math.round(amount * 100) : undefined;
+    const capturedCents = owned.amount_received || owned.amount;
+    const refundCents =
+      requestedCents === undefined ? undefined : Math.min(requestedCents, capturedCents);
+
     const refund = await stripe.refunds.create({
       payment_intent: payment_intent_id,
-      amount: amount ? Math.round(amount * 100) : undefined, // Convert to cents if provided
+      amount: refundCents, // in cents; clamped to the captured amount
       reason: reason || "requested_by_customer",
     });
 
