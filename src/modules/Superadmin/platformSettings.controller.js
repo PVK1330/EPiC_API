@@ -51,6 +51,7 @@ function parseIntOrNull(val) {
 const IDENTITY_KEYS = [
   "platform_name",
   "support_email",
+  "platform_address",
   "default_locale",
   "timezone",
   "maintenance_mode",
@@ -77,8 +78,9 @@ export const getIdentitySettings = catchAsync(async (req, res) => {
 
   // Build a flat object with only identity keys; provide sensible defaults
   const data = {
-    platform_name:      raw["platform_name"]      ?? "EPiC CRM",
+    platform_name:      raw["platform_name"]      ?? "ImCamHub",
     support_email:      raw["support_email"]       ?? "",
+    platform_address:   raw["platform_address"]    ?? "",
     default_locale:     raw["default_locale"]      ?? "en-GB",
     timezone:           raw["timezone"]            ?? "Europe/London",
     maintenance_mode:   parseBool(raw["maintenance_mode"]   ?? false),

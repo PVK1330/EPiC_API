@@ -10,7 +10,7 @@ const PLATFORM_ROLE_DEFAULTS = [
     id: 6,
     name: "platform_support",
     description: "Support Agent — organisations and dashboard",
-    moduleIds: ["dashboard", "organizations"],
+    moduleIds: ["dashboard", "organisations"],
   },
   {
     id: 7,

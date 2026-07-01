@@ -16,6 +16,7 @@ router.get("/data-capture", requireCandidate, workflowController.getDataCaptureF
 router.put("/data-capture", requireCandidate, workflowController.saveDataCaptureSubmission);
 router.post("/data-capture/submit", requireCandidate, workflowController.submitDataCapture);
 router.get("/decision-documents", requireCandidate, workflowController.getDecisionDocuments);
+router.post("/request-final-documents", requireCandidate, workflowController.candidateRequestFinalDocuments);
 router.get("/ccl", requireCandidate, workflowController.getCandidateCcl);
 router.get("/ccl/download", requireCandidate, workflowController.downloadCandidateCcl);
 router.post("/ccl/accept", requireCandidate, workflowController.acceptCcl);
@@ -39,6 +40,7 @@ router.patch("/cases/:caseId/data-capture/review", staff, workflowController.rev
 router.get("/cases/:caseId/ccl", staff, workflowController.getCclStatus);
 router.post("/cases/:caseId/ccl/propose", staff, workflowController.proposeCclFees);
 router.post("/cases/:caseId/ccl/issue", staff, workflowController.issueCcl);
+router.post("/cases/:caseId/ccl/send-payment-request", staff, workflowController.sendCclPaymentRequestAction);
 router.patch("/cases/:caseId/ccl/fee-review", adminOnly, workflowController.reviewCclFees);
 router.get("/ccl/pending-approvals", adminOnly, workflowController.listCclFeePendingApprovals);
 router.post("/cases/:caseId/visa-portal-submit", staff, workflowController.staffRecordVisaPortalSubmission);
@@ -47,5 +49,8 @@ router.post("/cases/:caseId/biometric-docs-uploaded", staff, workflowController.
 router.post("/cases/:caseId/visa-portal-reply", staff, workflowController.staffRecordVisaPortalReply);
 router.post("/cases/:caseId/communicate-decision", staff, workflowController.staffCommunicateDecision);
 router.post("/cases/:caseId/upload-decision-document", staff, handleDocumentUpload, workflowController.staffUploadDecisionDocument);
+router.post("/cases/:caseId/mark-completed", staff, workflowController.staffMarkCaseCompleted);
+router.post("/cases/:caseId/closure-letter", staff, workflowController.staffGenerateClosureLetter);
+router.post("/cases/:caseId/resend-final-documents", staff, workflowController.staffResendFinalDocuments);
 
 export default router;

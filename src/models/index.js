@@ -15,6 +15,10 @@ import UserSessionModel from "./platform/userSession.model.js";
 import StripeWebhookEventModel from "./platform/stripeWebhookEvent.model.js";
 import PaymentWebhookRetryQueueModel from "./platform/paymentWebhookRetryQueue.model.js";
 import OAuthStateModel from "./platform/oauthState.model.js";
+import ApiKeyModel from "./platform/apiKey.model.js";
+import WebhookEndpointModel from "./platform/webhookEndpoint.model.js";
+import WebhookDeliveryLogModel from "./platform/webhookDeliveryLog.model.js";
+import UsageMeterModel from "./platform/usageMeter.model.js";
 import RoleModel from "./tenant/role.model.js";
 import PermissionModel from "./tenant/permission.model.js";
 import RolePermissionModel from "./tenant/rolePermission.model.js";
@@ -52,7 +56,25 @@ db.UserSession = UserSessionModel(sequelize, Sequelize.DataTypes);
 db.StripeWebhookEvent = StripeWebhookEventModel(sequelize, Sequelize.DataTypes);
 db.PaymentWebhookRetryQueue = PaymentWebhookRetryQueueModel(sequelize, Sequelize.DataTypes);
 db.OAuthState = OAuthStateModel(sequelize, Sequelize.DataTypes);
+db.ApiKey = ApiKeyModel(sequelize, Sequelize.DataTypes);
+db.WebhookEndpoint = WebhookEndpointModel(sequelize, Sequelize.DataTypes);
+db.WebhookDeliveryLog = WebhookDeliveryLogModel(sequelize, Sequelize.DataTypes);
+db.UsageMeter = UsageMeterModel(sequelize, Sequelize.DataTypes);
 db.Role = RoleModel(sequelize, Sequelize.DataTypes);
+
+// API Key associations
+db.Organisation.hasMany(db.ApiKey, { foreignKey: "organisation_id", as: "apiKeys" });
+db.ApiKey.belongsTo(db.Organisation, { foreignKey: "organisation_id", as: "organisation" });
+
+// Webhook associations
+db.Organisation.hasMany(db.WebhookEndpoint, { foreignKey: "organisation_id", as: "webhookEndpoints" });
+db.WebhookEndpoint.belongsTo(db.Organisation, { foreignKey: "organisation_id", as: "organisation" });
+db.WebhookEndpoint.hasMany(db.WebhookDeliveryLog, { foreignKey: "webhook_endpoint_id", as: "deliveryLogs" });
+db.WebhookDeliveryLog.belongsTo(db.WebhookEndpoint, { foreignKey: "webhook_endpoint_id", as: "endpoint" });
+
+// Usage Meter associations
+db.Organisation.hasMany(db.UsageMeter, { foreignKey: "organisation_id", as: "usageMeters" });
+db.UsageMeter.belongsTo(db.Organisation, { foreignKey: "organisation_id", as: "organisation" });
 db.Permission = PermissionModel(sequelize, Sequelize.DataTypes);
 db.RolePermission = RolePermissionModel(sequelize, Sequelize.DataTypes);
 

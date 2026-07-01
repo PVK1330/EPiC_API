@@ -7,6 +7,7 @@ import platformDb from '../../../models/index.js';
 import { toPublicAssetUrl } from '../../../services/stripeTenant.service.js';
 import { normalizeStorageRelativePath, toPublicImagePath } from '../../../utils/storagePath.util.js';
 import { seedTenantOrganisation } from '../../../services/tenantSeed.service.js';
+import { clearEmailBrandingCache } from '../../../utils/emailBranding.js';
 import logger from '../../../utils/logger.js';
 
 
@@ -1304,6 +1305,9 @@ export const uploadOrganisationLogo = async (req, res) => {
     } catch (syncErr) {
       logger.warn({ errMessage: syncErr.message }, "Platform organisation logo sync skipped");
     }
+
+    // Invalidate cached branding so emails/PDFs pick up the new logo immediately.
+    clearEmailBrandingCache(orgId);
 
     res.status(200).json({
       status: "success",

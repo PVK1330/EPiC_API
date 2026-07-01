@@ -35,6 +35,33 @@ const REQUIRED_VARS = [
       return null;
     },
   },
+  {
+    key: "LICENCE_CRED_SECRET",
+    label: "LICENCE_CRED_SECRET",
+    hint: "Secret used to derive the AES-256 key for UKVI portal password encryption in licenceGovernmentTracking. Any strong random string works; recommended: `node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"`",
+    minLength: 16,
+  },
+  {
+    key: "FIELD_ENCRYPTION_KEY",
+    label: "FIELD_ENCRYPTION_KEY",
+    hint: "AES-256 key for field-level PII encryption (NI numbers, passport numbers, BRP numbers, etc.). Must be a 64-character hex string (32 bytes) distinct from SETTINGS_ENCRYPTION_KEY. Generate: `node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"`",
+    validate: (value) => {
+      const v = value.trim();
+      if (!/^[0-9a-fA-F]{64}$/.test(v)) {
+        return "must be a 64-character hex string (32 bytes)";
+      }
+      if (
+        process.env.SETTINGS_ENCRYPTION_KEY &&
+        v === process.env.SETTINGS_ENCRYPTION_KEY.trim()
+      ) {
+        return "must NOT be the same value as SETTINGS_ENCRYPTION_KEY";
+      }
+      if (process.env.JWT_SECRET && v === process.env.JWT_SECRET.trim()) {
+        return "must NOT be the same value as JWT_SECRET";
+      }
+      return null;
+    },
+  },
 ];
 
 /**

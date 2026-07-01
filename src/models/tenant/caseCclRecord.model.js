@@ -52,6 +52,22 @@ export default (sequelize, DataTypes) => {
       signedAt: { type: DataTypes.DATE, allowNull: true, field: "signed_at" },
       issuedBy: { type: DataTypes.INTEGER, allowNull: true, field: "issued_by" },
       notes: { type: DataTypes.TEXT, allowNull: true },
+      paymentRequestSentAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: "payment_request_sent_at",
+      },
+      paymentRequestCount: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 0,
+        field: "payment_request_count",
+      },
+      paymentRequestAmount: {
+        type: DataTypes.DECIMAL(10, 2),
+        allowNull: true,
+        field: "payment_request_amount",
+      },
     },
     {
       tableName: "case_ccl_records",

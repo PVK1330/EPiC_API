@@ -11,6 +11,8 @@ import {
   createAbsenceRecord,
   getAbsenceByWorker,
   updateAbsenceRecord,
+  deleteAbsenceRecord,
+  listAllAbsences,
   createSmsLog,
   getSmsLogsBySponsor,
 } from './sponsorWorker.controller.js';
@@ -34,9 +36,11 @@ router.patch('/:id/status', requireActiveSponsorLicence(), updateWorkerStatus);
 router.get('/', getSponsoredWorkers);
 router.get('/employee-records', getEmployeeRecords);
 router.get('/:candidateId/documents/download', downloadWorkerDocuments);
+router.get('/absence', listAllAbsences);
 router.get('/absence/worker/:workerId', getAbsenceByWorker);
 router.post('/absence', upload.single('document'), createAbsenceRecord);
 router.put('/absence/:id', upload.single('document'), updateAbsenceRecord);
+router.delete('/absence/:id', deleteAbsenceRecord);
 router.get('/sms-logs', getSmsLogsBySponsor);
 router.post('/sms-logs', upload.single('screenshot'), createSmsLog);
 router.get('/:id', getSponsoredWorkerDetails);

@@ -176,3 +176,37 @@ export const ensureSelfOrRole = (allowedRoles = [], options = {}) => {
     return ApiResponse.forbidden(res, "You do not have permission to access this resource");
   };
 };
+
+/**
+ * Middleware that enforces plan-based module access on the backend.
+ * Superadmins (role 5) and platform staff without an org always bypass.
+ * Tenant users must have the moduleKey in their allowedModules list (resolved
+ * at login time and attached to req.user by the auth middleware).
+ *
+ * Usage:  router.get('/finance', requirePlanModule('admin.finance'), handler)
+ */
+export const requirePlanModule = (moduleKey) => {
+  return (req, res, next) => {
+    if (!req.user) return ApiResponse.unauthorized(res, "Authentication required");
+
+    const roleId = toRoleId(req.user.role_id);
+
+    // Superadmin and platform staff (no org) always have full access
+    if (roleId === ROLES.SUPERADMIN) return next();
+    if (req.user.organisation_id == null || req.user.organisation_id === '') return next();
+
+    const allowed = req.user.allowedModules;
+
+    // If modules were not resolved (legacy session), fail open to avoid breaking
+    // existing sessions — log a warning so it can be tracked
+    if (!Array.isArray(allowed)) {
+      logger.warn({ userId: req.user.userId, moduleKey }, "requirePlanModule: allowedModules not resolved — failing open");
+      return next();
+    }
+
+    if (allowed.includes('*') || allowed.includes(moduleKey)) return next();
+
+    logger.warn({ userId: req.user.userId, moduleKey, allowed }, "requirePlanModule: access denied");
+    return ApiResponse.forbidden(res, `Your plan does not include access to this feature (${moduleKey})`);
+  };
+};

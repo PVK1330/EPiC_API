@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import * as auditLogController from './auditLog.controller.js';
 import { verifyTokenAndTenant } from '../../../middlewares/authStack.middleware.js';
-import { checkRole, ROLES } from '../../../middlewares/role.middleware.js';
+import { checkRole, ROLES, requirePlanModule } from '../../../middlewares/role.middleware.js';
 
 const router = Router();
 
@@ -11,6 +11,7 @@ router.use(verifyTokenAndTenant);
 router.post('/client-event', auditLogController.logClientEvent);
 
 router.use(checkRole([ROLES.ADMIN]));
+router.use(requirePlanModule('admin.audit-logs'));
 
 // Stats summary — must be before /:id style routes
 router.get('/stats',   auditLogController.getAuditStats);

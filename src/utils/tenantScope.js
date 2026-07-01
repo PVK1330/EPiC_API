@@ -4,7 +4,7 @@ import platformDb from "../models/index.js";
 /**
  * JWT payload fields used across login, OTP verify, and 2FA completion.
  */
-export function buildJwtPayload(user, role = null) {
+export function buildJwtPayload(user, role = null, allowedModules = null) {
   const roleName = role?.name ?? user.role?.name ?? null;
   const organisation_id =
     user.organisation_id != null && user.organisation_id !== ""
@@ -17,6 +17,8 @@ export function buildJwtPayload(user, role = null) {
     role_id: Number(user.role_id),
     role_name: roleName,
     organisation_id: Number.isNaN(organisation_id) ? null : organisation_id,
+    // Plan-based module keys; null on old tokens (middleware fails open gracefully)
+    allowedModules: Array.isArray(allowedModules) ? allowedModules : null,
   };
 }
 

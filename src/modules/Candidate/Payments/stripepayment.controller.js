@@ -7,7 +7,7 @@ import catchAsync from '../../../utils/catchAsync.js';
 import ApiResponse from '../../../utils/apiResponse.js';
 import { generateBrandedPdfBuffer } from '../../../services/pdfGenerator.service.js';
 import { notifyPaymentReceived, NotificationTypes } from '../../../services/notification.service.js';
-import { createWorkflowTask } from '../../../services/workflowTaskAutomation.service.js';
+import { createWorkflowTask, completePendingWorkflowTasks } from '../../../services/workflowTaskAutomation.service.js';
 import { evaluateCaseStageAfterEvent } from '../../../services/caseStageAutomation.service.js';
 import {
   isCclReleasedToClient,
@@ -17,6 +17,7 @@ import {
 import platformDb from '../../../models/index.js';
 import { getTenantDb } from '../../../services/tenantDb.service.js';
 import { activateOrgSubscriptionAfterPayment } from '../../../services/orgBilling.service.js';
+import { sendOrgSubscriptionInvoiceEmail } from '../../../services/orgInvoiceMail.service.js';
 import {
   getStripeForRequest,
   getStripeForTenant,
@@ -219,6 +220,15 @@ async function recordStripeCasePayment({ tenantDb, caseRecord, paymentIntent, us
     }
     await caseRecord.update(updates);
     await caseRecord.reload();
+
+    // Clear the candidate's "Pay case fees" task once the balance is settled so
+    // it doesn't linger on their to-do list after paying.
+    if (fullyPaid) {
+      await completePendingWorkflowTasks(tenantDb, {
+        caseId: caseRecord.id,
+        titlePattern: "Pay case fees%",
+      }).catch((err) => logger.error({ err }, "complete Pay case fees task"));
+    }
 
     // Keep the CCL record consistent: a paid case must not still read as an
     // un-reviewed proposal. Promote a lingering fee_proposed/fee_rejected/pending
@@ -964,18 +974,25 @@ const processStripeWebhookEvent = async (event, tenantDb, req) => {
             /* malformed snapshot — activation falls back to a fresh compute */
           }
           try {
-            await activateOrgSubscriptionAfterPayment({
-              organisationId: orgId,
-              paymentRef: session.id,
-              amount:
-                session.amount_total != null ? session.amount_total / 100 : undefined,
-              currency: session.currency,
-              paymentIntentId:
-                typeof session.payment_intent === "string"
-                  ? session.payment_intent
-                  : session.payment_intent?.id || null,
-              breakdown,
-            });
+            const { invoice, alreadyProcessed } =
+              await activateOrgSubscriptionAfterPayment({
+                organisationId: orgId,
+                paymentRef: session.id,
+                amount:
+                  session.amount_total != null ? session.amount_total / 100 : undefined,
+                currency: session.currency,
+                paymentIntentId:
+                  typeof session.payment_intent === "string"
+                    ? session.payment_intent
+                    : session.payment_intent?.id || null,
+                breakdown,
+              });
+            // Send the invoice email if THIS path performed the activation. If
+            // verify-session already did it, alreadyProcessed is true and no
+            // invoice is returned — so the customer never gets two emails.
+            if (!alreadyProcessed && invoice) {
+              await sendOrgSubscriptionInvoiceEmail({ invoiceId: invoice.id });
+            }
           } catch (e) {
             // Do NOT swallow: rethrow so the outer handler marks the event failed
             // and enqueues a retry. Activation is idempotent on session.id, so a

@@ -19,6 +19,7 @@ import {
   normalizePlatformEmail,
 } from '../../utils/platformUserEmail.js';
 import { getTenantDb } from '../../services/tenantDb.service.js';
+import { recordPlatformAuditLog } from '../../services/platformActivity.service.js';
 import { assertLoginAllowedForOrganisationContext } from '../../utils/organisationHost.js';
 import {
   createUserOnPlatformAndTenant,
@@ -536,7 +537,8 @@ export const verifyOTP = catchAsync(async (req, res) => {
   await unverifiedUser.destroy();
 
   const role = { name: ROLE_NAMES[verifiedUser.role_id] ?? null };
-  const payload = buildJwtPayload(verifiedUser, role);
+  const allowedModulesVerify = await resolveAllowedModules(verifiedUser);
+  const payload = buildJwtPayload(verifiedUser, role, allowedModulesVerify);
   const token = signToken(payload);
 
   // Set httpOnly cookie for secure token storage — XSS-resistant
@@ -557,15 +559,13 @@ export const verifyOTP = catchAsync(async (req, res) => {
     createdAt: verifiedUser.createdAt,
   };
 
-  const allowedModules = await resolveAllowedModules(verifiedUser);
-
   return ApiResponse.success(res, "Email verified successfully. You are now logged in!", {
     email: email,
     is_verified: true,
     credentials_sent: true,
     token: token,
     user: userResponse,
-    allowedModules,
+    allowedModules: allowedModulesVerify,
   });
 });
 
@@ -762,10 +762,12 @@ export const login = catchAsync(async (req, res) => {
   }
 
   if (user.locked_until && new Date(user.locked_until) > new Date()) {
-    platformDb.PlatformAuditLog.create({
-      user_id: user.id, action: 'FAILED_LOGIN',
-      details: 'Attempted login on locked account', ip_address: req.ip || req.connection?.remoteAddress, status: 'Failed'
-    }).catch(() => { });
+    recordPlatformAuditLog({
+      category: 'Authentication', action: 'Failed Login',
+      user: user.email, org: 'Global System',
+      description: 'Attempted login on locked account',
+      status: 'Failed', user_id: user.id, ip_address: req.ip || req.connection?.remoteAddress,
+    });
     return ApiResponse.forbidden(res, 'Account is locked due to multiple failed attempts. Please try again later.');
   }
 
@@ -778,16 +780,20 @@ export const login = catchAsync(async (req, res) => {
     user.failed_login_attempts = (user.failed_login_attempts || 0) + 1;
     if (user.failed_login_attempts >= 5) {
       user.locked_until = new Date(Date.now() + 30 * 60 * 1000);
-      platformDb.PlatformAuditLog.create({
-        user_id: user.id, action: 'ACCOUNT_LOCKED',
-        details: 'Account locked due to 5 failed attempts', ip_address: req.ip || req.connection?.remoteAddress, status: 'Success'
-      }).catch(() => { });
+      recordPlatformAuditLog({
+        category: 'Authentication', action: 'Account Locked',
+        user: user.email, org: 'Global System',
+        description: 'Account locked due to 5 failed attempts',
+        status: 'Success', user_id: user.id, ip_address: req.ip || req.connection?.remoteAddress,
+      });
     }
     await user.save();
-    platformDb.PlatformAuditLog.create({
-      user_id: user.id, action: 'FAILED_LOGIN',
-      details: 'Invalid password', ip_address: req.ip || req.connection?.remoteAddress, status: 'Failed'
-    }).catch(() => { });
+    recordPlatformAuditLog({
+      category: 'Authentication', action: 'Failed Login',
+      user: user.email, org: 'Global System',
+      description: 'Invalid password',
+      status: 'Failed', user_id: user.id, ip_address: req.ip || req.connection?.remoteAddress,
+    });
     return ApiResponse.unauthorized(res, 'Invalid credentials.');
   }
 
@@ -811,7 +817,8 @@ export const login = catchAsync(async (req, res) => {
   }
 
   const roleMeta = await resolveAuthRole(user);
-  const payload = buildJwtPayload(user, { name: roleMeta.name });
+  const allowedModules = await resolveAllowedModules(user);
+  const payload = buildJwtPayload(user, { name: roleMeta.name }, allowedModules);
   const token = signToken(payload);
 
   const crypto = await import('crypto');
@@ -832,10 +839,12 @@ export const login = catchAsync(async (req, res) => {
     logger.warn({ err: sessionErr }, 'UserSession.create failed — continuing login');
   }
 
-  platformDb.PlatformAuditLog.create({
-    user_id: user.id, action: 'LOGIN',
-    details: 'User logged in successfully', ip_address: req.ip || req.connection?.remoteAddress, status: 'Success'
-  }).catch(() => { });
+  recordPlatformAuditLog({
+    category: 'Authentication', action: 'Login',
+    user: user.email, org: 'Global System',
+    description: 'User logged in successfully',
+    status: 'Success', user_id: user.id, ip_address: req.ip || req.connection?.remoteAddress,
+  });
 
   // Set httpOnly cookie for secure token storage — XSS-resistant.
   // maxAge matches the JWT (7d) + refresh token so the cookie isn't deleted
@@ -866,8 +875,6 @@ export const login = catchAsync(async (req, res) => {
     }
   }
 
-  const allowedModules = await resolveAllowedModules(user);
-
   return ApiResponse.success(res, 'Login successful.', {
     user: {
       ...buildLoginUserResponse(user, roleMeta),
@@ -897,10 +904,12 @@ export const logout = catchAsync(async (req, res) => {
     }
   }
 
-  platformDb.PlatformAuditLog.create({
-    user_id: req.user?.id || null, action: 'LOGOUT',
-    details: 'User logged out', ip_address: req.ip || req.connection?.remoteAddress, status: 'Success'
-  }).catch(() => { });
+  recordPlatformAuditLog({
+    category: 'Authentication', action: 'Logout',
+    user: req.user?.email || 'System', org: 'Global System',
+    description: 'User logged out',
+    status: 'Success', user_id: req.user?.id || null, ip_address: req.ip || req.connection?.remoteAddress,
+  });
 
   res.clearCookie('token', getCookieConfig());
   res.clearCookie('refreshToken', getCookieConfig());
@@ -952,7 +961,8 @@ export const refreshToken = catchAsync(async (req, res) => {
   }
 
   const roleMeta = await resolveAuthRole(user);
-  const payload = buildJwtPayload(user, { name: roleMeta.name });
+  const allowedModulesRefresh = await resolveAllowedModules(user);
+  const payload = buildJwtPayload(user, { name: roleMeta.name }, allowedModulesRefresh);
   const newToken = signToken(payload);
 
   const crypto = await import('crypto');
@@ -963,10 +973,12 @@ export const refreshToken = catchAsync(async (req, res) => {
   currentSession.last_active = new Date();
   await currentSession.save();
 
-  platformDb.PlatformAuditLog.create({
-    user_id: user.id, action: 'REFRESH_TOKEN_ROTATED',
-    details: 'Token rotated', ip_address: req.ip || req.connection?.remoteAddress, status: 'Success'
-  }).catch(() => { });
+  recordPlatformAuditLog({
+    category: 'Authentication', action: 'Token Refreshed',
+    user: user.email, org: 'Global System',
+    description: 'Token rotated',
+    status: 'Success', user_id: user.id, ip_address: req.ip || req.connection?.remoteAddress,
+  });
 
   res.cookie('token', newToken, getCookieConfig({ maxAge: 7 * 24 * 60 * 60 * 1000 }));
   res.cookie('refreshToken', newRefreshString, getCookieConfig({ maxAge: 7 * 24 * 60 * 60 * 1000 }));
@@ -1251,10 +1263,16 @@ export const sendPasswordChangeOtp = catchAsync(async (req, res) => {
   const otp = randomInt(100000, 1000000).toString(); // S-08 fix: CSPRNG
   const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
 
-  user.otp_code = otp;
-  user.otp_expiry = otpExpiry;
-  await user.save();
-  await mirrorPlatformUserById(userId);
+  // verifyOtpUser reads the OTP from the PLATFORM registry, so the OTP must be
+  // written to BOTH the platform and tenant rows. Writing only to the tenant
+  // (and relying on mirrorPlatformUserById, which syncs platform→tenant — the
+  // wrong direction) left the platform otp_code stale/null, so a correct code
+  // was rejected as "Invalid OTP". Sync both DBs as the single source of truth.
+  await syncUserToPlatformAndTenant(req.tenantDb, userId, {
+    otp_code: otp,
+    otp_expiry: otpExpiry,
+    is_otp_verified: false,
+  });
 
   const passwordChangeOrgId = req.user?.organisation_id ?? user.organisation_id;
   const passwordChangeBranding = await getOrganisationEmailBranding(passwordChangeOrgId);
@@ -1277,7 +1295,13 @@ export const setup2FA = catchAsync(async (req, res) => {
 
   if (!user) return ApiResponse.notFound(res, 'User not found');
 
-  const secret = speakeasy.generateSecret({ name: `ElitePic (${user.email})` });
+  const branding = await getOrganisationEmailBranding(user.organisation_id ?? null);
+  const issuerName = branding.orgName;
+
+  const fullName = [user.first_name, user.last_name].filter(Boolean).join(' ');
+  const accountLabel = fullName ? `${fullName} (${user.email})` : user.email;
+
+  const secret = speakeasy.generateSecret({ name: `${issuerName}:${accountLabel}` });
   const dataURL = await QRCode.toDataURL(secret.otpauth_url);
 
   await user.update({
@@ -1305,7 +1329,9 @@ export const verify2FASetup = catchAsync(async (req, res) => {
   const verified = speakeasy.totp.verify({
     secret: user.two_factor_secret,
     encoding: 'base32',
-    token,
+    token: String(token ?? '').replace(/\s+/g, ''),
+    // ±30s clock-drift tolerance so a correct code is not rejected on minor skew.
+    window: 1,
   });
 
   if (!verified) return ApiResponse.badRequest(res, 'Invalid verification token');
@@ -1328,7 +1354,9 @@ export const verify2FA = catchAsync(async (req, res) => {
   const verified = speakeasy.totp.verify({
     secret: user.two_factor_secret,
     encoding: 'base32',
-    token,
+    token: String(token ?? '').replace(/\s+/g, ''),
+    // ±30s clock-drift tolerance so a correct code is not rejected on minor skew.
+    window: 1,
   });
 
   if (!verified) return ApiResponse.unauthorized(res, 'Invalid 2FA token');
@@ -1340,7 +1368,8 @@ export const verify2FA = catchAsync(async (req, res) => {
   }
 
   const role = { name: ROLE_NAMES[user.role_id] ?? null };
-  const payload = buildJwtPayload(user, role);
+  const allowedModules = await resolveAllowedModules(user);
+  const payload = buildJwtPayload(user, role, allowedModules);
   const jwtToken = signToken(payload);
 
   // Set httpOnly cookie for secure token storage — XSS-resistant
@@ -1364,8 +1393,6 @@ export const verify2FA = catchAsync(async (req, res) => {
       };
     }
   }
-
-  const allowedModules = await resolveAllowedModules(user);
 
   return ApiResponse.success(res, '2FA verified, login successful', {
     user: {

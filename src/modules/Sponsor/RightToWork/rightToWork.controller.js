@@ -47,7 +47,7 @@ export const getAllRtwRecordsForSponsor = async (req, res) => {
     const { count, rows } = await req.tenantDb.RightToWorkRecord.findAndCountAll({
       where: { sponsorId },
       include: [
-        { model: req.tenantDb.User, as: "worker", attributes: ["id", "first_name", "last_name", "email"] },
+        { model: req.tenantDb.SponsoredWorker, as: "worker", attributes: ["id", "workerFirstName", "workerLastName", "workerEmail"] },
       ],
       order: [["initialCheckDate", "DESC"]],
       limit,
@@ -77,8 +77,7 @@ export const getRtwRecordsByWorker = async (req, res) => {
     const records = await req.tenantDb.RightToWorkRecord.findAll({
       where: { workerId, sponsorId },
       include: [
-        { model: req.tenantDb.User, as: "worker", attributes: ["id", "first_name", "last_name", "email"] },
-        { model: req.tenantDb.User, as: "checker", attributes: ["id", "first_name", "last_name", "email"] },
+        { model: req.tenantDb.SponsoredWorker, as: "worker", attributes: ["id", "workerFirstName", "workerLastName", "workerEmail"] },
       ],
       order: [["initialCheckDate", "DESC"]],
     });

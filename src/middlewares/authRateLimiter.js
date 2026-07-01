@@ -164,7 +164,15 @@ const rateLimitHandler = (req, res) => {
  * bypass rate limiting in non-production environments.
  */
 const skipIfInternal = (req) => {
-  if (process.env.NODE_ENV === 'production') return false;
+  // Always skip in development — no rate limiting needed locally.
+  if (process.env.NODE_ENV === 'development') return true;
+  // In production, never skip unless the internal bypass header matches.
+  if (process.env.NODE_ENV === 'production') {
+    const bypassSecret = process.env.RATELIMIT_BYPASS_SECRET;
+    if (!bypassSecret) return false;
+    return req.headers['x-internal-ratelimit-bypass'] === bypassSecret;
+  }
+  // test / staging: allow bypass via header only when secret is configured.
   const bypassSecret = process.env.RATELIMIT_BYPASS_SECRET;
   if (!bypassSecret) return false;
   return req.headers['x-internal-ratelimit-bypass'] === bypassSecret;

@@ -58,8 +58,19 @@ export const createPlan = catchAsync(async (req, res) => {
     is_public,
   } = req.body;
 
-  if (!name || price === undefined) {
-    return ApiResponse.badRequest(res, "Name and price are required");
+  if (!name || String(name).trim() === "") {
+    return ApiResponse.badRequest(res, "Plan name is required");
+  }
+
+  // Empty form fields arrive as "" (not undefined), so an explicit numeric
+  // check is needed — otherwise an empty price slips through to the DB and
+  // surfaces as a raw "notNull Violation: Plan.price cannot be null".
+  if (price === undefined || price === null || String(price).trim() === "") {
+    return ApiResponse.badRequest(res, "Price is required");
+  }
+  const priceValue = Number(price);
+  if (!Number.isFinite(priceValue) || priceValue < 0) {
+    return ApiResponse.badRequest(res, "Price must be a valid amount of 0 or more");
   }
 
   // Check if name already exists
@@ -71,7 +82,7 @@ export const createPlan = catchAsync(async (req, res) => {
   const plan = await platformDb.Plan.create({
     name,
     description,
-    price,
+    price: priceValue,
     currency,
     billing_cycle,
     user_quota,

@@ -16,12 +16,28 @@ import { handlePlatformLogoUpload, handlePlatformFaviconUpload, handleSuperadmin
 import * as platformAuditLogController from './platformAuditLog.controller.js';
 import * as platformNotificationController from './platformNotification.controller.js';
 import * as platformNotificationPrefsController from './platformNotificationPreferences.controller.js';
+import apiKeyRoutes from './ApiKeys/apiKey.routes.js';
+import webhookRoutes from './Webhooks/webhook.routes.js';
+import usageRoutes from './Usage/usage.routes.js';
+import gdprRoutes from './GDPR/gdpr.routes.js';
+import sandboxRoutes from './Sandbox/sandbox.routes.js';
 
 const router = express.Router();
 
 router.use(verifyToken, isPlatformStaff);
 
+// Week 9 — API Keys, Webhooks, Usage metering
+router.use('/api-keys', apiKeyRoutes);
+router.use('/webhooks', webhookRoutes);
+router.use('/usage', usageRoutes);
+// Week 8 — GDPR compliance
+router.use('/gdpr', gdprRoutes);
+// Week 8 — Demo/sandbox environments
+router.use('/sandbox', sandboxRoutes);
+
 router.get('/team/modules', requirePlatformPermission('platform.team.view', 'platform.team.manage'), teamController.listPlatformModules);
+router.get('/team/export/excel', requirePlatformPermission('platform.team.view', 'platform.team.manage'), teamController.exportTeamMembersExcel);
+router.get('/team/export/pdf', requirePlatformPermission('platform.team.view', 'platform.team.manage'), teamController.exportTeamMembersPdf);
 router.get('/team', requirePlatformPermission('platform.team.view', 'platform.team.manage'), teamController.listTeamMembers);
 router.post('/team', requirePlatformPermission('platform.team.manage'), teamController.inviteTeamMember);
 router.patch('/team/:id', requirePlatformPermission('platform.team.manage'), teamController.updateTeamMember);
@@ -35,6 +51,8 @@ router.delete('/platform-roles/:id', requirePlatformPermission('platform.team.ma
 router.post('/announcements', requirePlatformPermission('platform.dashboard.view'), announcementController.createPlatformAnnouncement);
 
 router.get('/organisations', requirePlatformPermission('platform.organisations.view', 'platform.organisations.manage'), orgController.listOrganisations);
+router.get('/organisations/export/excel', requirePlatformPermission('platform.organisations.view', 'platform.organisations.manage'), orgController.exportOrganisationsExcel);
+router.get('/organisations/export/pdf', requirePlatformPermission('platform.organisations.view', 'platform.organisations.manage'), orgController.exportOrganisationsPdf);
 router.get('/organisations/:id', requirePlatformPermission('platform.organisations.view', 'platform.organisations.manage'), orgController.getOrganisationById);
 router.post('/organisations', requirePlatformPermission('platform.organisations.manage'), orgController.createOrganisation);
 router.post('/organisations/with-admin', requirePlatformPermission('platform.organisations.manage'), orgController.createOrganisationWithAdmin);
@@ -42,6 +60,7 @@ router.patch('/organisations/:id', requirePlatformPermission('platform.organisat
 router.delete('/organisations/:id', requirePlatformPermission('platform.organisations.manage'), orgController.deleteOrganisation);
 router.post('/organisations/:id/suspend', requirePlatformPermission('platform.organisations.manage'), orgController.suspendOrganisation);
 router.post('/organisations/:id/activate', requirePlatformPermission('platform.organisations.manage'), orgController.activateOrganisation);
+router.post('/organisations/:id/mark-paid', requirePlatformPermission('platform.organisations.manage'), orgController.markOrganisationAsPaid);
 router.post('/organisations/:id/admins', requirePlatformPermission('platform.organisations.manage'), orgController.createOrganisationAdmin);
 router.post('/organisations/:id/impersonate', requirePlatformPermission('platform.organisations.manage'), orgController.impersonateOrganisationAdmin);
 

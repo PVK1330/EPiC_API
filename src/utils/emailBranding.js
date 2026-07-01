@@ -43,7 +43,7 @@ export const EMAIL_PALETTE = Object.freeze({
   unionRed: "#C8102E",
 });
 
-const PLATFORM_NAME_FALLBACK = "EPiC";
+const PLATFORM_NAME_FALLBACK = "ImCamHub";
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 /** orgId(or "platform") -> { value, expires } */
@@ -90,11 +90,15 @@ async function resolvePlatformBranding() {
     PLATFORM_NAME_FALLBACK;
   const support = String(identity.support_email || "").trim() || null;
   const logoUrl = absoluteImageUrl(identity.logo_url) || platformFallbackLogoUrl();
+  // Raw stored value (e.g. "api/public/images/platform-logo.png") — PDF generators
+  // need this to resolve the file from the local storage directory.
+  const logoRawPath = String(identity.logo_url || "").trim() || null;
 
   return {
     isPlatform: true,
     orgName: name,
     logoUrl,
+    logoRawPath,
     supportEmail: support,
     replyTo: support,
     portalUrl: mainPortalUrl(),
@@ -127,6 +131,10 @@ async function resolveOrgBranding(organisationId) {
     // null when the org has no logo → template falls back to the org-name wordmark
     // (we deliberately do NOT show the EPiC platform logo on a tenant's mail).
     logoUrl: absoluteImageUrl(org.logoUrl),
+    // For PDF generation: org logo first, then platform/superadmin logo, then null.
+    // PDF callers use this to resolve the file from local storage; they fall back to
+    // the hardcoded assets file only when this is also null.
+    logoRawPath: org.logoUrl || platform.logoRawPath || null,
     supportEmail: support,
     replyTo: support,
     portalUrl,

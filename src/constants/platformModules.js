@@ -7,7 +7,7 @@ export const PLATFORM_MODULES = [
     permissions: ["platform.dashboard.view"],
   },
   {
-    id: "organizations",
+    id: "organisations",
     label: "Organisations",
     description: "Tenant and user management",
     permissions: ["platform.organisations.view", "platform.organisations.manage"],

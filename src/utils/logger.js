@@ -63,10 +63,21 @@ const REDACT_PATHS = [
   'cookie',
   'set-cookie',
 
-  // Personal data
+  // Personal data — UK PII fields
   'ssn',
   'socialSecurityNumber',
   'passportNumber',
+  'niNumber',
+  'ni_number',
+  'nationalInsuranceNumber',
+  'nationalIdCardNumber',
+  'nationalIdNumber',
+  'brpNumber',
+  'brp_number',
+  'biometricResidencePermit',
+  'dob',
+  'dateOfBirth',
+  'birthDate',
 
   // Nested wildcards — catches body.password, query.token, etc.
   '*.password',

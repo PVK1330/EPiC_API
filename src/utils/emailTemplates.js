@@ -554,3 +554,165 @@ export function generateDispatchReceiptTemplate({
       "If the recipient did not receive the email, check their spam folder. You received this copy because you are the configured SMTP account owner.",
   });
 }
+
+/**
+ * Monthly Compliance Review email — Section N
+ *
+ * Sent to Sponsor, Caseworkers, and Admins on the 1st of each month.
+ * Five sections mirror the five-section JSON payload stored in the DB.
+ */
+export function generateMonthlyComplianceReportTemplate({
+  branding = {},
+  recipientName = "Team",
+  orgName = "Organisation",
+  reportMonth = "This Month",
+  complianceSummary = {},
+  workersExpiring = [],
+  reportingHistory = {},
+  missingDocuments = [],
+  riskMovement = {},
+}) {
+  const name = brandName(branding) || orgName;
+
+  // ── Section 1: Compliance Summary ──────────────────────────────────────────
+  const summaryHtml = `
+    <div style="margin-bottom:28px;">
+      <h2 style="font-size:16px; font-weight:700; color:#0B2E5E; margin:0 0 12px 0; border-bottom:2px solid #1D70B8; padding-bottom:8px;">
+        1. Compliance Summary
+      </h2>
+      ${metadataBlockHtml({
+        "Total Workers": complianceSummary.totalWorkers ?? 0,
+        "High Risk": complianceSummary.highRiskCount ?? 0,
+        "Medium Risk": complianceSummary.mediumRiskCount ?? 0,
+        "Low Risk": complianceSummary.lowRiskCount ?? 0,
+        "Compliance Score": complianceSummary.complianceScore != null ? `${complianceSummary.complianceScore}%` : "N/A",
+        "Risk Level": complianceSummary.riskLevel || "N/A",
+        "Licence Status": complianceSummary.licenceStatus || "N/A",
+      })}
+    </div>`;
+
+  // ── Section 2: Workers Expiring in 90 Days ─────────────────────────────────
+  const expiryRows = workersExpiring.length
+    ? workersExpiring
+        .map(
+          (w) =>
+            `<tr>
+              <td style="padding:8px 12px; font-size:13px; color:#0B0C0C; border-bottom:1px solid #EEF1F5;">${w.candidateName || "—"}</td>
+              <td style="padding:8px 12px; font-size:13px; color:#0B0C0C; border-bottom:1px solid #EEF1F5;">${w.visaType || "—"}</td>
+              <td style="padding:8px 12px; font-size:13px; color:#0B0C0C; border-bottom:1px solid #EEF1F5;">${w.visaEndDate || "—"}</td>
+              <td style="padding:8px 12px; font-size:13px; font-weight:700; color:${w.urgency === "high" ? "#D4351C" : "#B04A00"}; border-bottom:1px solid #EEF1F5;">${w.daysRemaining != null ? `${w.daysRemaining}d` : "—"}</td>
+             </tr>`,
+        )
+        .join("")
+    : `<tr><td colspan="4" style="padding:12px; font-size:13px; color:#6B7785; text-align:center;">No workers expiring within 90 days.</td></tr>`;
+
+  const expiryHtml = `
+    <div style="margin-bottom:28px;">
+      <h2 style="font-size:16px; font-weight:700; color:#0B2E5E; margin:0 0 12px 0; border-bottom:2px solid #1D70B8; padding-bottom:8px;">
+        2. Workers Expiring in 90 Days (${workersExpiring.length})
+      </h2>
+      <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse; border:1px solid #DDE3EA; border-radius:8px; overflow:hidden;">
+        <thead>
+          <tr style="background:#EAF0F7;">
+            <th style="padding:10px 12px; font-size:12px; font-weight:700; color:#0B2E5E; text-align:left;">Worker</th>
+            <th style="padding:10px 12px; font-size:12px; font-weight:700; color:#0B2E5E; text-align:left;">Visa Type</th>
+            <th style="padding:10px 12px; font-size:12px; font-weight:700; color:#0B2E5E; text-align:left;">Expiry Date</th>
+            <th style="padding:10px 12px; font-size:12px; font-weight:700; color:#0B2E5E; text-align:left;">Days Left</th>
+          </tr>
+        </thead>
+        <tbody>${expiryRows}</tbody>
+      </table>
+    </div>`;
+
+  // ── Section 3: Reporting History ───────────────────────────────────────────
+  const historyHtml = `
+    <div style="margin-bottom:28px;">
+      <h2 style="font-size:16px; font-weight:700; color:#0B2E5E; margin:0 0 12px 0; border-bottom:2px solid #1D70B8; padding-bottom:8px;">
+        3. Reporting History (${reportMonth})
+      </h2>
+      ${metadataBlockHtml({
+        "Total Actions": reportingHistory.total ?? 0,
+        "Submitted / Re-submitted": reportingHistory.submitted ?? 0,
+        "Under Review": reportingHistory.underReview ?? 0,
+        "Approved": reportingHistory.approved ?? 0,
+        "Rejected": reportingHistory.rejected ?? 0,
+        "Information Requested": reportingHistory.informationRequested ?? 0,
+      })}
+    </div>`;
+
+  // ── Section 4: Missing Documents ───────────────────────────────────────────
+  const missingRows = missingDocuments.length
+    ? missingDocuments
+        .map(
+          (d) =>
+            `<tr>
+              <td style="padding:8px 12px; font-size:13px; color:#0B0C0C; border-bottom:1px solid #EEF1F5;">${d.documentType || "—"}</td>
+              <td style="padding:8px 12px; font-size:13px; font-weight:700; color:#D4351C; border-bottom:1px solid #EEF1F5; text-transform:capitalize;">${d.status || "—"}</td>
+              <td style="padding:8px 12px; font-size:13px; color:#6B7785; border-bottom:1px solid #EEF1F5;">${d.expiryDate || "—"}</td>
+             </tr>`,
+        )
+        .join("")
+    : `<tr><td colspan="3" style="padding:12px; font-size:13px; color:#00703C; text-align:center; font-weight:600;">No missing or expired documents.</td></tr>`;
+
+  const missingHtml = `
+    <div style="margin-bottom:28px;">
+      <h2 style="font-size:16px; font-weight:700; color:#0B2E5E; margin:0 0 12px 0; border-bottom:2px solid #1D70B8; padding-bottom:8px;">
+        4. Missing / Expired Documents (${missingDocuments.length})
+      </h2>
+      <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse; border:1px solid #DDE3EA; border-radius:8px; overflow:hidden;">
+        <thead>
+          <tr style="background:#EAF0F7;">
+            <th style="padding:10px 12px; font-size:12px; font-weight:700; color:#0B2E5E; text-align:left;">Document Type</th>
+            <th style="padding:10px 12px; font-size:12px; font-weight:700; color:#0B2E5E; text-align:left;">Status</th>
+            <th style="padding:10px 12px; font-size:12px; font-weight:700; color:#0B2E5E; text-align:left;">Expiry Date</th>
+          </tr>
+        </thead>
+        <tbody>${missingRows}</tbody>
+      </table>
+    </div>`;
+
+  // ── Section 5: Risk Movement ────────────────────────────────────────────────
+  const riskArrow =
+    riskMovement.direction === "improved"
+      ? "▼ Improved"
+      : riskMovement.direction === "worse"
+      ? "▲ Worsened"
+      : "→ Unchanged";
+  const riskColor =
+    riskMovement.direction === "improved"
+      ? "#00703C"
+      : riskMovement.direction === "worse"
+      ? "#D4351C"
+      : "#6B7785";
+
+  const riskHtml = `
+    <div style="margin-bottom:28px;">
+      <h2 style="font-size:16px; font-weight:700; color:#0B2E5E; margin:0 0 12px 0; border-bottom:2px solid #1D70B8; padding-bottom:8px;">
+        5. Risk Movement
+      </h2>
+      ${metadataBlockHtml({
+        "Current Risk Score": riskMovement.currentRiskScore != null ? `${riskMovement.currentRiskScore}` : "N/A",
+        "Previous Risk Score": riskMovement.previousRiskScore != null ? `${riskMovement.previousRiskScore}` : "No prior report",
+        "Change": riskMovement.delta != null ? `${riskMovement.delta > 0 ? "+" : ""}${riskMovement.delta}` : "N/A",
+        "Trend": riskMovement.direction ? `${riskArrow}` : "N/A",
+        "Compared to Month": riskMovement.previousReportMonth || "N/A",
+      })}
+      ${riskMovement.direction && riskMovement.direction !== "unchanged"
+        ? `<div style="background:${riskMovement.direction === "improved" ? "#E7F2EC" : "#FBE9E6"}; border:1px solid ${riskMovement.direction === "improved" ? "#B7DCC6" : "#F3B6AC"}; border-radius:8px; padding:12px 16px; margin-top:10px; font-size:13px; font-weight:700; color:${riskColor};">
+            ${riskArrow} — Your compliance risk score has ${riskMovement.direction === "improved" ? "improved" : "deteriorated"} since last month.
+           </div>`
+        : ""}
+    </div>`;
+
+  return wrapEpicEmail({
+    branding,
+    pageTitle: `${name} — Monthly Compliance Review: ${reportMonth}`,
+    badge: "Monthly Compliance Report",
+    badgeColor: "#0B2E5E",
+    title: `Compliance Review — ${reportMonth}`,
+    messageHtml: `Hi ${recipientName}, here is your monthly compliance review for <strong>${orgName}</strong>.`,
+    bodyHtml: summaryHtml + expiryHtml + historyHtml + missingHtml + riskHtml,
+    ctaLabel: "View Full Report in Portal",
+    securityHtml: `This automated monthly compliance report was generated on ${new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })} for <strong>${name}</strong>. Please log in to your portal to take any required action.`,
+  });
+}

@@ -11,6 +11,105 @@
  * any that still hold a previous built-in default (legacyBodies) — admin-edited
  * templates are never overwritten.
  */
+// ─── Transactional / account-creation templates ──────────────────────────────
+// These are editable from Admin > Settings > Email Templates.
+// The body is the intro text shown ABOVE the styled credentials / OTP block
+// that the send service always appends — so admins can customise the tone
+// without accidentally removing the functional block.
+//
+// Supported variables:
+//   welcome_org_admin    → {{recipient_name}}, {{email}}, {{password}}, {{login_url}}, {{org_name}}
+//   welcome_caseworker   → {{recipient_name}}, {{email}}, {{password}}, {{login_url}}, {{org_name}}
+//   welcome_candidate    → {{recipient_name}}, {{email}}, {{password}}, {{login_url}}, {{org_name}}
+//   welcome_sponsor      → {{recipient_name}}, {{email}}, {{password}}, {{login_url}}, {{org_name}}
+//   password_reset       → {{recipient_name}}, {{org_name}}
+//   otp_verification     → {{recipient_name}}, {{org_name}}
+
+const TRANSACTIONAL_EMAIL_TEMPLATES = [
+  {
+    template_key: "welcome_org_admin",
+    subject: "{{org_name}} — Your admin account is ready",
+    body: `Dear {{recipient_name}},
+
+Your administrator account for {{org_name}} has been created. Please find your login credentials below.
+
+We recommend updating your password immediately after your first sign-in.
+
+If you have any questions, please contact our support team.
+
+Kind regards,
+The {{org_name}} Team`,
+    legacyBodies: [],
+  },
+  {
+    template_key: "welcome_caseworker",
+    subject: "{{org_name}} — Your caseworker account is ready",
+    body: `Dear {{recipient_name}},
+
+Your caseworker account for {{org_name}} has been created. Please find your login credentials below.
+
+Log in to start managing cases and collaborating with your team.
+
+Kind regards,
+The {{org_name}} Team`,
+    legacyBodies: [],
+  },
+  {
+    template_key: "welcome_candidate",
+    subject: "{{org_name}} — Your account & visa enquiry access",
+    body: `Dear {{recipient_name}},
+
+Your account has been created. Please find your login credentials below.
+
+Sign in to submit your visa enquiry, upload documents, and track your case progress.
+
+Kind regards,
+The {{org_name}} Team`,
+    legacyBodies: [],
+  },
+  {
+    template_key: "welcome_sponsor",
+    subject: "{{org_name}} — Your sponsor account is ready",
+    body: `Dear {{recipient_name}},
+
+Your sponsor account for {{org_name}} has been created. Please find your login credentials below.
+
+Log in to manage your licences, compliance requirements, and sponsored workers.
+
+Kind regards,
+The {{org_name}} Team`,
+    legacyBodies: [],
+  },
+  {
+    template_key: "password_reset",
+    subject: "{{org_name}} — Password reset code",
+    body: `Dear {{recipient_name}},
+
+We received a request to reset your {{org_name}} account password.
+
+Please use the one-time code below to reset your password. This code expires in 10 minutes.
+
+If you did not request a password reset, please ignore this email.
+
+Kind regards,
+The {{org_name}} Team`,
+    legacyBodies: [],
+  },
+  {
+    template_key: "otp_verification",
+    subject: "{{org_name}} — Email verification code",
+    body: `Dear {{recipient_name}},
+
+Please use the one-time verification code below to complete your registration. This code expires in 10 minutes.
+
+Never share this code with anyone. {{org_name}} staff will never ask for your verification code.
+
+Kind regards,
+The {{org_name}} Team`,
+    legacyBodies: [],
+  },
+];
+
 const WORKFLOW_EMAIL_TEMPLATES = [
   {
     template_key: "data_capture_request",
@@ -202,10 +301,8 @@ Kind regards,
 
 const norm = (s) => String(s || "").trim();
 
-export async function seedWorkflowEmailTemplatesForDb(tenantDb) {
-  if (!tenantDb?.EmailTemplateSetting) return;
-
-  for (const tpl of WORKFLOW_EMAIL_TEMPLATES) {
+async function seedTemplateList(tenantDb, templates) {
+  for (const tpl of templates) {
     const [row, created] = await tenantDb.EmailTemplateSetting.findOrCreate({
       where: { template_key: tpl.template_key },
       defaults: {
@@ -229,6 +326,12 @@ export async function seedWorkflowEmailTemplatesForDb(tenantDb) {
       await row.update({ subject: tpl.subject });
     }
   }
+}
+
+export async function seedWorkflowEmailTemplatesForDb(tenantDb) {
+  if (!tenantDb?.EmailTemplateSetting) return;
+  await seedTemplateList(tenantDb, WORKFLOW_EMAIL_TEMPLATES);
+  await seedTemplateList(tenantDb, TRANSACTIONAL_EMAIL_TEMPLATES);
 }
 
 export default seedWorkflowEmailTemplatesForDb;

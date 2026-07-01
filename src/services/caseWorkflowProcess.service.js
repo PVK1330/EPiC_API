@@ -375,11 +375,15 @@ export async function submitBiometricAvailability({
     };
   }
 
+  const resolvedTz = String(candidateTimezone || "UTC").trim();
   const availability = {
     preferredLocation: location,
     preferredDate: date,
     preferredTime: time,
-    preferredTimezone: String(candidateTimezone || "UTC").trim(),
+    // `timezone` is the canonical field the candidate form and staff views read;
+    // `preferredTimezone` is kept for backward compatibility with older records.
+    timezone: resolvedTz,
+    preferredTimezone: resolvedTz,
     notes: String(notes || "").trim() || null,
     submittedAt: new Date().toISOString(),
   };
@@ -402,7 +406,7 @@ export async function submitBiometricAvailability({
       tenantDb,
       caseId: caseRecord.id,
       actionType: "biometric_availability",
-      description: `Candidate availability: ${location}, ${date} ${time} (${availability.preferredTimezone})`,
+      description: `Candidate availability: ${location}, ${date} ${time} (${availability.timezone})`,
       performedBy,
       visibility: "internal",
       metadata: availability,

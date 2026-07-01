@@ -605,6 +605,10 @@ export const updateCase = async (req, res) => {
     const reqDeptId = departmentId !== undefined ? departmentId : req.body.department;
     const parsedDeptId = reqDeptId !== undefined ? (reqDeptId !== null && reqDeptId !== '' ? parseInt(reqDeptId, 10) : null) : undefined;
 
+    const resolvedStatus = (status && (nextStage === undefined || nextStage === previousStage)) ? status : caseData.status;
+    const isClosingNow = resolvedStatus === 'Closed' && caseData.status !== 'Closed';
+    const isReopeningFromClosed = caseData.status === 'Closed' && resolvedStatus !== 'Closed';
+
     const updateData = {
       candidateId: candidateId !== undefined ? candidateId : caseData.candidateId,
       sponsorId: sponsorId !== undefined ? sponsorId : caseData.sponsorId,
@@ -612,7 +616,8 @@ export const updateCase = async (req, res) => {
       visaTypeId: visaTypeId !== undefined ? visaTypeId : caseData.visaTypeId,
       petitionTypeId: petitionTypeId !== undefined ? petitionTypeId : caseData.petitionTypeId,
       priority: priority || caseData.priority,
-      status: (status && (nextStage === undefined || nextStage === previousStage)) ? status : caseData.status,
+      status: resolvedStatus,
+      closed_at: isClosingNow ? new Date() : (isReopeningFromClosed ? null : caseData.closed_at),
       caseStage: (caseStage && (nextStage === undefined || nextStage === previousStage)) ? caseStage : caseData.caseStage,
       targetSubmissionDate: targetSubmissionDate || caseData.targetSubmissionDate,
       lcaNumber: lcaNumber !== undefined ? lcaNumber : caseData.lcaNumber,
@@ -626,6 +631,18 @@ export const updateCase = async (req, res) => {
       paidAmount: paidAmount !== undefined ? paidAmount : caseData.paidAmount,
       notes: notes !== undefined ? notes : caseData.notes,
     };
+
+    // When a case is moved to the closure stage, its status must become terminal.
+    // The stage-edit path above otherwise leaves a stale status (e.g. "Approved"),
+    // which shows the case as still active to the candidate/staff.
+    if (
+      updateData.caseStage === 'case_closure' &&
+      !['Closed', 'Completed', 'Cancelled', 'Rejected'].includes(updateData.status)
+    ) {
+      updateData.status = 'Closed';
+      if (!updateData.closed_at) updateData.closed_at = new Date();
+    }
+
     logger.debug({ updateData }, "Update Case - Update data");
 
     await caseData.update(updateData);

@@ -71,20 +71,47 @@ export const seedModules = async () => {
   }
 };
 
+// Modules excluded per plan tier (not available to that plan or lower)
+const PLAN_EXCLUSIONS = {
+  Starter: [
+    'admin.audit-logs',
+    'admin.escalations',
+    'admin.workload',
+    'admin.assign',
+    'admin.departments',
+    'caseworker.finance',
+    'caseworker.performance',
+  ],
+  Silver: [
+    'admin.audit-logs',
+    'admin.escalations',
+    'admin.assign',
+  ],
+  // Professional and Enterprise get all modules
+};
+
 async function seedPlanModules() {
   try {
     const plans = await platformDb.Plan.findAll();
     const modules = await platformDb.Module.findAll({ where: { is_active: true } });
 
     for (const plan of plans) {
+      const excluded = new Set(PLAN_EXCLUSIONS[plan.name] || []);
       for (const mod of modules) {
-        await platformDb.PlanModule.findOrCreate({
-          where: { plan_id: plan.id, module_id: mod.id },
-          defaults: { plan_id: plan.id, module_id: mod.id },
-        });
+        if (excluded.has(mod.key)) {
+          // Remove this module from the plan if it was previously granted
+          await platformDb.PlanModule.destroy({
+            where: { plan_id: plan.id, module_id: mod.id },
+          });
+        } else {
+          await platformDb.PlanModule.findOrCreate({
+            where: { plan_id: plan.id, module_id: mod.id },
+            defaults: { plan_id: plan.id, module_id: mod.id },
+          });
+        }
       }
     }
-    logger.info("✔ Plan modules seeded (all modules assigned to all plans)");
+    logger.info("✔ Plan modules seeded (tiered: Starter=44, Silver=48, Professional/Enterprise=51)");
   } catch (err) {
     logger.error({ err }, "Plan modules seeder failed");
     throw err;

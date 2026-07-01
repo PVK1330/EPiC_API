@@ -71,6 +71,22 @@ export default (sequelize, DataTypes) => {
         allowNull: false,
         defaultValue: "DD/MM/YYYY",
       },
+      onboarding_steps: {
+        type: DataTypes.JSONB,
+        allowNull: false,
+        defaultValue: {},
+        comment: "Map of step_key → completed_at ISO string",
+      },
+      onboarding_completed_at: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
+      is_sandbox: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+        comment: "Demo/sandbox org — data is reset every 24h",
+      },
     },
     {
       tableName: "organisations",

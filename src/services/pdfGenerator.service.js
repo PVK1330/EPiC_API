@@ -1,5 +1,6 @@
 import PdfPrinter from "pdfmake";
 import fs from "fs";
+import path from "path";
 import logger from "../utils/logger.js";
 
 // Use pdfmake's built-in fonts (Roboto) or standard PDF fonts
@@ -76,6 +77,7 @@ function normalizeRows(rows) {
 
 export function buildBrandedPdfDocDefinition({
   logoPath,
+  logoDataUri,
   title,
   sections,
   metadata,
@@ -93,9 +95,14 @@ export function buildBrandedPdfDocDefinition({
 
   const images = {};
   let hasLogo = false;
-  if (logoPath && fs.existsSync(logoPath)) {
+  if (logoDataUri) {
+    images.logo = logoDataUri;
+    hasLogo = true;
+  } else if (logoPath && fs.existsSync(logoPath)) {
     const buf = fs.readFileSync(logoPath);
-    images.logo = `data:image/png;base64,${buf.toString("base64")}`;
+    const ext = path.extname(logoPath).toLowerCase();
+    const mime = (ext === ".jpg" || ext === ".jpeg") ? "image/jpeg" : "image/png";
+    images.logo = `data:${mime};base64,${buf.toString("base64")}`;
     hasLogo = true;
   }
 

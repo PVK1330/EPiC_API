@@ -13,6 +13,13 @@ import complianceDocumentRoutes from './Compliance/complianceDocument.routes.js'
 import sponsorComplianceRespondRoutes from './Compliance/sponsorComplianceRespond.routes.js';
 import sponsorChangeRequestRoutes from './ChangeRequests/sponsorChangeRequest.routes.js';
 import rightToWorkRoutes from './RightToWork/rightToWork.routes.js';
+import auditModeRoutes from './Compliance/auditMode.routes.js';
+// Section N — Monthly Compliance Review
+import monthlyReviewRoutes from './Compliance/monthlyReview.routes.js';
+// Section K — Multi-Company Handling
+import linkedEntitiesRoutes from './LinkedEntities/sponsorLinkedEntities.routes.js';
+// Section O — Sponsor Audit Log
+import sponsorAuditLogRoutes from './AuditLog/sponsorAuditLog.routes.js';
 import {
   getBusinessCases,
   getBusinessPayments,
@@ -55,5 +62,12 @@ router.use('/compliance-documents', complianceDocumentRoutes);
 router.use('/compliance-review', sponsorComplianceRespondRoutes);
 router.use('/change-requests', sponsorChangeRequestRoutes);
 router.use('/right-to-work', rightToWorkRoutes);
+router.use('/audit', auditModeRoutes);
+// Section N — Monthly Compliance Review
+router.use('/compliance/monthly-reviews', monthlyReviewRoutes);
+// Section K — Multi-Company Handling
+router.use('/linked-entities', linkedEntitiesRoutes);
+// Section O — Sponsor Audit Log
+router.use('/audit-logs', sponsorAuditLogRoutes);
 
 export default router;

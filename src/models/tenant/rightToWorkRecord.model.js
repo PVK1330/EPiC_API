@@ -12,7 +12,7 @@ export default (sequelize, DataTypes) => {
         allowNull: false,
         field: "worker_id",
         references: {
-          model: "users",
+          model: "sponsored_workers",
           key: "id",
         },
       },
