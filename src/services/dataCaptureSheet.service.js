@@ -1,12 +1,60 @@
 import { Op } from "sequelize";
 import path from "path";
+import fs from "fs";
 import XLSX from "xlsx";
 import { generateBrandedPdfBuffer } from "./pdfGenerator.service.js";
 import { getStageGuidance } from "../constants/immigrationCaseProcess.js";
 
-/** Brand logo used across generated PDFs. */
-function brandLogoPath() {
-  return path.join(process.cwd(), "assets", "elitepic_logo.png");
+/** Fallback brand logo data URI for PDFs when no org logo is available. */
+function brandLogoDataUri() {
+  const logoPath = path.join(process.cwd(), "assets", "elitepic_logo.png");
+  if (fs.existsSync(logoPath)) {
+    const buf = fs.readFileSync(logoPath);
+    return `data:image/png;base64,${buf.toString("base64")}`;
+  }
+  return null;
+}
+
+/**
+ * Resolve a logo stored in one of these formats to a base64 data URI for pdfmake:
+ *   - "storage/private/organisations/abc.jpg"   (org logo — most common)
+ *   - "api/public/images/platform-logo.png"     (platform/superadmin logo)
+ *   - any relative path resolvable from CWD
+ *
+ * Returns null when the file cannot be found — caller should then fall back
+ * to the last-resort hardcoded asset logo.
+ */
+function resolveLogoDataUri(rawPath) {
+  if (!rawPath || /^https?:/i.test(rawPath)) return null;
+  const raw = String(rawPath).replace(/\\/g, "/").replace(/^\/+/, "");
+  const basename = path.basename(raw.split("?")[0]);
+  if (!basename) return null;
+
+  const candidates = [
+    // 1. Direct relative path as stored (e.g. "storage/private/organisations/abc.png")
+    path.resolve(process.cwd(), raw),
+    // 2. Strip "api/public/images/" prefix and search storage subdirs by basename
+    //    (e.g. platform logo stored as "api/public/images/logo.png")
+    ...["organisations", "platform", "superadmin", "avatars"].map((sub) =>
+      path.join(process.cwd(), "storage", "private", sub, basename),
+    ),
+    // 3. Legacy uploads directory
+    path.join(process.cwd(), "uploads", basename),
+  ];
+
+  for (const filePath of candidates) {
+    try {
+      if (fs.existsSync(filePath)) {
+        const buf = fs.readFileSync(filePath);
+        const ext = path.extname(filePath).toLowerCase();
+        const mime = ext === ".jpg" || ext === ".jpeg" ? "image/jpeg" : "image/png";
+        return `data:${mime};base64,${buf.toString("base64")}`;
+      }
+    } catch {
+      /* try next candidate */
+    }
+  }
+  return null;
 }
 
 /**
@@ -187,6 +235,7 @@ export async function buildDataCaptureSheetPdfAttachment({
   candidate = null,
   visaTypeName = "",
   requiredDocuments = [],
+  branding = null,
 }) {
   const fields = Array.isArray(template?.fields) ? template.fields : [];
   const docs = Array.isArray(requiredDocuments) ? requiredDocuments : [];
@@ -238,8 +287,10 @@ export async function buildDataCaptureSheetPdfAttachment({
     });
   }
 
+  const logoDataUri =
+    resolveLogoDataUri(branding?.logoRawPath) || brandLogoDataUri();
   const buffer = await generateBrandedPdfBuffer({
-    logoPath: brandLogoPath(),
+    logoDataUri,
     title: sheetName,
     metadata: {
       subtitle: visaTypeName ? `${visaTypeName} application` : "",

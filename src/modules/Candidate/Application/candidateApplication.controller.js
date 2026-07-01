@@ -6,6 +6,7 @@ import { notifyCaseCreated } from '../../../services/notification.service.js';
 import { addTimelineEntry } from '../../../services/timeline.service.js';
 import { localDateStr } from '../../../utils/dateHelpers.js';
 import { generateBrandedPdfBuffer } from '../../../services/pdfGenerator.service.js';
+import { resolveOrgPdfLogoDataUri } from '../../../utils/pdfLogo.js';
 import { rowsToXlsxBuffer, xlsxBufferToRows } from '../../../utils/excelExport.util.js';
 import catchAsync from '../../../utils/catchAsync.js';
 import ApiResponse from '../../../utils/apiResponse.js';
@@ -1501,12 +1502,12 @@ export const downloadFilledApplicationPdf = catchAsync(async (req, res) => {
       });
     }
 
-    const logoPath = path.join(process.cwd(), 'assets', 'elitepic_logo.png');
+    const logoDataUri = await resolveOrgPdfLogoDataUri(req.user?.organisation_id);
     const candidateName =
       `${appJson.firstName || ''} ${appJson.lastName || ''}`.trim() || 'Candidate';
 
     const buffer = await generateBrandedPdfBuffer({
-      logoPath,
+      logoDataUri,
       title: 'Filled Application Form',
       sections,
       metadata: {
@@ -1681,10 +1682,10 @@ export const downloadCaseSummaryPdf = catchAsync(async (req, res) => {
       },
     ];
 
-    const logoPath = path.join(process.cwd(), 'assets', 'elitepic_logo.png');
+    const logoDataUri = await resolveOrgPdfLogoDataUri(req.user?.organisation_id);
 
     const buffer = await generateBrandedPdfBuffer({
-      logoPath,
+      logoDataUri,
       title: 'Case Summary Report',
       sections,
       metadata: {
@@ -1775,12 +1776,12 @@ export const downloadCandidateApplicationPdf = catchAsync(async (req, res) => {
     });
   }
 
-  const logoPath = path.join(process.cwd(), "assets", "elitepic_logo.png");
+  const logoDataUri = await resolveOrgPdfLogoDataUri(req.user?.organisation_id);
   const candidateName =
     `${appJson.firstName || ""} ${appJson.lastName || ""}`.trim() || "Client";
 
   const buffer = await generateBrandedPdfBuffer({
-    logoPath,
+    logoDataUri,
     title: "Client Application",
     sections,
     metadata: {

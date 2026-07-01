@@ -125,6 +125,11 @@ export async function sendWorkflowStageEmail({
     );
     if (!candidate?.email) return { sent: false, reason: "no_email" };
 
+    // Per-tenant branding: firm name + logo come from the sending organisation,
+    // never a hardcoded fallback. Resolved up-front so the PDF fallback below
+    // can carry the org (or superadmin) logo.
+    const branding = await getOrganisationEmailBranding(organisationId);
+
     let mailAttachments = Array.isArray(attachments) ? [...attachments] : [];
     let fallbackRequiredDocsText = "";
     if (templateKey === "data_capture_request" && mailAttachments.length === 0) {
@@ -143,6 +148,7 @@ export async function sendWorkflowStageEmail({
         candidate,
         visaTypeName: visaType?.name || "",
         requiredDocuments,
+        branding,
       }).catch((err) => {
         logger.error({ err }, "buildDataCaptureSheetPdfAttachment (fallback)");
         return null;
@@ -153,10 +159,6 @@ export async function sendWorkflowStageEmail({
     const portalBase =
       process.env.FRONTEND_URL?.split(",")[0]?.trim() || "http://localhost:5173";
     const portalRoot = portalBase.replace(/\/$/, "");
-
-    // Per-tenant branding: firm name + logo come from the sending organisation,
-    // never a hardcoded "VisaFlow".
-    const branding = await getOrganisationEmailBranding(organisationId);
 
     const vars = {
       client_name: fullName(candidate, "Client"),

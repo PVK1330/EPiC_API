@@ -8,8 +8,22 @@ import {
   notifyCclFeeRejected,
   createAdminWorkflowTask,
 } from "./workflowNotifications.service.js";
+import {
+  notifyUser,
+  NotificationTypes,
+  NotificationPriority,
+} from "./notification.service.js";
+import { createWorkflowTask } from "./workflowTaskAutomation.service.js";
 import { attachCclTemplateToCase } from "./cclTemplate.service.js";
 import logger from "../utils/logger.js";
+
+/** True when the case fee is settled in full (no outstanding balance). */
+function isCaseFullyPaid(caseRecord) {
+  const amountStatus = String(caseRecord?.amountStatus || "").toLowerCase();
+  const total = Number(caseRecord?.totalAmount) || 0;
+  const paid = Number(caseRecord?.paidAmount) || 0;
+  return amountStatus === "paid" || (total > 0 && paid >= total);
+}
 
 export function normalizeInstallments(installments = []) {
   if (!Array.isArray(installments)) return [];
@@ -347,4 +361,148 @@ export async function reviewCclFeeProposal({
 
 
   return { ok: true, ccl, caseRecord };
+}
+
+/**
+ * Staff action: (re)send the Client Care Letter together with a payment request
+ * while the CCL is already issued to the client but not yet accepted and the fee
+ * is still outstanding. Callable by caseworker or admin from the CCL panel and
+ * the Payments tab.
+ *
+ * Sends two things: the CCL email (the `ccl_issued` template already carries the
+ * fee schedule + portal link) and an explicit payment-request notification/email
+ * pointing the client at the Payments section.
+ */
+export async function sendCclPaymentRequest({
+  tenantDb,
+  caseRecord,
+  performedBy,
+  organisationId = null,
+  requestedAmount = null,
+}) {
+  if (!tenantDb || !caseRecord) {
+    return { ok: false, status: 400, message: "Case not found" };
+  }
+
+  const ccl = await tenantDb.CaseCclRecord.findOne({
+    where: { caseId: caseRecord.id },
+  });
+  if (!ccl || !["issued", "signed"].includes(ccl.status)) {
+    return {
+      ok: false,
+      status: 400,
+      message:
+        "The Client Care Letter must be issued before a payment request can be sent",
+    };
+  }
+
+  if (isCaseFullyPaid(caseRecord)) {
+    return { ok: false, status: 400, message: "Case fees are already paid in full" };
+  }
+
+  const outstandingBalance = Math.max(
+    0,
+    (Number(caseRecord.totalAmount) || 0) - (Number(caseRecord.paidAmount) || 0),
+  );
+
+  // Optional specific amount to request (e.g. an instalment). Must be > 0 and
+  // not exceed the outstanding balance; otherwise fall back to the full balance.
+  let amountToRequest = outstandingBalance;
+  if (requestedAmount != null && requestedAmount !== "") {
+    const parsed = Number(requestedAmount);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return { ok: false, status: 400, message: "Requested amount must be greater than zero" };
+    }
+    if (outstandingBalance > 0 && parsed > outstandingBalance + 0.02) {
+      return {
+        ok: false,
+        status: 400,
+        message: `Requested amount cannot exceed the outstanding balance (£${outstandingBalance.toFixed(2)})`,
+      };
+    }
+    amountToRequest = parsed;
+  }
+
+  // 1. Re-send the CCL email (ccl_issued template includes the fee schedule + link).
+  const { sendWorkflowStageEmail } = await import("./workflowEmail.service.js");
+  const emailResult = await sendWorkflowStageEmail({
+    tenantDb,
+    caseRecord,
+    stageId: "client_care_letter",
+    organisationId,
+  }).catch((err) => {
+    logger.error({ err }, "sendCclPaymentRequest: CCL email");
+    return { sent: false };
+  });
+
+  // 2. Explicit payment request to the client (in-app + email).
+  const caseLabel = caseRecord.caseId || `#${caseRecord.id}`;
+  const fee = Number(ccl.feeAmount || caseRecord.totalAmount || 0).toFixed(2);
+  const requestStr = amountToRequest.toFixed(2);
+  const outstandingStr = outstandingBalance.toFixed(2);
+  const message =
+    outstandingBalance > 0 && Math.abs(amountToRequest - outstandingBalance) > 0.02
+      ? `A payment of £${requestStr} is now requested for your case (total fee £${fee}, outstanding £${outstandingStr}). Please complete this payment from the Payments section of your portal.`
+      : `Your Client Care Letter fee is £${fee} (outstanding: £${outstandingStr}). Please review your Client Care Letter and complete payment from the Payments section of your portal.`;
+
+  if (caseRecord.candidateId) {
+    await notifyUser(tenantDb, caseRecord.candidateId, {
+      tenantDb,
+      type: NotificationTypes.PAYMENT_RECEIVED,
+      priority: NotificationPriority.HIGH,
+      title: `Payment request — ${caseLabel}`,
+      message,
+      actionType: "payment_request",
+      entityId: caseRecord.id,
+      entityType: "case",
+      metadata: {
+        caseId: caseLabel,
+        feeAmount: ccl.feeAmount,
+        requestedAmount: amountToRequest,
+      },
+      sendEmail: true,
+      organisationId,
+    }).catch((err) => logger.error({ err }, "sendCclPaymentRequest: notify"));
+  }
+
+  // 3. Record the send on the CCL record so the UI can show "Sent / Resend".
+  await ccl.update({
+    paymentRequestSentAt: new Date(),
+    paymentRequestCount: (Number(ccl.paymentRequestCount) || 0) + 1,
+    paymentRequestAmount: amountToRequest,
+  });
+
+  // 4. Candidate task: "Pay case fees" (dedup by title — a resend won't duplicate).
+  //    The payment-request notification is already sent above, so suppress the
+  //    task's own assignee notification to avoid a second email.
+  if (caseRecord.candidateId) {
+    await createWorkflowTask({
+      tenantDb,
+      caseRecord,
+      assigneeId: caseRecord.candidateId,
+      title: `Pay case fees — ${caseLabel}`,
+      createdBy: performedBy,
+      priority: "high",
+      dueInDays: 7,
+      organisationId,
+      skipAssigneeNotification: true,
+    }).catch((err) => logger.error({ err }, "sendCclPaymentRequest: task"));
+  }
+
+  // 5. Timeline entry.
+  await recordTimelineEntry({
+    tenantDb,
+    caseId: caseRecord.id,
+    actionType: "communication_sent",
+    description: `Client Care Letter and payment request (£${requestStr}) re-sent to client`,
+    performedBy,
+    metadata: {
+      emailSent: !!emailResult?.sent,
+      feeAmount: ccl.feeAmount,
+      requestedAmount: amountToRequest,
+    },
+    visibility: "public",
+  }).catch((err) => logger.error({ err }, "sendCclPaymentRequest: timeline"));
+
+  return { ok: true, ccl, emailSent: !!emailResult?.sent, requestedAmount: amountToRequest };
 }

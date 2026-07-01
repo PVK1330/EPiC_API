@@ -7,7 +7,7 @@ import catchAsync from '../../../utils/catchAsync.js';
 import ApiResponse from '../../../utils/apiResponse.js';
 import { generateBrandedPdfBuffer } from '../../../services/pdfGenerator.service.js';
 import { notifyPaymentReceived, NotificationTypes } from '../../../services/notification.service.js';
-import { createWorkflowTask } from '../../../services/workflowTaskAutomation.service.js';
+import { createWorkflowTask, completePendingWorkflowTasks } from '../../../services/workflowTaskAutomation.service.js';
 import { evaluateCaseStageAfterEvent } from '../../../services/caseStageAutomation.service.js';
 import {
   isCclReleasedToClient,
@@ -220,6 +220,15 @@ async function recordStripeCasePayment({ tenantDb, caseRecord, paymentIntent, us
     }
     await caseRecord.update(updates);
     await caseRecord.reload();
+
+    // Clear the candidate's "Pay case fees" task once the balance is settled so
+    // it doesn't linger on their to-do list after paying.
+    if (fullyPaid) {
+      await completePendingWorkflowTasks(tenantDb, {
+        caseId: caseRecord.id,
+        titlePattern: "Pay case fees%",
+      }).catch((err) => logger.error({ err }, "complete Pay case fees task"));
+    }
 
     // Keep the CCL record consistent: a paid case must not still read as an
     // un-reviewed proposal. Promote a lingering fee_proposed/fee_rejected/pending

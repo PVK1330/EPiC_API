@@ -11,6 +11,7 @@ import {
   resolveRequiredDocuments,
   formatRequiredDocumentsText,
 } from "../../../services/dataCaptureSheet.service.js";
+import { getOrganisationEmailBranding } from "../../../utils/emailBranding.js";
 import { recordTimelineEntry } from "../../../services/caseTimeline.service.js";
 import { ROLES } from "../../../middlewares/role.middleware.js";
 import {
@@ -38,7 +39,15 @@ import {
 import {
   submitCclFeeProposal,
   reviewCclFeeProposal,
+  sendCclPaymentRequest,
 } from "../../../services/cclFeeProposal.service.js";
+import {
+  markCaseCompleted,
+  generateCaseClosureLetter,
+  emailCaseDocumentToCandidate,
+  requestFinalDocuments,
+  resendFinalDocuments,
+} from "../../../services/caseClosure.service.js";
 import {
   isCclReleasedToClient,
   resolveCaseFeeTotal,
@@ -115,6 +124,7 @@ const DECISION_DOC_TYPES = [
   "Approval Notice",
   "Visa Copy",
   "BRP Information",
+  "Case Closure Letter",
 ];
 
 async function findCaseForUser(tenantDb, userId) {
@@ -360,12 +370,19 @@ export const sendDataCaptureRequest = async (req, res) => {
       caseRecord,
     );
 
+    // Resolve org branding so the PDF carries the org's (or superadmin's) logo
+    // rather than the hardcoded fallback asset.
+    const branding = await getOrganisationEmailBranding(
+      organisationIdFromReq(req),
+    );
+
     const sheetAttachment = await buildDataCaptureSheetPdfAttachment({
       template,
       caseRecord,
       candidate,
       visaTypeName: visaType?.name || "",
       requiredDocuments,
+      branding,
     }).catch((err) => {
       logger.error({ err }, "buildDataCaptureSheetPdfAttachment");
       return null;
@@ -684,6 +701,44 @@ export const reviewCclFees = async (req, res) => {
     });
   } catch (err) {
     logger.error({ err }, "reviewCclFees");
+    res.status(500).json({ status: "error", message: err.message, data: null });
+  }
+};
+
+/** Caseworker/Admin: (re)send the CCL + a payment request while fees are outstanding. */
+export const sendCclPaymentRequestAction = async (req, res) => {
+  try {
+    const { caseId } = req.params;
+    const caseRecord = await findCaseByRef(req.tenantDb, caseId);
+    if (!caseRecord) {
+      return res
+        .status(404)
+        .json({ status: "error", message: "Case not found", data: null });
+    }
+
+    const result = await sendCclPaymentRequest({
+      tenantDb: req.tenantDb,
+      caseRecord,
+      performedBy: req.user?.userId,
+      organisationId: organisationIdFromReq(req),
+      requestedAmount: req.body?.requestedAmount ?? null,
+    });
+
+    if (!result.ok) {
+      return res.status(result.status || 400).json({
+        status: "error",
+        message: result.message,
+        data: null,
+      });
+    }
+
+    res.status(200).json({
+      status: "success",
+      message: "Client Care Letter and payment request sent to client",
+      data: { ccl: result.ccl, emailSent: result.emailSent },
+    });
+  } catch (err) {
+    logger.error({ err }, "sendCclPaymentRequestAction");
     res.status(500).json({ status: "error", message: err.message, data: null });
   }
 };
@@ -1259,11 +1314,13 @@ export const getDecisionDocuments = async (req, res) => {
     const stage = resolveCaseStage(caseRecord);
     const unlocked = ["decision_communicated", "case_closure"].includes(stage);
 
+    // Staff-uploaded final/decision documents are authoritative — they do NOT
+    // need a separate approval step, so accept "uploaded" as well as "approved".
     const docs = await req.tenantDb.Document.findAll({
       where: {
         caseId: caseRecord.id,
         documentType: { [Op.in]: DECISION_DOC_TYPES },
-        status: "approved",
+        status: { [Op.in]: ["uploaded", "approved"] },
       },
       order: [["created_at", "DESC"]],
       attributes: [
@@ -1367,6 +1424,22 @@ export const getCandidatePaymentSchedule = async (req, res) => {
         ? ccl.installmentPlan
         : [{ label: "Full fee", amount: totalFee, dueDate: null }];
 
+    const balanceDue = Math.max(0, totalFee - paidAmount);
+
+    // Surface an explicit staff payment request (if one was sent and is still due)
+    // so the candidate's Payments page can highlight the amount to pay now.
+    const paymentRequest =
+      ccl?.paymentRequestSentAt && balanceDue > 0
+        ? {
+            requestedAmount:
+              Number(ccl.paymentRequestAmount) > 0
+                ? Number(ccl.paymentRequestAmount)
+                : balanceDue,
+            sentAt: ccl.paymentRequestSentAt,
+            count: Number(ccl.paymentRequestCount) || 1,
+          }
+        : null;
+
     res.status(200).json({
       status: "success",
       data: {
@@ -1375,9 +1448,10 @@ export const getCandidatePaymentSchedule = async (req, res) => {
         caseStage: resolveCaseStage(caseRecord),
         totalFee,
         paidAmount,
-        balanceDue: Math.max(0, totalFee - paidAmount),
+        balanceDue,
         amountStatus: caseRecord.amountStatus,
         installments,
+        paymentRequest,
         ccl: ccl
           ? {
               status: ccl.status,
@@ -1451,7 +1525,9 @@ export const getCandidateTasks = async (req, res) => {
       const caseRow = plain.case_id ? caseById[plain.case_id] : null;
       const title = plain.title || "";
       const isBiometricAttend = /attend biometrics/i.test(title);
+      const isCasePayment = /pay case fee/i.test(title);
       const isCclPayment =
+        isCasePayment ||
         /pay ccl fee/i.test(title) ||
         (/client care|ccl/i.test(title) && /pay|fee/i.test(title));
       const feeFromCase =
@@ -1465,6 +1541,7 @@ export const getCandidateTasks = async (req, res) => {
         case_id: plain.case_id,
         caseRef,
         isCclPayment,
+        isCasePayment,
         cclFeeAmount: feeFromCase != null ? Number(feeFromCase) : null,
         isDataCapture:
           /data capture sheet/i.test(plain.title || "") ||
@@ -1617,6 +1694,9 @@ export const getCaseWorkflowBundle = async (req, res) => {
         biometricDay: caseRecord.biometricDay,
         biometricsDate: caseRecord.biometricsDate,
         proposedAmount: caseRecord.proposedAmount,
+        totalAmount: caseRecord.totalAmount,
+        paidAmount: caseRecord.paidAmount,
+        amountStatus: caseRecord.amountStatus,
         dataCapture: { template, submission },
         ccl,
       },
@@ -1739,8 +1819,13 @@ export const submitCandidateDraftReview = async (req, res) => {
 export const submitCandidateBiometricAvailability = async (req, res) => {
   try {
     const userId = req.user?.userId;
-    const { preferredLocation, preferredDate, preferredTime, notes } = req.body;
-    const candidateTimezone = await resolveUserTimezone(req.tenantDb, userId);
+    const { preferredLocation, preferredDate, preferredTime, notes, timezone } =
+      req.body;
+    // Prefer the timezone the candidate explicitly chose on the form; fall back
+    // to their stored user/org timezone when the form didn't send one.
+    const submittedTz = String(timezone || "").trim();
+    const candidateTimezone =
+      submittedTz || (await resolveUserTimezone(req.tenantDb, userId));
 
     const caseRecord = await findCaseForUser(req.tenantDb, userId);
     if (!caseRecord) {
@@ -2076,6 +2161,157 @@ export const staffCommunicateDecision = async (req, res) => {
   }
 };
 
+/** Staff: mark an approved case as completed and closed. */
+export const staffMarkCaseCompleted = async (req, res) => {
+  try {
+    const caseRecord = await findCaseByRef(req.tenantDb, req.params.caseId);
+    if (!caseRecord) {
+      return res
+        .status(404)
+        .json({ status: "error", message: "Case not found", data: null });
+    }
+
+    const result = await markCaseCompleted({
+      tenantDb: req.tenantDb,
+      caseRecord,
+      performedBy: req.user?.userId,
+      organisationId: organisationIdFromReq(req),
+    });
+
+    if (!result.ok) {
+      return res.status(result.status || 400).json({
+        status: "error",
+        message: result.message,
+        data: null,
+      });
+    }
+
+    await caseRecord.reload();
+    res.status(200).json({
+      status: "success",
+      message: result.alreadyClosed
+        ? "Case is already closed"
+        : "Case marked as completed and closed",
+      data: {
+        caseStage: resolveCaseStage(caseRecord),
+        status: caseRecord.status,
+      },
+    });
+  } catch (err) {
+    logger.error({ err }, "staffMarkCaseCompleted");
+    res.status(500).json({ status: "error", message: err.message, data: null });
+  }
+};
+
+/** Candidate: request their final documents from the case team. */
+export const candidateRequestFinalDocuments = async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+    const caseRecord = await findCaseForUser(req.tenantDb, userId);
+    if (!caseRecord) {
+      return res
+        .status(404)
+        .json({ status: "error", message: "No case found", data: null });
+    }
+
+    const result = await requestFinalDocuments({
+      tenantDb: req.tenantDb,
+      caseRecord,
+      requestedBy: userId,
+      organisationId: organisationIdFromReq(req),
+    });
+
+    if (!result.ok) {
+      return res.status(result.status || 400).json({
+        status: "error",
+        message: result.message,
+        data: null,
+      });
+    }
+
+    res.status(200).json({
+      status: "success",
+      message: "Your request has been sent to your case team",
+      data: { notified: result.notified },
+    });
+  } catch (err) {
+    logger.error({ err }, "candidateRequestFinalDocuments");
+    res.status(500).json({ status: "error", message: err.message, data: null });
+  }
+};
+
+/** Staff: re-send all final documents to the candidate by email. */
+export const staffResendFinalDocuments = async (req, res) => {
+  try {
+    const caseRecord = await findCaseByRef(req.tenantDb, req.params.caseId);
+    if (!caseRecord) {
+      return res
+        .status(404)
+        .json({ status: "error", message: "Case not found", data: null });
+    }
+
+    const result = await resendFinalDocuments({
+      tenantDb: req.tenantDb,
+      caseRecord,
+      performedBy: req.user?.userId,
+      organisationId: organisationIdFromReq(req),
+    });
+
+    if (!result.ok) {
+      return res.status(result.status || 400).json({
+        status: "error",
+        message: result.message,
+        data: null,
+      });
+    }
+
+    res.status(200).json({
+      status: "success",
+      message: `Final documents re-sent to the candidate (${result.sent}/${result.total})`,
+      data: { sent: result.sent, total: result.total },
+    });
+  } catch (err) {
+    logger.error({ err }, "staffResendFinalDocuments");
+    res.status(500).json({ status: "error", message: err.message, data: null });
+  }
+};
+
+/** Staff: generate a case closure letter (branded PDF) for the candidate. */
+export const staffGenerateClosureLetter = async (req, res) => {
+  try {
+    const caseRecord = await findCaseByRef(req.tenantDb, req.params.caseId);
+    if (!caseRecord) {
+      return res
+        .status(404)
+        .json({ status: "error", message: "Case not found", data: null });
+    }
+
+    const result = await generateCaseClosureLetter({
+      tenantDb: req.tenantDb,
+      caseRecord,
+      performedBy: req.user?.userId,
+      organisationId: organisationIdFromReq(req),
+    });
+
+    if (!result.ok) {
+      return res.status(result.status || 400).json({
+        status: "error",
+        message: result.message,
+        data: null,
+      });
+    }
+
+    res.status(200).json({
+      status: "success",
+      message: "Case closure letter generated and shared with the candidate",
+      data: { document: result.document },
+    });
+  } catch (err) {
+    logger.error({ err }, "staffGenerateClosureLetter");
+    res.status(500).json({ status: "error", message: err.message, data: null });
+  }
+};
+
 /**
  * Staff: upload a decision document (Decision Letter / Approval Notice /
  * Visa Copy / BRP Information) for a case and notify the candidate by email.
@@ -2151,20 +2387,27 @@ export const staffUploadDecisionDocument = async (req, res) => {
       });
     }
 
-    // Notify candidate via in-app + email
+    // Email the document as an attachment + in-app notification.
     if (caseRecord.candidateId) {
       try {
+        await emailCaseDocumentToCandidate({
+          tenantDb: req.tenantDb,
+          caseRecord,
+          document,
+          filePath: targetPath,
+          organisationId: organisationIdFromReq(req),
+        });
         await notifyUser(req.tenantDb, caseRecord.candidateId, {
           type: NotificationTypes.SUCCESS,
           priority: NotificationPriority.HIGH,
           category: "document",
           title: `${documentType} is now available`,
-          message: `Your ${documentType.toLowerCase()} for case ${caseLabel} has been uploaded to the portal. Download it from your Application Pack.`,
+          message: `Your ${documentType.toLowerCase()} for case ${caseLabel} has been emailed to you and is available to download from your Final Documents.`,
           entityType: "document",
           entityId: document.id,
           actionType: "decision_document_uploaded",
           actionUrl: "/my-account?tab=downloads",
-          sendEmail: true,
+          sendEmail: false,
           organisationId: organisationIdFromReq(req),
         });
       } catch (notifErr) {

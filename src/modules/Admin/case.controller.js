@@ -631,6 +631,18 @@ export const updateCase = async (req, res) => {
       paidAmount: paidAmount !== undefined ? paidAmount : caseData.paidAmount,
       notes: notes !== undefined ? notes : caseData.notes,
     };
+
+    // When a case is moved to the closure stage, its status must become terminal.
+    // The stage-edit path above otherwise leaves a stale status (e.g. "Approved"),
+    // which shows the case as still active to the candidate/staff.
+    if (
+      updateData.caseStage === 'case_closure' &&
+      !['Closed', 'Completed', 'Cancelled', 'Rejected'].includes(updateData.status)
+    ) {
+      updateData.status = 'Closed';
+      if (!updateData.closed_at) updateData.closed_at = new Date();
+    }
+
     logger.debug({ updateData }, "Update Case - Update data");
 
     await caseData.update(updateData);
