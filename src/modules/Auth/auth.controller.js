@@ -1263,10 +1263,16 @@ export const sendPasswordChangeOtp = catchAsync(async (req, res) => {
   const otp = randomInt(100000, 1000000).toString(); // S-08 fix: CSPRNG
   const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
 
-  user.otp_code = otp;
-  user.otp_expiry = otpExpiry;
-  await user.save();
-  await mirrorPlatformUserById(userId);
+  // verifyOtpUser reads the OTP from the PLATFORM registry, so the OTP must be
+  // written to BOTH the platform and tenant rows. Writing only to the tenant
+  // (and relying on mirrorPlatformUserById, which syncs platform→tenant — the
+  // wrong direction) left the platform otp_code stale/null, so a correct code
+  // was rejected as "Invalid OTP". Sync both DBs as the single source of truth.
+  await syncUserToPlatformAndTenant(req.tenantDb, userId, {
+    otp_code: otp,
+    otp_expiry: otpExpiry,
+    is_otp_verified: false,
+  });
 
   const passwordChangeOrgId = req.user?.organisation_id ?? user.organisation_id;
   const passwordChangeBranding = await getOrganisationEmailBranding(passwordChangeOrgId);
