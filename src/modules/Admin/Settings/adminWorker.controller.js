@@ -15,7 +15,11 @@ import {
 const handle = (res, err, fallback) => {
   const code = err?.statusCode || 500;
   if (code >= 500) logger.error({ err }, fallback);
-  return res.status(code).json({ status: "error", message: err.message || fallback });
+  return res.status(code).json({
+    status: "error",
+    message: code >= 500 ? fallback : (err.message || fallback),
+    error: process.env.NODE_ENV === 'development' ? err.message : undefined,
+  });
 };
 
 /** GET /workers — list all workers, optionally filtered by status, sponsorId, or includeDeleted. */

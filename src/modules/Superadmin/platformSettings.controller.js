@@ -214,7 +214,7 @@ export const testSmtpConnection = catchAsync(async (req, res) => {
     await transporter.verify();
     return ApiResponse.success(res, "SMTP connection verified", { ok: true });
   } catch (err) {
-    return ApiResponse.success(res, "SMTP connection failed", { ok: false, error: err.message });
+    return ApiResponse.success(res, "SMTP connection failed", { ok: false, error: process.env.NODE_ENV === 'development' ? err.message : undefined });
   }
 });
 

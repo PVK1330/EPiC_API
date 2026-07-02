@@ -73,7 +73,11 @@ const review = (action) => async (req, res) => {
   } catch (error) {
     const code = error?.statusCode || 500;
     if (code >= 500) logger.error({ err: error }, `Error during CoS ${action}`);
-    res.status(code).json({ status: "error", message: error.message || `Failed to ${action} CoS request` });
+    res.status(code).json({
+      status: "error",
+      message: code >= 500 ? `Failed to ${action} CoS request` : (error.message || `Failed to ${action} CoS request`),
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    });
   }
 };
 
@@ -121,6 +125,6 @@ export const requestInfoForCosRequest = async (req, res) => {
   } catch (error) {
     const code = error?.statusCode || 500;
     if (code >= 500) logger.error({ err: error }, "Error requesting CoS information");
-    res.status(code).json({ status: "error", message: error.message || "Failed to request information" });
+    res.status(code).json({ status: "error", message: "Failed to request information" });
   }
 };

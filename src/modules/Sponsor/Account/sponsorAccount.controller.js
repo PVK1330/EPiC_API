@@ -7,6 +7,7 @@ import logger from '../../../utils/logger.js';
 import { toPublicImagePath } from '../../../utils/storagePath.util.js';
 import platformDb from '../../../models/index.js';
 import { excludeSensitiveUserAttrs } from '../../../utils/userAttributes.js';
+import { checkPasswordStrength } from '../../../validations/common.validation.js';
 
 const ALLOWED_PROFILE_DOC_FIELDS = new Set([
   'sponsorLetter',
@@ -200,7 +201,7 @@ export const getProfile = async (req, res) => {
     res.status(500).json({
       status: 'error',
       message: 'Internal server error',
-      error: err.message,
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined,
     });
   }
 };
@@ -384,7 +385,7 @@ export const updateProfile = async (req, res) => {
     res.status(500).json({
       status: 'error',
       message: 'Internal server error',
-      error: err.message
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
     });
   }
 };
@@ -455,7 +456,7 @@ export const updateKeyPersonnel = async (req, res) => {
     res.status(500).json({
       status: 'error',
       message: 'Failed to update Key Personnel',
-      error: err.message
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
     });
   }
 };
@@ -474,6 +475,11 @@ export const changePassword = async (req, res) => {
 
     if (!new_password) {
       return res.status(400).json({ status: 'error', message: 'New password is required' });
+    }
+
+    const pwErr = checkPasswordStrength(new_password);
+    if (pwErr) {
+      return res.status(400).json({ status: 'error', message: pwErr });
     }
 
     // Passwords live in the platform DB (same DB that login checks against).
@@ -504,7 +510,7 @@ export const changePassword = async (req, res) => {
     res.status(500).json({
       status: 'error',
       message: 'Internal server error',
-      error: err.message
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
     });
   }
 };

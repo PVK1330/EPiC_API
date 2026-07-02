@@ -560,7 +560,7 @@ export const createSponsorCheckoutSession = async (req, res) => {
     logger.error({ err: error }, 'createSponsorCheckoutSession');
     return res.status(500).json({
       status: 'error',
-      message: error.message || 'Failed to create checkout session',
+      message: 'Failed to create checkout session',
       data: null,
     });
   }
@@ -655,7 +655,7 @@ export const verifySponsorCheckoutSession = async (req, res) => {
     logger.error({ err: error }, 'verifySponsorCheckoutSession');
     return res.status(500).json({
       status: 'error',
-      message: error.message || 'Failed to verify checkout session',
+      message: 'Failed to verify checkout session',
       data: null,
     });
   }

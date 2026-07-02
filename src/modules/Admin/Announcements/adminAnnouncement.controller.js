@@ -78,7 +78,7 @@ export const createTenantAnnouncement = async (req, res) => {
     logger.error({ err }, 'createTenantAnnouncement error');
     return res.status(500).json({
       status: 'error',
-      message: err.message || 'Failed to send announcement',
+      message: 'Failed to send announcement',
       data: null,
     });
   }

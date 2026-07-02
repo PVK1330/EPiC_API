@@ -68,7 +68,7 @@ export const getChecklistByVisaType = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -130,7 +130,7 @@ export const getCandidateDocumentChecklist = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -282,7 +282,7 @@ export const getCaseChecklist = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -332,7 +332,7 @@ export const createChecklistItem = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -383,7 +383,7 @@ export const updateChecklistItem = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -418,7 +418,7 @@ export const deleteChecklistItem = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -452,7 +452,7 @@ export const getAllChecklists = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -525,7 +525,7 @@ export const initializeCaseChecklist = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -588,7 +588,7 @@ export const createCaseChecklistItem = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -622,7 +622,7 @@ export const updateCaseChecklistItem = async (req, res) => {
 
     res.status(200).json({ status: "success", data: item });
   } catch (err) {
-    res.status(500).json({ status: "error", message: err.message });
+    res.status(500).json({ status: "error", message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined });
   }
 };
 
@@ -637,6 +637,6 @@ export const deleteCaseChecklistItem = async (req, res) => {
     await item.destroy();
     res.status(200).json({ status: "success", message: "Item deleted successfully" });
   } catch (err) {
-    res.status(500).json({ status: "error", message: err.message });
+    res.status(500).json({ status: "error", message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined });
   }
 };

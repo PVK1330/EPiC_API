@@ -59,7 +59,7 @@ export const getDocumentsBySponsor = async (req, res) => {
     });
   } catch (error) {
     logger.error({ err: error }, 'getDocumentsBySponsor error');
-    return res.status(500).json({ status: 'error', message: error.message || 'Internal server error' });
+    return res.status(500).json({ status: 'error', message: 'Internal server error' });
   }
 };
 
@@ -129,7 +129,7 @@ export const uploadComplianceDocument = async (req, res) => {
     });
   } catch (error) {
     logger.error({ err: error }, 'uploadComplianceDocument error');
-    return res.status(500).json({ status: 'error', message: error.message || 'Internal server error' });
+    return res.status(500).json({ status: 'error', message: 'Internal server error' });
   }
 };
 
@@ -226,7 +226,7 @@ export const updateDocumentMetadata = async (req, res) => {
       return res.status(409).json({ status: 'error', message: error.message });
     }
     logger.error({ err: error }, 'updateDocumentMetadata error');
-    return res.status(500).json({ status: 'error', message: error.message || 'Internal server error' });
+    return res.status(500).json({ status: 'error', message: 'Internal server error' });
   }
 };
 
@@ -276,7 +276,7 @@ export const downloadComplianceDocument = async (req, res) => {
   } catch (error) {
     logger.error({ err: error }, 'downloadComplianceDocument error');
     if (!res.headersSent) {
-      res.status(500).json({ status: 'error', message: error.message || 'Internal server error' });
+      res.status(500).json({ status: 'error', message: 'Internal server error' });
     }
   }
 };
@@ -317,6 +317,6 @@ export const deleteComplianceDocument = async (req, res) => {
     });
   } catch (error) {
     logger.error({ err: error }, 'deleteComplianceDocument error');
-    return res.status(500).json({ status: 'error', message: error.message || 'Internal server error' });
+    return res.status(500).json({ status: 'error', message: 'Internal server error' });
   }
 };

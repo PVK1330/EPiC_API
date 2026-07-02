@@ -63,7 +63,7 @@ export const listVisaTypes = async (req, res) => {
     });
   } catch (error) {
     logger.error({ err: error }, "listVisaTypes error");
-    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
+    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 
@@ -96,7 +96,7 @@ export const createVisaType = async (req, res) => {
     if (error.name === "SequelizeUniqueConstraintError") {
       return res.status(400).json({ status: "error", message: "A visa type with this name already exists", data: null });
     }
-    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
+    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 
@@ -137,7 +137,7 @@ export const updateVisaType = async (req, res) => {
     });
   } catch (error) {
     logger.error({ err: error }, "updateVisaType error");
-    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
+    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 
@@ -157,7 +157,7 @@ export const deleteVisaType = async (req, res) => {
     res.status(200).json({ status: "success", message: "Visa type deleted.", data: null });
   } catch (error) {
     logger.error({ err: error }, "deleteVisaType error");
-    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
+    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 
@@ -178,7 +178,7 @@ export const dropdownVisaType = async (req, res) => {
     });
   } catch (error) {
     logger.error({ err: error }, "dropdownVisaType error");
-    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
+    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 
@@ -224,7 +224,7 @@ export const uploadCclTemplate = async (req, res) => {
         /* ignore */
       }
     }
-    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
+    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 
@@ -252,6 +252,6 @@ export const deleteCclTemplate = async (req, res) => {
     });
   } catch (error) {
     logger.error({ err: error }, "deleteCclTemplate error");
-    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
+    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };

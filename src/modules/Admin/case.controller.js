@@ -256,7 +256,7 @@ export const createCase = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -344,7 +344,7 @@ export const getCasesWithFilters = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -449,7 +449,7 @@ export const getAllCases = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -529,7 +529,7 @@ export const getCaseById = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -760,7 +760,7 @@ export const updateCase = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -794,7 +794,7 @@ export const deleteCase = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -808,7 +808,7 @@ export const getCaseWorkflow = async (_req, res) => {
       data: { steps: IMMIGRATION_CASE_STEPS, guidance: STAGE_GUIDANCE },
     });
   } catch (error) {
-    res.status(500).json({ status: "error", message: "Internal server error", error: error.message });
+    res.status(500).json({ status: "error", message: "Internal server error", error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 
@@ -851,7 +851,7 @@ export const getPipelineCases = async (req, res) => {
       meta: { steps: IMMIGRATION_CASE_STEPS },
     });
   } catch (error) {
-    res.status(500).json({ status: "error", message: "Internal server error", error: error.message });
+    res.status(500).json({ status: "error", message: "Internal server error", error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 
@@ -953,7 +953,7 @@ export const updatePipelineStage = async (req, res) => {
     });
   } catch (error) {
     logger.error({ err: error }, "Update Pipeline Stage Error");
-    res.status(500).json({ status: "error", message: "Internal server error", error: error.message });
+    res.status(500).json({ status: "error", message: "Internal server error", error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 
@@ -1137,7 +1137,7 @@ export const getTeamCapacity = async (req, res) => {
       data: capacityArray
     });
   } catch (error) {
-    res.status(500).json({ status: "error", message: "Internal server error", error: error.message });
+    res.status(500).json({ status: "error", message: "Internal server error", error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 
@@ -1327,7 +1327,7 @@ export const assignCase = async (req, res) => {
       data: { case: caseData }
     });
   } catch (error) {
-    res.status(500).json({ status: "error", message: "Internal server error", error: error.message });
+    res.status(500).json({ status: "error", message: "Internal server error", error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 
@@ -1358,6 +1358,6 @@ export const getCasesDropdown = async (req, res) => {
       data: casesDropdown
     });
   } catch (error) {
-    res.status(500).json({ status: "error", message: "Internal server error", error: error.message });
+    res.status(500).json({ status: "error", message: "Internal server error", error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };

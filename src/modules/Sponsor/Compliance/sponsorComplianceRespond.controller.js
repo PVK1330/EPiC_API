@@ -68,6 +68,6 @@ export const respondToComplianceReview = async (req, res) => {
   } catch (err) {
     const code = err?.statusCode || 500;
     if (code >= 500) logger.error({ err }, "Failed to submit compliance response");
-    res.status(code).json({ status: "error", message: err.message || "Failed to submit response" });
+    res.status(code).json({ status: "error", message: "Failed to submit response" });
   }
 };

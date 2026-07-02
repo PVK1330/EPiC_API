@@ -107,7 +107,7 @@ export const createRequest = async (req, res) => {
     res.status(201).json({ status: 'success', data: cr });
   } catch (error) {
     logger.error({ err: error }, 'Failed to create Change Request');
-    res.status(500).json({ status: 'error', message: error.message });
+    res.status(500).json({ status: 'error', message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 
@@ -143,7 +143,7 @@ export const listRequests = async (req, res) => {
     res.status(200).json({ status: 'success', data: rows, meta: { total: count, page, limit } });
   } catch (error) {
     logger.error({ err: error }, 'Failed to list Change Requests');
-    res.status(500).json({ status: 'error', message: error.message });
+    res.status(500).json({ status: 'error', message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 
@@ -159,7 +159,7 @@ export const getRequestById = async (req, res) => {
     res.status(200).json({ status: 'success', data: cr });
   } catch (error) {
     logger.error({ err: error }, 'Failed to get Change Request');
-    res.status(500).json({ status: 'error', message: error.message });
+    res.status(500).json({ status: 'error', message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 
@@ -173,7 +173,7 @@ export const getRequestHistory = async (req, res) => {
     res.status(200).json({ status: 'success', data: history });
   } catch (error) {
     logger.error({ err: error }, 'Failed to get Change Request History');
-    res.status(500).json({ status: 'error', message: error.message });
+    res.status(500).json({ status: 'error', message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 
@@ -191,7 +191,7 @@ export const reviewRequest = async (req, res) => {
     res.status(200).json({ status: 'success', data: cr });
   } catch (error) {
     logger.error({ err: error }, 'Failed to review request');
-    res.status(500).json({ status: 'error', message: error.message });
+    res.status(500).json({ status: 'error', message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 
@@ -271,7 +271,7 @@ export const approveRequest = async (req, res) => {
     res.status(200).json({ status: 'success', data: cr });
   } catch (error) {
     logger.error({ err: error }, 'Failed to approve request');
-    res.status(500).json({ status: 'error', message: error.message });
+    res.status(500).json({ status: 'error', message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 
@@ -317,7 +317,7 @@ export const rejectRequest = async (req, res) => {
     res.status(200).json({ status: 'success', data: cr });
   } catch (error) {
     logger.error({ err: error }, 'Failed to reject request');
-    res.status(500).json({ status: 'error', message: error.message });
+    res.status(500).json({ status: 'error', message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 
@@ -338,6 +338,6 @@ export const escalateRequest = async (req, res) => {
     res.status(200).json({ status: 'success', data: cr });
   } catch (error) {
     logger.error({ err: error }, 'Failed to escalate request');
-    res.status(500).json({ status: 'error', message: error.message });
+    res.status(500).json({ status: 'error', message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };

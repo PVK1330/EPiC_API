@@ -218,7 +218,7 @@ export const addSponsoredWorker = async (req, res) => {
       return res.status(500).json({
         status: 'error',
         message: 'Candidate application schema mismatch detected. Please contact admin.',
-        error: err.message,
+        error: process.env.NODE_ENV === 'development' ? err.message : undefined,
       });
     }
     res.status(500).json({
@@ -292,7 +292,7 @@ export const getSponsoredWorkers = async (req, res) => {
     res.status(500).json({
       status: 'error',
       message: 'Internal server error',
-      error: err.message
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
     });
   }
 };
@@ -713,7 +713,7 @@ export const getSponsoredWorkerDetails = async (req, res) => {
     res.status(500).json({
       status: 'error',
       message: 'Internal server error',
-      error: err.message
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
     });
   }
 };

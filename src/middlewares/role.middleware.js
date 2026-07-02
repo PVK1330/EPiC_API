@@ -197,11 +197,13 @@ export const requirePlanModule = (moduleKey) => {
 
     const allowed = req.user.allowedModules;
 
-    // If modules were not resolved (legacy session), fail open to avoid breaking
-    // existing sessions — log a warning so it can be tracked
+    // Fail CLOSED when modules are unresolved (backend-authz-13). Every current
+    // login path resolves allowedModules to an array (resolveAllowedModules never
+    // returns null), so a missing array means a stale pre-enforcement token —
+    // deny and prompt re-login rather than silently granting plan-gated access.
     if (!Array.isArray(allowed)) {
-      logger.warn({ userId: req.user.userId, moduleKey }, "requirePlanModule: allowedModules not resolved — failing open");
-      return next();
+      logger.warn({ userId: req.user.userId, moduleKey }, "requirePlanModule: allowedModules unresolved — failing closed (stale session)");
+      return ApiResponse.forbidden(res, "Your session predates plan enforcement. Please log out and sign in again.");
     }
 
     if (allowed.includes('*') || allowed.includes(moduleKey)) return next();

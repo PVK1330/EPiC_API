@@ -24,7 +24,11 @@ const orgId = (req) =>
 const handleError = (res, err, fallback) => {
   const status = err?.statusCode || 500;
   if (status >= 500) logger.error({ err }, fallback);
-  return res.status(status).json({ status: "error", message: err.message || fallback });
+  return res.status(status).json({
+    status: "error",
+    message: status >= 500 ? fallback : (err.message || fallback),
+    error: process.env.NODE_ENV === 'development' ? err.message : undefined,
+  });
 };
 
 export const getCosSummary = async (req, res) => {

@@ -25,6 +25,21 @@ export const strongPasswordSchema = z
   .regex(/[0-9]/, "Password must contain a number")
   .regex(/[^A-Za-z0-9]/, "Password must contain a special character");
 
+/**
+ * Imperative strength check for controllers that validate passwords OUTSIDE the
+ * zod route-schema layer (admin create/reset, self-service change-password).
+ * Single source of truth: reuses strongPasswordSchema so every entry point
+ * enforces the same policy (12 chars + upper/lower/digit/special).
+ *
+ * @param {unknown} password
+ * @returns {string|null} null when valid, else the first policy message.
+ */
+export function checkPasswordStrength(password) {
+  const result = strongPasswordSchema.safeParse(password);
+  if (result.success) return null;
+  return result.error.issues[0]?.message || "Password does not meet the required policy";
+}
+
 export const phoneSchema = z
   .string()
   .trim()

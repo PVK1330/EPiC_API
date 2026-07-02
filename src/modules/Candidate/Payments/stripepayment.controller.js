@@ -420,7 +420,7 @@ export const getBankTransferDetails = async (req, res) => {
     });
   } catch (err) {
     logger.error({ err }, 'getBankTransferDetails');
-    res.status(500).json({ status: 'error', message: err.message, data: null });
+    res.status(500).json({ status: 'error', message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined, data: null });
   }
 };
 
@@ -472,7 +472,7 @@ export const recordBankTransferIntent = async (req, res) => {
     });
   } catch (err) {
     logger.error({ err }, 'recordBankTransferIntent');
-    res.status(500).json({ status: 'error', message: err.message, data: null });
+    res.status(500).json({ status: 'error', message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined, data: null });
   }
 };
 
@@ -548,7 +548,7 @@ export const createPaymentIntent = async (req, res) => {
     logger.error({ err: error }, "Stripe Payment Intent Error");
     res.status(500).json({
       status: "error",
-      message: error.message || "Failed to create payment intent",
+      message: "Failed to create payment intent",
       data: null,
     });
   }
@@ -625,7 +625,7 @@ export const createCaseCheckoutSession = async (req, res) => {
     logger.error({ err: error }, "Stripe Checkout Session Error");
     res.status(500).json({
       status: "error",
-      message: error.message || "Failed to create checkout session",
+      message: "Failed to create checkout session",
       data: null,
     });
   }
@@ -697,7 +697,7 @@ export const verifyCheckoutSession = async (req, res) => {
     logger.error({ err: error }, "verifyCheckoutSession");
     res.status(500).json({
       status: "error",
-      message: error.message || "Failed to verify checkout session",
+      message: "Failed to verify checkout session",
       data: null,
     });
   }
@@ -772,7 +772,7 @@ export const confirmPayment = async (req, res) => {
     logger.error({ err: error }, "Stripe Payment Confirmation Error");
     res.status(500).json({
       status: "error",
-      message: error.message || "Failed to confirm payment",
+      message: "Failed to confirm payment",
       data: null,
     });
   }
@@ -822,7 +822,7 @@ export const getPaymentStatus = async (req, res) => {
     logger.error({ err: error }, "Stripe Payment Status Error");
     res.status(500).json({
       status: "error",
-      message: error.message || "Failed to retrieve payment status",
+      message: "Failed to retrieve payment status",
       data: null,
     });
   }
@@ -861,7 +861,7 @@ export const cancelPayment = async (req, res) => {
     logger.error({ err: error }, "Stripe Payment Cancellation Error");
     res.status(500).json({
       status: "error",
-      message: error.message || "Failed to cancel payment",
+      message: "Failed to cancel payment",
       data: null,
     });
   }
@@ -891,7 +891,7 @@ export const createSetupIntent = async (req, res) => {
     logger.error({ err: error }, "Stripe Setup Intent Error");
     res.status(500).json({
       status: "error",
-      message: error.message || "Failed to create setup intent",
+      message: "Failed to create setup intent",
       data: null,
     });
   }
@@ -1391,7 +1391,7 @@ export const createRefund = async (req, res) => {
     logger.error({ err: error }, "Stripe Refund Error");
     res.status(500).json({
       status: "error",
-      message: error.message || "Failed to create refund",
+      message: "Failed to create refund",
       data: null,
     });
   }
@@ -1462,7 +1462,7 @@ export const createSubscription = async (req, res) => {
     logger.error({ err: error }, "Stripe Subscription Creation Error");
     res.status(500).json({
       status: "error",
-      message: error.message || "Failed to create subscription",
+      message: "Failed to create subscription",
       data: null,
     });
   }
@@ -1536,7 +1536,7 @@ export const renewSubscription = async (req, res) => {
     logger.error({ err: error }, "Stripe Subscription Renewal Error");
     res.status(500).json({
       status: "error",
-      message: error.message || "Failed to renew subscription",
+      message: "Failed to renew subscription",
       data: null,
     });
   }
@@ -1580,7 +1580,7 @@ export const cancelSubscription = async (req, res) => {
     logger.error({ err: error }, "Stripe Subscription Cancellation Error");
     res.status(500).json({
       status: "error",
-      message: error.message || "Failed to cancel subscription",
+      message: "Failed to cancel subscription",
       data: null,
     });
   }
@@ -1627,7 +1627,7 @@ export const getSubscriptionStatus = async (req, res) => {
     logger.error({ err: error }, "Stripe Subscription Status Error");
     res.status(500).json({
       status: "error",
-      message: error.message || "Failed to retrieve subscription status",
+      message: "Failed to retrieve subscription status",
       data: null,
     });
   }
@@ -1679,7 +1679,7 @@ export const updateSubscription = async (req, res) => {
     logger.error({ err: error }, "Stripe Subscription Update Error");
     res.status(500).json({
       status: "error",
-      message: error.message || "Failed to update subscription",
+      message: "Failed to update subscription",
       data: null,
     });
   }

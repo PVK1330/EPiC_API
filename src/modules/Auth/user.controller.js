@@ -44,7 +44,7 @@ export const profile = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: err.message
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
     });
   }
 };
@@ -130,7 +130,7 @@ export const editProfile = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: err.message
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
     });
   }
 };
@@ -178,7 +178,7 @@ export const changeOwnPassword = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: err.message,
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined,
     });
   }
 };
@@ -243,7 +243,7 @@ export const getAllUsers = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: err.message
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
     });
   }
 };
@@ -294,7 +294,7 @@ export const dropdownSponsors = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: err.message
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
     });
   }
 };

@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 
 import { ROLES } from '../../../middlewares/role.middleware.js';
 import platformDb from '../../../models/index.js';
+import { checkPasswordStrength } from '../../../validations/common.validation.js';
 import { toPublicAssetUrl } from '../../../services/stripeTenant.service.js';
 import { normalizeStorageRelativePath, toPublicImagePath } from '../../../utils/storagePath.util.js';
 import { seedTenantOrganisation } from '../../../services/tenantSeed.service.js';
@@ -171,7 +172,7 @@ export const getMe = async (req, res) => {
 
     logger.error({ err: error }, "getMe settings error");
 
-    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
+    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: process.env.NODE_ENV === 'development' ? error.message : undefined });
 
   }
 
@@ -415,7 +416,7 @@ export const patchMe = async (req, res) => {
 
     logger.error({ err: error }, "patchMe settings error");
 
-    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
+    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: process.env.NODE_ENV === 'development' ? error.message : undefined });
 
   }
 
@@ -572,7 +573,7 @@ export const patchMePreferences = async (req, res) => {
 
     logger.error({ err: error }, "patchMePreferences error");
 
-    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
+    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: process.env.NODE_ENV === 'development' ? error.message : undefined });
 
   }
 
@@ -608,13 +609,15 @@ export const changePassword = async (req, res) => {
 
     }
 
-    if (new_password.length < 8) {
+    const pwErr = checkPasswordStrength(new_password);
+
+    if (pwErr) {
 
       return res.status(400).json({
 
         status: "error",
 
-        message: "New password must be at least 8 characters",
+        message: pwErr,
 
         data: null,
 
@@ -648,7 +651,7 @@ export const changePassword = async (req, res) => {
 
     logger.error({ err: error }, "changePassword error");
 
-    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
+    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: process.env.NODE_ENV === 'development' ? error.message : undefined });
 
   }
 
@@ -680,7 +683,7 @@ export const listVisaTypes = async (req, res) => {
 
     logger.error({ err: error }, "listVisaTypes error");
 
-    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
+    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: process.env.NODE_ENV === 'development' ? error.message : undefined });
 
   }
 
@@ -746,7 +749,7 @@ export const createVisaType = async (req, res) => {
 
     }
 
-    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
+    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: process.env.NODE_ENV === 'development' ? error.message : undefined });
 
   }
 
@@ -828,7 +831,7 @@ export const updateVisaType = async (req, res) => {
 
     logger.error({ err: error }, "updateVisaType error");
 
-    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
+    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: process.env.NODE_ENV === 'development' ? error.message : undefined });
 
   }
 
@@ -866,7 +869,7 @@ export const deleteVisaType = async (req, res) => {
 
     logger.error({ err: error }, "deleteVisaType error");
 
-    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
+    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: process.env.NODE_ENV === 'development' ? error.message : undefined });
 
   }
 
@@ -898,7 +901,7 @@ export const listCaseCategories = async (req, res) => {
 
     logger.error({ err: error }, "listCaseCategories error");
 
-    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
+    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: process.env.NODE_ENV === 'development' ? error.message : undefined });
 
   }
 
@@ -960,7 +963,7 @@ export const createCaseCategory = async (req, res) => {
 
     }
 
-    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
+    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: process.env.NODE_ENV === 'development' ? error.message : undefined });
 
   }
 
@@ -998,7 +1001,7 @@ export const deleteCaseCategory = async (req, res) => {
 
     logger.error({ err: error }, "deleteCaseCategory error");
 
-    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
+    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: process.env.NODE_ENV === 'development' ? error.message : undefined });
 
   }
 
@@ -1042,7 +1045,7 @@ export const listEmailTemplates = async (req, res) => {
 
     logger.error({ err: error }, "listEmailTemplates error");
 
-    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
+    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: process.env.NODE_ENV === 'development' ? error.message : undefined });
 
   }
 
@@ -1082,7 +1085,7 @@ export const getEmailTemplateByKey = async (req, res) => {
 
     logger.error({ err: error }, "getEmailTemplateByKey error");
 
-    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
+    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: process.env.NODE_ENV === 'development' ? error.message : undefined });
 
   }
 
@@ -1136,7 +1139,7 @@ export const updateEmailTemplate = async (req, res) => {
 
   } catch (error) {
     logger.error({ err: error }, "updateEmailTemplate error");
-    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
+    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 
@@ -1321,7 +1324,7 @@ export const uploadOrganisationLogo = async (req, res) => {
     });
   } catch (error) {
     logger.error({ err: error }, "uploadOrganisationLogo error");
-    res.status(500).json({ status: "error", message: error.message || "Internal server error" });
+    res.status(500).json({ status: "error", message: "Internal server error" });
   }
 };
 
@@ -1362,7 +1365,7 @@ export const uploadOrganisationFavicon = async (req, res) => {
     });
   } catch (error) {
     logger.error({ err: error }, "uploadOrganisationFavicon error");
-    res.status(500).json({ status: "error", message: error.message || "Internal server error" });
+    res.status(500).json({ status: "error", message: "Internal server error" });
   }
 };
 
@@ -1434,7 +1437,7 @@ export const listSlaRules = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      ...(process.env.NODE_ENV === "development" ? { error: error.message, stack: error.stack } : {}),
+      ...(process.env.NODE_ENV === "development" ? { error: process.env.NODE_ENV === 'development' ? error.message : undefined, stack: error.stack } : {}),
     });
   }
 };
@@ -1462,7 +1465,7 @@ export const createSlaRule = async (req, res) => {
     res.status(500).json({
       status: "error",
       message: "Internal server error",
-      ...(process.env.NODE_ENV === "development" ? { error: error.message, stack: error.stack } : {}),
+      ...(process.env.NODE_ENV === "development" ? { error: process.env.NODE_ENV === 'development' ? error.message : undefined, stack: error.stack } : {}),
     });
   }
 };
@@ -1491,7 +1494,7 @@ export const updateSlaRule = async (req, res) => {
     res.status(500).json({
       status: "error",
       message: "Internal server error",
-      ...(process.env.NODE_ENV === "development" ? { error: error.message, stack: error.stack } : {}),
+      ...(process.env.NODE_ENV === "development" ? { error: process.env.NODE_ENV === 'development' ? error.message : undefined, stack: error.stack } : {}),
     });
   }
 };
@@ -1510,7 +1513,7 @@ export const deleteSlaRule = async (req, res) => {
     res.status(500).json({
       status: "error",
       message: "Internal server error",
-      ...(process.env.NODE_ENV === "development" ? { error: error.message, stack: error.stack } : {}),
+      ...(process.env.NODE_ENV === "development" ? { error: process.env.NODE_ENV === 'development' ? error.message : undefined, stack: error.stack } : {}),
     });
   }
 };

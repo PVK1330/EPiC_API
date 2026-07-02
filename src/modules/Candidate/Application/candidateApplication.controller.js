@@ -1,5 +1,6 @@
 import logger from '../../../utils/logger.js';
 import { excludeSensitiveUserAttrs } from '../../../utils/userAttributes.js';
+import { MAX_BULK_IMPORT_ROWS } from '../../../middlewares/upload.middleware.js';
 import path from 'path';
 import bcrypt from 'bcryptjs';
 import { Op } from 'sequelize';
@@ -310,7 +311,7 @@ export const getCandidateApplicationFieldSettings = async (req, res) => {
       status: 'error',
       message: 'Internal server error',
       data: null,
-      error: err.message,
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined,
     });
   }
 };
@@ -338,7 +339,7 @@ export const getCandidateApplicationCustomFields = async (req, res) => {
       status: 'error',
       message: 'Internal server error',
       data: null,
-      error: err.message,
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined,
     });
   }
 };
@@ -449,7 +450,7 @@ export const getMyApplication = async (req, res) => {
       status: 'error',
       message: 'Internal server error',
       data: null,
-      error: err.message,
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined,
     });
   }
 };
@@ -665,7 +666,7 @@ export const submitApplication = async (req, res) => {
       status: 'error',
       message: 'Internal server error',
       data: null,
-      error: err.message,
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined,
     });
   }
 };
@@ -724,7 +725,7 @@ export const saveDraft = async (req, res) => {
       status: 'error',
       message: 'Internal server error',
       data: null,
-      error: err.message,
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined,
     });
   }
 };
@@ -751,7 +752,7 @@ export const unlockApplication = async (req, res) => {
       status: 'error',
       message: 'Internal server error',
       data: null,
-      error: err.message,
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined,
     });
   }
 };
@@ -903,7 +904,7 @@ export const adminUpdateCandidateApplication = async (req, res) => {
       status: 'error',
       message: 'Internal server error',
       data: null,
-      error: err.message,
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined,
     });
   }
 };
@@ -1051,7 +1052,7 @@ export const exportCandidateApplicationsExcel = async (req, res) => {
       status: 'error',
       message: 'Internal server error',
       data: null,
-      error: err.message,
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined,
     });
   }
 };
@@ -1098,6 +1099,15 @@ export const importCandidateApplicationsExcel = async (req, res) => {
       return res.status(400).json({
         status: 'error',
         message: 'Spreadsheet has no headers',
+        data: null,
+      });
+    }
+
+    // upload-security-2: cap parsed rows to prevent amplification into mass inserts.
+    if (Array.isArray(dataRows) && dataRows.length > MAX_BULK_IMPORT_ROWS) {
+      return res.status(400).json({
+        status: 'error',
+        message: `Too many rows. Import is limited to ${MAX_BULK_IMPORT_ROWS} rows per file.`,
         data: null,
       });
     }
@@ -1260,7 +1270,7 @@ export const importCandidateApplicationsExcel = async (req, res) => {
           });
         });
       } catch (err) {
-        results.errors.push({ row: rowNum, error: err.message });
+        results.errors.push({ row: rowNum, error: process.env.NODE_ENV === 'development' ? err.message : undefined });
       }
       rowNum += 1;
     }
@@ -1281,7 +1291,7 @@ export const importCandidateApplicationsExcel = async (req, res) => {
       status: 'error',
       message: 'Internal server error',
       data: null,
-      error: err.message,
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined,
     });
   }
 };

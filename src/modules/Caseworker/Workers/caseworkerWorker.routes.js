@@ -10,8 +10,13 @@ import {
   getAuditTrailHandler,
 } from "./caseworkerWorker.controller.js";
 import { ensureAssignedWorkerCaseworker } from "../../../middlewares/ensureAssignedWorkerCaseworker.middleware.js";
+import { verifyTokenAndTenant } from "../../../middlewares/authStack.middleware.js";
+import { checkRole, STAFF_ROLES } from "../../../middlewares/role.middleware.js";
 
 const router = Router();
+
+router.use(verifyTokenAndTenant);
+router.use(checkRole(STAFF_ROLES));
 
 router.get("/",                            getMyWorkers);
 router.post("/",                           createWorkerHandler);

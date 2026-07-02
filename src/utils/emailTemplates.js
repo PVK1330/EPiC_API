@@ -33,11 +33,11 @@ function metadataBlockHtml(metadata) {
     .map(
       ([key, val]) => `
     <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f1f5f9;">
-      <span style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase;">${String(
-        key,
-      )
-        .replace(/([A-Z])/g, " $1")
-        .trim()}</span>
+      <span style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase;">${escapeHtml(
+        String(key)
+          .replace(/([A-Z])/g, " $1")
+          .trim(),
+      )}</span>
       <span style="font-size: 13px; font-weight: 600; color: #0f172a; text-align: right;">${escapeHtml(Array.isArray(val) ? val.join(", ") : val)}</span>
     </div>
   `,
@@ -146,7 +146,7 @@ export function generateOrganisationWelcomeTemplate({
     pageTitle: `${organisationName} — Workspace Ready`,
     badge: organisationName,
     title: `Welcome, ${adminName}`,
-    messageHtml: `Your organisation workspace on EPiC is ready. Sign in to set up <strong>${organisationName}</strong> and invite your team.${alt}`,
+    messageHtml: `Your organisation workspace on EPiC is ready. Sign in to set up <strong>${escapeHtml(organisationName)}</strong> and invite your team.${alt}`,
     bodyHtml: credentialsBlockHtml({
       email,
       password,
@@ -328,12 +328,16 @@ export function generateAppointmentTemplate({
   staffName,
   isStaffRecipient = false,
 }) {
+  // injection-xss-3: candidate/staff names are user-controlled — escape before
+  // embedding in the email HTML body.
+  const safeCandidateName = escapeHtml(candidateName);
+  const safeStaffName = escapeHtml(staffName);
   const greeting = isStaffRecipient
-    ? `Hi ${staffName},`
-    : `Hi ${candidateName},`;
+    ? `Hi ${safeStaffName},`
+    : `Hi ${safeCandidateName},`;
   const message = isStaffRecipient
-    ? `A new meeting has been scheduled with candidate <strong>${candidateName}</strong>.`
-    : `Your meeting with <strong>${staffName}</strong> has been successfully scheduled.`;
+    ? `A new meeting has been scheduled with candidate <strong>${safeCandidateName}</strong>.`
+    : `Your meeting with <strong>${safeStaffName}</strong> has been successfully scheduled.`;
 
   const platformLabel =
     {
@@ -370,8 +374,8 @@ export function generateSubscriptionExpiryTemplate({
     daysRemaining <= 0 ? "Subscription Expired" : "Subscription Expiring Soon";
   const message =
     daysRemaining <= 0
-      ? `Your ${type} subscription for <strong>${organisationName}</strong> has expired. Access to premium features is currently restricted.`
-      : `Your ${type} subscription for <strong>${organisationName}</strong> will expire in <strong>${daysRemaining} day(s)</strong>.`;
+      ? `Your ${type} subscription for <strong>${escapeHtml(organisationName)}</strong> has expired. Access to premium features is currently restricted.`
+      : `Your ${type} subscription for <strong>${escapeHtml(organisationName)}</strong> will expire in <strong>${daysRemaining} day(s)</strong>.`;
 
   return wrapEpicEmail({
     branding,
@@ -452,8 +456,9 @@ export function generateLicenceGrantedTemplate({
 
   // Licence details block — mirrors the credentialsBlockHtml style
   const rows = [
-    { label: "Licence Number", value: `<span style="font-family:'SFMono-Regular',Consolas,'Liberation Mono',monospace;font-size:16px;font-weight:800;color:${C.success};letter-spacing:1px;">${licenceNumber}</span>` },
-    { label: "Company",        value: companyName },
+    // injection-xss-6: licenceNumber + companyName are user/registration data.
+    { label: "Licence Number", value: `<span style="font-family:'SFMono-Regular',Consolas,'Liberation Mono',monospace;font-size:16px;font-weight:800;color:${C.success};letter-spacing:1px;">${escapeHtml(licenceNumber)}</span>` },
+    { label: "Company",        value: escapeHtml(companyName) },
     ...(issuedStr  ? [{ label: "Date Issued",    value: issuedStr  }] : []),
     ...(expiryStr  ? [{ label: "Expiry Date",     value: expiryStr  }] : []),
     ...(cosAllocation != null ? [{ label: "CoS Allocation", value: String(cosAllocation) }] : []),
@@ -476,7 +481,7 @@ export function generateLicenceGrantedTemplate({
     badge: isRenewal ? "Licence Renewed" : "Licence Granted",
     badgeColor: "#00703C",
     title: isRenewal ? "Your Sponsor Licence Has Been Renewed" : "Your Sponsor Licence Has Been Granted",
-    messageHtml: `Hi ${recipientName},<br/><br/>Congratulations — your ${isRenewal ? "sponsor licence has been renewed" : "sponsor licence application for <strong>" + companyName + "</strong> has been approved"} by UKVI.`,
+    messageHtml: `Hi ${escapeHtml(recipientName)},<br/><br/>Congratulations — your ${isRenewal ? "sponsor licence has been renewed" : "sponsor licence application for <strong>" + escapeHtml(companyName) + "</strong> has been approved"} by UKVI.`,
     bodyHtml: detailsBlock + successBox,
     ctaUrl: actionUrl,
     ctaLabel: actionUrl ? (isRenewal ? "View renewed licence →" : "View in your portal →") : "",
@@ -503,7 +508,7 @@ export function generateUKVIPortalCredentialsTemplate({
     pageTitle: "EPiC — UKVI Portal Credentials",
     badge: "Government Portal",
     title: "Your UKVI Portal Credentials",
-    messageHtml: `Hi ${recipientName},<br/><br/>Your UKVI Sponsorship Management System (SMS) portal login credentials for <strong>${companyName}</strong> are ready. Use these to access the UKVI online portal and complete your sponsor licence application.`,
+    messageHtml: `Hi ${escapeHtml(recipientName)},<br/><br/>Your UKVI Sponsorship Management System (SMS) portal login credentials for <strong>${escapeHtml(companyName)}</strong> are ready. Use these to access the UKVI online portal and complete your sponsor licence application.`,
     bodyHtml: credBlock,
     ctaUrl: actionUrl || null,
     ctaLabel: actionUrl ? "Go to Licence Portal" : "",
@@ -535,7 +540,7 @@ export function generateDocumentDispatchTemplate({
     pageTitle: `EPiC — ${typeLabel} from your caseworker`,
     badge: "Document Received",
     title: `A document has been sent to you`,
-    messageHtml: `Hi ${recipientName},<br/><br/>Your caseworker <strong>${senderName}</strong> has sent you a <strong>${typeLabel}</strong> for <strong>${companyName}</strong>.<br/><br/>Document: <strong>${documentName}</strong>${message ? `<br/><br/>Message from ${senderName}: <em>${message}</em>` : ""}`,
+    messageHtml: `Hi ${escapeHtml(recipientName)},<br/><br/>Your caseworker <strong>${escapeHtml(senderName)}</strong> has sent you a <strong>${typeLabel}</strong> for <strong>${escapeHtml(companyName)}</strong>.<br/><br/>Document: <strong>${escapeHtml(documentName)}</strong>${message ? `<br/><br/>Message from ${escapeHtml(senderName)}: <em>${escapeHtml(message)}</em>` : ""}`,
     bodyHtml: infoBlockHtml(
       `The document is attached to this email. You can also view and download all documents sent to you from your EPiC sponsor portal.`,
     ),
@@ -614,9 +619,9 @@ export function generateMonthlyComplianceReportTemplate({
         .map(
           (w) =>
             `<tr>
-              <td style="padding:8px 12px; font-size:13px; color:#0B0C0C; border-bottom:1px solid #EEF1F5;">${w.candidateName || "—"}</td>
-              <td style="padding:8px 12px; font-size:13px; color:#0B0C0C; border-bottom:1px solid #EEF1F5;">${w.visaType || "—"}</td>
-              <td style="padding:8px 12px; font-size:13px; color:#0B0C0C; border-bottom:1px solid #EEF1F5;">${w.visaEndDate || "—"}</td>
+              <td style="padding:8px 12px; font-size:13px; color:#0B0C0C; border-bottom:1px solid #EEF1F5;">${escapeHtml(w.candidateName || "—")}</td>
+              <td style="padding:8px 12px; font-size:13px; color:#0B0C0C; border-bottom:1px solid #EEF1F5;">${escapeHtml(w.visaType || "—")}</td>
+              <td style="padding:8px 12px; font-size:13px; color:#0B0C0C; border-bottom:1px solid #EEF1F5;">${escapeHtml(w.visaEndDate || "—")}</td>
               <td style="padding:8px 12px; font-size:13px; font-weight:700; color:${w.urgency === "high" ? "#D4351C" : "#B04A00"}; border-bottom:1px solid #EEF1F5;">${w.daysRemaining != null ? `${w.daysRemaining}d` : "—"}</td>
              </tr>`,
         )
@@ -663,9 +668,9 @@ export function generateMonthlyComplianceReportTemplate({
         .map(
           (d) =>
             `<tr>
-              <td style="padding:8px 12px; font-size:13px; color:#0B0C0C; border-bottom:1px solid #EEF1F5;">${d.documentType || "—"}</td>
-              <td style="padding:8px 12px; font-size:13px; font-weight:700; color:#D4351C; border-bottom:1px solid #EEF1F5; text-transform:capitalize;">${d.status || "—"}</td>
-              <td style="padding:8px 12px; font-size:13px; color:#6B7785; border-bottom:1px solid #EEF1F5;">${d.expiryDate || "—"}</td>
+              <td style="padding:8px 12px; font-size:13px; color:#0B0C0C; border-bottom:1px solid #EEF1F5;">${escapeHtml(d.documentType || "—")}</td>
+              <td style="padding:8px 12px; font-size:13px; font-weight:700; color:#D4351C; border-bottom:1px solid #EEF1F5; text-transform:capitalize;">${escapeHtml(d.status || "—")}</td>
+              <td style="padding:8px 12px; font-size:13px; color:#6B7785; border-bottom:1px solid #EEF1F5;">${escapeHtml(d.expiryDate || "—")}</td>
              </tr>`,
         )
         .join("")
@@ -727,7 +732,7 @@ export function generateMonthlyComplianceReportTemplate({
     badge: "Monthly Compliance Report",
     badgeColor: "#0B2E5E",
     title: `Compliance Review — ${reportMonth}`,
-    messageHtml: `Hi ${recipientName}, here is your monthly compliance review for <strong>${orgName}</strong>.`,
+    messageHtml: `Hi ${escapeHtml(recipientName)}, here is your monthly compliance review for <strong>${escapeHtml(orgName)}</strong>.`,
     bodyHtml: summaryHtml + expiryHtml + historyHtml + missingHtml + riskHtml,
     ctaLabel: "View Full Report in Portal",
     securityHtml: `This automated monthly compliance report was generated on ${new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })} for <strong>${name}</strong>. Please log in to your portal to take any required action.`,

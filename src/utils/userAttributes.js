@@ -27,6 +27,13 @@ export const SENSITIVE_USER_FIELDS = Object.freeze([
   'temp_password',
   'two_factor_secret',
   'two_factor_backup_codes',
+  // Lockout state — internal brute-force counters. No client/UI consumes these
+  // (verified: no frontend reference), and returning them to admins/caseworkers
+  // via GET /api/user/all leaked every account's lockout posture (data-leakage-2
+  // / data-leakage-8). `two_factor_enabled` (a boolean) stays exposed — the UI
+  // needs it — only the secret material and lockout counters are stripped.
+  'failed_login_attempts',
+  'locked_until',
 ]);
 
 /**

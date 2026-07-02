@@ -164,7 +164,7 @@ export const createEscalation = async (req, res) => {
     res.status(500).json({
       status: "error",
       message: "Failed to create escalation",
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -214,7 +214,7 @@ export const getAllEscalations = async (req, res) => {
     res.status(500).json({
       status: "error",
       message: "Failed to fetch escalations",
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -258,7 +258,7 @@ export const getEscalationById = async (req, res) => {
     res.status(500).json({
       status: "error",
       message: "Failed to fetch escalation",
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -365,7 +365,7 @@ export const updateEscalation = async (req, res) => {
     res.status(500).json({
       status: "error",
       message: "Failed to update escalation",
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -394,7 +394,7 @@ export const deleteEscalation = async (req, res) => {
     res.status(500).json({
       status: "error",
       message: "Failed to delete escalation",
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -437,7 +437,7 @@ export const getEscalationKPI = async (req, res) => {
     res.status(500).json({
       status: "error",
       message: "Failed to fetch KPI",
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -509,7 +509,7 @@ export const exportEscalationsExcel = async (req, res) => {
     res.status(500).json({
       status: "error",
       message: "Failed to export escalations",
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -575,7 +575,7 @@ export const assignEscalation = async (req, res) => {
     res.status(500).json({
       status: "error",
       message: "Failed to assign escalation",
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };

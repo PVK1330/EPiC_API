@@ -43,7 +43,7 @@ export const createPlatformAnnouncement = async (req, res) => {
     logger.error({ err }, 'createPlatformAnnouncement error');
     return res.status(500).json({
       status: 'error',
-      message: err.message || 'Failed to send announcement',
+      message: 'Failed to send announcement',
       data: null,
     });
   }

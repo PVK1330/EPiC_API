@@ -8,11 +8,16 @@ import {
   generateSponsorWelcomeTemplate,
 } from "../utils/emailTemplates.js";
 import { getOrganisationEmailBranding } from "../utils/emailBranding.js";
-import { wrapEpicEmail, credentialsBlockHtml, otpBlockHtml } from "../utils/epicEmailLayout.js";
+import { wrapEpicEmail, credentialsBlockHtml, otpBlockHtml, esc as escapeHtml } from "../utils/epicEmailLayout.js";
 
-function interpolate(template, vars) {
+// injection-xss-9/11: escape {{var}} values when the interpolation result is HTML
+// (email body). Subjects are plain text, so escapeValues stays false there.
+function interpolate(template, vars, escapeValues = false) {
   if (!template) return "";
-  return String(template).replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] ?? "");
+  return String(template).replace(/\{\{(\w+)\}\}/g, (_, key) => {
+    const value = vars[key] ?? "";
+    return escapeValues ? escapeHtml(value) : value;
+  });
 }
 
 /**
@@ -29,7 +34,7 @@ async function buildFromDbTemplate(tenantDb, templateKey, vars, styledBlock) {
   if (!row?.body) return null;
 
   const subject = interpolate(row.subject, vars);
-  const messageHtml = interpolate(row.body, vars).replace(/\n/g, "<br>");
+  const messageHtml = interpolate(row.body, vars, true).replace(/\n/g, "<br>");
   const html = wrapEpicEmail({
     branding: vars._branding,
     pageTitle: subject,

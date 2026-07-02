@@ -42,7 +42,7 @@ export const createRole = async (req, res) => {
       status: 'error',
       message: 'Failed to create role',
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -90,7 +90,7 @@ export const getAllRoles = async (req, res) => {
       status: 'error',
       message: 'Failed to fetch roles',
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -123,7 +123,7 @@ export const getRoleById = async (req, res) => {
       status: 'error',
       message: 'Failed to fetch role',
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -169,7 +169,7 @@ export const getRoleWithPermissions = async (req, res) => {
       status: 'error',
       message: 'Failed to fetch role with permissions',
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -219,7 +219,7 @@ export const updateRole = async (req, res) => {
       status: 'error',
       message: 'Failed to update role',
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -272,7 +272,7 @@ export const deleteRole = async (req, res) => {
       status: 'error',
       message: 'Failed to delete role',
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -332,7 +332,7 @@ export const assignPermissionsToRole = async (req, res) => {
       status: 'error',
       message: 'Failed to assign permissions to role',
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -373,7 +373,7 @@ export const getRolePermissions = async (req, res) => {
       status: 'error',
       message: 'Failed to fetch role permissions',
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -418,7 +418,7 @@ export const removePermissionFromRole = async (req, res) => {
       status: 'error',
       message: 'Failed to remove permission from role',
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -483,7 +483,7 @@ export const cloneRolePermissions = async (req, res) => {
       status: 'error',
       message: 'Failed to clone role permissions',
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -542,7 +542,7 @@ export const updateUserRole = async (req, res) => {
       status: 'error',
       message: 'Failed to update user role',
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };

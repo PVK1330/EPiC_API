@@ -217,7 +217,7 @@ export const getCaseAnalytics = async (req, res) => {
     });
   } catch (error) {
     logger.error({ err: error }, 'getCaseAnalytics Error');
-    res.status(500).json({ status: 'error', message: error.message, data: null });
+    res.status(500).json({ status: 'error', message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? error.message : undefined, data: null });
   }
 };
 
@@ -309,7 +309,7 @@ export const getWorkloadReport = async (req, res) => {
     });
   } catch (error) {
     logger.error({ err: error }, 'getWorkloadReport Error');
-    res.status(500).json({ status: 'error', message: error.message, data: null });
+    res.status(500).json({ status: 'error', message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? error.message : undefined, data: null });
   }
 };
 
@@ -453,7 +453,7 @@ export const getFinancialReport = async (req, res) => {
     });
   } catch (error) {
     logger.error({ err: error }, 'getFinancialReport Error');
-    res.status(500).json({ status: 'error', message: error.message, data: null });
+    res.status(500).json({ status: 'error', message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? error.message : undefined, data: null });
   }
 };
 
@@ -512,7 +512,7 @@ export const getFinancialTransactions = async (req, res) => {
     });
   } catch (error) {
     logger.error({ err: error }, 'getFinancialTransactions Error');
-    res.status(500).json({ status: 'error', message: error.message });
+    res.status(500).json({ status: 'error', message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 
@@ -680,7 +680,7 @@ export const getPerformanceReport = async (req, res) => {
     });
   } catch (error) {
     logger.error({ err: error }, 'getPerformanceReport Error');
-    res.status(500).json({ status: 'error', message: error.message, data: null });
+    res.status(500).json({ status: 'error', message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? error.message : undefined, data: null });
   }
 };
 
@@ -1019,7 +1019,7 @@ export const exportReportingExcel = async (req, res) => {
     logger.error({ err: error }, 'exportReportingExcel Error');
     res.status(500).json({
       status: 'error',
-      message: error.message || 'Export failed',
+      message: 'Export failed',
       data: null,
     });
   }
@@ -1110,6 +1110,6 @@ export const getReportingSummary = async (req, res) => {
     });
   } catch (error) {
     logger.error({ err: error }, 'getReportingSummary Error');
-    res.status(500).json({ status: 'error', message: error.message, data: null });
+    res.status(500).json({ status: 'error', message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? error.message : undefined, data: null });
   }
 };
