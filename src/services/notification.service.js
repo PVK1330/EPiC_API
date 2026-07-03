@@ -5,6 +5,7 @@ import { getOrganisationEmailBranding } from '../utils/emailBranding.js';
 import { ROLES } from '../middlewares/role.middleware.js';
 import { getIO } from '../realtime/ioRegistry.js';
 import { userRoom } from '../realtime/messagingRealtime.js';
+import { sendPushToUser } from './webPush.service.js';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
@@ -116,6 +117,20 @@ export async function notifyUser(tenantDb, userId, payload = {}) {
         where: { userId, isRead: false },
       });
       io.to(userRoom(userId)).emit('notification:count', { count: unread });
+    }
+
+    // Web Push (desktop notifications) — reaches the user even when no
+    // ElitePic tab is open. Fire-and-forget like email; the service worker
+    // suppresses the OS toast while an ElitePic window is focused, so this
+    // never doubles up with the in-page chime. Honors the same in-app
+    // preference gate as the socket channel.
+    if (sendSocket) {
+      void sendPushToUser(tenantDb, userId, {
+        title,
+        message,
+        url: actionUrl || null,
+        tag: `notification-${notification.id}`,
+      }).catch((err) => logger.warn({ err }, 'web push dispatch failed'));
     }
 
     if (sendEmail) {
