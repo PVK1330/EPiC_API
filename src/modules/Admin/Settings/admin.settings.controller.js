@@ -9,6 +9,7 @@ import { normalizeStorageRelativePath, toPublicImagePath } from '../../../utils/
 import { seedTenantOrganisation } from '../../../services/tenantSeed.service.js';
 import { clearEmailBrandingCache } from '../../../utils/emailBranding.js';
 import logger from '../../../utils/logger.js';
+import { sanitizePlainText } from '../../../utils/sanitizeText.js';
 
 
 
@@ -694,7 +695,7 @@ export const createVisaType = async (req, res) => {
 
     if (!(await requireAdmin(req, res))) return;
 
-    const name = String(req.body?.name || "").trim();
+    const name = sanitizePlainText(String(req.body?.name || ""), { maxLength: 100 }).trim();
 
     if (!name) {
 
@@ -768,7 +769,7 @@ export const updateVisaType = async (req, res) => {
 
     }
 
-    const name = String(req.body?.name || "").trim();
+    const name = sanitizePlainText(String(req.body?.name || ""), { maxLength: 100 }).trim();
 
     if (!name) {
 
@@ -912,7 +913,7 @@ export const createCaseCategory = async (req, res) => {
 
     if (!(await requireAdmin(req, res))) return;
 
-    const name = String(req.body?.name || "").trim();
+    const name = sanitizePlainText(String(req.body?.name || ""), { maxLength: 100 }).trim();
 
     if (!name) {
 
@@ -1185,6 +1186,29 @@ export const deleteEmailTemplate = async (req, res) => {
   }
 };
 
+// SECURITY (BUG-001): payment-gateway secret keys are write-only. They must
+// never be sent back to any client. maskPaymentSetting strips the raw secret
+// values and replaces each with a boolean `<field>_configured` so the UI can
+// still show whether a key is set without exposing it.
+const PAYMENT_SECRET_FIELDS = [
+  "stripe_secret_key",
+  "stripe_webhook_secret",
+  "paypal_secret",
+  "razorpay_key_secret",
+];
+function maskPaymentSetting(setting) {
+  const plain = setting?.toJSON ? setting.toJSON() : { ...(setting || {}) };
+  for (const k of PAYMENT_SECRET_FIELDS) {
+    plain[`${k}_configured`] = !!plain[k];
+    delete plain[k];
+  }
+  return plain;
+}
+// On update, a blank/omitted secret means "keep the stored value" so the masked
+// GET response can round-trip through the form without wiping the real key.
+const keepSecret = (incoming, existing) =>
+  typeof incoming === "string" && incoming.trim() !== "" ? incoming : existing;
+
 export const getPaymentSetting = async (req, res) => {
   try {
     if (!(await requireAdmin(req, res))) return;
@@ -1192,7 +1216,7 @@ export const getPaymentSetting = async (req, res) => {
     if (!setting) {
       setting = await req.tenantDb.PaymentSetting.create({});
     }
-    res.status(200).json({ status: "success", data: { setting } });
+    res.status(200).json({ status: "success", data: { setting: maskPaymentSetting(setting) } });
   } catch (error) {
     logger.error({ err: error }, "getPaymentSetting error");
     res.status(500).json({ status: "error", message: "Internal server error" });
@@ -1399,17 +1423,16 @@ export const updatePaymentSetting = async (req, res) => {
       bank_details: bank_details !== undefined ? bank_details : setting.bank_details,
       invoice_prefix: invoice_prefix !== undefined ? invoice_prefix : setting.invoice_prefix,
       stripe_public_key: stripe_public_key !== undefined ? stripe_public_key : setting.stripe_public_key,
-      stripe_secret_key: stripe_secret_key !== undefined ? stripe_secret_key : setting.stripe_secret_key,
-      stripe_webhook_secret:
-        stripe_webhook_secret !== undefined ? stripe_webhook_secret : setting.stripe_webhook_secret,
+      stripe_secret_key: keepSecret(stripe_secret_key, setting.stripe_secret_key),
+      stripe_webhook_secret: keepSecret(stripe_webhook_secret, setting.stripe_webhook_secret),
       paypal_client_id: paypal_client_id !== undefined ? paypal_client_id : setting.paypal_client_id,
-      paypal_secret: paypal_secret !== undefined ? paypal_secret : setting.paypal_secret,
+      paypal_secret: keepSecret(paypal_secret, setting.paypal_secret),
       razorpay_key_id: razorpay_key_id !== undefined ? razorpay_key_id : setting.razorpay_key_id,
-      razorpay_key_secret: razorpay_key_secret !== undefined ? razorpay_key_secret : setting.razorpay_key_secret,
+      razorpay_key_secret: keepSecret(razorpay_key_secret, setting.razorpay_key_secret),
       active_gateway: active_gateway !== undefined ? active_gateway : setting.active_gateway,
     });
 
-    res.status(200).json({ status: "success", message: "Payment settings updated", data: { setting } });
+    res.status(200).json({ status: "success", message: "Payment settings updated", data: { setting: maskPaymentSetting(setting) } });
   } catch (error) {
     logger.error({ err: error }, "updatePaymentSetting error");
     res.status(500).json({ status: "error", message: "Internal server error" });

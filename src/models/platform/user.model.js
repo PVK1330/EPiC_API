@@ -154,5 +154,33 @@ export default (sequelize, DataTypes) => {
         }
     );
 
+    // ── Safe-by-default serialisation (defence against sensitive-data exposure) ──
+    // Credential / auth-secret columns must never be serialised into an API
+    // response. Overriding toJSON() strips them from every `res.json(user)`,
+    // `JSON.stringify(user)`, and `{ ...user.toJSON() }` regardless of which query
+    // fetched the row — so a forgotten `attributes` exclusion can no longer leak a
+    // password hash or 2FA secret. Internal logic that genuinely needs these
+    // values reads the attribute directly (user.password) or uses
+    // user.get({ plain: true }) — neither of which goes through toJSON — so login,
+    // password checks, and the platform↔tenant sync are unaffected.
+    User.SENSITIVE_ATTRIBUTES = Object.freeze([
+        'password',
+        'otp_code',
+        'otp_expiry',
+        'password_reset_otp',
+        'password_reset_otp_expiry',
+        'temp_password',
+        'two_factor_secret',
+        'two_factor_backup_codes',
+    ]);
+
+    User.prototype.toJSON = function toJSON() {
+        const values = { ...this.get() };
+        for (const field of User.SENSITIVE_ATTRIBUTES) {
+            delete values[field];
+        }
+        return values;
+    };
+
     return User;
 };

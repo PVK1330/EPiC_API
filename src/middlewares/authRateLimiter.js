@@ -164,18 +164,23 @@ const rateLimitHandler = (req, res) => {
  * bypass rate limiting in non-production environments.
  */
 const skipIfInternal = (req) => {
-  // Always skip in development — no rate limiting needed locally.
-  if (process.env.NODE_ENV === 'development') return true;
-  // In production, never skip unless the internal bypass header matches.
-  if (process.env.NODE_ENV === 'production') {
-    const bypassSecret = process.env.RATELIMIT_BYPASS_SECRET;
-    if (!bypassSecret) return false;
-    return req.headers['x-internal-ratelimit-bypass'] === bypassSecret;
-  }
-  // test / staging: allow bypass via header only when secret is configured.
+  // AUTH-16 fix: rate limiting is now ON by DEFAULT in every environment,
+  // including development. Previously it was unconditionally disabled whenever
+  // NODE_ENV=development, which left any non-production/UAT box running in dev
+  // mode with zero brute-force / OTP-guessing protection.
+  //
+  // Two explicit, opt-in ways to skip remain:
+  //   1. DISABLE_RATE_LIMIT=true  — a deliberate local-only convenience switch
+  //      a developer sets in their own .env. Never set this on a shared/UAT box.
+  //   2. The internal-service bypass header, valid only when a shared secret is
+  //      configured (integration tests, trusted internal callers).
+  if (process.env.DISABLE_RATE_LIMIT === 'true') return true;
+
   const bypassSecret = process.env.RATELIMIT_BYPASS_SECRET;
-  if (!bypassSecret) return false;
-  return req.headers['x-internal-ratelimit-bypass'] === bypassSecret;
+  if (bypassSecret && req.headers['x-internal-ratelimit-bypass'] === bypassSecret) {
+    return true;
+  }
+  return false;
 };
 
 // ────────────────────────────────────────────────────────────────────────────

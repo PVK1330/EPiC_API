@@ -8,8 +8,12 @@ import {
   assignWorkerCos,
 } from "./sponsorWorker.controller.js";
 import { requireActiveSponsorLicence } from "../../../middlewares/requireActiveSponsorLicence.middleware.js";
+import { numericParam } from "../../../middlewares/validateParam.middleware.js";
 
 const router = Router();
+
+// SPN-20: reject non-numeric :id with 400 before any DB query.
+router.param("id", numericParam("worker id"));
 
 // Reads are always allowed — sponsors can view their workers regardless of licence status.
 router.get("/",           listMyWorkers);

@@ -18,6 +18,30 @@ const REQUIRED_VARS = [
     label: "JWT_SECRET",
     hint: "Generate a strong random secret (e.g. `node -e \"console.log(require('crypto').randomBytes(64).toString('hex'))\"`)",
     minLength: 32,
+    // SECURITY: a long-but-PUBLIC value (e.g. the jwt.io example token) passes a
+    // pure length check yet lets anyone forge valid tokens. Reject known example
+    // / weak secrets and require enough distinct characters that the value cannot
+    // be a trivial placeholder.
+    validate: (value) => {
+      const v = value.trim();
+      const KNOWN_WEAK = [
+        // The public jwt.io example token — do NOT use as an HMAC key.
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWUsImlhdCI6MTUxNjIzOTAyMn0.KMUFsIDTnFmyG3nMiGM6H9FNFUROf3wh7SmqJp-QV30",
+        "your-256-bit-secret",
+        "secret",
+        "changeme",
+        "supersecret",
+        "jwt_secret",
+      ];
+      const lower = v.toLowerCase();
+      if (KNOWN_WEAK.some((w) => lower === w.toLowerCase() || lower.includes(w.toLowerCase()))) {
+        return "is a known/public example secret — anyone can forge tokens with it. Generate a fresh random value";
+      }
+      if (new Set(v).size < 12) {
+        return "has too little entropy (needs at least 12 distinct characters). Generate a fresh random value";
+      }
+      return null;
+    },
   },
   {
     key: "SETTINGS_ENCRYPTION_KEY",

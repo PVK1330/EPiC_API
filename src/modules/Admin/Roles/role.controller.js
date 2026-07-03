@@ -1,5 +1,7 @@
 import { Op } from 'sequelize';
-
+import logger from '../../../utils/logger.js';
+import platformDb from '../../../models/index.js';
+import { invalidatePermCache } from '../../../services/orgCache.service.js';
 
 /**
  * Create a new role
@@ -41,7 +43,6 @@ export const createRole = async (req, res) => {
       status: 'error',
       message: 'Failed to create role',
       data: null,
-      error: error.message,
     });
   }
 };
@@ -493,14 +494,14 @@ export const cloneRolePermissions = async (req, res) => {
 export const updateUserRole = async (req, res) => {
   try {
     const { userId } = req.params;
-    const { roleId } = req.body;
+    const roleId = Number(req.body?.roleId);
 
-    if (!roleId) {
-      return res.status(400).json({
-        status: 'error',
-        message: 'roleId is required',
-        data: null,
-      });
+    // Validate inputs are positive integers to avoid Postgres cast errors (500 -> 400).
+    if (!Number.isInteger(Number(userId)) || Number(userId) <= 0) {
+      return res.status(400).json({ status: 'error', message: 'A valid userId is required', data: null });
+    }
+    if (!Number.isInteger(roleId) || roleId <= 0) {
+      return res.status(400).json({ status: 'error', message: 'A valid roleId is required', data: null });
     }
 
     const user = await req.tenantDb.User.findByPk(userId, {
@@ -508,32 +509,74 @@ export const updateUserRole = async (req, res) => {
     });
 
     if (!user) {
-      return res.status(404).json({
-        status: 'error',
-        message: 'User not found',
-        data: null,
-      });
+      return res.status(404).json({ status: 'error', message: 'User not found', data: null });
     }
 
     const role = await req.tenantDb.Role.findByPk(roleId);
     if (!role) {
-      return res.status(404).json({
+      return res.status(404).json({ status: 'error', message: 'Role not found', data: null });
+    }
+
+    // ── Privilege-ceiling guard ──────────────────────────────────────────────
+    // An organisation admin manages tenant users only. They must never be able
+    // to mint a platform SUPERADMIN or any platform-scoped role. Cross-check the
+    // platform registry: block the assignment if the target role name maps to a
+    // platform-scoped role (superadmin, platform_*). The actor's own role is
+    // ADMIN (checkRole([ADMIN]) on this router), so this caps assignments at
+    // ADMIN and below.
+    const roleName = String(role.name || '').toLowerCase();
+    const platformRole = await platformDb.Role.findOne({
+      where: { name: role.name },
+      attributes: ['id', 'name', 'scope'],
+    });
+    const isPlatformScoped =
+      roleName === 'superadmin' || roleName.startsWith('platform_') ||
+      (platformRole && platformRole.scope === 'platform');
+    if (isPlatformScoped) {
+      logger.warn(
+        { actor: req.user?.id, targetUser: userId, roleId, roleName },
+        'Blocked attempt to assign a platform-scoped role via org RBAC',
+      );
+      return res.status(403).json({
         status: 'error',
-        message: 'Role not found',
+        message: 'You cannot assign this role. Platform-level roles are managed by the platform team.',
         data: null,
       });
     }
 
+    // ── Apply to the tenant DB (source of truth for org-scoped users) ─────────
     await user.update({ role_id: roleId });
+
+    // ── Keep the platform registry in sync so the change actually takes effect ─
+    // Authentication/JWT resolves role_id from the platform users table, so a
+    // tenant-only update would be a no-op for access control. Map the tenant
+    // role to the platform role by NAME (ids are aligned for the base roles but
+    // matching by name is robust) and mirror it. Custom tenant roles with no
+    // platform equivalent keep the user's existing base platform role for auth.
+    if (platformRole && platformRole.scope !== 'platform') {
+      try {
+        await platformDb.User.update(
+          { role_id: platformRole.id },
+          { where: { id: userId } },
+        );
+      } catch (syncErr) {
+        logger.error({ err: syncErr, userId }, 'updateUserRole: platform role sync failed');
+      }
+    }
+
+    // ── Invalidate cached permissions so the new role is enforced immediately ──
+    try {
+      const orgId = req.user?.organisation_id;
+      if (orgId) {
+        invalidatePermCache(`user:${orgId}:${userId}`);
+        invalidatePermCache(`admin:${orgId}`);
+      }
+    } catch (_) { /* cache best-effort */ }
 
     res.status(200).json({
       status: 'success',
       message: 'User role updated successfully',
-      data: {
-        userId: user.id,
-        roleName: role.name,
-        roleId: role.id,
-      },
+      data: { userId: Number(userId), roleName: role.name, roleId: role.id },
     });
   } catch (error) {
     logger.error({ err: error }, 'Error updating user role');
@@ -541,7 +584,6 @@ export const updateUserRole = async (req, res) => {
       status: 'error',
       message: 'Failed to update user role',
       data: null,
-      error: error.message,
     });
   }
 };

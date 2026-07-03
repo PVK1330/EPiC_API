@@ -2,6 +2,7 @@ import express from 'express';
 import { verifyTokenAndTenant } from '../../../middlewares/authStack.middleware.js';
 import { checkRole, ROLES } from '../../../middlewares/role.middleware.js';
 import { handleDocumentUpload } from '../../../middlewares/upload.middleware.js';
+import { numericParam } from '../../../middlewares/validateParam.middleware.js';
 import {
   uploadDocuments,
   getCaseDocuments,
@@ -21,6 +22,9 @@ import {
 } from '../../Admin/Settings/documentChecklist.controller.js';
 
 const router = express.Router();
+
+// CW-12: reject non-numeric :documentId with 400 before any DB query.
+router.param('documentId', numericParam('document id'));
 
 // Apply authentication and role-based access
 router.use(verifyTokenAndTenant);
@@ -52,5 +56,12 @@ router.get('/:documentId', getDocumentById);
 router.put('/:documentId', updateDocument);
 router.delete('/:documentId', deleteDocument);
 router.patch('/status/:documentId', updateDocumentStatus);
+
+// CW-19: terminate unmatched paths here with a clean 404 instead of letting the
+// request fall through to the generic /caseworker mounts, which returned a
+// misleading "plan does not include caseworker.performance" 403 for the base path.
+router.use((req, res) => {
+  res.status(404).json({ status: 'error', message: 'Caseworker document route not found', data: null });
+});
 
 export default router;

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { verifyTokenAndTenant } from '../../middlewares/authStack.middleware.js';
 import { checkRole, ROLES } from '../../middlewares/role.middleware.js';
+import { sanitizeBody } from '../../middlewares/sanitizeBody.middleware.js';
 import sponsorAccountRoutes from './Account/sponsorAccount.routes.js';
 import sponsorWorkerRoutes from './Workers/sponsorWorker.routes.js';
 import sponsorLicenceRoutes from './Licence/sponsorLicence.routes.js';
@@ -37,6 +38,9 @@ const router = Router();
 // All sponsor routes require authentication and business role
 router.use(verifyTokenAndTenant);
 router.use(checkRole([ROLES.BUSINESS]));
+// SPN-21: strip HTML from all sponsor plain-text inputs (company/trading names,
+// worker details, addresses, free-text) to prevent stored XSS.
+router.use(sanitizeBody);
 
 router.use('/account', sponsorAccountRoutes);
 router.use('/workers', sponsorWorkerRoutes);

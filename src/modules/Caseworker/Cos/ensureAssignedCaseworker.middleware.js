@@ -22,6 +22,14 @@ export async function ensureAssignedCaseworker(req, res, next) {
     return res.status(401).json({ status: "error", message: "Authentication required" });
   }
 
+  // Validate the id param is a positive integer BEFORE any DB query, so a
+  // non-numeric id returns a clean 400 instead of a 500 that leaks the raw
+  // Postgres type-cast error (parity with the shared ensureAssignedCaseworker).
+  const cosId = Number(params.id);
+  if (!Number.isInteger(cosId) || cosId <= 0) {
+    return res.status(400).json({ status: "error", message: "A valid CoS request id is required" });
+  }
+
   // Admins and superadmins bypass the assignment check — no DB load needed.
   if (hasFullAccessRole(user.role_id)) return next();
 

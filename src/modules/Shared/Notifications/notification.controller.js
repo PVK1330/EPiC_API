@@ -45,6 +45,15 @@ export const getAllNotifications = async (req, res) => {
       });
     }
 
+    // Platform staff / superadmin carry no tenant scope (NOTIF-01).
+    if (!req.tenantDb) {
+      return res.status(200).json({
+        status: 'success',
+        message: 'Notifications retrieved successfully',
+        data: { notifications: [], total: 0, page: 1, totalPages: 0, unreadCount: 0 },
+      });
+    }
+
     const {
       page = 1,
       limit = 50,
@@ -145,6 +154,17 @@ export const getNotifications = async (req, res) => {
     const parsedPage = Math.max(1, Number.parseInt(page, 10) || 1);
     const parsedLimit = Math.min(100, Math.max(1, Number.parseInt(limit, 10) || 20));
 
+    // Platform staff / superadmin carry no tenant scope (req.tenantDb === null).
+    // They have no tenant notifications, so return an empty result rather than
+    // dereferencing a null tenantDb and 500-ing (NOTIF-01).
+    if (!req.tenantDb) {
+      return res.status(200).json({
+        status: 'success',
+        message: 'Notifications retrieved successfully',
+        data: { notifications: [], total: 0, page: parsedPage, totalPages: 0 },
+      });
+    }
+
     if (type && !validNotificationTypes.has(type)) {
       return res.status(400).json({
         status: 'error',
@@ -189,6 +209,15 @@ export const getUnreadNotificationCount = async (req, res) => {
         status: 'error',
         message: 'Authentication required',
         data: null,
+      });
+    }
+
+    // Platform staff / superadmin have no tenant scope (NOTIF-01).
+    if (!req.tenantDb) {
+      return res.status(200).json({
+        status: 'success',
+        message: 'Unread count retrieved successfully',
+        data: { count: 0 },
       });
     }
 

@@ -9,6 +9,7 @@ import { getIO } from '../../../realtime/ioRegistry.js';
 import { notifyMessageReceived } from '../../../services/notification.service.js';
 import { buildCaseworkerAssignmentWhere } from '../../../utils/caseworkerScope.js';
 import { toPublicImagePath } from '../../../utils/storagePath.util.js';
+import { sanitizePlainText } from '../../../utils/sanitizeText.js';
 
 // Normalize a User-like Sequelize row's profile_pic to the canonical relative
 // "api/public/images/<basename>" web path (idempotent, null-safe). Mutates the
@@ -93,6 +94,12 @@ export const sendMessage = async (req, res) => {
     let { content, messageType = 'text' } = req.body;
     const senderId = req.user.userId;
     const organisationId = req.user.organisation_id;
+
+    // SECURITY (stored XSS): message bodies are plain text — strip any HTML so a
+    // payload cannot be persisted and later executed by a client that renders it.
+    if (typeof content === 'string') {
+      content = sanitizePlainText(content, { maxLength: 5000 });
+    }
 
     // Handle file upload if present
     if (req.file) {
