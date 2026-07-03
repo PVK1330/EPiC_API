@@ -1,5 +1,10 @@
+import path from 'path';
+import fs from 'fs';
 import logger from '../../../utils/logger.js';
 import { getPaginationParams, buildPaginationMeta } from '../../../utils/paginate.js';
+
+// Uploaded RTW evidence lives under the private storage dir (never served statically).
+const PRIVATE_STORAGE_DIR = path.resolve(process.cwd(), 'storage/private');
 
 const toISODate = (value) => {
   if (!value) return null;
@@ -85,6 +90,51 @@ export const getRtwRecordsByWorker = async (req, res) => {
     return res.status(200).json({ status: "success", data: records });
   } catch (error) {
     logger.error({ err: error }, "Error fetching right to work records");
+    return res.status(500).json({ status: "error", message: "Internal server error" });
+  }
+};
+
+/**
+ * Stream the RTW evidence document for a record owned by the calling sponsor.
+ * The stored documentPath is not web-served (uploads are private), so this is
+ * the only way to view/download the evidence. Served inline so PDFs/images open
+ * in the browser tab.
+ */
+export const downloadRtwDocument = async (req, res) => {
+  try {
+    const sponsorId = req.user.userId;
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ status: "error", message: "A valid record id is required" });
+    }
+
+    const record = await req.tenantDb.RightToWorkRecord.findOne({ where: { id, sponsorId } });
+    if (!record) {
+      return res.status(404).json({ status: "error", message: "Right to work record not found" });
+    }
+    if (!record.documentPath) {
+      return res.status(404).json({ status: "error", message: "No document attached to this record" });
+    }
+
+    // documentPath may be absolute (multer req.file.path) or relative — resolve
+    // both, then confirm it stays inside the private storage dir (defence against
+    // path traversal / tampered values).
+    const abs = path.isAbsolute(record.documentPath)
+      ? path.normalize(record.documentPath)
+      : path.resolve(process.cwd(), record.documentPath);
+
+    if (!abs.startsWith(PRIVATE_STORAGE_DIR + path.sep) && abs !== PRIVATE_STORAGE_DIR) {
+      logger.warn({ sponsorId, id, abs }, "RTW document path outside private storage — refused");
+      return res.status(403).json({ status: "error", message: "Access denied" });
+    }
+    if (!fs.existsSync(abs)) {
+      return res.status(404).json({ status: "error", message: "Document file not found" });
+    }
+
+    res.setHeader("Content-Disposition", `inline; filename="${path.basename(abs)}"`);
+    return res.sendFile(abs);
+  } catch (error) {
+    logger.error({ err: error }, "Error downloading right to work document");
     return res.status(500).json({ status: "error", message: "Internal server error" });
   }
 };

@@ -33,6 +33,7 @@ import MessageModel from "./tenant/message.model.js";
 import ConversationModel from "./tenant/conversation.model.js";
 import RescheduleHistoryModel from "./tenant/rescheduleHistory.model.js";
 import NotificationModel from "./tenant/notification.model.js";
+import AnnouncementModel from "./tenant/announcement.model.js";
 import NotificationPreferenceModel from "./tenant/notificationPreference.model.js";
 import DepartmentModel from "./tenant/department.model.js";
 import CandidateAccountSettingsModel from "./tenant/candidateAccountSettings.model.js";
@@ -139,6 +140,7 @@ export function buildDb(sequelize) {
   db.Conversation = ConversationModel(sequelize, Sequelize.DataTypes);
   db.RescheduleHistory = RescheduleHistoryModel(sequelize, Sequelize.DataTypes);
   db.Notification = NotificationModel(sequelize, Sequelize.DataTypes);
+  db.Announcement = AnnouncementModel(sequelize, Sequelize.DataTypes);
   db.NotificationPreference = NotificationPreferenceModel(sequelize, Sequelize.DataTypes);
   db.Department = DepartmentModel(sequelize, Sequelize.DataTypes);
   db.CandidateAccountSettings = CandidateAccountSettingsModel(sequelize, Sequelize.DataTypes);

@@ -49,6 +49,10 @@ router.patch('/platform-roles/:id', requirePlatformPermission('platform.team.man
 router.delete('/platform-roles/:id', requirePlatformPermission('platform.team.manage'), teamController.deletePlatformRole);
 
 router.post('/announcements', requirePlatformPermission('platform.dashboard.view'), announcementController.createPlatformAnnouncement);
+router.get('/announcements', requirePlatformPermission('platform.dashboard.view'), announcementController.listPlatformAnnouncements);
+router.get('/announcements/export', requirePlatformPermission('platform.dashboard.view'), announcementController.exportPlatformAnnouncements);
+router.put('/announcements/:id', requirePlatformPermission('platform.dashboard.view'), announcementController.updatePlatformAnnouncement);
+router.delete('/announcements/:id', requirePlatformPermission('platform.dashboard.view'), announcementController.deletePlatformAnnouncement);
 
 router.get('/organisations', requirePlatformPermission('platform.organisations.view', 'platform.organisations.manage'), orgController.listOrganisations);
 router.get('/organisations/export/excel', requirePlatformPermission('platform.organisations.view', 'platform.organisations.manage'), orgController.exportOrganisationsExcel);

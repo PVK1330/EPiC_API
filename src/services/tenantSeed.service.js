@@ -102,12 +102,16 @@ export async function seedTenantDefaults(tenantDb) {
 /** Ensure application field tables exist (migration + Sequelize sync safety net). */
 async function ensureApplicationFieldTables(tenantDb) {
   if (!tenantDb?.sequelize) return;
-  const { ApplicationFieldSetting, ApplicationCustomField } = tenantDb;
+  const { ApplicationFieldSetting, ApplicationCustomField, Announcement } = tenantDb;
   if (ApplicationFieldSetting) {
     await ApplicationFieldSetting.sync();
   }
   if (ApplicationCustomField) {
     await ApplicationCustomField.sync();
+  }
+  // Announcements table (org-admin "previous announcements" list).
+  if (Announcement) {
+    await Announcement.sync();
   }
 }
 
