@@ -26,14 +26,23 @@ const router = express.Router();
 
 router.use(verifyToken, isPlatformStaff);
 
-// Week 9 — API Keys, Webhooks, Usage metering
-router.use('/api-keys', apiKeyRoutes);
-router.use('/webhooks', webhookRoutes);
-router.use('/usage', usageRoutes);
-// Week 8 — GDPR compliance
-router.use('/gdpr', gdprRoutes);
+// Week 9 — API Keys, Webhooks, Usage metering.
+// backend-authz-6: these developer/integration sub-routers previously inherited
+// only isPlatformStaff (no permission gate), so any restricted platform sub-role
+// (support/billing/compliance) could mint API keys, register data-exfiltrating
+// webhooks, or read usage metering. Gated behind dedicated permissions that no
+// sub-role currently holds; requirePlatformPermission bypasses for the superadmin
+// (role_id 5), so these become superadmin-only — same pattern as GDPR below.
+router.use('/api-keys', requirePlatformPermission('platform.apikeys.view', 'platform.apikeys.manage'), apiKeyRoutes);
+router.use('/webhooks', requirePlatformPermission('platform.webhooks.view', 'platform.webhooks.manage'), webhookRoutes);
+router.use('/usage', requirePlatformPermission('platform.usage.view', 'platform.billing.view'), usageRoutes);
+// Week 8 — GDPR compliance. Org PII export + erasure must not be reachable by
+// restricted platform staff (support/billing/compliance). No sub-role holds
+// platform.gdpr.*, and requirePlatformPermission bypasses for the superadmin
+// (role_id 5), so this gate makes the whole GDPR module superadmin-only.
+router.use('/gdpr', requirePlatformPermission('platform.gdpr.view', 'platform.gdpr.manage'), gdprRoutes);
 // Week 8 — Demo/sandbox environments
-router.use('/sandbox', sandboxRoutes);
+router.use('/sandbox', requirePlatformPermission('platform.sandbox.view', 'platform.sandbox.manage'), sandboxRoutes);
 
 router.get('/team/modules', requirePlatformPermission('platform.team.view', 'platform.team.manage'), teamController.listPlatformModules);
 router.get('/team/export/excel', requirePlatformPermission('platform.team.view', 'platform.team.manage'), teamController.exportTeamMembersExcel);

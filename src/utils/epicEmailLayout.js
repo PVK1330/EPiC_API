@@ -31,7 +31,7 @@ const C = {
 const FONT =
   "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
 
-function esc(value) {
+export function esc(value) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -78,7 +78,7 @@ export function wrapEpicEmail({
   const badgeBg   = badgeColor ? `${badgeColor}18` : C.blueTint; // 18 = ~10% alpha hex
   const badgeFg   = badgeColor || C.navy;
   const badgeBlock = badge
-    ? `<div style="display:inline-block; background-color:${badgeBg}; color:${badgeFg}; font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; padding:5px 11px; border-radius:6px; margin-bottom:18px; border:1px solid ${badgeFg}22;">${badge}</div>`
+    ? `<div style="display:inline-block; background-color:${badgeBg}; color:${badgeFg}; font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; padding:5px 11px; border-radius:6px; margin-bottom:18px; border:1px solid ${badgeFg}22;">${esc(badge)}</div>`
     : "";
 
   const ctaBlock =
@@ -86,7 +86,7 @@ export function wrapEpicEmail({
       ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:30px 0;">
            <tr>
              <td align="center" style="border-radius:8px; background-color:${C.navy};">
-               <a href="${esc(ctaUrl)}" target="_blank" style="display:inline-block; padding:13px 26px; font-family:${FONT}; font-size:14px; font-weight:700; color:#ffffff; text-decoration:none; border-radius:8px;">${ctaLabel}&nbsp;&rarr;</a>
+               <a href="${esc(ctaUrl)}" target="_blank" style="display:inline-block; padding:13px 26px; font-family:${FONT}; font-size:14px; font-weight:700; color:#ffffff; text-decoration:none; border-radius:8px;">${esc(ctaLabel)}&nbsp;&rarr;</a>
              </td>
            </tr>
          </table>`
@@ -130,7 +130,7 @@ export function wrapEpicEmail({
           <tr>
             <td style="padding:38px 40px;">
               ${badgeBlock}
-              ${title ? `<h1 style="font-size:22px; font-weight:800; color:${C.ink}; margin:0 0 16px 0; letter-spacing:-0.4px; line-height:1.3;">${title}</h1>` : ""}
+              ${title ? `<h1 style="font-size:22px; font-weight:800; color:${C.ink}; margin:0 0 16px 0; letter-spacing:-0.4px; line-height:1.3;">${esc(title)}</h1>` : ""}
               ${messageHtml ? `<div style="font-size:15px; color:${C.body}; line-height:1.65; margin-bottom:22px;">${messageHtml}</div>` : ""}
 
               <div style="font-size:14px; color:${C.body}; line-height:1.65;">
@@ -162,27 +162,30 @@ export function wrapEpicEmail({
 }
 
 export function credentialsBlockHtml({ email, password, loginUrl, mainLoginUrl, loginUrlLabel = "Portal Login", mainLoginUrlLabel = "Main Portal" }) {
+  // injection-xss-2: escape every interpolated credential value in BOTH the href
+  // and the visible text. A crafted email/URL (e.g. from an admin-set profile)
+  // could otherwise inject markup or break out of the href attribute.
   const urlRow = loginUrl
     ? `<div style="padding:16px; border-bottom:1px solid ${C.border};">
-         <div style="font-size:12px; color:${C.muted}; margin-bottom:4px;">${loginUrlLabel}</div>
-         <div style="font-size:14px; font-weight:600;"><a href="${loginUrl}" style="color:${C.blue}; text-decoration:none;">${loginUrl}</a></div>
+         <div style="font-size:12px; color:${C.muted}; margin-bottom:4px;">${esc(loginUrlLabel)}</div>
+         <div style="font-size:14px; font-weight:600;"><a href="${esc(loginUrl)}" style="color:${C.blue}; text-decoration:none;">${esc(loginUrl)}</a></div>
        </div>`
     : "";
   const mainUrlRow = mainLoginUrl && mainLoginUrl !== loginUrl
     ? `<div style="padding:16px;">
-         <div style="font-size:12px; color:${C.muted}; margin-bottom:4px;">${mainLoginUrlLabel}</div>
-         <div style="font-size:14px; font-weight:600;"><a href="${mainLoginUrl}" style="color:${C.blue}; text-decoration:none;">${mainLoginUrl}</a></div>
+         <div style="font-size:12px; color:${C.muted}; margin-bottom:4px;">${esc(mainLoginUrlLabel)}</div>
+         <div style="font-size:14px; font-weight:600;"><a href="${esc(mainLoginUrl)}" style="color:${C.blue}; text-decoration:none;">${esc(mainLoginUrl)}</a></div>
        </div>`
     : "";
   return `<div style="border:1px solid ${C.border}; border-radius:10px; overflow:hidden; margin-bottom:30px; background-color:${C.surface};">
     <div style="background:${C.pageBg}; padding:12px 16px; font-size:11px; font-weight:700; color:${C.muted}; text-transform:uppercase; letter-spacing:0.5px; border-bottom:1px solid ${C.border};">Access Credentials</div>
     <div style="padding:16px; border-bottom:1px solid ${C.border};">
       <div style="font-size:12px; color:${C.muted}; margin-bottom:4px;">Email Address</div>
-      <div style="font-size:14px; color:${C.ink}; font-weight:600;">${email}</div>
+      <div style="font-size:14px; color:${C.ink}; font-weight:600;">${esc(email)}</div>
     </div>
     ${password ? `<div style="padding:16px; border-bottom:1px solid ${C.border};">
       <div style="font-size:12px; color:${C.muted}; margin-bottom:4px;">Password</div>
-      <div style="font-size:14px; color:${C.ink}; font-weight:600; font-family:'SFMono-Regular',Consolas,'Liberation Mono',monospace;">${password}</div>
+      <div style="font-size:14px; color:${C.ink}; font-weight:600; font-family:'SFMono-Regular',Consolas,'Liberation Mono',monospace;">${esc(password)}</div>
     </div>` : ""}
     ${urlRow}
     ${mainUrlRow}

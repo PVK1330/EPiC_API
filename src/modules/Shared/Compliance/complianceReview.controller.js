@@ -45,7 +45,7 @@ export const listComplianceDocumentsForReview = async (req, res) => {
     return res.status(200).json({ status: 'success', data: documents });
   } catch (error) {
     logger.error({ err: error }, 'listComplianceDocumentsForReview error');
-    return res.status(500).json({ status: 'error', message: error.message || 'Internal server error' });
+    return res.status(500).json({ status: 'error', message: 'Internal server error' });
   }
 };
 
@@ -80,7 +80,7 @@ export const getComplianceDocumentForReview = async (req, res) => {
     return res.status(200).json({ status: 'success', data: document });
   } catch (error) {
     logger.error({ err: error }, 'getComplianceDocumentForReview error');
-    return res.status(500).json({ status: 'error', message: error.message || 'Internal server error' });
+    return res.status(500).json({ status: 'error', message: 'Internal server error' });
   }
 };
 
@@ -131,7 +131,7 @@ const handleReviewAction = (action, isReviewAction) => async (req, res) => {
       return res.status(409).json({ status: 'error', message: error.message });
     }
     logger.error({ err: error }, `compliance review action '${action}' error`);
-    return res.status(500).json({ status: 'error', message: error.message || 'Internal server error' });
+    return res.status(500).json({ status: 'error', message: 'Internal server error' });
   }
 };
 

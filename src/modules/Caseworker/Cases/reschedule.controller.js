@@ -245,7 +245,7 @@ export const rescheduleCase = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -311,7 +311,7 @@ export const getRescheduleHistory = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -416,7 +416,7 @@ export const getAllRescheduleHistory = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };

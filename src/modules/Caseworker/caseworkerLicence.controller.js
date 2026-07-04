@@ -76,7 +76,7 @@ export const getAssignedLicenceApplications = async (req, res) => {
         res.status(500).json({
             status: 'error',
             message: 'Failed to fetch assigned licence applications',
-            error: error.message
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
 };
@@ -180,7 +180,7 @@ export const updateLicenceReviewStatus = async (req, res) => {
         res.status(500).json({
             status: 'error',
             message: 'Failed to update status',
-            error: error.message
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
 };
@@ -220,7 +220,7 @@ export const getMyAssignedDashboard = async (req, res) => {
         res.status(500).json({
             status: 'error',
             message: 'Failed to fetch assigned applications',
-            error: error.message
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
 };
@@ -279,7 +279,7 @@ export const getLicenceApplicationAudit = async (req, res) => {
         res.status(500).json({
             status: 'error',
             message: 'Failed to fetch audit trail',
-            error: error.message
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
 };

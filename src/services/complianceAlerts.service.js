@@ -205,9 +205,12 @@ const checkRightToWorkFollowUps = async (tenantDb, organisationId, today) => {
     },
     include: [
       {
-        model: tenantDb.User,
+        // RightToWorkRecord.worker is a SponsoredWorker (FK workerId), not a User —
+        // unlike WorkerEvent.worker which is a User. Using tenantDb.User here threw
+        // SequelizeEagerLoadingError ("User associated multiple times").
+        model: tenantDb.SponsoredWorker,
         as: "worker",
-        attributes: ["id", "first_name", "last_name"],
+        attributes: ["id", "workerFirstName", "workerLastName"],
       },
     ],
   });
@@ -219,7 +222,7 @@ const checkRightToWorkFollowUps = async (tenantDb, organisationId, today) => {
     });
 
     const worker = record.worker;
-    const workerName = [worker?.first_name, worker?.last_name].filter(Boolean).join(" ") || "Worker";
+    const workerName = [worker?.workerFirstName, worker?.workerLastName].filter(Boolean).join(" ") || "Worker";
 
     await notifyCaseworkersAndAdmins({
       tenantDb,

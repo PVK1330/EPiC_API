@@ -26,6 +26,34 @@ import { ROLES } from '../../../middlewares/role.middleware.js';
 const DECISION_DOC_TYPES = ['Decision Letter', 'Approval Notice'];
 const FINAL_DOC_TYPES = ['Visa Copy', 'BRP Information'];
 
+// Case-level access check shared by document listings and downloads. Mirrors
+// the per-case ownership rules: admin/superadmin/sponsor have org-wide access;
+// a caseworker must be assigned to the case; a candidate must own it. Does NOT
+// apply the candidate document-type/stage gate — that is byte-download-only and
+// layered on top in assertDocumentAccess (backend-authz-10 / backend-authz-11).
+function assertCaseAccess(req, caseRecord) {
+  const roleId = Number(req.user?.role_id);
+  const userId = Number(req.user?.userId ?? req.user?.id);
+
+  if (roleId === ROLES.ADMIN || roleId === ROLES.SUPERADMIN) return { ok: true };
+  if (roleId === ROLES.SPONSOR) return { ok: true };
+
+  if (roleId === ROLES.CASEWORKER) {
+    // assignedcaseworkerId is a JSONB array of assigned caseworker user IDs.
+    const assigned = caseRecord.assignedcaseworkerId;
+    const ids = Array.isArray(assigned) ? assigned : (assigned ? [assigned] : []);
+    if (!ids.map(Number).includes(userId)) return { ok: false, message: 'Access denied' };
+    return { ok: true };
+  }
+
+  if (roleId === ROLES.CANDIDATE) {
+    if (Number(caseRecord.candidateId) !== userId) return { ok: false, message: 'Access denied' };
+    return { ok: true };
+  }
+
+  return { ok: false, message: 'Access denied' };
+}
+
 // S-12 fix: full ownership check for all roles, not just candidates.
 async function assertDocumentAccess(req, document) {
   const roleId = Number(req.user?.role_id);
@@ -52,21 +80,10 @@ async function assertDocumentAccess(req, document) {
     return { ok: false, message: 'Case not found for this document' };
   }
 
-  if (roleId === ROLES.CASEWORKER) {
-    // assignedcaseworkerId is a JSONB array of assigned caseworker user IDs.
-    const assigned = caseRecord.assignedcaseworkerId;
-    const ids = Array.isArray(assigned) ? assigned : (assigned ? [assigned] : []);
-    if (!ids.map(Number).includes(userId)) {
-      return { ok: false, message: 'Access denied' };
-    }
-    return { ok: true };
-  }
+  const caseAccess = assertCaseAccess(req, caseRecord);
+  if (!caseAccess.ok) return caseAccess;
 
   if (roleId === ROLES.CANDIDATE) {
-    if (Number(caseRecord.candidateId) !== userId) {
-      return { ok: false, message: 'Access denied' };
-    }
-
     const stage = resolveCaseStage(caseRecord);
     const order = getStageOrder(stage);
     const docType = document.documentType || '';
@@ -94,7 +111,7 @@ async function assertDocumentAccess(req, document) {
     return { ok: true };
   }
 
-  return { ok: false, message: 'Access denied' };
+  return { ok: true };
 }
 
 const documentsColumnMetadataByDb = new Map();
@@ -521,7 +538,7 @@ export const uploadDocuments = async (req, res) => {
       status: "error",
       message: "Failed to upload documents",
       data: null,
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -536,6 +553,24 @@ export const getUserDocumentsByCategory = async (req, res) => {
     // RE-03 fix: candidates and sponsors may only view their own documents.
     if (roleId === ROLES.CANDIDATE || roleId === ROLES.SPONSOR) {
       if (Number(userId) !== requestingUserId) {
+        return res.status(403).json({ status: 'error', message: 'Access denied', data: null });
+      }
+    }
+
+    // backend-authz-11: a caseworker may only read documents of a user they
+    // share an assigned case with (was: any caseworker could read any user's
+    // documents org-wide). Admin/superadmin retain org-wide access.
+    if (roleId === ROLES.CASEWORKER) {
+      const cases = await req.tenantDb.Case.findAll({
+        where: { candidateId: userId },
+        attributes: ['assignedcaseworkerId'],
+      });
+      const isAssigned = cases.some((c) => {
+        const a = c.assignedcaseworkerId;
+        const ids = Array.isArray(a) ? a : (a ? [a] : []);
+        return ids.map(Number).includes(requestingUserId);
+      });
+      if (!isAssigned) {
         return res.status(403).json({ status: 'error', message: 'Access denied', data: null });
       }
     }
@@ -584,7 +619,7 @@ export const getUserDocumentsByCategory = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -621,6 +656,14 @@ export const getCaseDocuments = async (req, res) => {
         message: "Case not found",
         data: null,
       });
+    }
+
+    // backend-authz-10: enforce ownership before returning the document list.
+    // Candidates could otherwise enumerate caseIds to read other candidates'
+    // document metadata + uploader PII + download URLs (horizontal IDOR).
+    const caseAccess = assertCaseAccess(req, caseRecord);
+    if (!caseAccess.ok) {
+      return res.status(403).json({ status: "error", message: caseAccess.message, data: null });
     }
 
     const candidateId = caseRecord.candidateId;
@@ -690,7 +733,7 @@ export const getCaseDocuments = async (req, res) => {
       status: "error",
       message: "Failed to retrieve case documents",
       data: null,
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -753,7 +796,7 @@ export const getDocumentById = async (req, res) => {
       status: "error",
       message: "Failed to retrieve document",
       data: null,
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -800,7 +843,7 @@ export const updateDocument = async (req, res) => {
       status: "error",
       message: "Failed to update document",
       data: null,
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -845,7 +888,7 @@ export const deleteDocument = async (req, res) => {
       status: "error",
       message: "Failed to delete document",
       data: null,
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -980,7 +1023,7 @@ export const updateDocumentStatus = async (req, res) => {
       status: "error",
       message: "Failed to update document status",
       data: null,
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -1087,8 +1130,60 @@ export const downloadDocument = async (req, res) => {
       status: "error",
       message: "Failed to download document",
       data: null,
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
+  }
+};
+
+// Message-attachment download (GET /api/documents/temp/:filename).
+// These files live in storage/private/temp and are referenced ONLY from
+// Message.content JSON (url: /api/documents/temp/<filename>), so ownership
+// = being a participant of a message that references the filename. Checking
+// the caller's tenant DB also scopes access to their own tenant (upload-security-5).
+export const downloadTempAttachment = async (req, res) => {
+  try {
+    const { filename } = req.params;
+
+    // Multer names these files itself (hex/uuid + ext); anything outside this
+    // charset is not a legitimate attachment name and blocks traversal tricks.
+    if (!/^[A-Za-z0-9._-]+$/.test(filename) || filename.includes('..')) {
+      return res.status(400).json({ status: 'error', message: 'Invalid filename' });
+    }
+
+    const userId = Number(req.user?.userId ?? req.user?.id);
+    const message = await req.tenantDb.Message.findOne({
+      where: {
+        messageType: 'file',
+        content: { [Op.like]: `%/api/documents/temp/${filename}%` },
+        [Op.or]: [{ senderId: userId }, { receiverId: userId }],
+      },
+      attributes: ['id'],
+    });
+
+    if (!message) {
+      auditLogger.logDownloadAttempt({
+        userId: req.user?.id,
+        organisationId: req.organisationContext?.organisation?.id,
+        documentId: `temp:${filename}`,
+        status: 'FAILED',
+        reason: 'Not a participant of any message referencing this attachment',
+      });
+      return res.status(404).json({ status: 'error', message: 'File not found' });
+    }
+
+    const baseDir = path.join(process.cwd(), 'storage/private/temp');
+    const targetPath = path.join(baseDir, filename);
+    if (!targetPath.startsWith(baseDir) || !fs.existsSync(targetPath)) {
+      return res.status(404).json({ status: 'error', message: 'File not found' });
+    }
+
+    const safeFilename = filename.replace(/[^A-Za-z0-9._-]/g, '_');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}"`);
+    res.sendFile(targetPath);
+  } catch (error) {
+    logger.error({ err: error }, 'Download temp attachment error');
+    res.status(500).json({ status: 'error', message: 'Failed to download attachment' });
   }
 };
 
@@ -1166,7 +1261,7 @@ export const downloadMyDocumentsBundle = async (req, res) => {
           status: 'error',
           message: 'Failed to create archive',
           data: null,
-          error: err.message,
+          error: process.env.NODE_ENV === 'development' ? err.message : undefined,
         });
       }
     });
@@ -1185,7 +1280,7 @@ export const downloadMyDocumentsBundle = async (req, res) => {
         status: 'error',
         message: 'Failed to bundle documents',
         data: null,
-        error: error.message,
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined,
       });
     }
   }

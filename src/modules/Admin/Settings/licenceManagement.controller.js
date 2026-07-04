@@ -716,7 +716,7 @@ export const verifyAdminAppendixDocument = async (req, res) => {
   } catch (err) {
     const code = err.statusCode || 500;
     if (code >= 500) logger.error({ err }, "verifyAdminAppendixDocument failed");
-    res.status(code).json({ status: "error", message: err.message || "Failed to verify document" });
+    res.status(code).json({ status: "error", message: "Failed to verify document" });
   }
 };
 
@@ -730,7 +730,7 @@ export const bulkVerifyAdminAppendixDocuments = async (req, res) => {
   } catch (err) {
     const code = err.statusCode || 500;
     if (code >= 500) logger.error({ err }, "bulkVerifyAdminAppendixDocuments failed");
-    res.status(code).json({ status: "error", message: err.message || "Failed to verify documents" });
+    res.status(code).json({ status: "error", message: "Failed to verify documents" });
   }
 };
 
@@ -747,6 +747,6 @@ export const rejectAdminAppendixDocument = async (req, res) => {
   } catch (err) {
     const code = err.statusCode || 500;
     if (code >= 500) logger.error({ err }, "rejectAdminAppendixDocument failed");
-    res.status(code).json({ status: "error", message: err.message || "Failed to reject document" });
+    res.status(code).json({ status: "error", message: "Failed to reject document" });
   }
 };

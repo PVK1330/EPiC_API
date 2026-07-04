@@ -117,7 +117,7 @@ export const getLinkedEntities = async (req, res) => {
     res.status(200).json({ status: 'success', data: entities });
   } catch (err) {
     logger.error({ err }, 'getLinkedEntities error');
-    res.status(500).json({ status: 'error', message: 'Internal server error', error: err.message });
+    res.status(500).json({ status: 'error', message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined });
   }
 };
 
@@ -205,7 +205,7 @@ export const linkSubsidiary = async (req, res) => {
     });
   } catch (err) {
     logger.error({ err }, 'linkSubsidiary error');
-    res.status(500).json({ status: 'error', message: 'Internal server error', error: err.message });
+    res.status(500).json({ status: 'error', message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined });
   }
 };
 
@@ -241,7 +241,7 @@ export const unlinkSubsidiary = async (req, res) => {
     res.status(200).json({ status: 'success', message: 'Entity unlinked successfully' });
   } catch (err) {
     logger.error({ err }, 'unlinkSubsidiary error');
-    res.status(500).json({ status: 'error', message: 'Internal server error', error: err.message });
+    res.status(500).json({ status: 'error', message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined });
   }
 };
 
@@ -366,7 +366,7 @@ export const getConsolidatedDashboard = async (req, res) => {
     });
   } catch (err) {
     logger.error({ err }, 'getConsolidatedDashboard error');
-    res.status(500).json({ status: 'error', message: 'Internal server error', error: err.message });
+    res.status(500).json({ status: 'error', message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined });
   }
 };
 
@@ -415,6 +415,6 @@ export const searchSponsorProfiles = async (req, res) => {
     res.status(200).json({ status: 'success', data: results });
   } catch (err) {
     logger.error({ err }, 'searchSponsorProfiles error');
-    res.status(500).json({ status: 'error', message: 'Internal server error', error: err.message });
+    res.status(500).json({ status: 'error', message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined });
   }
 };

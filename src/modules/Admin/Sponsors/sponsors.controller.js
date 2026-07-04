@@ -1,9 +1,9 @@
 import { Op } from 'sequelize';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
-import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import { handleBulkImportUpload, MAX_BULK_IMPORT_ROWS } from '../../../middlewares/upload.middleware.js';
 import platformDb from '../../../models/index.js';
 import { isPlatformEmailTaken, normalizePlatformEmail } from '../../../utils/platformUserEmail.js';
 import { ROLES } from '../../../middlewares/role.middleware.js';
@@ -18,11 +18,11 @@ import catchAsync from '../../../utils/catchAsync.js';
 import ApiResponse from '../../../utils/apiResponse.js';
 import { rowsToXlsxBuffer, sendXlsxDownload } from '../../../utils/excelExport.util.js';
 import logger from '../../../utils/logger.js';
+import { excludeSensitiveUserAttrs, SENSITIVE_USER_FIELDS } from '../../../utils/userAttributes.js';
 
-// Multer configuration for file upload
-const upload = multer({ storage: multer.memoryStorage() });
-
-export const uploadMiddleware = upload.single('file');
+// upload-security-2: use the shared secured bulk-import upload (size limit +
+// CSV/XLSX-only filter) instead of an unrestricted memory multer.
+export const uploadMiddleware = handleBulkImportUpload;
 import { generateStrongPassword } from '../../../utils/passwordGenerator.js';
 
 // Create Sponsor
@@ -213,7 +213,8 @@ export const createSponsor = async (req, res) => {
       logger.error({ err: e }, "sponsorCreated notification failed");
     }
 
-    const { password: _, ...sponsorData } = sponsor.toJSON();
+    const sponsorData = sponsor.toJSON();
+    SENSITIVE_USER_FIELDS.forEach((f) => delete sponsorData[f]);
 
     res.status(201).json({
       status: "success",
@@ -234,7 +235,7 @@ export const createSponsor = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -289,9 +290,7 @@ export const getAllSponsors = async (req, res) => {
 
     const { count, rows: sponsors } = await req.tenantDb.User.findAndCountAll({
       where: whereClause,
-      attributes: { 
-        exclude: ['password', 'otp_code', 'otp_expiry', 'password_reset_otp', 'password_reset_otp_expiry', 'temp_password'] 
-      },
+      attributes: excludeSensitiveUserAttrs(),
       include: includeClause,
       order: [["createdAt", "DESC"]],
       limit: parseInt(limit),
@@ -318,7 +317,7 @@ export const getAllSponsors = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -330,9 +329,7 @@ export const getSponsorById = async (req, res) => {
 
     const sponsor = await req.tenantDb.User.findOne({
       where: { id, role_id: 4 },
-      attributes: {
-        exclude: ['password', 'otp_code', 'otp_expiry', 'password_reset_otp', 'password_reset_otp_expiry', 'temp_password']
-      },
+      attributes: excludeSensitiveUserAttrs(),
       include: [{
         model: req.tenantDb.Role,
         as: 'role',
@@ -368,7 +365,7 @@ export const getSponsorById = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 } // Added closing bracket here
@@ -646,9 +643,7 @@ export const updateSponsor = async (req, res) => {
     // Get updated sponsor with role and profile
     const updatedSponsor = await req.tenantDb.User.findOne({
       where: { id },
-      attributes: { 
-        exclude: ['password', 'otp_code', 'otp_expiry', 'password_reset_otp', 'password_reset_otp_expiry', 'temp_password'] 
-      },
+      attributes: excludeSensitiveUserAttrs(),
       include: [{
         model: req.tenantDb.Role,
         as: 'role',
@@ -672,7 +667,7 @@ export const updateSponsor = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -705,7 +700,7 @@ export const deleteSponsor = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -784,7 +779,7 @@ export const resetSponsorPassword = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -821,7 +816,7 @@ export const toggleSponsorStatus = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -844,6 +839,16 @@ export const bulkImportSponsors = async (req, res) => {
       return res.status(400).json({
         status: "error",
         message: "CSV file is empty or has no data rows",
+        data: null
+      });
+    }
+
+    // upload-security-2: cap the number of data rows to prevent a small upload
+    // from amplifying into a huge number of user-creation operations.
+    if (lines.length - 1 > MAX_BULK_IMPORT_ROWS) {
+      return res.status(400).json({
+        status: "error",
+        message: `Too many rows. Bulk import is limited to ${MAX_BULK_IMPORT_ROWS} rows per file.`,
         data: null
       });
     }
@@ -930,13 +935,15 @@ export const bulkImportSponsors = async (req, res) => {
           riskLevel: rowData.riskLevel || null,
         });
 
+        let welcomeEmailSent = false;
         try {
-          await sendTenantSponsorWelcomeEmail({
+          const emailRes = await sendTenantSponsorWelcomeEmail({
             user: sponsor,
             plainPassword: generatedPassword,
             organisationId,
             firstName: sponsor.first_name,
           });
+          welcomeEmailSent = emailRes?.sent === true;
         } catch (emailError) {
           logger.error({ err: emailError, email: sponsor.email }, 'Failed to send sponsor email');
         }
@@ -957,13 +964,17 @@ export const bulkImportSponsors = async (req, res) => {
           row: i + 1,
           id: sponsor.id,
           email: sponsor.email,
-          temporary_password: generatedPassword
+          welcome_email_sent: welcomeEmailSent,
+          // data-leakage-10: only surface the plaintext temp password when the
+          // welcome email did NOT reach the sponsor (so the admin can relay it).
+          // When the email succeeded, the password stays server-side.
+          ...(welcomeEmailSent ? {} : { temporary_password: generatedPassword }),
         });
 
       } catch (error) {
         results.errors.push({
           row: i + 1,
-          error: error.message
+          error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
       }
     }
@@ -985,7 +996,7 @@ export const bulkImportSponsors = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -1016,9 +1027,7 @@ export const exportSponsors = catchAsync(async (req, res) => {
 
     const sponsors = await req.tenantDb.User.findAll({
       where: whereClause,
-      attributes: {
-        exclude: ['password', 'otp_code', 'otp_expiry', 'password_reset_otp', 'password_reset_otp_expiry', 'temp_password']
-      },
+      attributes: excludeSensitiveUserAttrs(),
       include: [{
         model: req.tenantDb.Role,
         as: 'role',

@@ -1,12 +1,17 @@
 import { sendTransactionalEmail } from "./mail.service.js";
 import { generateCandidateWelcomeTemplate } from "../utils/emailTemplates.js";
 import { getOrganisationEmailBranding } from "../utils/emailBranding.js";
-import { wrapEpicEmail, credentialsBlockHtml } from "../utils/epicEmailLayout.js";
+import { wrapEpicEmail, credentialsBlockHtml, esc as escapeHtml } from "../utils/epicEmailLayout.js";
 import { resolveOrganisationLoginUrls } from "./tenantUserMail.service.js";
 
-function interpolate(template, vars) {
+// injection-xss-9/11: escape {{var}} values in HTML bodies; subjects stay raw
+// (plain text) so escapeValues defaults to false.
+function interpolate(template, vars, escapeValues = false) {
   if (!template) return "";
-  return String(template).replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] ?? "");
+  return String(template).replace(/\{\{(\w+)\}\}/g, (_, key) => {
+    const value = vars[key] ?? "";
+    return escapeValues ? escapeHtml(value) : value;
+  });
 }
 
 export async function sendCandidateWelcomeEmail({ user, plainPassword, organisationId, tenantDb = null }) {
@@ -30,7 +35,7 @@ export async function sendCandidateWelcomeEmail({ user, plainPassword, organisat
         login_url: loginUrl, org_name: branding.orgName,
       };
       subject = interpolate(row.subject, vars) || subject;
-      const messageHtml = interpolate(row.body, vars).replace(/\n/g, "<br>");
+      const messageHtml = interpolate(row.body, vars, true).replace(/\n/g, "<br>");
       const credBlock = credentialsBlockHtml({ email: user.email, password: plainPassword, loginUrl, mainLoginUrl });
       html = wrapEpicEmail({
         branding,

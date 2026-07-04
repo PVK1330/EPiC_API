@@ -2,6 +2,8 @@ import { Router } from 'express';
 import * as caseController from '../../Admin/case.controller.js';
 import { verifyTokenAndTenant } from '../../../middlewares/authStack.middleware.js';
 import { checkRole, ROLES } from '../../../middlewares/role.middleware.js';
+import { validate } from '../../../middlewares/validate.middleware.js';
+import { createCaseSchema, updateCaseSchema } from '../../../validations/case.validation.js';
 
 const router = Router();
 
@@ -18,12 +20,12 @@ router.patch("/:id/assign", caseController.assignCase);
 router.patch("/:id/stage", caseController.updatePipelineStage);
 router.get("/export", caseController.exportCases);
 // CRUD Operations
-router.post("/", caseController.createCase);
+router.post("/", validate(createCaseSchema), caseController.createCase);
 router.get("/filtered", caseController.getCasesWithFilters);
 router.get("/", caseController.getAllCases);
 router.get("/dropdown", caseController.getCasesDropdown);
 router.get("/:id", caseController.getCaseById);
-router.put("/:id", caseController.updateCase);
+router.put("/:id", validate(updateCaseSchema), caseController.updateCase);
 router.delete("/:id", caseController.deleteCase);
 
 export default router;

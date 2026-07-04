@@ -6,7 +6,7 @@ import {
   updateRtwRecord,
   downloadRtwDocument,
 } from "./rightToWork.controller.js";
-import { upload } from "../../../middlewares/upload.middleware.js";
+import { secureUpload } from "../../../middlewares/upload.middleware.js";
 
 const router = Router();
 
@@ -15,7 +15,7 @@ router.get("/", getAllRtwRecordsForSponsor);
 router.get("/worker/:workerId", getRtwRecordsByWorker);
 // Authenticated evidence-document view (uploads are not served statically).
 router.get("/:id/document", downloadRtwDocument);
-router.post("/", upload.single("document"), createRtwRecord);
-router.put("/:id", upload.single("document"), updateRtwRecord);
+router.post("/", ...secureUpload("document"), createRtwRecord);
+router.put("/:id", ...secureUpload("document"), updateRtwRecord);
 
 export default router;

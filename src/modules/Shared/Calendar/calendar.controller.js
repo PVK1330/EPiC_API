@@ -29,7 +29,7 @@ export const getWorkflowEvents = async (req, res) => {
     logger.error({ err }, "getWorkflowEvents");
     res.status(500).json({
       status: "error",
-      message: err.message || "Failed to load calendar events",
+      message: "Failed to load calendar events",
       data: null,
     });
   }

@@ -5,6 +5,7 @@ import catchAsync from '../../utils/catchAsync.js';
 import ApiResponse from '../../utils/apiResponse.js';
 import logger from '../../utils/logger.js';
 import platformDb from '../../models/index.js';
+import { encrypt as encryptSecret, decrypt as decryptSecret } from '../../utils/fieldEncryption.js';
 import { mirrorUserToTenant } from '../../services/userSync.service.js';
 import { getTenantDb } from '../../services/tenantDb.service.js';
 import { toPublicImagePath } from '../../utils/storagePath.util.js';
@@ -201,13 +202,15 @@ export const setup2FAForSuperadmin = catchAsync(async (req, res) => {
   // into their authenticator, so their codes would never match the DB — the
   // exact "Invalid verification token" symptom. We only mint a fresh secret when
   // 2FA is already enabled (re-enrolment) or none exists yet.
-  let base32 = user.two_factor_secret;
+  // decrypt() returns legacy plaintext unchanged and decrypts encrypted-at-rest
+  // seeds (data-leakage-2), so the reuse branch always feeds speakeasy plaintext.
+  let base32 = decryptSecret(user.two_factor_secret);
   let otpauthUrl;
   if (user.two_factor_enabled || !base32) {
     const secret = speakeasy.generateSecret({ name: label, issuer });
     base32 = secret.base32;
     otpauthUrl = secret.otpauth_url;
-    await user.update({ two_factor_secret: base32 });
+    await user.update({ two_factor_secret: encryptSecret(base32) });
   } else {
     otpauthUrl = speakeasy.otpauthURL({
       secret: base32,
@@ -238,7 +241,7 @@ export const verify2FASetupForSuperadmin = catchAsync(async (req, res) => {
   }
 
   const verified = speakeasy.totp.verify({
-    secret: user.two_factor_secret,
+    secret: decryptSecret(user.two_factor_secret),
     encoding: 'base32',
     token,
     // window:1 tolerates ±30s of clock drift between the server and the user's
@@ -275,7 +278,7 @@ export const disable2FAForSuperadmin = catchAsync(async (req, res) => {
 
   if (token) {
     const verified = speakeasy.totp.verify({
-      secret: user.two_factor_secret,
+      secret: decryptSecret(user.two_factor_secret),
       encoding: 'base32',
       token,
       window: 1,

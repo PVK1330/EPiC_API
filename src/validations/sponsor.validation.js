@@ -1,5 +1,9 @@
 import { z } from 'zod';
-import { emailSchema, phoneSchema, passwordSchema, paginationSchema, UserStatusEnum } from './common.validation.js';
+import { emailSchema, phoneSchema, strongPasswordSchema, paginationSchema, UserStatusEnum } from './common.validation.js';
+
+// Password may be blank/absent on create (the service auto-generates a strong
+// one); when the admin DOES supply one it must meet the strong policy.
+const optionalStrongPassword = z.union([z.literal(''), strongPasswordSchema]).optional().nullable();
 
 /**
  * Licence status is set ONLY by the licence activation workflow
@@ -24,7 +28,7 @@ export const createSponsorSchema = z.object({
     country_code: z.string().trim().min(1, 'Country code is required').max(10),
     mobile: phoneSchema,
     role_id: z.coerce.number().int().optional().default(4),
-    password: passwordSchema.optional().nullable(),
+    password: optionalStrongPassword,
     confirm_password: z.string().optional().nullable(),
     companyName: z.string().trim().min(1, 'Company name is required').max(200),
     tradingName: z.string().trim().max(200).optional().nullable(),
@@ -127,7 +131,7 @@ export const resetSponsorPasswordSchema = z.object({
     id: z.coerce.number().int().positive(),
   }),
   body: z.object({
-    new_password: passwordSchema,
+    new_password: strongPasswordSchema,
     confirm_password: z.string(),
   }).strict().refine((data) => data.new_password === data.confirm_password, {
     message: "Passwords do not match",

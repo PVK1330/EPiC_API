@@ -15,36 +15,53 @@ export default (sequelize, DataTypes) => {
         type: DataTypes.TEXT,
         allowNull: false,
       },
-      // Audience roles this announcement was sent to (caseworker/sponsor/candidate).
-      target_roles: {
+      // e.g. ["caseworker", "sponsor"] — audience checkboxes on the send form.
+      targetRoles: {
         type: DataTypes.JSONB,
         allowNull: false,
         defaultValue: [],
+        field: "target_roles",
       },
+      sendEmail: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: true,
+        field: "send_email",
+      },
+      // Recipient count of the LATEST send (refreshed on "update & resend").
       recipients: {
         type: DataTypes.INTEGER,
         allowNull: false,
         defaultValue: 0,
       },
-      send_email: {
-        type: DataTypes.BOOLEAN,
-        allowNull: false,
-        defaultValue: true,
-      },
-      created_by: {
+      createdBy: {
         type: DataTypes.INTEGER,
         allowNull: true,
+        field: "created_by",
+        references: {
+          model: "users",
+          key: "id",
+        },
+        onDelete: "SET NULL",
       },
-      created_by_name: {
-        type: DataTypes.STRING(200),
+      // Denormalised so history keeps showing the sender after user deletion.
+      createdByName: {
+        type: DataTypes.STRING(255),
         allowNull: true,
+        field: "created_by_name",
+      },
+      organisationId: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        field: "organisation_id",
       },
     },
     {
       tableName: "announcements",
       timestamps: true,
-      indexes: [{ fields: ["createdAt"] }],
-    },
+      createdAt: "created_at",
+      updatedAt: "updated_at",
+    }
   );
 
   return Announcement;

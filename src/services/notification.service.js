@@ -5,6 +5,7 @@ import { getOrganisationEmailBranding } from '../utils/emailBranding.js';
 import { ROLES } from '../middlewares/role.middleware.js';
 import { getIO } from '../realtime/ioRegistry.js';
 import { userRoom } from '../realtime/messagingRealtime.js';
+import { sendPushToUser } from './webPush.service.js';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
@@ -116,6 +117,20 @@ export async function notifyUser(tenantDb, userId, payload = {}) {
         where: { userId, isRead: false },
       });
       io.to(userRoom(userId)).emit('notification:count', { count: unread });
+    }
+
+    // Web Push (desktop notifications) — reaches the user even when no
+    // ElitePic tab is open. Fire-and-forget like email; the service worker
+    // suppresses the OS toast while an ElitePic window is focused, so this
+    // never doubles up with the in-page chime. Honors the same in-app
+    // preference gate as the socket channel.
+    if (sendSocket) {
+      void sendPushToUser(tenantDb, userId, {
+        title,
+        message,
+        url: actionUrl || null,
+        tag: `notification-${notification.id}`,
+      }).catch((err) => logger.warn({ err }, 'web push dispatch failed'));
     }
 
     if (sendEmail) {
@@ -531,8 +546,20 @@ export const generateNotification = async (context, payload) => {
       resolvedOrganisationId = recipient?.organisation_id ?? null;
     }
 
-    // 1. Fetch Template
-    const template = await tenantDb.NotificationTemplate.findOne({ where: { code: templateCode } });
+    // 1. Fetch Template. The notification_templates table is not present in every
+    // tenant DB (schema drift), so this lookup previously THREW an uncaught error
+    // on every timeline event (only swallowed by the listener's outer catch, and
+    // noisy in the logs). This template path is redundant with the primary
+    // notifyUser() path that already delivers these notifications, so when the
+    // table is missing (or no row matches) we SKIP gracefully — deliberately NOT
+    // synthesising a notification here, to avoid duplicating notifyUser().
+    let template = null;
+    try {
+      template = await tenantDb.NotificationTemplate.findOne({ where: { code: templateCode } });
+    } catch (tplErr) {
+      logger.warn({ err: tplErr, templateCode }, 'NotificationTemplate lookup skipped (table missing) — deferring to notifyUser path');
+      return null;
+    }
     if (!template) {
       logger.warn(`Notification template not found for code: ${templateCode}`);
       return null;
@@ -585,11 +612,19 @@ export const generateNotification = async (context, payload) => {
       }
     }
 
-    // 5. Track Delivery
-    const delivery = await tenantDb.NotificationDelivery.create({
-      notificationId: notification.id,
-      deliveryStatus: 'pending'
-    });
+    // 5. Track Delivery — best-effort (notification_deliveries table is optional
+    // / absent in some tenant DBs). A missing table must not abort a
+    // successfully-created notification, so failures here are swallowed and the
+    // later delivery.update() calls are null-guarded.
+    let delivery = null;
+    try {
+      delivery = await tenantDb.NotificationDelivery.create({
+        notificationId: notification.id,
+        deliveryStatus: 'pending'
+      });
+    } catch (delErr) {
+      logger.warn({ err: delErr }, 'NotificationDelivery create failed (table missing?) — skipping delivery tracking');
+    }
 
     // 6. Deliver via Socket.IO (prefer the explicit context io, else the
     //    centralized registry instance).
@@ -603,7 +638,7 @@ export const generateNotification = async (context, payload) => {
       const unreadCount = await tenantDb.Notification.count({ where: { userId: recipientId, isRead: false } });
       ioInstance.to(userRoom(recipientId)).emit('notification:count', { count: unreadCount });
 
-      await delivery.update({ socketDelivered: true, socketDeliveredAt: new Date() });
+      await delivery?.update({ socketDelivered: true, socketDeliveredAt: new Date() });
     }
 
     // 7. Deliver via Email
@@ -619,10 +654,10 @@ export const generateNotification = async (context, payload) => {
             subject: emailSubject,
             html: emailHtml || message, // Fallback to message if no specific HTML template
           });
-          await delivery.update({ emailSent: true, emailSentAt: new Date(), deliveryStatus: 'delivered' });
+          await delivery?.update({ emailSent: true, emailSentAt: new Date(), deliveryStatus: 'delivered' });
         } catch (emailErr) {
           logger.error({ err: emailErr }, 'Failed to send notification email');
-          await delivery.update({ deliveryStatus: 'failed' });
+          await delivery?.update({ deliveryStatus: 'failed' });
         }
       }
     }

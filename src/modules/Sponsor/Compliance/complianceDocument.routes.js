@@ -6,7 +6,7 @@ import {
   deleteComplianceDocument,
   downloadComplianceDocument,
 } from './complianceDocument.controller.js';
-import { upload } from '../../../middlewares/upload.middleware.js';
+import { secureUpload } from '../../../middlewares/upload.middleware.js';
 import { validate } from '../../../middlewares/validate.middleware.js';
 import {
   createComplianceDocumentSchema,
@@ -23,13 +23,13 @@ router.get('/', getDocumentsBySponsor);
 router.get('/:id/download', downloadComplianceDocument);
 router.post(
   '/upload',
-  upload.single('file'),
+  ...secureUpload('file'),
   validate(createComplianceDocumentSchema, 'createComplianceDocument'),
   uploadComplianceDocument
 );
 router.put(
   '/:id',
-  upload.single('file'),
+  ...secureUpload('file'),
   validate(updateComplianceDocumentSchema, 'updateComplianceDocument'),
   updateDocumentMetadata
 );

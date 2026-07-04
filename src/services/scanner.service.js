@@ -25,23 +25,25 @@ class ScannerService {
    * @returns {Promise<{ isSafe: boolean, threatName?: string }>}
    */
   async scanBuffer(buffer, originalName) {
-    if (!this.enabled) {
-      return { isSafe: true };
-    }
-
     try {
-      logger.info({ originalName }, 'Initiating malware scan on uploaded file');
-      
-      // MOCK CLAMAV INTEGRATION
-      // In production: const result = await clamav.scanBuffer(buffer);
-      // For this implementation, we will simulate a clean scan 
-      // but explicitly catch a mock EICAR test string if present.
-      
-      const fileContent = buffer.toString('utf8');
-      if (fileContent.includes('X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*')) {
-        logger.warn({ originalName }, 'Malware signature detected in file (EICAR)');
-        return { isSafe: false, threatName: 'Win.Test.EICAR_HDB-1' };
+      // Baseline signature check — runs ALWAYS, even when the full external
+      // scanner is disabled, so the known EICAR test signature and raw native
+      // executable headers can never slip through unscanned. (The authoritative
+      // type gate is the magic-byte allowlist in upload.middleware.js; this is a
+      // cheap complementary content check.)
+      const baseline = this.baselineSignatureCheck(buffer, originalName);
+      if (!baseline.isSafe) return baseline;
+
+      if (!this.enabled) {
+        return { isSafe: true };
       }
+
+      logger.info({ originalName }, 'Initiating malware scan on uploaded file');
+
+      // NOTE: real anti-virus (ClamAV daemon via clamdjs/clamscan, or a hosted
+      // API such as VirusTotal) is an INFRASTRUCTURE dependency — wire it in here
+      // and keep the fail-closed behaviour below when it is unreachable.
+      // In production: const result = await clamav.scanBuffer(buffer);
 
       // Simulate API latency
       await new Promise(resolve => setTimeout(resolve, 50));
@@ -49,10 +51,39 @@ class ScannerService {
       return { isSafe: true };
     } catch (error) {
       logger.error({ err: error, originalName }, 'Error during malware scan');
-      // Fail-safe approach: If the scanner crashes, reject the file to be safe.
-      // Alternatively, depending on enterprise policy, could allow with a warning.
+      // Fail-closed: if the scanner crashes, reject the file to be safe.
       return { isSafe: false, threatName: 'SCANNER_ERROR' };
     }
+  }
+
+  /**
+   * Cheap, dependency-free content signature check. Catches the EICAR test file
+   * and raw native-executable headers (PE `MZ`, ELF, Mach-O) embedded in a file
+   * that claimed to be a document/image. Not a substitute for real AV, but a
+   * baseline that always runs.
+   */
+  baselineSignatureCheck(buffer, originalName) {
+    if (!Buffer.isBuffer(buffer) || buffer.length === 0) return { isSafe: true };
+
+    const head = buffer.subarray(0, 4);
+    // PE (Windows .exe/.dll): "MZ"
+    if (head[0] === 0x4d && head[1] === 0x5a) {
+      logger.warn({ originalName }, 'Rejected file with PE/MZ executable header');
+      return { isSafe: false, threatName: 'Heur.Executable.PE' };
+    }
+    // ELF (Linux executables): 0x7F 'E' 'L' 'F'
+    if (head[0] === 0x7f && head[1] === 0x45 && head[2] === 0x4c && head[3] === 0x46) {
+      logger.warn({ originalName }, 'Rejected file with ELF executable header');
+      return { isSafe: false, threatName: 'Heur.Executable.ELF' };
+    }
+
+    const fileContent = buffer.toString('utf8');
+    if (fileContent.includes('X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*')) {
+      logger.warn({ originalName }, 'Malware signature detected in file (EICAR)');
+      return { isSafe: false, threatName: 'Win.Test.EICAR_HDB-1' };
+    }
+
+    return { isSafe: true };
   }
 }
 

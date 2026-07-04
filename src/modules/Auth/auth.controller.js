@@ -5,6 +5,7 @@ import QRCode from 'qrcode';
 import catchAsync from '../../utils/catchAsync.js';
 import ApiResponse from '../../utils/apiResponse.js';
 import platformDb from '../../models/index.js';
+import { encrypt as encryptSecret, decrypt as decryptSecret } from '../../utils/fieldEncryption.js';
 import { generateOTPTemplate, generateCredentialsTemplate } from '../../utils/emailTemplates.js';
 import { getOrganisationEmailBranding } from '../../utils/emailBranding.js';
 import { sendPasswordResetOtpEmail } from '../../services/tenantUserMail.service.js';
@@ -1357,8 +1358,11 @@ export const setup2FA = catchAsync(async (req, res) => {
   const secret = speakeasy.generateSecret({ name: `${issuerName}:${accountLabel}` });
   const dataURL = await QRCode.toDataURL(secret.otpauth_url);
 
+  // data-leakage-2: encrypt the TOTP seed at rest (AES-256-GCM via
+  // fieldEncryption). decrypt() passes legacy plaintext through unchanged, so
+  // existing enrolments keep verifying; only the stored value changes.
   await user.update({
-    two_factor_secret: secret.base32,
+    two_factor_secret: encryptSecret(secret.base32),
   });
 
   // S-10 fix: never return the raw base32 secret in the JSON response.
@@ -1380,7 +1384,7 @@ export const verify2FASetup = catchAsync(async (req, res) => {
   if (!user || !user.two_factor_secret) return ApiResponse.badRequest(res, '2FA setup not initiated');
 
   const verified = speakeasy.totp.verify({
-    secret: user.two_factor_secret,
+    secret: decryptSecret(user.two_factor_secret),
     encoding: 'base32',
     token: String(token ?? '').replace(/\s+/g, ''),
     // ±30s clock-drift tolerance so a correct code is not rejected on minor skew.
@@ -1405,7 +1409,7 @@ export const verify2FA = catchAsync(async (req, res) => {
   if (!user || !user.two_factor_secret) return ApiResponse.badRequest(res, '2FA not enabled');
 
   const verified = speakeasy.totp.verify({
-    secret: user.two_factor_secret,
+    secret: decryptSecret(user.two_factor_secret),
     encoding: 'base32',
     token: String(token ?? '').replace(/\s+/g, ''),
     // ±30s clock-drift tolerance so a correct code is not rejected on minor skew.

@@ -445,7 +445,7 @@ export const getCaseDetails = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -597,7 +597,7 @@ export const updateCaseStatus = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -895,7 +895,7 @@ export const updateCaseFinance = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -1024,7 +1024,7 @@ export const recordManualCasePayment = async (req, res) => {
       status: 'error',
       message: 'Internal server error',
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };

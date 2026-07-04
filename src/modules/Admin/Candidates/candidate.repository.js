@@ -1,20 +1,5 @@
 import { Op } from 'sequelize';
-
-// SECURITY (BUG-002): never serialise credential / auth-secret columns out of
-// the admin candidate endpoints. Exposing the bcrypt hash allows offline
-// cracking, and the TOTP secret + reset OTPs allow 2FA bypass / account
-// takeover. is_otp_verified / two_factor_enabled / password_changed_at are safe
-// booleans/timestamps and are intentionally NOT excluded.
-export const SENSITIVE_USER_ATTRS = [
-  'password',
-  'otp_code',
-  'otp_expiry',
-  'password_reset_otp',
-  'password_reset_otp_expiry',
-  'temp_password',
-  'two_factor_secret',
-  'two_factor_backup_codes',
-];
+import { excludeSensitiveUserAttrs } from '../../../utils/userAttributes.js';
 
 export class CandidateRepository {
   constructor(tenantDb) {
@@ -40,7 +25,7 @@ export class CandidateRepository {
   async findById(id) {
     return await this.tenantDb.User.findOne({
       where: { id, role_id: 1 },
-      attributes: { exclude: SENSITIVE_USER_ATTRS },
+      attributes: excludeSensitiveUserAttrs(),
       include: [
         {
           model: this.tenantDb.Role,
@@ -106,7 +91,7 @@ export class CandidateRepository {
   async findAndCountAll({ where, include, order, limit, offset }) {
     return await this.tenantDb.User.findAndCountAll({
       where,
-      attributes: { exclude: SENSITIVE_USER_ATTRS },
+      attributes: excludeSensitiveUserAttrs(),
       include,
       order,
       limit,

@@ -443,7 +443,7 @@ export const getWorkloadOverview = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -606,7 +606,7 @@ export const getCaseworkerWorkload = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -704,7 +704,7 @@ export const getWorkloadTrends = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -839,7 +839,7 @@ export const getWorkloadAlerts = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };

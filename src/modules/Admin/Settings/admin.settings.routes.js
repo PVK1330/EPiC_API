@@ -7,6 +7,8 @@ import * as integrationsDashboardController from './integrationsDashboard.contro
 import * as integrationCredentialsController from './integrationCredentials.controller.js';
 import { verifyTokenAndTenant } from '../../../middlewares/authStack.middleware.js';
 import { checkRole, ROLES } from '../../../middlewares/role.middleware.js';
+import { validate } from '../../../middlewares/validate.middleware.js';
+import { createSlaRuleSchema, updateSlaRuleSchema } from '../../../validations/slaRule.validation.js';
 import { handleProfilePicUpload, handleCclTemplateUpload, handleOrganisationLogoUpload, handleOrganisationFaviconUpload } from '../../../middlewares/upload.middleware.js';
 
 const router = Router();
@@ -52,8 +54,8 @@ router.put("/email-templates/:key", adminSettingsController.updateEmailTemplate)
 router.delete("/email-templates/:key", adminSettingsController.deleteEmailTemplate);
 
 router.get("/sla-rules", adminSettingsController.listSlaRules);
-router.post("/sla-rules", adminSettingsController.createSlaRule);
-router.patch("/sla-rules/:id", adminSettingsController.updateSlaRule);
+router.post("/sla-rules", validate(createSlaRuleSchema), adminSettingsController.createSlaRule);
+router.patch("/sla-rules/:id", validate(updateSlaRuleSchema), adminSettingsController.updateSlaRule);
 router.delete("/sla-rules/:id", adminSettingsController.deleteSlaRule);
 
 router.get("/payment-settings", adminSettingsController.getPaymentSetting);

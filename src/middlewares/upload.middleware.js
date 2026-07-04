@@ -13,6 +13,7 @@ import {
 import { scannerService } from '../services/scanner.service.js';
 import { imageSanitizer } from '../services/imageSanitizer.service.js';
 import { auditLogger } from '../services/auditLogger.service.js';
+import { uploadLimiter } from './uploadRateLimiter.js';
 import logger from '../utils/logger.js';
 
 // Base private storage directory
@@ -73,6 +74,24 @@ export const memoryUpload = multer({
   limits: { fileSize: MAX_FILE_SIZES.DOCUMENT },
   fileFilter: generalFileFilter
 });
+
+// upload-security-2: bulk-import (CSV/XLSX) upload with an explicit size limit
+// and a spreadsheet-only filter. Bulk-import controllers previously used a bare
+// `multer({ storage: memoryStorage() })` with NO limit and NO filter — a
+// memory-DoS + unrestricted-type + XLSX zip-bomb vector. Controllers must still
+// cap the parsed row count before trusting the sheet (see MAX_BULK_IMPORT_ROWS).
+const spreadsheetFilter = createFileFilter(['.csv', '.xlsx', '.xls']);
+export const bulkImportUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_FILE_SIZES.DOCUMENT, files: 1 },
+  fileFilter: spreadsheetFilter,
+});
+export const handleBulkImportUpload = bulkImportUpload.single('file');
+
+// Hard cap on rows a bulk-import file may contain — enforced in controllers
+// before iterating, so an attacker cannot amplify a small upload into millions
+// of row inserts.
+export const MAX_BULK_IMPORT_ROWS = 5000;
 
 const cclTemplateUpload = multer({
   storage: createSecureDiskStorage('ccl-templates'),
@@ -135,34 +154,71 @@ const issueReportUpload = multer({
   fileFilter: imageOnlyFilter
 });
 
+// Plain-text formats legitimately have NO magic bytes, so file-type returns
+// undefined for them. They are still constrained by the multer extension filter.
+const NO_MAGIC_TEXT_EXTS = ['.txt', '.csv'];
+
+// Magic-byte-detected types we accept (upload-security-9 fix — positive
+// allowlist, default-deny). Union of our allowed document/image formats plus the
+// ZIP/compound-file containers that Office documents (docx/xlsx/doc/xls) present
+// as when inspected by content.
+const ALLOWED_DETECTED_EXTS = new Set([
+  'pdf', 'png', 'jpg', 'jpeg', 'webp', 'ico',
+  'docx', 'xlsx', 'pptx', 'zip', 'cfb', 'doc', 'xls',
+]);
+
 /**
  * ── POST-UPLOAD VALIDATION ───────────────────────────────────────────────────
  * Validates magic bytes, checks malware, sanitizes images, and logs audits.
+ * All file reads are async (upload-security-10) to avoid blocking the event loop.
  */
 const processFileSecurity = async (req, file) => {
   try {
     const ext = path.extname(file.originalname).toLowerCase();
-    
+
+    const logSuccess = (detectedMime) =>
+      auditLogger.logUploadAttempt({
+        userId: req.user?.id,
+        organisationId: req.organisationContext?.organisation?.id,
+        originalFilename: file.originalname,
+        savedFilename: file.filename,
+        detectedMime,
+        fileSize: file.size,
+        status: 'SUCCESS',
+      });
+
     // 1. Magic Bytes Validation
     const typeInfo = await fileTypeFromFile(file.path);
     if (!typeInfo) {
-      throw new Error('Could not determine actual file type (missing magic bytes).');
+      // Accept only genuine no-magic-byte text formats (txt/csv). Anything else
+      // that lacks magic bytes is treated as spoofing and rejected.
+      if (!NO_MAGIC_TEXT_EXTS.includes(ext)) {
+        throw new Error('Could not determine actual file type (missing magic bytes).');
+      }
+      const textBuf = await fs.promises.readFile(file.path);
+      const textScan = await scannerService.scanBuffer(textBuf, file.originalname);
+      if (!textScan.isSafe) {
+        throw new Error(`File rejected: Malware detected (${textScan.threatName})`);
+      }
+      logSuccess('text/plain');
+      return;
     }
-    
-    // Check if the detected extension is dangerous (e.g., zip pretending to be pdf, or exe)
+
+    // upload-security-9: detected type must be neither dangerous NOR outside our
+    // allowlist. Previously a mismatch branch was a no-op, so a file whose true
+    // magic-byte type was unlisted (spoofed extension) passed through.
     if (BLOCKED_EXTENSIONS.includes(`.${typeInfo.ext}`)) {
       throw new Error(`Dangerous file type detected by magic bytes: .${typeInfo.ext}`);
     }
-
-    // Check if detected extension matches the declared one (allow docx/xlsx which are zip based)
-    const isArchiveBased = ['docx', 'xlsx', 'pptx'].includes(ext.replace('.', ''));
-    if (!isArchiveBased && `.${typeInfo.ext}` !== ext && typeInfo.ext !== 'cfb') {
-      // Ignore some minor mismatches, but generally flag spoofing
-      // Note: doc format is often cfb
+    if (!ALLOWED_DETECTED_EXTS.has(typeInfo.ext)) {
+      throw new Error(`File content type .${typeInfo.ext} is not permitted for this upload.`);
     }
 
-    // 2. Malware Scan
-    const scanResult = await scannerService.scanBuffer(fs.readFileSync(file.path), file.originalname);
+    // 2. Malware Scan (async read)
+    const scanResult = await scannerService.scanBuffer(
+      await fs.promises.readFile(file.path),
+      file.originalname,
+    );
     if (!scanResult.isSafe) {
       auditLogger.logUploadAttempt({
         userId: req.user?.id,
@@ -172,42 +228,36 @@ const processFileSecurity = async (req, file) => {
         detectedMime: typeInfo.mime,
         fileSize: file.size,
         status: 'QUARANTINED',
-        reason: scanResult.threatName
+        reason: scanResult.threatName,
       });
       throw new Error(`File rejected: Malware detected (${scanResult.threatName})`);
     }
 
-    // 3. Image Sanitization (if image)
+    // 3. Image Sanitization (if image) — async read + write
     if (typeInfo.mime.startsWith('image/') && typeInfo.mime !== 'image/x-icon') {
-      const buffer = fs.readFileSync(file.path);
+      const buffer = await fs.promises.readFile(file.path);
       const sanitizedBuffer = await imageSanitizer.sanitizeImage(buffer, typeInfo.mime);
-      fs.writeFileSync(file.path, sanitizedBuffer); // Overwrite with sanitized safe image
+      await fs.promises.writeFile(file.path, sanitizedBuffer); // Overwrite with sanitized safe image
     }
 
     // 4. Success Audit Log
-    auditLogger.logUploadAttempt({
-      userId: req.user?.id,
-      organisationId: req.organisationContext?.organisation?.id,
-      originalFilename: file.originalname,
-      savedFilename: file.filename,
-      detectedMime: typeInfo.mime,
-      fileSize: file.size,
-      status: 'SUCCESS'
-    });
-
+    logSuccess(typeInfo.mime);
   } catch (err) {
     // Purge the file if validation fails
     if (fs.existsSync(file.path)) {
-      fs.unlinkSync(file.path);
+      await fs.promises.unlink(file.path).catch(() => {});
     }
     throw err; // Re-throw to be caught by the route handler wrapper
   }
 };
 
 /**
- * Wrapper to run multer upload and then the security post-processor
+ * Wrapper to run multer upload and then the security post-processor.
+ * Exported (upload-security-1) so route files that previously used a raw multer
+ * instance can run the full magic-byte + scan + image-sanitise pipeline by
+ * wrapping their disk-storage upload: `secureUpload(upload.single('document'))`.
  */
-const withSecurityProcessing = (uploadMiddleware) => {
+export const withSecurityProcessing = (uploadMiddleware) => {
   return (req, res, next) => {
     uploadMiddleware(req, res, async (err) => {
       if (err) {
@@ -273,6 +323,22 @@ export const handleSponsorRegistrationUpload = withSecurityProcessing(
   ])
 );
 export const handleDocumentUpload = withSecurityProcessing(upload.array("files", 10));
+
+/**
+ * upload-security-1/4: one-liner for route files that previously used a raw
+ * `upload.single(field)` / `upload.array(field, n)` (disk storage, no magic-byte
+ * check, no scan, no image sanitisation, no rate limit). Returns a middleware
+ * array that applies the per-user/tenant upload rate limiter AND the full
+ * security post-processor. Usage:
+ *   router.post('/evidence', ...secureUpload('document'), handler)
+ *   router.post('/apply',    ...secureUpload('documents', 10), handler)
+ */
+export const secureUpload = (field, count = null) => {
+  const mw = count == null
+    ? upload.single(field)
+    : upload.array(field, count);
+  return [uploadLimiter, withSecurityProcessing(mw)];
+};
 
 export const handleOrganisationLogoUpload = withSecurityProcessing(orgLogoUpload.single('logo'));
 export const handleOrganisationFaviconUpload = withSecurityProcessing(orgFaviconUpload.single('favicon'));

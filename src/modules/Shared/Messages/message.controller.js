@@ -84,7 +84,7 @@ export const getMessages = async (req, res) => {
 
     res.status(200).json({ status: "success", message: "Messages retrieved successfully", data: { count: messages.length, messages } });
   } catch (error) {
-    res.status(500).json({ status: "error", message: "Error retrieving messages", error: error.message });
+    res.status(500).json({ status: "error", message: "Error retrieving messages", error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 
@@ -209,7 +209,7 @@ export const sendMessage = async (req, res) => {
 
     res.status(201).json({ status: "success", message: "Message sent successfully", data: messageInfo });
   } catch (error) {
-    res.status(500).json({ status: "error", message: "Error sending message", error: error.message });
+    res.status(500).json({ status: "error", message: "Error sending message", error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 
@@ -275,7 +275,7 @@ export const getRecentConversations = async (req, res) => {
       data: { count: formattedConversations.length, conversations: formattedConversations },
     });
   } catch (error) {
-    res.status(500).json({ status: "error", message: "Error retrieving conversations", error: error.message });
+    res.status(500).json({ status: "error", message: "Error retrieving conversations", error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 
@@ -378,7 +378,7 @@ export const getChatUsers = async (req, res) => {
 
     res.status(200).json({ status: "success", message: "Chat users retrieved successfully", data: { count: chatUsers.length, users: chatUsers } });
   } catch (error) {
-    res.status(500).json({ status: "error", message: "Error retrieving chat users", error: error.message });
+    res.status(500).json({ status: "error", message: "Error retrieving chat users", error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 
@@ -424,7 +424,7 @@ export const markAsRead = async (req, res) => {
 
     res.status(200).json({ status: "success", message: "Messages marked as read" });
   } catch (error) {
-    res.status(500).json({ status: "error", message: "Error updating message status", error: error.message });
+    res.status(500).json({ status: "error", message: "Error updating message status", error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 

@@ -28,6 +28,65 @@ import {
   notifyCandidatePaymentEvent,
 } from '../../../services/stripeTenant.service.js';
 
+/**
+ * Ownership guard for candidate payment operations (refund / cancel / status).
+ *
+ * Prevents a cross-candidate financial IDOR: the org shares one tenant Stripe
+ * account, so without this any candidate could pass an arbitrary/enumerated
+ * payment_intent_id and act on another candidate's payment.
+ *
+ * A PaymentIntent is "owned" by the caller when EITHER:
+ *   (a) pi.metadata.userId === req.user.userId — stamped at creation for direct
+ *       PaymentIntents (mirrors the verifyCheckoutSession ownership check), or
+ *   (b) a CasePayment row (transactionId === pi.id) belongs to a Case whose
+ *       candidateId === req.user.userId — covers Checkout-created PaymentIntents
+ *       whose metadata lives on the session, not on the PI itself.
+ *
+ * On success returns the retrieved PaymentIntent. On failure it sends the
+ * 404/403 response and returns null — the caller MUST `return` when null.
+ */
+async function loadOwnedPaymentIntent(req, res, stripe, paymentIntentId) {
+  let paymentIntent;
+  try {
+    paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+  } catch (err) {
+    logger.warn({ err, paymentIntentId }, 'loadOwnedPaymentIntent: retrieve failed');
+    res.status(404).json({ status: 'error', message: 'Payment not found', data: null });
+    return null;
+  }
+
+  const userId = String(req.user?.userId || '');
+  if (userId && String(paymentIntent.metadata?.userId || '') === userId) {
+    return paymentIntent;
+  }
+
+  // Checkout-created PaymentIntents carry no metadata.userId (it is on the
+  // session), so verify ownership through the recorded CasePayment -> Case.
+  try {
+    const casePayment = await req.tenantDb?.CasePayment.findOne({
+      where: { transactionId: String(paymentIntentId) },
+      attributes: ['id', 'caseId'],
+    });
+    if (casePayment) {
+      const caseRow = await req.tenantDb.Case.findByPk(casePayment.caseId, {
+        attributes: ['id', 'candidateId'],
+      });
+      if (caseRow && userId && String(caseRow.candidateId || '') === userId) {
+        return paymentIntent;
+      }
+    }
+  } catch (err) {
+    logger.warn({ err, paymentIntentId }, 'loadOwnedPaymentIntent: DB ownership check failed');
+  }
+
+  res.status(403).json({
+    status: 'error',
+    message: 'This payment does not belong to your account',
+    data: null,
+  });
+  return null;
+}
+
 async function getActiveAdminIds(tenantDb) {
   const adminRole = await tenantDb.Role.findOne({
     where: { name: { [Op.iLike]: 'admin' } },
@@ -361,7 +420,7 @@ export const getBankTransferDetails = async (req, res) => {
     });
   } catch (err) {
     logger.error({ err }, 'getBankTransferDetails');
-    res.status(500).json({ status: 'error', message: err.message, data: null });
+    res.status(500).json({ status: 'error', message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined, data: null });
   }
 };
 
@@ -413,7 +472,7 @@ export const recordBankTransferIntent = async (req, res) => {
     });
   } catch (err) {
     logger.error({ err }, 'recordBankTransferIntent');
-    res.status(500).json({ status: 'error', message: err.message, data: null });
+    res.status(500).json({ status: 'error', message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined, data: null });
   }
 };
 
@@ -489,7 +548,7 @@ export const createPaymentIntent = async (req, res) => {
     logger.error({ err: error }, "Stripe Payment Intent Error");
     res.status(500).json({
       status: "error",
-      message: error.message || "Failed to create payment intent",
+      message: "Failed to create payment intent",
       data: null,
     });
   }
@@ -566,7 +625,7 @@ export const createCaseCheckoutSession = async (req, res) => {
     logger.error({ err: error }, "Stripe Checkout Session Error");
     res.status(500).json({
       status: "error",
-      message: error.message || "Failed to create checkout session",
+      message: "Failed to create checkout session",
       data: null,
     });
   }
@@ -638,7 +697,7 @@ export const verifyCheckoutSession = async (req, res) => {
     logger.error({ err: error }, "verifyCheckoutSession");
     res.status(500).json({
       status: "error",
-      message: error.message || "Failed to verify checkout session",
+      message: "Failed to verify checkout session",
       data: null,
     });
   }
@@ -658,9 +717,8 @@ export const confirmPayment = async (req, res) => {
       });
     }
 
-    // Retrieve payment intent
-    const paymentIntent =
-      await stripe.paymentIntents.retrieve(payment_intent_id);
+    const paymentIntent = await loadOwnedPaymentIntent(req, res, stripe, payment_intent_id);
+    if (!paymentIntent) return;
 
     if (paymentIntent.status === "succeeded") {
       await finalizeStripePaymentForUser({
@@ -714,7 +772,7 @@ export const confirmPayment = async (req, res) => {
     logger.error({ err: error }, "Stripe Payment Confirmation Error");
     res.status(500).json({
       status: "error",
-      message: error.message || "Failed to confirm payment",
+      message: "Failed to confirm payment",
       data: null,
     });
   }
@@ -734,8 +792,8 @@ export const getPaymentStatus = async (req, res) => {
       });
     }
 
-    const paymentIntent =
-      await stripe.paymentIntents.retrieve(payment_intent_id);
+    const paymentIntent = await loadOwnedPaymentIntent(req, res, stripe, payment_intent_id);
+    if (!paymentIntent) return;
 
     if (paymentIntent.status === "succeeded") {
       await finalizeStripePaymentForUser({
@@ -764,7 +822,7 @@ export const getPaymentStatus = async (req, res) => {
     logger.error({ err: error }, "Stripe Payment Status Error");
     res.status(500).json({
       status: "error",
-      message: error.message || "Failed to retrieve payment status",
+      message: "Failed to retrieve payment status",
       data: null,
     });
   }
@@ -784,6 +842,9 @@ export const cancelPayment = async (req, res) => {
       });
     }
 
+    const owned = await loadOwnedPaymentIntent(req, res, stripe, payment_intent_id);
+    if (!owned) return;
+
     const canceledPayment =
       await stripe.paymentIntents.cancel(payment_intent_id);
 
@@ -800,7 +861,7 @@ export const cancelPayment = async (req, res) => {
     logger.error({ err: error }, "Stripe Payment Cancellation Error");
     res.status(500).json({
       status: "error",
-      message: error.message || "Failed to cancel payment",
+      message: "Failed to cancel payment",
       data: null,
     });
   }
@@ -830,7 +891,7 @@ export const createSetupIntent = async (req, res) => {
     logger.error({ err: error }, "Stripe Setup Intent Error");
     res.status(500).json({
       status: "error",
-      message: error.message || "Failed to create setup intent",
+      message: "Failed to create setup intent",
       data: null,
     });
   }
@@ -1299,9 +1360,19 @@ export const createRefund = async (req, res) => {
       });
     }
 
+    const owned = await loadOwnedPaymentIntent(req, res, stripe, payment_intent_id);
+    if (!owned) return;
+
+    // Clamp a client-supplied partial-refund amount to what was actually
+    // captured, so a candidate cannot request more than their own payment.
+    const requestedCents = amount ? Math.round(amount * 100) : undefined;
+    const capturedCents = owned.amount_received || owned.amount;
+    const refundCents =
+      requestedCents === undefined ? undefined : Math.min(requestedCents, capturedCents);
+
     const refund = await stripe.refunds.create({
       payment_intent: payment_intent_id,
-      amount: amount ? Math.round(amount * 100) : undefined, // Convert to cents if provided
+      amount: refundCents, // in cents; clamped to the captured amount
       reason: reason || "requested_by_customer",
     });
 
@@ -1320,7 +1391,7 @@ export const createRefund = async (req, res) => {
     logger.error({ err: error }, "Stripe Refund Error");
     res.status(500).json({
       status: "error",
-      message: error.message || "Failed to create refund",
+      message: "Failed to create refund",
       data: null,
     });
   }
@@ -1391,7 +1462,7 @@ export const createSubscription = async (req, res) => {
     logger.error({ err: error }, "Stripe Subscription Creation Error");
     res.status(500).json({
       status: "error",
-      message: error.message || "Failed to create subscription",
+      message: "Failed to create subscription",
       data: null,
     });
   }
@@ -1465,7 +1536,7 @@ export const renewSubscription = async (req, res) => {
     logger.error({ err: error }, "Stripe Subscription Renewal Error");
     res.status(500).json({
       status: "error",
-      message: error.message || "Failed to renew subscription",
+      message: "Failed to renew subscription",
       data: null,
     });
   }
@@ -1509,7 +1580,7 @@ export const cancelSubscription = async (req, res) => {
     logger.error({ err: error }, "Stripe Subscription Cancellation Error");
     res.status(500).json({
       status: "error",
-      message: error.message || "Failed to cancel subscription",
+      message: "Failed to cancel subscription",
       data: null,
     });
   }
@@ -1556,7 +1627,7 @@ export const getSubscriptionStatus = async (req, res) => {
     logger.error({ err: error }, "Stripe Subscription Status Error");
     res.status(500).json({
       status: "error",
-      message: error.message || "Failed to retrieve subscription status",
+      message: "Failed to retrieve subscription status",
       data: null,
     });
   }
@@ -1608,7 +1679,7 @@ export const updateSubscription = async (req, res) => {
     logger.error({ err: error }, "Stripe Subscription Update Error");
     res.status(500).json({
       status: "error",
-      message: error.message || "Failed to update subscription",
+      message: "Failed to update subscription",
       data: null,
     });
   }

@@ -68,7 +68,7 @@ export const getMyAppointments = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -203,7 +203,7 @@ export const createAppointment = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -233,7 +233,7 @@ export const getAvailableStaff = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -280,7 +280,7 @@ export const updateAppointmentStatus = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -327,7 +327,7 @@ export const deleteAppointment = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };

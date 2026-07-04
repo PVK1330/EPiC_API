@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { upload } from "../../../middlewares/upload.middleware.js";
+import { secureUpload } from "../../../middlewares/upload.middleware.js";
 import { validate } from "../../../middlewares/validate.middleware.js";
 import { respondToComplianceReview } from "./sponsorComplianceRespond.controller.js";
 import { sponsorRespondSchema } from "../../../validations/complianceReview.validation.js";
@@ -12,7 +12,7 @@ const router = Router();
 // item for review.
 router.post(
   "/:entityType/:id/respond",
-  upload.single("evidence"),
+  ...secureUpload("evidence"),
   validate(sponsorRespondSchema, "sponsorComplianceRespond"),
   respondToComplianceReview
 );
