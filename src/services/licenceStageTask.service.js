@@ -1427,11 +1427,14 @@ export async function completeStageTask(tenantDb, { applicationId, stageKey, rol
   }
 
   // ── Fan-out notifications (in-app + email) — best-effort, never throws ────────
-  try {
-    await notifyStageTaskCompleted({ tenantDb, application, stageDef, role, task, actorUser, req });
-  } catch (err) {
+  // Fired WITHOUT awaiting: each recipient's email is sent synchronously over
+  // SMTP, so awaiting the whole fan-out can hold the HTTP response open past the
+  // client's request timeout — the task then completes server-side while the UI
+  // reports "Couldn't complete this task". The completion is already committed
+  // above; delivery failures are logged and never affect the response.
+  notifyStageTaskCompleted({ tenantDb, application, stageDef, role, task, actorUser, req }).catch((err) => {
     logger.error({ err }, "completeStageTask: notification failed");
-  }
+  });
 
   return task;
 }

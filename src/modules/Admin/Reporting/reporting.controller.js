@@ -687,7 +687,7 @@ export const getPerformanceReport = async (req, res) => {
 /** Multi-sheet workbook; reuses compute* payloads (same filters as JSON report APIs). */
 export const exportReportingExcel = async (req, res) => {
   try {
-    const { startDate, endDate, sheet } = req.query;
+    const { startDate, endDate, sheet, caseworkerId } = req.query;
 
     // sheet = 'cases' | 'workload' | 'financial' | 'performance' | undefined (all)
     const wantCases      = !sheet || sheet === 'cases';
@@ -701,12 +701,19 @@ export const exportReportingExcel = async (req, res) => {
         return null;
       });
 
-    const [cases, workload, financial, performance] = await Promise.all([
+    let [cases, workload, financial, performance] = await Promise.all([
       wantCases       ? guard('cases', computeCaseAnalyticsData(req))         : null,
       wantWorkload    ? guard('workload', computeWorkloadReportData(req))     : null,
       wantFinancial   ? guard('financial', computeFinancialReportData(req))   : null,
       wantPerformance ? guard('performance', computePerformanceReportData(req)) : null,
     ]);
+
+    // Per-caseworker export: narrow performance rows to the requested caseworker only.
+    if (caseworkerId && Array.isArray(performance)) {
+      performance = performance.filter(
+        (p) => String(p.id) === String(caseworkerId),
+      );
+    }
 
     /** @type {{ name: string, columns: { key: string, header: string }[], rows: Record<string, unknown>[] }[]} */
     const sheets = [];
@@ -724,7 +731,12 @@ export const exportReportingExcel = async (req, res) => {
       { field: 'Report', value: 'ElitePic — Reporting & Analytics' },
       { field: 'Generated', value: `${new Date().toISOString().replace('T', ' ').slice(0, 16)} UTC` },
       { field: 'Date Range', value: rangeLabel },
-      { field: 'Scope', value: sheet ? `${sheet} only` : 'All reports' },
+      {
+        field: 'Scope',
+        value: sheet
+          ? `${sheet} only${caseworkerId ? ` (caseworker ${caseworkerId})` : ''}`
+          : 'All reports',
+      },
     ];
 
     if (cases?.summary) {

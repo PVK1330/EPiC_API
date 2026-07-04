@@ -1064,9 +1064,13 @@ export const downloadDocument = async (req, res) => {
 
     const filename = path.basename(absolutePath);
     const ext = path.extname(filename).toLowerCase();
-    const imageExts = ['.png', '.jpg', '.jpeg', '.webp'];
-    
-    if (!imageExts.includes(ext)) {
+    // Previewable types (images + PDF) are served inline so "View"/preview in
+    // the panels renders them in the browser instead of forcing a download.
+    // Explicit download buttons fetch as a blob and save client-side, so they
+    // are unaffected by the inline disposition.
+    const inlineExts = ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.pdf'];
+
+    if (!inlineExts.includes(ext)) {
       res.setHeader('Content-Disposition', `attachment; filename="${document.userFileName || document.documentName}"`);
     } else {
       res.setHeader('Content-Disposition', `inline; filename="${document.userFileName || document.documentName}"`);

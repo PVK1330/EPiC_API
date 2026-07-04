@@ -1401,6 +1401,24 @@ export const getCandidatePaymentSchedule = async (req, res) => {
     const totalFee = resolveCaseFeeTotal(caseRecord, ccl);
     const paidAmount = Number(caseRecord.paidAmount) || 0;
 
+    // Invoices / payment records for this case (admin-generated invoices from
+    // Finance, Stripe payments, bank transfers…) so the candidate's Payments
+    // page can list them and let the candidate settle pending ones.
+    const paymentRows = await req.tenantDb.CasePayment.findAll({
+      where: { caseId: caseRecord.id },
+      order: [["created_at", "DESC"]],
+    }).catch(() => []);
+    const invoices = paymentRows.map((p) => ({
+      id: p.id,
+      invoiceNumber: p.invoiceNumber || p.transactionId || `#PAY-${p.id}`,
+      amount: Number(p.amount) || 0,
+      status: p.paymentStatus,
+      method: p.paymentMethod || null,
+      description: p.description || null,
+      dueDate: p.dueDate || null,
+      date: p.paymentDate || p.created_at,
+    }));
+
     if (!approved || totalFee <= 0) {
       return res.status(200).json({
         status: "success",
@@ -1413,6 +1431,7 @@ export const getCandidatePaymentSchedule = async (req, res) => {
           caseId: caseRecord.caseId,
           cclStatus: ccl?.status || "pending",
           amountStatus: caseRecord.amountStatus,
+          invoices,
         },
       });
     }
@@ -1452,6 +1471,7 @@ export const getCandidatePaymentSchedule = async (req, res) => {
         amountStatus: caseRecord.amountStatus,
         installments,
         paymentRequest,
+        invoices,
         ccl: ccl
           ? {
               status: ccl.status,

@@ -8,6 +8,12 @@ import { localDateStr } from '../../../utils/dateHelpers.js';
 import catchAsync from '../../../utils/catchAsync.js';
 import ApiResponse from '../../../utils/apiResponse.js';
 import { rowsToXlsxBuffer, sendXlsxDownload } from '../../../utils/excelExport.util.js';
+import {
+  notifyUser,
+  NotificationTypes,
+  NotificationPriority,
+} from '../../../services/notification.service.js';
+import logger from '../../../utils/logger.js';
 
 // ─── GET /admin/finance/summary ───────────────────────────────────────────────
 export const getFinanceSummary = catchAsync(async (req, res) => {
@@ -245,6 +251,48 @@ export const createInvoice = catchAsync(async (req, res) => {
     notes,
     receivedBy:    req.user?.id || null,
   });
+
+  // Make the invoice payable from the candidate portal. The candidate payment
+  // schedule (GET /workflow/payments/schedule) is only visible when fees read
+  // as approved AND a fee total exists (legacy admin-approval path), so an
+  // admin-generated invoice must satisfy both or it never surfaces.
+  try {
+    const caseUpdates = {};
+    const currentTotal = Number(caseRecord.totalAmount) || 0;
+    if (currentTotal <= 0) caseUpdates.totalAmount = parseFloat(amount);
+    if (!['Approved', 'Paid'].includes(String(caseRecord.amountStatus || '').trim())) {
+      caseUpdates.amountStatus = 'Approved';
+    }
+    if (Object.keys(caseUpdates).length) await caseRecord.update(caseUpdates);
+  } catch (err) {
+    logger.warn({ err, caseId: caseRecord.id }, 'createInvoice: failed to sync case fee totals');
+  }
+
+  // Send the invoice to the candidate: in-app notification + branded email with
+  // a link to the candidate portal's Payments page (existing notifyUser pattern).
+  if (caseRecord.candidateId) {
+    const amountStr = `£${parseFloat(amount).toLocaleString('en-GB', { minimumFractionDigits: 2 })}`;
+    const caseLabel = caseRecord.caseId || `#${caseRecord.id}`;
+    await notifyUser(req.tenantDb, caseRecord.candidateId, {
+      type:           NotificationTypes.INFO,
+      priority:       NotificationPriority.HIGH,
+      category:       'payment',
+      title:          `New invoice ${autoInvoiceNumber} — ${amountStr}`,
+      message:        `An invoice of ${amountStr} has been issued for your case ${caseLabel}${dueDate ? ` (due by ${dueDate})` : ''}${description ? ` — ${description}` : ''}. You can view and pay it from the Payments section of your portal.`,
+      actionUrl:      '/candidate/payments',
+      actionType:     'invoice_generated',
+      entityType:     'case_payment',
+      entityId:       payment.id,
+      organisationId: req.user?.organisation_id ?? null,
+      sendEmail:      true,
+      metadata: {
+        invoiceNumber: autoInvoiceNumber,
+        amount:        parseFloat(amount),
+        caseId:        caseLabel,
+        dueDate:       dueDate || null,
+      },
+    });
+  }
 
   return ApiResponse.created(res, 'Invoice created successfully', { payment });
 });

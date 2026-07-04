@@ -90,14 +90,15 @@ export async function buildUkInvoiceDocDef(invoice, platformSettings) {
   const taxId = platformSettings["tax_id"] || null;
   const taxEnabled = hasBreakdown ? parseFloat(invoice.tax_amount || 0) > 0 : taxRate > 0;
 
-  // Resolve platform logo
-  const platformLogoPath = path.join(__dirname, "../../assets/elitepic_logo.png");
-  let logoDataUri = null;
-  if (fs.existsSync(platformLogoPath)) {
-    const buf = fs.readFileSync(platformLogoPath);
-    logoDataUri = `data:image/png;base64,${buf.toString("base64")}`;
-  } else {
-    logoDataUri = resolveLogoDataUri(platformLogoUrl);
+  // Resolve platform logo — the logo uploaded in superadmin settings takes
+  // priority; the bundled asset is only a fallback for fresh installs.
+  let logoDataUri = resolveLogoDataUri(platformLogoUrl);
+  if (!logoDataUri) {
+    const platformLogoPath = path.join(__dirname, "../../assets/elitepic_logo.png");
+    if (fs.existsSync(platformLogoPath)) {
+      const buf = fs.readFileSync(platformLogoPath);
+      logoDataUri = `data:image/png;base64,${buf.toString("base64")}`;
+    }
   }
 
   const orgLogoDataUri = resolveLogoDataUri(org.logoUrl);
@@ -143,11 +144,13 @@ export async function buildUkInvoiceDocDef(invoice, platformSettings) {
   });
 
   // ── Supplier / Bill To / Invoice Details (3 equal columns, explicit widths) ──
+  const platformAddressLines = String(platformSettings["platform_address"] || "United Kingdom")
+    .split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+
   const supplierBlock = [
     { text: "FROM", style: "blockLabel" },
     { text: platformName, style: "blockCompany" },
-    { text: "Elite PiC Ltd", style: "blockDetail" },
-    { text: "United Kingdom", style: "blockDetail" },
+    ...platformAddressLines.map((line) => ({ text: line, style: "blockDetail" })),
     { text: supportEmail, style: "blockDetail" },
     taxEnabled && taxId ? { text: `Tax No: ${taxId}`, style: "blockDetail" } : {},
   ];
@@ -395,7 +398,7 @@ export const getInvoiceById = catchAsync(async (req, res) => {
       {
         model: platformDb.Organisation,
         as: "organisation",
-        attributes: ["id", "name", "slug", "primaryEmail"],
+        attributes: ["id", "name", "slug", "primaryEmail", "country", "logoUrl"],
       },
       {
         model: platformDb.Subscription,
