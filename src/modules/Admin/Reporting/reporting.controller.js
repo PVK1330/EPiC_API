@@ -502,6 +502,15 @@ export const getFinancialTransactions = async (req, res) => {
             : r.paymentStatus === 'refunded' ? 'Refunded'
             : 'Processed',
           date: localDateStr(new Date(r.created_at)),
+          // Detail fields for the View modal
+          invoiceNumber:  r.invoiceNumber || null,
+          transactionRef: r.transactionId || null,
+          paymentType:    r.paymentType || null,
+          description:    r.description || null,
+          notes:          r.notes || null,
+          dueDate:        r.dueDate ? localDateStr(new Date(r.dueDate)) : null,
+          paymentDate:    r.paymentDate ? localDateStr(new Date(r.paymentDate)) : null,
+          caseStatus:     r.Case?.status || null,
         })),
         pagination: {
           total: count,
