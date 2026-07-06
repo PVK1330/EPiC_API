@@ -106,7 +106,7 @@ export async function getSmtpSettings(req, res) {
     });
   } catch (err) {
     logger.error({ err }, "getSmtpSettings");
-    return res.status(500).json({ status: "error", message: err.message });
+    return res.status(500).json({ status: "error", message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined });
   }
 }
 
@@ -154,7 +154,7 @@ export async function updateSmtpSettings(req, res) {
     });
   } catch (err) {
     logger.error({ err }, "updateSmtpSettings");
-    return res.status(500).json({ status: "error", message: err.message });
+    return res.status(500).json({ status: "error", message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined });
   }
 }
 
@@ -206,7 +206,7 @@ export async function testSmtpSettings(req, res) {
     });
   } catch (err) {
     logger.error({ err }, "testSmtpSettings");
-    return res.status(500).json({ status: "error", message: err.message });
+    return res.status(500).json({ status: "error", message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined });
   }
 }
 
@@ -227,6 +227,6 @@ export async function getPlatformSmtpSettings(req, res) {
     });
   } catch (err) {
     logger.error({ err }, "getPlatformSmtpSettings");
-    return res.status(500).json({ status: "error", message: err.message });
+    return res.status(500).json({ status: "error", message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined });
   }
 }

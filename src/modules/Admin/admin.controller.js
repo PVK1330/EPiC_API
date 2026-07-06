@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import catchAsync from '../../utils/catchAsync.js';
 import ApiResponse from '../../utils/apiResponse.js';
 import { generateStrongPassword } from '../../utils/passwordGenerator.js';
+import { checkPasswordStrength } from '../../validations/common.validation.js';
 import { ROLES } from '../../middlewares/role.middleware.js';
 import platformDb from '../../models/index.js';
 import { isPlatformEmailTaken } from '../../utils/platformUserEmail.js';
@@ -11,6 +12,7 @@ import { sendTenantAdminWelcomeEmail } from '../../services/tenantUserMail.servi
 import { ensureAdminHasAllPermissions } from '../../seeders/permission.seeder.js';
 import { rowsToXlsxBuffer, sendXlsxDownload } from '../../utils/excelExport.util.js';
 import logger from '../../utils/logger.js';
+import { excludeSensitiveUserAttrs, SENSITIVE_USER_FIELDS } from '../../utils/userAttributes.js';
 
 /** Tenant users with role "admin" (matches org provisioning + tenantSeed). */
 const ADMIN_ROLE_ID = ROLES.ADMIN;
@@ -64,10 +66,14 @@ export const createAdmin = catchAsync(async (req, res) => {
     return ApiResponse.badRequest(res, "Invalid role ID");
   }
 
-  // Generate password if not provided
+  // Generate password if not provided; when the admin DID supply one, enforce
+  // the strong policy before accepting it (was previously unvalidated).
   let generatedPassword = password;
   if (!password) {
     generatedPassword = generateStrongPassword(12);
+  } else {
+    const pwErr = checkPasswordStrength(password);
+    if (pwErr) return ApiResponse.badRequest(res, pwErr);
   }
 
   // Validate password confirmation
@@ -108,7 +114,8 @@ export const createAdmin = catchAsync(async (req, res) => {
     welcomeEmail = { sent: false, reason: emailError?.message || "send_failed" };
   }
 
-  const { password: _, ...adminData } = admin.toJSON();
+  const adminData = admin.toJSON();
+  SENSITIVE_USER_FIELDS.forEach((f) => delete adminData[f]);
 
   return ApiResponse.created(
     res,
@@ -153,9 +160,7 @@ export const getAllAdmins = catchAsync(async (req, res) => {
 
   const { count, rows: admins } = await req.tenantDb.User.findAndCountAll({
     where: whereClause,
-    attributes: { 
-      exclude: ['password', 'otp_code', 'otp_expiry', 'password_reset_otp', 'password_reset_otp_expiry', 'temp_password'] 
-    },
+    attributes: excludeSensitiveUserAttrs(),
     include: [{
       model: req.tenantDb.Role,
       as: "role",
@@ -185,9 +190,7 @@ export const getAdminById = catchAsync(async (req, res) => {
 
   const admin = await req.tenantDb.User.findOne({
     where: { id, role_id: ADMIN_ROLE_ID },
-    attributes: { 
-      exclude: ['password', 'otp_code', 'otp_expiry', 'password_reset_otp', 'password_reset_otp_expiry', 'temp_password'] 
-    },
+    attributes: excludeSensitiveUserAttrs(),
     include: [{
       model: req.tenantDb.Role,
       as: "role",
@@ -285,9 +288,7 @@ export const updateAdmin = catchAsync(async (req, res) => {
 
   const updatedAdmin = await req.tenantDb.User.findOne({
     where: { id },
-    attributes: { 
-      exclude: ['password', 'otp_code', 'otp_expiry', 'password_reset_otp', 'password_reset_otp_expiry', 'temp_password'] 
-    },
+    attributes: excludeSensitiveUserAttrs(),
     include: [{
       model: req.tenantDb.Role,
       as: "role",
@@ -342,8 +343,9 @@ export const resetAdminPassword = catchAsync(async (req, res) => {
     return ApiResponse.badRequest(res, "Passwords do not match");
   }
 
-  if (new_password.length < 6) {
-    return ApiResponse.badRequest(res, "Password must be at least 6 characters long");
+  const pwErr = checkPasswordStrength(new_password);
+  if (pwErr) {
+    return ApiResponse.badRequest(res, pwErr);
   }
 
   const admin = await req.tenantDb.User.findOne({ where: { id, role_id: ADMIN_ROLE_ID } });
@@ -419,16 +421,7 @@ export const exportAdmins = catchAsync(async (req, res) => {
 
     const admins = await req.tenantDb.User.findAll({
       where: whereClause,
-      attributes: {
-        exclude: [
-          "password",
-          "otp_code",
-          "otp_expiry",
-          "password_reset_otp",
-          "password_reset_otp_expiry",
-          "temp_password",
-        ],
-      },
+      attributes: excludeSensitiveUserAttrs(),
       include: [
         {
           model: req.tenantDb.Role,

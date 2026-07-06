@@ -108,7 +108,7 @@ export const getDashboard = async (req, res) => {
     });
   } catch (err) {
     logger.error({ err }, 'getDashboard error');
-    res.status(500).json({ status: 'error', message: 'Internal server error', error: err.message });
+    res.status(500).json({ status: 'error', message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined });
   }
 };
 
@@ -136,7 +136,7 @@ export const getBusinessCases = async (req, res) => {
       data: { cases: rows, total: count, page: parseInt(page), totalPages: Math.ceil(count / parseInt(limit)) }
     });
   } catch (err) {
-    res.status(500).json({ status: 'error', message: 'Internal server error', error: err.message });
+    res.status(500).json({ status: 'error', message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined });
   }
 };
 
@@ -192,7 +192,7 @@ export const getComplianceSummary = async (req, res) => {
       }
     });
   } catch (err) {
-    res.status(500).json({ status: 'error', message: 'Internal server error', error: err.message });
+    res.status(500).json({ status: 'error', message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined });
   }
 };
 
@@ -240,7 +240,7 @@ export const getBusinessDocuments = async (req, res) => {
 
     res.status(200).json({ status: 'success', data: docs });
   } catch (err) {
-    res.status(500).json({ status: 'error', message: 'Internal server error', error: err.message });
+    res.status(500).json({ status: 'error', message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined });
   }
 };
 
@@ -334,6 +334,6 @@ export const getBusinessPayments = async (req, res) => {
     });
   } catch (err) {
     logger.error({ err }, 'getBusinessPayments error');
-    res.status(500).json({ status: 'error', message: 'Internal server error', error: err.message });
+    res.status(500).json({ status: 'error', message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined });
   }
 };

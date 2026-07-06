@@ -16,8 +16,9 @@ export const createCandidateSchema = z.object({
     country_code: z.string().trim().min(1, 'Country code is required').max(10),
     mobile: phoneSchema,
     // Optional account fields the admin form may include. Password may be an
-    // empty string — the service auto-generates a strong one when blank.
-    password: z.string().optional(),
+    // empty string — the service auto-generates a strong one when blank; when
+    // the admin DOES supply one it must meet the strong policy (was unvalidated).
+    password: z.union([z.literal(''), strongPasswordSchema]).optional(),
     confirm_password: z.string().optional(),
     role_id: z.coerce.number().int().positive().optional(),
     // Application wizard payload (validated/sanitised in the service layer).

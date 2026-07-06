@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { verifyTokenAndTenant } from "../../../middlewares/authStack.middleware.js";
 import { checkRole, ROLES } from "../../../middlewares/role.middleware.js";
-import { upload } from "../../../middlewares/upload.middleware.js";
+import { secureUpload } from "../../../middlewares/upload.middleware.js";
 import { validate } from "../../../middlewares/validate.middleware.js";
 import { saveDraftSchema, feePreviewSchema } from "../../../validations/licenceApplicationV2.validation.js";
 import {
@@ -42,7 +42,7 @@ router.put("/applications/:id", validate(saveDraftSchema), saveDraft);
 router.delete("/applications/:id", deleteDraft);
 router.post("/applications/:id/submit", submitApplication);
 router.post("/applications/:id/sync-from-profile", syncFromProfile);
-router.post("/applications/:id/appendix-documents/:docId/file", upload.single("file"), uploadAppendixDocument);
+router.post("/applications/:id/appendix-documents/:docId/file", ...secureUpload("file"), uploadAppendixDocument);
 router.get("/applications/:id/appendix-documents/:docId/file", previewAppendixDocument);
 
 // Audit trail — immutable event history for the Timeline tab.

@@ -35,7 +35,7 @@ export const listPetitionTypes = async (req, res) => {
     });
   } catch (error) {
     logger.error({ err: error }, "listPetitionTypes error");
-    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
+    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 
@@ -68,7 +68,7 @@ export const createPetitionType = async (req, res) => {
     if (error.name === "SequelizeUniqueConstraintError") {
       return res.status(400).json({ status: "error", message: "A petition type with this name already exists", data: null });
     }
-    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
+    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 
@@ -109,7 +109,7 @@ export const updatePetitionType = async (req, res) => {
     });
   } catch (error) {
     logger.error({ err: error }, "updatePetitionType error");
-    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
+    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 
@@ -128,7 +128,7 @@ export const deletePetitionType = async (req, res) => {
     res.status(200).json({ status: "success", message: "Petition type deleted.", data: null });
   } catch (error) {
     logger.error({ err: error }, "deletePetitionType error");
-    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
+    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 
@@ -150,6 +150,6 @@ export const dropdownPetitionType = async (req, res) => {
     });
   } catch (error) {
     logger.error({ err: error }, "dropdownPetitionType error");
-    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: error.message });
+    res.status(500).json({ status: "error", message: "Internal server error", data: null, error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };

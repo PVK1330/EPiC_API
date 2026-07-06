@@ -25,7 +25,7 @@ import {
 import * as sponsorshipNotify from "../../../services/sponsorshipNotification.service.js";
 import { ensureStageTasks } from "../../../services/licenceStageTask.service.js";
 import { verifyAppendixDocument, bulkVerifyAppendixDocuments, rejectAppendixDocument } from "../../../services/licenceIntake.service.js";
-import { resolveLicenceDocumentPaths } from "../../../utils/licenceDocuments.util.js";
+import { resolveLicenceDocumentPaths, resolveLicenceDocumentDescriptors } from "../../../utils/licenceDocuments.util.js";
 import { validateTransition, WORKFLOW_TYPES } from "../../../services/workflowEngine.service.js";
 import { getPaginationParams, buildPaginationMeta } from "../../../utils/paginate.js";
 
@@ -140,10 +140,14 @@ export const getAllLicenceApplications = async (req, res) => {
 
     // V2-aware: merge V2 appendix evidence into each app's documents array so the
     // reviewer document list is populated for V2 applications too (not just V1).
+    // documentNames carries a human label per document (same index order): the
+    // V2 checklist label (e.g. "Sponsor Letter") or the stored filename for V1.
     const data = await Promise.all(
       applications.map(async (app) => {
         const plain = app.toJSON();
-        plain.documents = await resolveLicenceDocumentPaths(req.tenantDb, app);
+        const docs = await resolveLicenceDocumentDescriptors(req.tenantDb, app);
+        plain.documents = docs.map((d) => d.path);
+        plain.documentNames = docs.map((d) => d.name || path.basename(String(d.path)));
         return plain;
       })
     );
@@ -712,7 +716,7 @@ export const verifyAdminAppendixDocument = async (req, res) => {
   } catch (err) {
     const code = err.statusCode || 500;
     if (code >= 500) logger.error({ err }, "verifyAdminAppendixDocument failed");
-    res.status(code).json({ status: "error", message: err.message || "Failed to verify document" });
+    res.status(code).json({ status: "error", message: "Failed to verify document" });
   }
 };
 
@@ -726,7 +730,7 @@ export const bulkVerifyAdminAppendixDocuments = async (req, res) => {
   } catch (err) {
     const code = err.statusCode || 500;
     if (code >= 500) logger.error({ err }, "bulkVerifyAdminAppendixDocuments failed");
-    res.status(code).json({ status: "error", message: err.message || "Failed to verify documents" });
+    res.status(code).json({ status: "error", message: "Failed to verify documents" });
   }
 };
 
@@ -743,6 +747,6 @@ export const rejectAdminAppendixDocument = async (req, res) => {
   } catch (err) {
     const code = err.statusCode || 500;
     if (code >= 500) logger.error({ err }, "rejectAdminAppendixDocument failed");
-    res.status(code).json({ status: "error", message: err.message || "Failed to reject document" });
+    res.status(code).json({ status: "error", message: "Failed to reject document" });
   }
 };

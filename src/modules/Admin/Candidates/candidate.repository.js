@@ -1,4 +1,5 @@
 import { Op } from 'sequelize';
+import { excludeSensitiveUserAttrs } from '../../../utils/userAttributes.js';
 
 export class CandidateRepository {
   constructor(tenantDb) {
@@ -24,6 +25,7 @@ export class CandidateRepository {
   async findById(id) {
     return await this.tenantDb.User.findOne({
       where: { id, role_id: 1 },
+      attributes: excludeSensitiveUserAttrs(),
       include: [
         {
           model: this.tenantDb.Role,
@@ -89,6 +91,7 @@ export class CandidateRepository {
   async findAndCountAll({ where, include, order, limit, offset }) {
     return await this.tenantDb.User.findAndCountAll({
       where,
+      attributes: excludeSensitiveUserAttrs(),
       include,
       order,
       limit,

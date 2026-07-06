@@ -202,7 +202,7 @@ export const getDataCaptureForm = async (req, res) => {
     });
   } catch (err) {
     logger.error({ err }, "getDataCaptureForm");
-    res.status(500).json({ status: "error", message: err.message, data: null });
+    res.status(500).json({ status: "error", message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined, data: null });
   }
 };
 
@@ -293,7 +293,7 @@ export const saveDataCaptureSubmission = async (req, res) => {
     });
   } catch (err) {
     logger.error({ err }, "saveDataCaptureSubmission");
-    res.status(500).json({ status: "error", message: err.message, data: null });
+    res.status(500).json({ status: "error", message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined, data: null });
   }
 };
 
@@ -322,7 +322,7 @@ export const getStaffDataCapture = async (req, res) => {
     });
   } catch (err) {
     logger.error({ err }, "getStaffDataCapture");
-    res.status(500).json({ status: "error", message: err.message, data: null });
+    res.status(500).json({ status: "error", message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined, data: null });
   }
 };
 
@@ -428,7 +428,7 @@ export const sendDataCaptureRequest = async (req, res) => {
     });
   } catch (err) {
     logger.error({ err }, "sendDataCaptureRequest");
-    res.status(500).json({ status: "error", message: err.message, data: null });
+    res.status(500).json({ status: "error", message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined, data: null });
   }
 };
 
@@ -486,7 +486,7 @@ export const sendFurtherInformationRequest = async (req, res) => {
     });
   } catch (err) {
     logger.error({ err }, "sendFurtherInformationRequest");
-    res.status(500).json({ status: "error", message: err.message, data: null });
+    res.status(500).json({ status: "error", message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined, data: null });
   }
 };
 
@@ -528,7 +528,7 @@ export const sendDraftApplicationForReview = async (req, res) => {
     });
   } catch (err) {
     logger.error({ err }, "sendDraftApplicationForReview");
-    res.status(500).json({ status: "error", message: err.message, data: null });
+    res.status(500).json({ status: "error", message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined, data: null });
   }
 };
 
@@ -604,7 +604,7 @@ export const reviewDataCaptureSubmission = async (req, res) => {
     res.status(200).json({ status: "success", data: { submission } });
   } catch (err) {
     logger.error({ err }, "reviewDataCaptureSubmission");
-    res.status(500).json({ status: "error", message: err.message, data: null });
+    res.status(500).json({ status: "error", message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined, data: null });
   }
 };
 
@@ -647,7 +647,7 @@ export const proposeCclFees = async (req, res) => {
     });
   } catch (err) {
     logger.error({ err }, "proposeCclFees");
-    res.status(500).json({ status: "error", message: err.message, data: null });
+    res.status(500).json({ status: "error", message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined, data: null });
   }
 };
 
@@ -701,7 +701,7 @@ export const reviewCclFees = async (req, res) => {
     });
   } catch (err) {
     logger.error({ err }, "reviewCclFees");
-    res.status(500).json({ status: "error", message: err.message, data: null });
+    res.status(500).json({ status: "error", message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined, data: null });
   }
 };
 
@@ -739,7 +739,7 @@ export const sendCclPaymentRequestAction = async (req, res) => {
     });
   } catch (err) {
     logger.error({ err }, "sendCclPaymentRequestAction");
-    res.status(500).json({ status: "error", message: err.message, data: null });
+    res.status(500).json({ status: "error", message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined, data: null });
   }
 };
 
@@ -852,7 +852,7 @@ export const listCclFeePendingApprovals = async (req, res) => {
     });
   } catch (err) {
     logger.error({ err }, "listCclFeePendingApprovals");
-    res.status(500).json({ status: "error", message: err.message, data: null });
+    res.status(500).json({ status: "error", message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined, data: null });
   }
 };
 
@@ -873,7 +873,7 @@ export const getCclStatus = async (req, res) => {
       .status(200)
       .json({ status: "success", data: { ccl, caseId: caseRecord.caseId } });
   } catch (err) {
-    res.status(500).json({ status: "error", message: err.message, data: null });
+    res.status(500).json({ status: "error", message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined, data: null });
   }
 };
 
@@ -966,7 +966,7 @@ export const getCandidateCcl = async (req, res) => {
     });
   } catch (err) {
     logger.error({ err }, "getCandidateCcl");
-    res.status(500).json({ status: "error", message: err.message, data: null });
+    res.status(500).json({ status: "error", message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined, data: null });
   }
 };
 
@@ -1044,7 +1044,7 @@ export const downloadCandidateCcl = async (req, res) => {
     );
   } catch (err) {
     logger.error({ err }, "downloadCandidateCcl");
-    res.status(500).json({ status: "error", message: err.message, data: null });
+    res.status(500).json({ status: "error", message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined, data: null });
   }
 };
 
@@ -1190,7 +1190,7 @@ export const acceptCcl = async (req, res) => {
     });
   } catch (err) {
     logger.error({ err }, "acceptCcl");
-    res.status(500).json({ status: "error", message: err.message, data: null });
+    res.status(500).json({ status: "error", message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined, data: null });
   }
 };
 
@@ -1296,7 +1296,7 @@ export const confirmCclSigned = async (req, res) => {
     res.status(200).json({ status: "success", data: { ccl } });
   } catch (err) {
     logger.error({ err }, "confirmCclSigned");
-    res.status(500).json({ status: "error", message: err.message, data: null });
+    res.status(500).json({ status: "error", message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined, data: null });
   }
 };
 
@@ -1368,7 +1368,7 @@ export const getDecisionDocuments = async (req, res) => {
     });
   } catch (err) {
     logger.error({ err }, "getDecisionDocuments");
-    res.status(500).json({ status: "error", message: err.message, data: null });
+    res.status(500).json({ status: "error", message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined, data: null });
   }
 };
 
@@ -1401,6 +1401,24 @@ export const getCandidatePaymentSchedule = async (req, res) => {
     const totalFee = resolveCaseFeeTotal(caseRecord, ccl);
     const paidAmount = Number(caseRecord.paidAmount) || 0;
 
+    // Invoices / payment records for this case (admin-generated invoices from
+    // Finance, Stripe payments, bank transfers…) so the candidate's Payments
+    // page can list them and let the candidate settle pending ones.
+    const paymentRows = await req.tenantDb.CasePayment.findAll({
+      where: { caseId: caseRecord.id },
+      order: [["created_at", "DESC"]],
+    }).catch(() => []);
+    const invoices = paymentRows.map((p) => ({
+      id: p.id,
+      invoiceNumber: p.invoiceNumber || p.transactionId || `#PAY-${p.id}`,
+      amount: Number(p.amount) || 0,
+      status: p.paymentStatus,
+      method: p.paymentMethod || null,
+      description: p.description || null,
+      dueDate: p.dueDate || null,
+      date: p.paymentDate || p.created_at,
+    }));
+
     if (!approved || totalFee <= 0) {
       return res.status(200).json({
         status: "success",
@@ -1413,6 +1431,7 @@ export const getCandidatePaymentSchedule = async (req, res) => {
           caseId: caseRecord.caseId,
           cclStatus: ccl?.status || "pending",
           amountStatus: caseRecord.amountStatus,
+          invoices,
         },
       });
     }
@@ -1452,6 +1471,7 @@ export const getCandidatePaymentSchedule = async (req, res) => {
         amountStatus: caseRecord.amountStatus,
         installments,
         paymentRequest,
+        invoices,
         ccl: ccl
           ? {
               status: ccl.status,
@@ -1463,7 +1483,7 @@ export const getCandidatePaymentSchedule = async (req, res) => {
     });
   } catch (err) {
     logger.error({ err }, "getCandidatePaymentSchedule");
-    res.status(500).json({ status: "error", message: err.message, data: null });
+    res.status(500).json({ status: "error", message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined, data: null });
   }
 };
 
@@ -1566,7 +1586,7 @@ export const getCandidateTasks = async (req, res) => {
     });
   } catch (err) {
     logger.error({ err }, "getCandidateTasks");
-    res.status(500).json({ status: "error", message: err.message, data: null });
+    res.status(500).json({ status: "error", message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined, data: null });
   }
 };
 
@@ -1662,7 +1682,7 @@ export const completeCandidateTask = async (req, res) => {
     });
   } catch (err) {
     logger.error({ err }, "completeCandidateTask");
-    res.status(500).json({ status: "error", message: err.message, data: null });
+    res.status(500).json({ status: "error", message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined, data: null });
   }
 };
 
@@ -1702,7 +1722,7 @@ export const getCaseWorkflowBundle = async (req, res) => {
       },
     });
   } catch (err) {
-    res.status(500).json({ status: "error", message: err.message, data: null });
+    res.status(500).json({ status: "error", message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined, data: null });
   }
 };
 
@@ -1758,7 +1778,7 @@ export const getCandidateWorkflowProcess = async (req, res) => {
     });
   } catch (err) {
     logger.error({ err }, "getCandidateWorkflowProcess");
-    res.status(500).json({ status: "error", message: err.message, data: null });
+    res.status(500).json({ status: "error", message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined, data: null });
   }
 };
 
@@ -1811,7 +1831,7 @@ export const submitCandidateDraftReview = async (req, res) => {
     });
   } catch (err) {
     logger.error({ err }, "submitCandidateDraftReview");
-    res.status(500).json({ status: "error", message: err.message, data: null });
+    res.status(500).json({ status: "error", message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined, data: null });
   }
 };
 
@@ -1865,7 +1885,7 @@ export const submitCandidateBiometricAvailability = async (req, res) => {
     });
   } catch (err) {
     logger.error({ err }, "submitCandidateBiometricAvailability");
-    res.status(500).json({ status: "error", message: err.message, data: null });
+    res.status(500).json({ status: "error", message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined, data: null });
   }
 };
 
@@ -1929,7 +1949,7 @@ export const candidateMarkBiometricAttended = async (req, res) => {
     });
   } catch (err) {
     logger.error({ err }, "candidateMarkBiometricAttended");
-    res.status(500).json({ status: "error", message: err.message, data: null });
+    res.status(500).json({ status: "error", message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined, data: null });
   }
 };
 
@@ -1970,7 +1990,7 @@ export const staffRecordVisaPortalSubmission = async (req, res) => {
     });
   } catch (err) {
     logger.error({ err }, "staffRecordVisaPortalSubmission");
-    res.status(500).json({ status: "error", message: err.message, data: null });
+    res.status(500).json({ status: "error", message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined, data: null });
   }
 };
 
@@ -2034,7 +2054,7 @@ export const staffSendBiometricSlot = async (req, res) => {
     });
   } catch (err) {
     logger.error({ err }, "staffSendBiometricSlot");
-    res.status(500).json({ status: "error", message: err.message, data: null });
+    res.status(500).json({ status: "error", message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined, data: null });
   }
 };
 
@@ -2074,7 +2094,7 @@ export const staffRecordBiometricDocsUploaded = async (req, res) => {
     });
   } catch (err) {
     logger.error({ err }, "staffRecordBiometricDocsUploaded");
-    res.status(500).json({ status: "error", message: err.message, data: null });
+    res.status(500).json({ status: "error", message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined, data: null });
   }
 };
 
@@ -2115,7 +2135,7 @@ export const staffRecordVisaPortalReply = async (req, res) => {
     });
   } catch (err) {
     logger.error({ err }, "staffRecordVisaPortalReply");
-    res.status(500).json({ status: "error", message: err.message, data: null });
+    res.status(500).json({ status: "error", message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined, data: null });
   }
 };
 
@@ -2157,7 +2177,7 @@ export const staffCommunicateDecision = async (req, res) => {
     });
   } catch (err) {
     logger.error({ err }, "staffCommunicateDecision");
-    res.status(500).json({ status: "error", message: err.message, data: null });
+    res.status(500).json({ status: "error", message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined, data: null });
   }
 };
 
@@ -2199,7 +2219,7 @@ export const staffMarkCaseCompleted = async (req, res) => {
     });
   } catch (err) {
     logger.error({ err }, "staffMarkCaseCompleted");
-    res.status(500).json({ status: "error", message: err.message, data: null });
+    res.status(500).json({ status: "error", message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined, data: null });
   }
 };
 
@@ -2236,7 +2256,7 @@ export const candidateRequestFinalDocuments = async (req, res) => {
     });
   } catch (err) {
     logger.error({ err }, "candidateRequestFinalDocuments");
-    res.status(500).json({ status: "error", message: err.message, data: null });
+    res.status(500).json({ status: "error", message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined, data: null });
   }
 };
 
@@ -2272,7 +2292,7 @@ export const staffResendFinalDocuments = async (req, res) => {
     });
   } catch (err) {
     logger.error({ err }, "staffResendFinalDocuments");
-    res.status(500).json({ status: "error", message: err.message, data: null });
+    res.status(500).json({ status: "error", message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined, data: null });
   }
 };
 
@@ -2308,7 +2328,7 @@ export const staffGenerateClosureLetter = async (req, res) => {
     });
   } catch (err) {
     logger.error({ err }, "staffGenerateClosureLetter");
-    res.status(500).json({ status: "error", message: err.message, data: null });
+    res.status(500).json({ status: "error", message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined, data: null });
   }
 };
 
@@ -2430,6 +2450,6 @@ export const staffUploadDecisionDocument = async (req, res) => {
     });
   } catch (err) {
     logger.error({ err }, "staffUploadDecisionDocument");
-    res.status(500).json({ status: "error", message: err.message, data: null });
+    res.status(500).json({ status: "error", message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined, data: null });
   }
 };

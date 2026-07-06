@@ -42,6 +42,18 @@ export async function seedTenantDefaults(tenantDb) {
       defaults: role,
     });
   }
+  // BUG-FIX: the roles above are inserted with explicit ids (1..5), which does
+  // NOT advance the roles_id_seq sequence. Without this, the first admin-created
+  // custom role (POST /api/admin/roles) tries to reuse id=1 and fails with a
+  // UniqueConstraintError ("id must be unique"), so org RBAC role creation is
+  // broken for every tenant. Re-sync the sequence to MAX(id).
+  try {
+    await tenantDb.sequelize.query(
+      "SELECT setval(pg_get_serial_sequence('roles', 'id'), (SELECT COALESCE(MAX(id), 1) FROM roles))",
+    );
+  } catch (seqErr) {
+    logger.warn({ err: seqErr }, "seedTenantDefaults: failed to re-sync roles_id_seq");
+  }
   await seedPermissionsForDb(tenantDb);
 
   const { VisaType, PetitionType, SlaSetting } = tenantDb;
@@ -90,12 +102,16 @@ export async function seedTenantDefaults(tenantDb) {
 /** Ensure application field tables exist (migration + Sequelize sync safety net). */
 async function ensureApplicationFieldTables(tenantDb) {
   if (!tenantDb?.sequelize) return;
-  const { ApplicationFieldSetting, ApplicationCustomField } = tenantDb;
+  const { ApplicationFieldSetting, ApplicationCustomField, Announcement } = tenantDb;
   if (ApplicationFieldSetting) {
     await ApplicationFieldSetting.sync();
   }
   if (ApplicationCustomField) {
     await ApplicationCustomField.sync();
+  }
+  // Announcements table (org-admin "previous announcements" list).
+  if (Announcement) {
+    await Announcement.sync();
   }
 }
 

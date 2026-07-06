@@ -1,10 +1,11 @@
 import { Op } from 'sequelize';
 import bcrypt from 'bcryptjs';
 import { randomBytes } from 'crypto';
-import multer from 'multer';
+import { handleBulkImportUpload, MAX_BULK_IMPORT_ROWS } from '../../../middlewares/upload.middleware.js';
 import { ROLES } from '../../../middlewares/role.middleware.js';
 import { rowsToXlsxBuffer, sendXlsxDownload } from '../../../utils/excelExport.util.js';
 import { generateStrongPassword } from '../../../utils/passwordGenerator.js';
+import { checkPasswordStrength } from '../../../validations/common.validation.js';
 import { createUserOnPlatformAndTenant, syncUserToPlatformOnly } from '../../../services/userSync.service.js';
 import { sendTenantCaseworkerWelcomeEmail } from '../../../services/tenantUserMail.service.js';
 import platformDb from '../../../models/index.js';
@@ -17,11 +18,12 @@ import {
   userBelongsToOrganisation,
 } from '../../../utils/tenantScope.js';
 import logger from '../../../utils/logger.js';
+import { excludeSensitiveUserAttrs, SENSITIVE_USER_FIELDS } from '../../../utils/userAttributes.js';
 
 const CASEWORKER_ROLE = ROLES.CASEWORKER;
 
-// Multer configuration for file upload
-const upload = multer({ storage: multer.memoryStorage() });
+// upload-security-2: shared secured bulk-import upload (size limit + CSV/XLSX
+// filter) replaces the unrestricted memory multer.
 
 // Get All Departments
 export const getDepartments = async (req, res) => {
@@ -50,7 +52,7 @@ export const getDepartments = async (req, res) => {
     res.status(500).json({
       status: "error",
       message: "Failed to fetch departments",
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -99,7 +101,7 @@ export const createDepartment = async (req, res) => {
     res.status(500).json({
       status: "error",
       message: "Failed to create department",
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -128,7 +130,7 @@ export const departmentDropdown = async (req, res) => {
     res.status(500).json({
       status: "error",
       message: "Failed to fetch departments",
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -188,7 +190,7 @@ export const updateDepartment = async (req, res) => {
     res.status(500).json({
       status: "error",
       message: "Failed to update department",
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -241,12 +243,12 @@ export const deleteDepartment = async (req, res) => {
     res.status(500).json({
       status: "error",
       message: "Failed to delete department",
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
 
-export const uploadMiddleware = upload.single('file');
+export const uploadMiddleware = handleBulkImportUpload;
 
 const PROFILE_KEYS = [
   "employee_id",
@@ -505,13 +507,16 @@ export const createCaseworker = async (req, res) => {
       });
     }
 
-    if (password && password.length < 8) {
-      await t.rollback();
-      return res.status(400).json({
-        status: "error",
-        message: "Password must be at least 8 characters",
-        data: null,
-      });
+    if (password) {
+      const pwErr = checkPasswordStrength(password);
+      if (pwErr) {
+        await t.rollback();
+        return res.status(400).json({
+          status: "error",
+          message: pwErr,
+          data: null,
+        });
+      }
     }
 
     const emailNorm = String(email).trim().toLowerCase();
@@ -619,20 +624,12 @@ export const createCaseworker = async (req, res) => {
 
     const full = await req.tenantDb.User.findOne({
       where: { id: caseworker.id },
-      attributes: {
-        exclude: [
-          "password",
-          "otp_code",
-          "otp_expiry",
-          "password_reset_otp",
-          "password_reset_otp_expiry",
-          "temp_password",
-        ],
-      },
+      attributes: excludeSensitiveUserAttrs(),
       include: caseworkerInclude(req),
     });
 
-    const { password: _, ...caseworkerData } = caseworker.toJSON();
+    const caseworkerData = caseworker.toJSON();
+    SENSITIVE_USER_FIELDS.forEach((f) => delete caseworkerData[f]);
 
     res.status(201).json({
       status: "success",
@@ -657,7 +654,7 @@ export const createCaseworker = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -704,16 +701,7 @@ export const getAllCaseworkers = async (req, res) => {
 
     const { count, rows: caseworkers } = await req.tenantDb.User.findAndCountAll({
       where: whereClause,
-      attributes: {
-        exclude: [
-          "password",
-          "otp_code",
-          "otp_expiry",
-          "password_reset_otp",
-          "password_reset_otp_expiry",
-          "temp_password",
-        ],
-      },
+      attributes: excludeSensitiveUserAttrs(),
       include: includeClause,
       order: [["createdAt", "DESC"]],
       limit: limitNum,
@@ -787,7 +775,7 @@ export const getAllCaseworkers = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -808,16 +796,7 @@ export const getCaseworkerById = async (req, res) => {
 
     const caseworker = await req.tenantDb.User.findOne({
       where: mergeUserWhere(req, { id: caseworkerId, role_id: CASEWORKER_ROLE }),
-      attributes: {
-        exclude: [
-          "password",
-          "otp_code",
-          "otp_expiry",
-          "password_reset_otp",
-          "password_reset_otp_expiry",
-          "temp_password",
-        ],
-      },
+      attributes: excludeSensitiveUserAttrs(),
       include: caseworkerInclude(req),
     });
 
@@ -863,7 +842,7 @@ export const getCaseworkerById = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -1011,16 +990,7 @@ export const updateCaseworker = async (req, res) => {
 
     const updatedCaseworker = await req.tenantDb.User.findOne({
       where: { id },
-      attributes: {
-        exclude: [
-          "password",
-          "otp_code",
-          "otp_expiry",
-          "password_reset_otp",
-          "password_reset_otp_expiry",
-          "temp_password",
-        ],
-      },
+      attributes: excludeSensitiveUserAttrs(),
       include: caseworkerInclude(req),
     });
 
@@ -1035,7 +1005,7 @@ export const updateCaseworker = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -1073,7 +1043,7 @@ export const deleteCaseworker = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -1100,10 +1070,11 @@ export const resetCaseworkerPassword = async (req, res) => {
       });
     }
 
-    if (new_password.length < 8) {
+    const pwErr = checkPasswordStrength(new_password);
+    if (pwErr) {
       return res.status(400).json({
         status: "error",
-        message: "Password must be at least 8 characters long",
+        message: pwErr,
         data: null,
       });
     }
@@ -1137,7 +1108,7 @@ export const resetCaseworkerPassword = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -1178,7 +1149,7 @@ export const toggleCaseworkerStatus = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -1215,16 +1186,7 @@ export const exportCaseworkers = async (req, res) => {
 
     const caseworkers = await req.tenantDb.User.findAll({
       where: whereClause,
-      attributes: {
-        exclude: [
-          "password",
-          "otp_code",
-          "otp_expiry",
-          "password_reset_otp",
-          "password_reset_otp_expiry",
-          "temp_password",
-        ],
-      },
+      attributes: excludeSensitiveUserAttrs(),
       include: includeClause,
       order: [["createdAt", "DESC"]],
     });
@@ -1264,7 +1226,7 @@ export const exportCaseworkers = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -1282,11 +1244,20 @@ export const bulkImportCaseworkers = async (req, res) => {
 
     const csvData = req.file.buffer.toString('utf-8');
     const lines = csvData.split('\n').filter(line => line.trim());
-    
+
     if (lines.length < 2) {
       return res.status(400).json({
         status: "error",
         message: "CSV file is empty or has no data rows",
+        data: null
+      });
+    }
+
+    // upload-security-2: cap data rows to prevent amplification into mass inserts.
+    if (lines.length - 1 > MAX_BULK_IMPORT_ROWS) {
+      return res.status(400).json({
+        status: "error",
+        message: `Too many rows. Bulk import is limited to ${MAX_BULK_IMPORT_ROWS} rows per file.`,
         data: null
       });
     }
@@ -1341,13 +1312,15 @@ export const bulkImportCaseworkers = async (req, res) => {
 
         // Send welcome email via the already-branded tenant service so the
         // tenant logo/name and reply-to are applied consistently.
+        let welcomeEmailSent = false;
         try {
-          await sendTenantCaseworkerWelcomeEmail({
+          const emailRes = await sendTenantCaseworkerWelcomeEmail({
             user: caseworker,
             plainPassword: generatedPassword,
             organisationId: organisationIdFromRequest(req),
             firstName: caseworker.first_name,
           });
+          welcomeEmailSent = emailRes?.sent === true;
         } catch (emailError) {
           logger.error({ err: emailError }, "Failed to send caseworker email");
         }
@@ -1356,13 +1329,16 @@ export const bulkImportCaseworkers = async (req, res) => {
           row: i + 1,
           id: caseworker.id,
           email: caseworker.email,
-          temporary_password: generatedPassword
+          welcome_email_sent: welcomeEmailSent,
+          // data-leakage-10: expose the temp password only when the welcome email
+          // failed to reach the caseworker; otherwise it stays server-side.
+          ...(welcomeEmailSent ? {} : { temporary_password: generatedPassword }),
         });
 
       } catch (error) {
         results.errors.push({
           row: i + 1,
-          error: error.message
+          error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
       }
     }
@@ -1384,7 +1360,7 @@ export const bulkImportCaseworkers = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -1479,7 +1455,7 @@ export const getPerformanceReport = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -1553,7 +1529,7 @@ export const reassignCase = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };

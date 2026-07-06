@@ -18,7 +18,7 @@ export const getGlobalTimeline = async (req, res) => {
     res.status(200).json({ status: 'success', data: timeline });
   } catch (error) {
     logger.error({ err: error }, 'Failed to fetch global timeline');
-    res.status(500).json({ status: 'error', message: error.message });
+    res.status(500).json({ status: 'error', message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 
@@ -36,7 +36,7 @@ export const getCaseTimeline = async (req, res) => {
     res.status(200).json({ status: 'success', data: timeline });
   } catch (error) {
     logger.error({ err: error }, 'Failed to fetch case timeline');
-    res.status(500).json({ status: 'error', message: error.message });
+    res.status(500).json({ status: 'error', message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 
@@ -59,7 +59,7 @@ export const getCandidateTimeline = async (req, res) => {
     res.status(200).json({ status: 'success', data: timeline });
   } catch (error) {
     logger.error({ err: error }, 'Failed to fetch candidate timeline');
-    res.status(500).json({ status: 'error', message: error.message });
+    res.status(500).json({ status: 'error', message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 
@@ -82,6 +82,6 @@ export const getSponsorTimeline = async (req, res) => {
     res.status(200).json({ status: 'success', data: timeline });
   } catch (error) {
     logger.error({ err: error }, 'Failed to fetch sponsor timeline');
-    res.status(500).json({ status: 'error', message: error.message });
+    res.status(500).json({ status: 'error', message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };

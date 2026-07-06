@@ -129,6 +129,24 @@ app.use((err, req, res, _next) => {
   // otherwise fall back to the root logger.
   const log = req.log || logger;
 
+  // Normalise malformed-input DB errors (e.g. a non-numeric value passed where an
+  // integer id is expected) into a clean 400. Postgres raises SQLSTATE 22P02
+  // ("invalid input syntax for type ...") which Sequelize wraps. Without this,
+  // such requests surface as a 500 that leaks the raw DB error text to the client.
+  const pgCode = err?.parent?.code || err?.original?.code || err?.code;
+  const isInvalidInput =
+    pgCode === '22P02' ||        // invalid_text_representation (bad int/uuid/enum literal)
+    pgCode === '22003' ||        // numeric_value_out_of_range
+    err?.name === 'SequelizeDatabaseError' && /invalid input syntax/i.test(err?.message || '');
+  if (isInvalidInput && !res.headersSent) {
+    log.warn({ pgCode, url: req.originalUrl, method: req.method }, 'Rejected malformed request parameter');
+    return res.status(400).json({
+      status: 'error',
+      message: 'Invalid request parameter format.',
+      data: null,
+    });
+  }
+
   const statusCode = err?.status || err?.statusCode || 500;
   const isClientError = statusCode >= 400 && statusCode < 500;
 

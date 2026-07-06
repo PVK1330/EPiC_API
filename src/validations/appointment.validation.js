@@ -18,7 +18,10 @@ export const updateAppointmentStatusSchema = z.object({
     id: z.coerce.number().int().positive(),
   }),
   body: z.object({
-    status: z.string().trim().min(1, 'Status is required'),
+    // Constrained to the Appointment model's status ENUM
+    // (scheduled/completed/cancelled/live) — the DB rejects anything else, so
+    // this only turns a would-be DB error into a clean 400.
+    status: z.enum(['scheduled', 'completed', 'cancelled', 'live']),
   }).strict(),
 });
 

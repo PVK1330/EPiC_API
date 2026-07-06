@@ -5,7 +5,7 @@ import {
   resolveRequiredDocuments,
   formatRequiredDocumentsText,
 } from "./dataCaptureSheet.service.js";
-import { wrapEpicEmail } from "../utils/epicEmailLayout.js";
+import { wrapEpicEmail, esc as escapeHtml } from "../utils/epicEmailLayout.js";
 import { getOrganisationEmailBranding } from "../utils/emailBranding.js";
 import logger from "../utils/logger.js";
 
@@ -22,9 +22,17 @@ export const STAGE_EMAIL_TEMPLATE = {
   case_closure: "case_closure",
 };
 
-function interpolate(template, vars) {
+// injection-xss-8/9/11: DB-editable templates embed {{vars}} (recipient/company
+// names, requested items, etc.) that originate from user data. When the result
+// is HTML (email body) each substituted value must be escaped so injected markup
+// cannot execute. Subjects are plain text — pass escapeValues=false there so a
+// literal "&" is not turned into "&amp;" in the subject line.
+function interpolate(template, vars, escapeValues = false) {
   if (!template) return "";
-  return String(template).replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] ?? "");
+  return String(template).replace(/\{\{(\w+)\}\}/g, (_, key) => {
+    const value = vars[key] ?? "";
+    return escapeValues ? escapeHtml(value) : value;
+  });
 }
 
 function parseAssignedCaseworkerIds(caseRecord) {
@@ -179,7 +187,7 @@ export async function sendWorkflowStageEmail({
     };
 
     const subject = interpolate(row.subject, vars);
-    let body = interpolate(row.body || "", vars);
+    let body = interpolate(row.body || "", vars, true);
 
     // The email body is the (admin-editable) template verbatim with tags filled.
     // Optional dynamic blocks are opt-in via tags: {{required_documents}} for the
@@ -198,10 +206,12 @@ export async function sendWorkflowStageEmail({
       // Build styled appointment card for email
       const dateDisplay = [day, date].filter(Boolean).join(", ") || "TBC";
 
+      // injection-xss-7: location/date/time are staff-supplied free text — escape
+      // before embedding in the appointment card HTML.
       const appointmentRows = [
-        { icon: "📍", label: "Location", value: loc || "TBC" },
-        { icon: "📅", label: "Date", value: dateDisplay },
-        { icon: "🕐", label: "Time", value: time || "TBC" },
+        { icon: "📍", label: "Location", value: escapeHtml(loc || "TBC") },
+        { icon: "📅", label: "Date", value: escapeHtml(dateDisplay) },
+        { icon: "🕐", label: "Time", value: escapeHtml(time || "TBC") },
       ];
 
       const appointmentTableRows = appointmentRows
@@ -221,7 +231,7 @@ export async function sendWorkflowStageEmail({
       const instructionsHtml = instructions
         ? `<div style="margin-top: 20px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 16px;">
              <p style="margin: 0 0 6px 0; font-size: 12px; font-weight: 700; color: #92400e; text-transform: uppercase; letter-spacing: 0.5px;">⚠️ &nbsp;Instructions</p>
-             <p style="margin: 0; font-size: 14px; color: #78350f; line-height: 1.6;">${instructions}</p>
+             <p style="margin: 0; font-size: 14px; color: #78350f; line-height: 1.6;">${escapeHtml(instructions)}</p>
            </div>`
         : "";
 

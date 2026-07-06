@@ -217,7 +217,7 @@ export const getCaseAnalytics = async (req, res) => {
     });
   } catch (error) {
     logger.error({ err: error }, 'getCaseAnalytics Error');
-    res.status(500).json({ status: 'error', message: error.message, data: null });
+    res.status(500).json({ status: 'error', message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? error.message : undefined, data: null });
   }
 };
 
@@ -309,7 +309,7 @@ export const getWorkloadReport = async (req, res) => {
     });
   } catch (error) {
     logger.error({ err: error }, 'getWorkloadReport Error');
-    res.status(500).json({ status: 'error', message: error.message, data: null });
+    res.status(500).json({ status: 'error', message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? error.message : undefined, data: null });
   }
 };
 
@@ -453,7 +453,7 @@ export const getFinancialReport = async (req, res) => {
     });
   } catch (error) {
     logger.error({ err: error }, 'getFinancialReport Error');
-    res.status(500).json({ status: 'error', message: error.message, data: null });
+    res.status(500).json({ status: 'error', message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? error.message : undefined, data: null });
   }
 };
 
@@ -502,6 +502,15 @@ export const getFinancialTransactions = async (req, res) => {
             : r.paymentStatus === 'refunded' ? 'Refunded'
             : 'Processed',
           date: localDateStr(new Date(r.created_at)),
+          // Detail fields for the View modal
+          invoiceNumber:  r.invoiceNumber || null,
+          transactionRef: r.transactionId || null,
+          paymentType:    r.paymentType || null,
+          description:    r.description || null,
+          notes:          r.notes || null,
+          dueDate:        r.dueDate ? localDateStr(new Date(r.dueDate)) : null,
+          paymentDate:    r.paymentDate ? localDateStr(new Date(r.paymentDate)) : null,
+          caseStatus:     r.Case?.status || null,
         })),
         pagination: {
           total: count,
@@ -512,7 +521,7 @@ export const getFinancialTransactions = async (req, res) => {
     });
   } catch (error) {
     logger.error({ err: error }, 'getFinancialTransactions Error');
-    res.status(500).json({ status: 'error', message: error.message });
+    res.status(500).json({ status: 'error', message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 
@@ -680,14 +689,14 @@ export const getPerformanceReport = async (req, res) => {
     });
   } catch (error) {
     logger.error({ err: error }, 'getPerformanceReport Error');
-    res.status(500).json({ status: 'error', message: error.message, data: null });
+    res.status(500).json({ status: 'error', message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? error.message : undefined, data: null });
   }
 };
 
 /** Multi-sheet workbook; reuses compute* payloads (same filters as JSON report APIs). */
 export const exportReportingExcel = async (req, res) => {
   try {
-    const { startDate, endDate, sheet } = req.query;
+    const { startDate, endDate, sheet, caseworkerId } = req.query;
 
     // sheet = 'cases' | 'workload' | 'financial' | 'performance' | undefined (all)
     const wantCases      = !sheet || sheet === 'cases';
@@ -701,12 +710,19 @@ export const exportReportingExcel = async (req, res) => {
         return null;
       });
 
-    const [cases, workload, financial, performance] = await Promise.all([
+    let [cases, workload, financial, performance] = await Promise.all([
       wantCases       ? guard('cases', computeCaseAnalyticsData(req))         : null,
       wantWorkload    ? guard('workload', computeWorkloadReportData(req))     : null,
       wantFinancial   ? guard('financial', computeFinancialReportData(req))   : null,
       wantPerformance ? guard('performance', computePerformanceReportData(req)) : null,
     ]);
+
+    // Per-caseworker export: narrow performance rows to the requested caseworker only.
+    if (caseworkerId && Array.isArray(performance)) {
+      performance = performance.filter(
+        (p) => String(p.id) === String(caseworkerId),
+      );
+    }
 
     /** @type {{ name: string, columns: { key: string, header: string }[], rows: Record<string, unknown>[] }[]} */
     const sheets = [];
@@ -724,7 +740,12 @@ export const exportReportingExcel = async (req, res) => {
       { field: 'Report', value: 'ElitePic — Reporting & Analytics' },
       { field: 'Generated', value: `${new Date().toISOString().replace('T', ' ').slice(0, 16)} UTC` },
       { field: 'Date Range', value: rangeLabel },
-      { field: 'Scope', value: sheet ? `${sheet} only` : 'All reports' },
+      {
+        field: 'Scope',
+        value: sheet
+          ? `${sheet} only${caseworkerId ? ` (caseworker ${caseworkerId})` : ''}`
+          : 'All reports',
+      },
     ];
 
     if (cases?.summary) {
@@ -1019,7 +1040,7 @@ export const exportReportingExcel = async (req, res) => {
     logger.error({ err: error }, 'exportReportingExcel Error');
     res.status(500).json({
       status: 'error',
-      message: error.message || 'Export failed',
+      message: 'Export failed',
       data: null,
     });
   }
@@ -1110,6 +1131,6 @@ export const getReportingSummary = async (req, res) => {
     });
   } catch (error) {
     logger.error({ err: error }, 'getReportingSummary Error');
-    res.status(500).json({ status: 'error', message: error.message, data: null });
+    res.status(500).json({ status: 'error', message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? error.message : undefined, data: null });
   }
 };

@@ -40,18 +40,39 @@ export const recordPlatformAuditLog = async ({
 
 /**
  * Create a platform-wide notification.
+ *
+ * The platform_notifications table was rebuilt with a NOT NULL `message`
+ * column (the legacy `desc` column no longer exists), so inserting `desc`
+ * made every insert fail its constraint and get swallowed by the catch —
+ * platform notifications silently stopped being stored. Accept both spellings
+ * from callers and always write `message`.
  */
 export const createPlatformNotification = async ({
   title,
-  desc,
-  type // success, warning, error, info
-}) => {
+  message,
+  desc, // legacy caller spelling
+  type, // success, warning, error, info
+  category,
+  priority,
+  organisationId,
+  entityType,
+  entityId,
+  actionUrl,
+  metadata,
+} = {}) => {
   try {
     await platformDb.PlatformNotification.create({
       title,
-      desc,
+      message: message ?? desc ?? "",
       type: type || "info",
-      isRead: false
+      category: category || "system",
+      priority: priority || "medium",
+      organisationId: organisationId ?? null,
+      entityType: entityType ?? null,
+      entityId: entityId ?? null,
+      actionUrl: actionUrl ?? null,
+      metadata: metadata ?? {},
+      isRead: false,
     });
   } catch (error) {
     logger.error({ err: error }, "Failed to create platform notification");

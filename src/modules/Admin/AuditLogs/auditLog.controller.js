@@ -121,7 +121,7 @@ export const getAuditLogs = async (req, res) => {
       },
     });
   } catch (error) {
-    res.status(500).json({ status: 'error', message: error.message });
+    res.status(500).json({ status: 'error', message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 
@@ -143,7 +143,7 @@ export const logClientEvent = async (req, res) => {
 
     res.status(200).json({ status: 'success', message: 'Event logged' });
   } catch (error) {
-    res.status(500).json({ status: 'error', message: error.message });
+    res.status(500).json({ status: 'error', message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 
@@ -173,7 +173,7 @@ export const getAuditStats = async (req, res) => {
       data: { total, byAction, byStatus },
     });
   } catch (error) {
-    res.status(500).json({ status: 'error', message: error.message });
+    res.status(500).json({ status: 'error', message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 
@@ -186,7 +186,7 @@ export const getAuditActionTypes = async (req, res) => {
     const actions = rows.map((r) => r.action).filter(Boolean).sort();
     res.status(200).json({ status: 'success', data: actions });
   } catch (error) {
-    res.status(500).json({ status: 'error', message: error.message });
+    res.status(500).json({ status: 'error', message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 
@@ -257,6 +257,6 @@ export const exportAuditLogs = async (req, res) => {
     const filename = `Audit_Export_${new Date().toISOString().slice(0, 10)}.xlsx`;
     sendXlsxDownload(res, buffer, filename);
   } catch (error) {
-    res.status(500).json({ status: 'error', message: error.message });
+    res.status(500).json({ status: 'error', message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };

@@ -14,6 +14,7 @@ import {
   updateDocumentStatus,
   downloadDocument,
   downloadMyDocumentsBundle,
+  downloadTempAttachment,
 } from './document.controller.js';
 import { getChecklistByVisaType } from '../../Admin/Settings/documentChecklist.controller.js';
 
@@ -61,29 +62,12 @@ router.get('/download/:documentId',
   downloadDocument
 );
 
+// Message attachments: ownership (message participant) is verified in the
+// controller against the caller's tenant DB (upload-security-5).
 router.get('/temp/:filename',
   verifyTokenAndTenant,
   downloadLimiter,
-  (req, res) => {
-    import('path').then(path => {
-      import('fs').then(fs => {
-        const { filename } = req.params;
-        const targetPath = path.default.join(process.cwd(), 'storage/private/temp', filename);
-        if (!targetPath.startsWith(path.default.join(process.cwd(), 'storage/private/temp'))) {
-          return res.status(403).json({ status: false, message: "Forbidden" });
-        }
-        if (!fs.default.existsSync(targetPath)) {
-          return res.status(404).json({ status: false, message: "File not found" });
-        }
-        // RE-13 fix: strip non-safe characters before using filename in a header
-        // to prevent HTTP response header injection via crafted filenames.
-        const safeFilename = filename.replace(/[^A-Za-z0-9._-]/g, '_');
-        res.setHeader('X-Content-Type-Options', 'nosniff');
-        res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}"`);
-        res.sendFile(targetPath);
-      });
-    });
-  }
+  downloadTempAttachment
 );
 
 router.get('/bundle/me',

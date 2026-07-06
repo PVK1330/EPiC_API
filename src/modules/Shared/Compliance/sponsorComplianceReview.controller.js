@@ -12,7 +12,11 @@ import {
 const handle = (res, err, fallback) => {
   const code = err?.statusCode || 500;
   if (code >= 500) logger.error({ err }, fallback);
-  return res.status(code).json({ status: "error", message: err.message || fallback });
+  return res.status(code).json({
+    status: "error",
+    message: code >= 500 ? fallback : (err.message || fallback),
+    error: process.env.NODE_ENV === 'development' ? err.message : undefined,
+  });
 };
 
 /** List items of one entity type for the review queue (optional ?status, ?sponsorId, ?page, ?limit). */

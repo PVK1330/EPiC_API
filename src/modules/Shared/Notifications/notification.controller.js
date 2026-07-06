@@ -14,6 +14,12 @@ import {
   NotificationTypes,
   NotificationPriority,
 } from '../../../services/notification.service.js';
+import {
+  isWebPushEnabled,
+  getVapidPublicKey,
+  savePushSubscription,
+  removePushSubscription,
+} from '../../../services/webPush.service.js';
 
 const validNotificationTypes = new Set(Object.values(NotificationTypes));
 const validPriorities = new Set(Object.values(NotificationPriority));
@@ -42,6 +48,15 @@ export const getAllNotifications = async (req, res) => {
         status: 'error',
         message: 'Authentication required',
         data: null,
+      });
+    }
+
+    // Platform staff / superadmin carry no tenant scope (NOTIF-01).
+    if (!req.tenantDb) {
+      return res.status(200).json({
+        status: 'success',
+        message: 'Notifications retrieved successfully',
+        data: { notifications: [], total: 0, page: 1, totalPages: 0, unreadCount: 0 },
       });
     }
 
@@ -145,6 +160,17 @@ export const getNotifications = async (req, res) => {
     const parsedPage = Math.max(1, Number.parseInt(page, 10) || 1);
     const parsedLimit = Math.min(100, Math.max(1, Number.parseInt(limit, 10) || 20));
 
+    // Platform staff / superadmin carry no tenant scope (req.tenantDb === null).
+    // They have no tenant notifications, so return an empty result rather than
+    // dereferencing a null tenantDb and 500-ing (NOTIF-01).
+    if (!req.tenantDb) {
+      return res.status(200).json({
+        status: 'success',
+        message: 'Notifications retrieved successfully',
+        data: { notifications: [], total: 0, page: parsedPage, totalPages: 0 },
+      });
+    }
+
     if (type && !validNotificationTypes.has(type)) {
       return res.status(400).json({
         status: 'error',
@@ -189,6 +215,15 @@ export const getUnreadNotificationCount = async (req, res) => {
         status: 'error',
         message: 'Authentication required',
         data: null,
+      });
+    }
+
+    // Platform staff / superadmin have no tenant scope (NOTIF-01).
+    if (!req.tenantDb) {
+      return res.status(200).json({
+        status: 'success',
+        message: 'Unread count retrieved successfully',
+        data: { count: 0 },
       });
     }
 
@@ -308,6 +343,96 @@ export const deleteNotificationById = async (req, res) => {
     });
   } catch (error) {
     logger.error({ err: error }, 'Delete notification error');
+    return internalServerError(res);
+  }
+};
+
+// ==================== WEB PUSH (DESKTOP NOTIFICATIONS) ====================
+
+// Public VAPID key the browser needs to create a push subscription.
+export const getPushPublicKey = async (req, res) => {
+  try {
+    const publicKey = getVapidPublicKey();
+    return res.status(200).json({
+      status: 'success',
+      message: 'Web push configuration',
+      data: { enabled: isWebPushEnabled(), publicKey },
+    });
+  } catch (error) {
+    logger.error({ err: error }, 'Get push public key error');
+    return internalServerError(res);
+  }
+};
+
+// Register (or refresh) this browser's push subscription for the current user.
+export const subscribeToPush = async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({
+        status: 'error',
+        message: 'Authentication required',
+        data: null,
+      });
+    }
+
+    const { subscription } = req.body || {};
+    if (!subscription?.endpoint || !subscription?.keys?.p256dh || !subscription?.keys?.auth) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'A valid push subscription is required',
+        data: null,
+      });
+    }
+
+    await savePushSubscription(
+      req.tenantDb,
+      userId,
+      subscription,
+      req.headers['user-agent'] || null,
+    );
+
+    return res.status(201).json({
+      status: 'success',
+      message: 'Push subscription saved',
+      data: null,
+    });
+  } catch (error) {
+    logger.error({ err: error }, 'Subscribe to push error');
+    return internalServerError(res);
+  }
+};
+
+// Remove this browser's push subscription (desktop notifications turned off).
+export const unsubscribeFromPush = async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({
+        status: 'error',
+        message: 'Authentication required',
+        data: null,
+      });
+    }
+
+    const { endpoint } = req.body || {};
+    if (!endpoint) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Subscription endpoint is required',
+        data: null,
+      });
+    }
+
+    await removePushSubscription(req.tenantDb, endpoint);
+
+    return res.status(200).json({
+      status: 'success',
+      message: 'Push subscription removed',
+      data: null,
+    });
+  } catch (error) {
+    logger.error({ err: error }, 'Unsubscribe from push error');
     return internalServerError(res);
   }
 };

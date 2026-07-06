@@ -29,6 +29,11 @@ router.patch('/:id/mark-read', notificationController.markNotificationAsRead);
 // Mark all notifications as read
 router.patch('/mark-all-read', notificationController.markAllNotificationsAsRead);
 
+// Web Push (desktop notifications): VAPID key + subscription lifecycle
+router.get('/push/public-key', notificationController.getPushPublicKey);
+router.post('/push/subscribe', notificationController.subscribeToPush);
+router.post('/push/unsubscribe', notificationController.unsubscribeFromPush);
+
 // Delete a specific notification
 router.delete('/:id', notificationController.deleteNotificationById);
 

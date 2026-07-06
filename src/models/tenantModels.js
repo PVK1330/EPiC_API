@@ -33,7 +33,9 @@ import MessageModel from "./tenant/message.model.js";
 import ConversationModel from "./tenant/conversation.model.js";
 import RescheduleHistoryModel from "./tenant/rescheduleHistory.model.js";
 import NotificationModel from "./tenant/notification.model.js";
+import AnnouncementModel from "./tenant/announcement.model.js";
 import NotificationPreferenceModel from "./tenant/notificationPreference.model.js";
+import PushSubscriptionModel from "./tenant/pushSubscription.model.js";
 import DepartmentModel from "./tenant/department.model.js";
 import CandidateAccountSettingsModel from "./tenant/candidateAccountSettings.model.js";
 import CandidateFeedbackModel from "./tenant/candidateFeedback.model.js";
@@ -139,7 +141,9 @@ export function buildDb(sequelize) {
   db.Conversation = ConversationModel(sequelize, Sequelize.DataTypes);
   db.RescheduleHistory = RescheduleHistoryModel(sequelize, Sequelize.DataTypes);
   db.Notification = NotificationModel(sequelize, Sequelize.DataTypes);
+  db.Announcement = AnnouncementModel(sequelize, Sequelize.DataTypes);
   db.NotificationPreference = NotificationPreferenceModel(sequelize, Sequelize.DataTypes);
+  db.PushSubscription = PushSubscriptionModel(sequelize, Sequelize.DataTypes);
   db.Department = DepartmentModel(sequelize, Sequelize.DataTypes);
   db.CandidateAccountSettings = CandidateAccountSettingsModel(sequelize, Sequelize.DataTypes);
   db.CandidateFeedback = CandidateFeedbackModel(sequelize, Sequelize.DataTypes);
@@ -262,6 +266,9 @@ export function buildDb(sequelize) {
   db.Role.hasMany(db.Notification, { foreignKey: "roleId", as: "notifications" });
   db.NotificationPreference.belongsTo(db.User, { foreignKey: "userId", as: "user" });
   db.User.hasOne(db.NotificationPreference, { foreignKey: "userId", as: "notificationPreference" });
+
+  db.PushSubscription.belongsTo(db.User, { foreignKey: "userId", as: "user" });
+  db.User.hasMany(db.PushSubscription, { foreignKey: "userId", as: "pushSubscriptions" });
   db.User.hasOne(db.CandidateAccountSettings, { foreignKey: "user_id", as: "candidateAccountSettings" });
   db.CandidateAccountSettings.belongsTo(db.User, { foreignKey: "user_id", as: "user" });
   db.User.hasMany(db.CandidateFeedback, { foreignKey: "user_id", as: "candidateFeedbacks" });

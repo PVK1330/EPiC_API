@@ -16,7 +16,13 @@ import {
 const handle = (res, err, fallback) => {
   const code = err?.statusCode || 500;
   if (code >= 500) logger.error({ err }, fallback);
-  return res.status(code).json({ status: "error", message: err.message || fallback });
+  // 5xx: never surface the raw error text to the client (dev-only via `error`).
+  // 4xx: err.message is a deliberate, user-safe thrown message — keep it.
+  return res.status(code).json({
+    status: "error",
+    message: code >= 500 ? fallback : (err.message || fallback),
+    error: process.env.NODE_ENV === 'development' ? err.message : undefined,
+  });
 };
 
 /** Verify the caller may act on this worker (admin override OR assigned caseworker). */

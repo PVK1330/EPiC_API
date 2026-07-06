@@ -27,7 +27,7 @@ export const getFieldSettings = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -66,7 +66,7 @@ export const batchUpdateFieldVisibility = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -135,7 +135,7 @@ export const updateFieldVisibilityById = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -176,7 +176,7 @@ export const updateSingleFieldVisibility = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -207,7 +207,7 @@ export const getCustomFields = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -262,7 +262,7 @@ export const createCustomField = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -308,7 +308,7 @@ export const updateCustomField = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -341,7 +341,7 @@ export const deleteCustomField = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -386,7 +386,7 @@ export const updateFieldSetting = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };

@@ -9,6 +9,7 @@ import { getIO } from '../../../realtime/ioRegistry.js';
 import { notifyMessageReceived } from '../../../services/notification.service.js';
 import { buildCaseworkerAssignmentWhere } from '../../../utils/caseworkerScope.js';
 import { toPublicImagePath } from '../../../utils/storagePath.util.js';
+import { sanitizePlainText } from '../../../utils/sanitizeText.js';
 
 // Normalize a User-like Sequelize row's profile_pic to the canonical relative
 // "api/public/images/<basename>" web path (idempotent, null-safe). Mutates the
@@ -83,7 +84,7 @@ export const getMessages = async (req, res) => {
 
     res.status(200).json({ status: "success", message: "Messages retrieved successfully", data: { count: messages.length, messages } });
   } catch (error) {
-    res.status(500).json({ status: "error", message: "Error retrieving messages", error: error.message });
+    res.status(500).json({ status: "error", message: "Error retrieving messages", error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 
@@ -93,6 +94,12 @@ export const sendMessage = async (req, res) => {
     let { content, messageType = 'text' } = req.body;
     const senderId = req.user.userId;
     const organisationId = req.user.organisation_id;
+
+    // SECURITY (stored XSS): message bodies are plain text — strip any HTML so a
+    // payload cannot be persisted and later executed by a client that renders it.
+    if (typeof content === 'string') {
+      content = sanitizePlainText(content, { maxLength: 5000 });
+    }
 
     // Handle file upload if present
     if (req.file) {
@@ -202,7 +209,7 @@ export const sendMessage = async (req, res) => {
 
     res.status(201).json({ status: "success", message: "Message sent successfully", data: messageInfo });
   } catch (error) {
-    res.status(500).json({ status: "error", message: "Error sending message", error: error.message });
+    res.status(500).json({ status: "error", message: "Error sending message", error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 
@@ -268,7 +275,7 @@ export const getRecentConversations = async (req, res) => {
       data: { count: formattedConversations.length, conversations: formattedConversations },
     });
   } catch (error) {
-    res.status(500).json({ status: "error", message: "Error retrieving conversations", error: error.message });
+    res.status(500).json({ status: "error", message: "Error retrieving conversations", error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 
@@ -371,7 +378,7 @@ export const getChatUsers = async (req, res) => {
 
     res.status(200).json({ status: "success", message: "Chat users retrieved successfully", data: { count: chatUsers.length, users: chatUsers } });
   } catch (error) {
-    res.status(500).json({ status: "error", message: "Error retrieving chat users", error: error.message });
+    res.status(500).json({ status: "error", message: "Error retrieving chat users", error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 
@@ -417,7 +424,7 @@ export const markAsRead = async (req, res) => {
 
     res.status(200).json({ status: "success", message: "Messages marked as read" });
   } catch (error) {
-    res.status(500).json({ status: "error", message: "Error updating message status", error: error.message });
+    res.status(500).json({ status: "error", message: "Error updating message status", error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };
 

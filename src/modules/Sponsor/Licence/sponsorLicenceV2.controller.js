@@ -40,7 +40,7 @@ export const createDraft = async (req, res) => {
     const code = error.statusCode || 500;
     if (code < 500) logger.info({ err: error }, "createDraft (licence v2) blocked");
     else logger.error({ err: error }, "createDraft (licence v2) failed");
-    return res.status(code).json({ status: "error", message: error.message || "Failed to create draft application" });
+    return res.status(code).json({ status: "error", message: "Failed to create draft application" });
   }
 };
 
@@ -167,7 +167,7 @@ export const submitApplication = async (req, res) => {
     const code = error.statusCode || 500;
     if (code < 500) logger.info({ err: error }, "submitApplication (licence v2) blocked");
     else logger.error({ err: error }, "submitApplication (licence v2) failed");
-    return res.status(code).json({ status: "error", message: error.message || "Failed to submit application" });
+    return res.status(code).json({ status: "error", message: "Failed to submit application" });
   }
 };
 
@@ -310,6 +310,6 @@ export const syncFromProfile = async (req, res) => {
     return res.status(200).json({ status: "success", message: "Profile data synced successfully", data: serializeApplication(updated) });
   } catch (error) {
     logger.error({ err: error }, "syncFromProfile failed");
-    return res.status(500).json({ status: "error", message: error.message || "Failed to sync profile data" });
+    return res.status(500).json({ status: "error", message: "Failed to sync profile data" });
   }
 };

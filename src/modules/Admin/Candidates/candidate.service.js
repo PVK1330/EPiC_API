@@ -426,7 +426,12 @@ export class CandidateService {
 
   async getCandidateById(id) {
     const candidate = await this.repository.findById(id);
-    if (!candidate) throw new Error("Candidate not found");
+    if (!candidate) {
+      // ADM-16: surface as 404 (not a generic 500) via the global error handler.
+      const err = new Error("Candidate not found");
+      err.statusCode = 404;
+      throw err;
+    }
     return candidate;
   }
 

@@ -67,7 +67,7 @@ export async function getIntegrationCredentials(req, res) {
     });
   } catch (err) {
     logger.error({ err }, "getIntegrationCredentials");
-    return res.status(500).json({ status: "error", message: err.message });
+    return res.status(500).json({ status: "error", message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined });
   }
 }
 
@@ -147,6 +147,6 @@ export async function updateIntegrationCredentials(req, res) {
     });
   } catch (err) {
     logger.error({ err }, "updateIntegrationCredentials");
-    return res.status(500).json({ status: "error", message: err.message });
+    return res.status(500).json({ status: "error", message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined });
   }
 }

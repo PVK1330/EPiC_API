@@ -5,6 +5,7 @@ import QRCode from 'qrcode';
 import catchAsync from '../../utils/catchAsync.js';
 import ApiResponse from '../../utils/apiResponse.js';
 import platformDb from '../../models/index.js';
+import { encrypt as encryptSecret, decrypt as decryptSecret } from '../../utils/fieldEncryption.js';
 import { generateOTPTemplate, generateCredentialsTemplate } from '../../utils/emailTemplates.js';
 import { getOrganisationEmailBranding } from '../../utils/emailBranding.js';
 import { sendPasswordResetOtpEmail } from '../../services/tenantUserMail.service.js';
@@ -695,6 +696,43 @@ export const login = catchAsync(async (req, res) => {
       const m = await bcrypt.compare(password, candidate.password);
       if (m) { user = candidate; break; }
     }
+
+    // SECURITY: the platform (no-subdomain) login path previously tracked no
+    // failed attempts and enforced no lockout, so the 5-attempt account lockout
+    // could be bypassed simply by logging in from the main URL. Mirror the
+    // tenant-path behaviour: reject when the account(s) are already locked, and
+    // otherwise count the failed attempt and lock at the threshold.
+    if (!user && allCandidates.length > 0) {
+      const now = new Date();
+      const allLocked = allCandidates.every(
+        (c) => c.locked_until && new Date(c.locked_until) > now,
+      );
+      if (allLocked) {
+        return ApiResponse.forbidden(
+          res,
+          'Account is locked due to multiple failed attempts. Please try again later.',
+        );
+      }
+      for (const c of allCandidates) {
+        c.failed_login_attempts = (c.failed_login_attempts || 0) + 1;
+        if (c.failed_login_attempts >= 5) {
+          c.locked_until = new Date(Date.now() + 30 * 60 * 1000);
+          recordPlatformAuditLog({
+            category: 'Authentication', action: 'Account Locked',
+            user: c.email, org: 'Global System',
+            description: 'Account locked due to 5 failed attempts (platform login)',
+            status: 'Success', user_id: c.id, ip_address: req.ip || req.connection?.remoteAddress,
+          });
+        }
+        await c.save();
+      }
+      recordPlatformAuditLog({
+        category: 'Authentication', action: 'Failed Login',
+        user: emailNorm, org: 'Global System',
+        description: 'Invalid password (platform login)',
+        status: 'Failed', user_id: null, ip_address: req.ip || req.connection?.remoteAddress,
+      });
+    }
   }
 
   if (!user) {
@@ -1023,8 +1061,18 @@ export const forgotPassword = catchAsync(async (req, res) => {
   const email = String(req.validated.body?.email || "").trim().toLowerCase();
   const { user, tenantDb } = await resolveUserForPasswordReset(req, email);
 
+  // SECURITY (BUG-005): do not reveal whether an account exists. Return the same
+  // generic response whether or not the email matches a user, so an attacker
+  // cannot enumerate registered accounts via this endpoint.
+  const GENERIC_RESET_RESPONSE = () =>
+    ApiResponse.success(res, "If an account exists for this email, a password reset OTP has been sent.", {
+      email,
+      otp_sent: true,
+      next_step: "verify_otp",
+    });
+
   if (!user) {
-    return ApiResponse.notFound(res, "No account found with this email for this organisation");
+    return GENERIC_RESET_RESPONSE();
   }
 
   const otp = randomInt(100000, 1000000).toString(); // S-08 fix: CSPRNG
@@ -1067,7 +1115,8 @@ export const forgotPassword = catchAsync(async (req, res) => {
     logger.info({ recipient }, "Password reset OTP sent");
   }
 
-  return ApiResponse.success(res, "Password reset OTP sent to your email", {
+  // Same generic message as the no-account branch (anti-enumeration).
+  return ApiResponse.success(res, "If an account exists for this email, a password reset OTP has been sent.", {
     email: recipient,
     otp_sent: true,
     next_step: "verify_otp",
@@ -1082,16 +1131,21 @@ export const verifyResetOTP = catchAsync(async (req, res) => {
   const { otp } = req.validated.body;
   const { user } = await resolveUserForPasswordReset(req, email);
 
+  // SECURITY (BUG-005): unknown email, wrong OTP, and expired OTP all return the
+  // SAME generic 400 so this endpoint cannot be used to enumerate accounts or
+  // distinguish "no such user" from "wrong code".
+  const INVALID_OTP = () => ApiResponse.badRequest(res, "Invalid or expired OTP");
+
   if (!user) {
-    return ApiResponse.notFound(res, "No account found with this email for this organisation");
+    return INVALID_OTP();
   }
 
-  if (!timingSafeEqualStr(user.password_reset_otp, otp)) {
-    return ApiResponse.badRequest(res, "Invalid OTP");
+  if (!user.password_reset_otp || !timingSafeEqualStr(user.password_reset_otp, otp)) {
+    return INVALID_OTP();
   }
 
-  if (new Date() > user.password_reset_otp_expiry) {
-    return ApiResponse.badRequest(res, "OTP expired");
+  if (!user.password_reset_otp_expiry || new Date() > user.password_reset_otp_expiry) {
+    return INVALID_OTP();
   }
 
   // RE-11 fix: null OTP fields immediately so the code cannot be reused to
@@ -1304,8 +1358,11 @@ export const setup2FA = catchAsync(async (req, res) => {
   const secret = speakeasy.generateSecret({ name: `${issuerName}:${accountLabel}` });
   const dataURL = await QRCode.toDataURL(secret.otpauth_url);
 
+  // data-leakage-2: encrypt the TOTP seed at rest (AES-256-GCM via
+  // fieldEncryption). decrypt() passes legacy plaintext through unchanged, so
+  // existing enrolments keep verifying; only the stored value changes.
   await user.update({
-    two_factor_secret: secret.base32,
+    two_factor_secret: encryptSecret(secret.base32),
   });
 
   // S-10 fix: never return the raw base32 secret in the JSON response.
@@ -1327,7 +1384,7 @@ export const verify2FASetup = catchAsync(async (req, res) => {
   if (!user || !user.two_factor_secret) return ApiResponse.badRequest(res, '2FA setup not initiated');
 
   const verified = speakeasy.totp.verify({
-    secret: user.two_factor_secret,
+    secret: decryptSecret(user.two_factor_secret),
     encoding: 'base32',
     token: String(token ?? '').replace(/\s+/g, ''),
     // ±30s clock-drift tolerance so a correct code is not rejected on minor skew.
@@ -1352,7 +1409,7 @@ export const verify2FA = catchAsync(async (req, res) => {
   if (!user || !user.two_factor_secret) return ApiResponse.badRequest(res, '2FA not enabled');
 
   const verified = speakeasy.totp.verify({
-    secret: user.two_factor_secret,
+    secret: decryptSecret(user.two_factor_secret),
     encoding: 'base32',
     token: String(token ?? '').replace(/\s+/g, ''),
     // ±30s clock-drift tolerance so a correct code is not rejected on minor skew.

@@ -283,7 +283,7 @@ export const generateAuditPack = async (req, res) => {
     });
   } catch (err) {
     logger.error({ err }, 'generateAuditPack error');
-    return res.status(500).json({ status: 'error', message: err.message || 'Internal server error' });
+    return res.status(500).json({ status: 'error', message: 'Internal server error' });
   }
 };
 
@@ -413,7 +413,7 @@ export const exportAuditPdf = async (req, res) => {
     return res.end(pdfBuffer);
   } catch (err) {
     logger.error({ err }, 'exportAuditPdf error');
-    return res.status(500).json({ status: 'error', message: err.message || 'PDF generation failed' });
+    return res.status(500).json({ status: 'error', message: 'PDF generation failed' });
   }
 };
 
@@ -582,7 +582,7 @@ export const exportAuditExcel = async (req, res) => {
     sendXlsxDownload(res, buffer, filename);
   } catch (err) {
     logger.error({ err }, 'exportAuditExcel error');
-    return res.status(500).json({ status: 'error', message: err.message || 'Excel generation failed' });
+    return res.status(500).json({ status: 'error', message: 'Excel generation failed' });
   }
 };
 
@@ -749,7 +749,7 @@ export const exportAuditZip = async (req, res) => {
   } catch (err) {
     logger.error({ err }, 'exportAuditZip error');
     if (!res.headersSent) {
-      return res.status(500).json({ status: 'error', message: err.message || 'ZIP generation failed' });
+      return res.status(500).json({ status: 'error', message: 'ZIP generation failed' });
     }
   }
 };

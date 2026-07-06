@@ -1,4 +1,5 @@
 import { Op } from 'sequelize';
+import { excludeSensitiveUserAttrs } from '../../../utils/userAttributes.js';
 
 
 // Get RBAC overview - summary of roles, permissions, and assignments
@@ -85,7 +86,7 @@ export const getRbacOverview = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -142,7 +143,7 @@ export const getRbacMatrix = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -167,9 +168,7 @@ export const getUsersWithRolesAndPermissions = async (req, res) => {
 
     const users = await req.tenantDb.User.findAll({
       where: whereClause,
-      attributes: {
-        exclude: ["password", "otp_code", "otp_expiry", "password_reset_otp", "password_reset_otp_expiry", "temp_password"],
-      },
+      attributes: excludeSensitiveUserAttrs(),
       include: [
         {
           model: req.tenantDb.Role,
@@ -225,7 +224,7 @@ export const getUsersWithRolesAndPermissions = async (req, res) => {
       status: "error",
       message: "Failed to fetch users with roles and permissions",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -294,7 +293,7 @@ export const getPermissionAudit = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -331,7 +330,7 @@ export const getOrphanPermissions = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -371,7 +370,7 @@ export const getRolesWithoutPermissions = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -472,7 +471,7 @@ export const bulkAssignPermissions = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };

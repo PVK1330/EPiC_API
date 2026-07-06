@@ -14,6 +14,13 @@ import { evaluateCaseStageAfterEvent, applyCaseStageChange } from '../../../serv
 import { bookBiometricDirect } from '../../../services/caseWorkflowProcess.service.js';
 import { recordTimelineEntry } from '../../../services/caseTimeline.service.js';
 import { getOrganisationEmailBranding } from '../../../utils/emailBranding.js';
+import { sendTransactionalEmail } from '../../../services/mail.service.js';
+import { generateNotificationEmailTemplate } from '../../../utils/emailTemplates.js';
+import {
+  notifyUser,
+  NotificationTypes,
+  NotificationPriority,
+} from '../../../services/notification.service.js';
 import {
   assertSubmissionGate,
   resolveCaseStage,
@@ -438,7 +445,7 @@ export const getCaseDetails = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -590,7 +597,7 @@ export const updateCaseStatus = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -888,7 +895,7 @@ export const updateCaseFinance = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -1017,7 +1024,7 @@ export const recordManualCasePayment = async (req, res) => {
       status: 'error',
       message: 'Internal server error',
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -1456,6 +1463,51 @@ export const exportCaseInvoicePDF = catchAsync(async (req, res) => {
     };
 
     const buffer = await generatePdfBufferFromDefinition(docDefinition);
+
+    // Send the generated invoice to the candidate as well: branded email with
+    // the PDF attached + in-app notification. Fire-and-forget so the admin's
+    // download is never blocked by SMTP latency (same pattern as notifyUser).
+    if (candidateEmail) {
+      const caseLabel = caseData.caseId || `#${caseData.id}`;
+      const frontendBase = (process.env.FRONTEND_URL?.split(",")[0]?.trim() || "").replace(/\/$/, "");
+      void sendTransactionalEmail({
+        organisationId: req.user?.organisation_id ?? null,
+        to: candidateEmail,
+        subject: `${orgName} — Invoice ${invoiceNo}`,
+        html: generateNotificationEmailTemplate({
+          recipientName: candidateName,
+          title: `Invoice ${invoiceNo}`,
+          message: `Please find attached your invoice for case ${caseLabel}. Total fee: ${money(totalFee)}, paid: ${money(totalPaid)}, balance due: ${money(balanceDue)}. You can view and pay it from the Payments section of your portal.`,
+          priority: NotificationPriority.HIGH,
+          notificationType: NotificationTypes.INFO,
+          actionUrl: frontendBase ? `${frontendBase}/candidate/payments` : null,
+          branding,
+        }),
+        attachments: [
+          { filename: `Invoice_${safeCaseId}.pdf`, content: buffer, contentType: "application/pdf" },
+        ],
+        failureContext: `case invoice ${invoiceNo}`,
+      }).catch((err) =>
+        logger.error({ err, caseId: caseData.id }, "exportCaseInvoicePDF: candidate invoice email failed"),
+      );
+
+      if (caseData.candidate?.id) {
+        void notifyUser(req.tenantDb, caseData.candidate.id, {
+          type: NotificationTypes.INFO,
+          priority: NotificationPriority.HIGH,
+          category: "payment",
+          title: `Invoice ${invoiceNo} issued`,
+          message: `An invoice for your case ${caseLabel} has been generated and emailed to you. Balance due: ${money(balanceDue)}.`,
+          actionUrl: "/candidate/payments",
+          actionType: "invoice_generated",
+          entityType: "case",
+          entityId: caseData.id,
+          organisationId: req.user?.organisation_id ?? null,
+          metadata: { invoiceNumber: invoiceNo, balanceDue },
+        });
+      }
+    }
+
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename=Invoice_${safeCaseId}.pdf`);
     res.status(200).send(buffer);

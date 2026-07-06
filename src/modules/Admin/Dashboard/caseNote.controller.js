@@ -1,10 +1,13 @@
 import { ROLES } from '../../../middlewares/role.middleware.js';
 import logger from '../../../utils/logger.js';
+import { sanitizePlainText } from '../../../utils/sanitizeText.js';
 
 // Create a new case note
 export const createCaseNote = async (req, res) => {
   try {
-    const { caseId, content, parentNoteId } = req.body;
+    const { caseId, parentNoteId } = req.body;
+    // SECURITY (stored XSS): case notes are plain text — strip any HTML markup.
+    const content = sanitizePlainText(req.body?.content, { maxLength: 10000 });
     const userId = req.user?.userId;
     const roleId = req.user?.role_id;
 
@@ -76,7 +79,7 @@ export const createCaseNote = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -171,7 +174,7 @@ export const getCaseNotes = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -180,7 +183,7 @@ export const getCaseNotes = async (req, res) => {
 export const updateCaseNote = async (req, res) => {
   try {
     const { id } = req.params;
-    const { content } = req.body;
+    const content = sanitizePlainText(req.body?.content, { maxLength: 10000 });
     const userId = req.user?.userId;
     const roleId = req.user?.role_id;
 
@@ -228,7 +231,7 @@ export const updateCaseNote = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -273,7 +276,7 @@ export const deleteCaseNote = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -350,7 +353,7 @@ export const getCaseNoteByNoteId = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };

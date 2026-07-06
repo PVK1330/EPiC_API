@@ -62,7 +62,7 @@ export const getLicenceStages = async (req, res) => {
   } catch (error) {
     const code = error?.statusCode || 500;
     if (code >= 500) logger.error({ err: error }, "getLicenceStages failed");
-    return res.status(code).json({ status: "error", message: error.message || "Failed to load stages" });
+    return res.status(code).json({ status: "error", message: "Failed to load stages" });
   }
 };
 
@@ -112,7 +112,7 @@ export const downloadLicenceDocument = async (req, res) => {
   } catch (error) {
     const code = error?.statusCode || 500;
     if (code >= 500) logger.error({ err: error }, "downloadLicenceDocument (shared) failed");
-    return res.status(code).json({ status: "error", message: error.message || "Failed to download document" });
+    return res.status(code).json({ status: "error", message: "Failed to download document" });
   }
 };
 
@@ -157,7 +157,7 @@ export const downloadPaymentProof = async (req, res) => {
   } catch (error) {
     const code = error?.statusCode || 500;
     if (code >= 500) logger.error({ err: error }, "downloadPaymentProof (shared) failed");
-    return res.status(code).json({ status: "error", message: error.message || "Failed to download payment slip" });
+    return res.status(code).json({ status: "error", message: "Failed to download payment slip" });
   }
 };
 
@@ -202,7 +202,7 @@ export const downloadDecisionLetter = async (req, res) => {
   } catch (error) {
     const code = error?.statusCode || 500;
     if (code >= 500) logger.error({ err: error }, "downloadDecisionLetter (shared) failed");
-    return res.status(code).json({ status: "error", message: error.message || "Failed to download decision letter" });
+    return res.status(code).json({ status: "error", message: "Failed to download decision letter" });
   }
 };
 
@@ -224,7 +224,7 @@ export const getLicenceWorkflowTimeline = async (req, res) => {
   } catch (error) {
     const code = error?.statusCode || 500;
     if (code >= 500) logger.error({ err: error }, "getLicenceWorkflowTimeline failed");
-    return res.status(code).json({ status: "error", message: error.message || "Failed to load workflow timeline" });
+    return res.status(code).json({ status: "error", message: "Failed to load workflow timeline" });
   }
 };
 
@@ -265,6 +265,6 @@ export const completeLicenceStageTask = async (req, res) => {
   } catch (error) {
     const code = error?.statusCode || 500;
     if (code >= 500) logger.error({ err: error }, "completeLicenceStageTask failed");
-    return res.status(code).json({ status: "error", message: error.message || "Failed to complete task" });
+    return res.status(code).json({ status: "error", message: "Failed to complete task" });
   }
 };

@@ -39,7 +39,7 @@ import {
     deleteCosRequest
 } from './sponsorCos.controller.js';
 import { verifyTokenAndTenant } from '../../../middlewares/authStack.middleware.js';
-import { upload } from '../../../middlewares/upload.middleware.js';
+import { secureUpload } from '../../../middlewares/upload.middleware.js';
 import { validate } from '../../../middlewares/validate.middleware.js';
 import { submitCredentialsSchema } from '../../../validations/licenceGovernment.validation.js';
 import {
@@ -56,15 +56,15 @@ router.use(verifyTokenAndTenant);
 // Stream one of the sponsor's own uploaded documents (ownership-guarded).
 router.get("/:id/documents/:index/download", downloadLicenceDocument);
 
-router.post("/apply", upload.array("documents", 10), validate(sponsorSubmitLicenceSchema, "sponsorSubmitLicenceSchema"), submitLicenceApplication);
+router.post("/apply", ...secureUpload("documents", 10), validate(sponsorSubmitLicenceSchema, "sponsorSubmitLicenceSchema"), submitLicenceApplication);
 router.get("/my-applications", getMyLicenceApplications);
 router.get("/details/:id", getLicenceApplicationDetails);
-router.put("/update/:id", upload.array("documents", 10), validate(sponsorUpdateLicenceSchema, "sponsorUpdateLicenceSchema"), updateLicenceApplication);
+router.put("/update/:id", ...secureUpload("documents", 10), validate(sponsorUpdateLicenceSchema, "sponsorUpdateLicenceSchema"), updateLicenceApplication);
 router.delete("/delete/:id", deleteMyLicenceApplication);
 router.post("/renew/:id", renewLicenceApplication);
 router.get("/documents", getLicenceDocuments);
 router.get("/summary", getLicenceSummary);
-router.post("/documents/upload", upload.array("documents", 10), uploadLicenceDocument);
+router.post("/documents/upload", ...secureUpload("documents", 10), uploadLicenceDocument);
 router.delete("/documents/:applicationId/:docIndex", deleteLicenceDocument);
 
 // Government credentials — view (GET) and confirm receipt / submit (POST).
@@ -73,10 +73,10 @@ router.post("/:id/government-credentials", confirmGovernmentCredentialsReceived)
 router.post("/:id/submit-credentials", validate(submitCredentialsSchema), submitSponsorUkviCredentials);
 // Optional `paymentProof` file may accompany the confirmation (multipart). Plain
 // JSON (no file) still works — multer passes non-multipart requests straight through.
-router.post("/:id/confirm-payment", upload.single("paymentProof"), confirmSponsorUkviPayment);
+router.post("/:id/confirm-payment", ...secureUpload("paymentProof"), confirmSponsorUkviPayment);
 router.get("/:id/payment-proof/download", downloadSponsorPaymentProof);
 // Sponsor confirms the UKVI decision they received; optional `decisionLetter` file.
-router.post("/:id/confirm-decision", upload.single("decisionLetter"), confirmSponsorUkviDecision);
+router.post("/:id/confirm-decision", ...secureUpload("decisionLetter"), confirmSponsorUkviDecision);
 router.get("/:id/decision-letter/download", downloadSponsorDecisionLetter);
 
 // Documents dispatched to sponsor by admin/caseworker.
@@ -88,7 +88,7 @@ router.get("/:id/intake", getSponsorIntakeSummary);
 router.put("/:id/intake", updateSponsorIntakeForm);
 router.post("/:id/intake/submit", submitSponsorIntakeForm);
 router.get("/:id/intake/documents/:documentKey/download", downloadSponsorIntakeDocument);
-router.post("/:id/intake/documents/:documentKey/upload", upload.single("document"), uploadSponsorIntakeDocument);
+router.post("/:id/intake/documents/:documentKey/upload", ...secureUpload("document"), uploadSponsorIntakeDocument);
 router.delete("/:id/intake/documents/:documentKey", deleteSponsorIntakeDocument);
 
 // --- Deprecated CoS aliases (use /api/business/cos/* instead) ---

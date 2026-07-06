@@ -5,11 +5,10 @@ import * as schema from '../../../validations/candidate.validation.js';
 import { verifyTokenAndTenant } from '../../../middlewares/authStack.middleware.js';
 import { checkRole, ensureSelfOrRole, ROLES } from '../../../middlewares/role.middleware.js';
 import * as candidateApplicationController from '../../Candidate/Application/candidateApplication.controller.js';
-import multer from 'multer';
+import { handleBulkImportUpload } from '../../../middlewares/upload.middleware.js';
 import logger from '../../../utils/logger.js';
 
 const router = Router();
-const upload = multer({ storage: multer.memoryStorage() });
 
 router.use(verifyTokenAndTenant);
 
@@ -29,7 +28,7 @@ router.get(
 router.post(
   "/applications/import",
   checkRole([ROLES.ADMIN, ROLES.CASEWORKER]),
-  upload.single('file'),
+  handleBulkImportUpload,
   candidateApplicationController.importCandidateApplicationsExcel
 );
 

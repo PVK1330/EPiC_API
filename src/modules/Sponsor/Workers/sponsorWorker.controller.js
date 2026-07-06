@@ -218,7 +218,7 @@ export const addSponsoredWorker = async (req, res) => {
       return res.status(500).json({
         status: 'error',
         message: 'Candidate application schema mismatch detected. Please contact admin.',
-        error: err.message,
+        error: process.env.NODE_ENV === 'development' ? err.message : undefined,
       });
     }
     res.status(500).json({
@@ -292,7 +292,7 @@ export const getSponsoredWorkers = async (req, res) => {
     res.status(500).json({
       status: 'error',
       message: 'Internal server error',
-      error: err.message
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
     });
   }
 };
@@ -332,7 +332,10 @@ export const getEmployeeRecords = async (req, res) => {
         name: profile.authorisingName || 'Authorising Officer',
         email: profile.authorisingEmail || '',
         phone: profile.authorisingPhone || '',
-        nationality: profile.country || '-',
+        // Personal nationality is not captured for internal staff — don't fall
+        // back to the company's country or every internal row shows the same
+        // "nationality".
+        nationality: '-',
         visaType: 'Internal Staff',
         niNumber: '-',
         startDate: profile.createdAt,
@@ -357,7 +360,7 @@ export const getEmployeeRecords = async (req, res) => {
         name: profile.keyContactName || 'Key Contact',
         email: profile.keyContactEmail || '',
         phone: profile.keyContactPhone || '',
-        nationality: profile.country || '-',
+        nationality: '-',
         visaType: 'Internal Staff',
         niNumber: '-',
         startDate: profile.createdAt,
@@ -382,7 +385,7 @@ export const getEmployeeRecords = async (req, res) => {
         name: profile.hrName || 'HR Manager',
         email: profile.hrEmail || '',
         phone: profile.hrPhone || '',
-        nationality: profile.country || '-',
+        nationality: '-',
         visaType: 'Internal Staff',
         niNumber: '-',
         startDate: profile.createdAt,
@@ -407,7 +410,7 @@ export const getEmployeeRecords = async (req, res) => {
         name: user?.name || `Level 1 User ${idx + 1}`,
         email: user?.email || '',
         phone: user?.phone || '',
-        nationality: profile.country || '-',
+        nationality: '-',
         visaType: 'Internal Staff',
         niNumber: '-',
         startDate: profile.createdAt,
@@ -713,7 +716,7 @@ export const getSponsoredWorkerDetails = async (req, res) => {
     res.status(500).json({
       status: 'error',
       message: 'Internal server error',
-      error: err.message
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
     });
   }
 };

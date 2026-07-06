@@ -288,7 +288,7 @@ export const getDashboardStats = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -343,7 +343,7 @@ export const getRecentCases = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -407,7 +407,7 @@ export const getRecentTasks = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -528,7 +528,7 @@ export const getRecentActivities = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -617,7 +617,7 @@ export const getQuickActions = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -1131,7 +1131,7 @@ export const getDueOverdueTasks = async (req, res) => {
     res.status(500).json({
       status: "error",
       message: "Failed to load due and overdue items",
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
