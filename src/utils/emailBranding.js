@@ -17,6 +17,8 @@ import { getSettingsByNamespace } from "../services/settings.service.js";
 import { buildTenantFrontendUrls } from "./organisationHost.js";
 import logger from "./logger.js";
 
+import { toPublicImagePath } from "./storagePath.util.js";
+
 // ── Fixed UK palette ─────────────────────────────────────────────────────────
 // One identity for ALL tenants (navy / GOV.UK blue / GOV.UK red = red·white·blue).
 // Exported so anything that renders email-adjacent HTML stays in lockstep.
@@ -66,10 +68,10 @@ function mainPortalUrl() {
  */
 export function absoluteImageUrl(input) {
   if (!input) return null;
-  const v = String(input).trim();
-  if (!v) return null;
-  if (/^https?:\/\//i.test(v)) return v;
-  return `${baseUrl()}/${v.replace(/^\/+/, "")}`;
+  const publicPath = toPublicImagePath(input);
+  if (!publicPath) return null;
+  if (/^https?:\/\//i.test(publicPath)) return publicPath;
+  return `${baseUrl()}/${publicPath.replace(/^\/+/, "")}`;
 }
 
 /** Platform fallback logo — physically present at assets/elitepic_logo.png. */
