@@ -213,6 +213,24 @@ export async function seedAppendixDocuments(
     });
 }
 
+function formatCooldownDate(value) {
+  if (!value) return null;
+  const d = value instanceof Date ? value : new Date(String(value));
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString().slice(0, 10);
+}
+
+function isCooldownActive(cooldownUntil) {
+  if (!cooldownUntil) return false;
+  const parsed = cooldownUntil instanceof Date ? cooldownUntil : new Date(String(cooldownUntil));
+  if (Number.isNaN(parsed.getTime())) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(parsed);
+  target.setHours(0, 0, 0, 0);
+  return target > today;
+}
+
 export async function createDraft({ tenantDb, userId, organisationId }) {
   try {
     return await tenantDb.sequelize.transaction(
@@ -249,6 +267,32 @@ export async function createDraft({ tenantDb, userId, organisationId }) {
           );
           err.statusCode = 409;
           err.code = "ACTIVE_APPLICATION_EXISTS";
+          throw err;
+        }
+
+        const cooldownBlocked = await tenantDb.LicenceApplication.findOne({
+          where: {
+            userId,
+            applicationVersion: APPLICATION_VERSION_V2,
+            deletedAt: null,
+            status: {
+              [Op.in]: ["Rejected", "Licence Rejected"],
+            },
+            rejectionCooldownUntil: {
+              [Op.not]: null,
+            },
+          },
+          attributes: ["id", "status", "rejectionCooldownUntil"],
+          transaction: t,
+          lock: t.LOCK.UPDATE,
+        });
+        if (cooldownBlocked && isCooldownActive(cooldownBlocked.rejectionCooldownUntil)) {
+          const until = formatCooldownDate(cooldownBlocked.rejectionCooldownUntil);
+          const err = new Error(
+            `Your previous licence application was rejected. You may apply again after ${until || "6 months"} (6 months from the rejection date).`,
+          );
+          err.statusCode = 409;
+          err.code = "REAPPLICATION_COOLDOWN_ACTIVE";
           throw err;
         }
 

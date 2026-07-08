@@ -25,7 +25,11 @@ const orgId = (req) => {
   return Number.isInteger(n) ? n : null;
 };
 
-const EDITABLE = ["Draft", "Information Requested"];
+const EDITABLE_STATUSES = new Set(["Draft", "Pending", "Under Review", "Information Requested", "Government Processing", "Decision Pending"]);
+
+export function isApplicationEditable(status) {
+  return EDITABLE_STATUSES.has(String(status || "").trim());
+}
 
 /** POST /api/business/licence/v2/applications — start a new draft. */
 export const createDraft = async (req, res) => {
@@ -40,7 +44,7 @@ export const createDraft = async (req, res) => {
     const code = error.statusCode || 500;
     if (code < 500) logger.info({ err: error }, "createDraft (licence v2) blocked");
     else logger.error({ err: error }, "createDraft (licence v2) failed");
-    return res.status(code).json({ status: "error", message: "Failed to create draft application" });
+    return res.status(code).json({ status: "error", message: error.message || "Failed to create draft application" });
   }
 };
 
@@ -84,7 +88,7 @@ export const saveDraft = async (req, res) => {
       where: { id: req.params.id, userId, applicationVersion: APPLICATION_VERSION_V2 },
     });
     if (!app) return res.status(404).json({ status: "error", message: "Application not found" });
-    if (!EDITABLE.includes(app.status)) {
+    if (!isApplicationEditable(app.status)) {
       return res.status(409).json({ status: "error", message: `A ${app.status} application can no longer be edited.` });
     }
     const updated = await saveDraftSvc({
@@ -107,7 +111,7 @@ export const submitApplication = async (req, res) => {
     if (!userId) return res.status(401).json({ status: "error", message: "Invalid session" });
     const app = await loadFullApplication(req.tenantDb, req.params.id, { ownerUserId: userId });
     if (!app) return res.status(404).json({ status: "error", message: "Application not found" });
-    if (!EDITABLE.includes(app.status)) {
+    if (!isApplicationEditable(app.status)) {
       return res.status(409).json({ status: "error", message: `A ${app.status} application cannot be submitted.` });
     }
 
@@ -180,7 +184,7 @@ export const uploadAppendixDocument = async (req, res) => {
       where: { id: req.params.id, userId, applicationVersion: APPLICATION_VERSION_V2 },
     });
     if (!app) return res.status(404).json({ status: "error", message: "Application not found" });
-    if (!EDITABLE.includes(app.status)) {
+    if (!isApplicationEditable(app.status)) {
       return res.status(409).json({ status: "error", message: `A ${app.status} application can no longer be edited.` });
     }
     const doc = await req.tenantDb.LicenceAppendixDocument.findOne({
@@ -302,7 +306,7 @@ export const syncFromProfile = async (req, res) => {
       where: { id: req.params.id, userId, applicationVersion: APPLICATION_VERSION_V2 },
     });
     if (!app) return res.status(404).json({ status: "error", message: "Application not found" });
-    if (!EDITABLE.includes(app.status)) {
+    if (!isApplicationEditable(app.status)) {
       return res.status(409).json({ status: "error", message: `A ${app.status} application can no longer be edited.` });
     }
 

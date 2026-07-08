@@ -492,7 +492,7 @@ const frontend = () => process.env.FRONTEND_URL || "";
 
 // ─── Data-signal completion inference (mirrors the frontend deriveStageStatuses) ──
 
-function deriveStageCompletion(app) {
+export function deriveStageCompletion(app) {
   const completed = new Set();
   if (!app) return { completed, currentKey: LICENCE_STAGE_DEFINITIONS[0].key };
 
@@ -512,7 +512,7 @@ function deriveStageCompletion(app) {
   const infoProvided = submitted && !["Draft", "Pending"].includes(status);
 
   const signal = {
-    enquiry_onboarding:              true,
+    enquiry_onboarding:              false,
     licence_routes:                  (app.routes || []).length > 0,
     organisation_details:            !!(app.organisationInfo && (app.organisationInfo.companiesHouseNumber || app.organisationInfo.organisationType)),
     cos_requirements:                (app.cosRequirements || []).length > 0,
@@ -1147,7 +1147,6 @@ export async function getStagesForApplication(tenantDb, applicationOrId, { req =
   await ensureStageTasks(tenantDb, application, { req });
 
   const appShape = await buildAppShape(tenantDb, application);
-  const { completed } = deriveStageCompletion(appShape);
   const rejected = application.status === "Rejected" || application.status === "Licence Rejected";
 
   const rows = await tenantDb.LicenceStageTask.findAll({
@@ -1161,22 +1160,42 @@ export async function getStagesForApplication(tenantDb, applicationOrId, { req =
     byStage.get(r.stageKey).push(r);
   }
 
-  // Supplement the data-signal completed set with DB task-row state for ALL stages.
-  // This prevents stage regression when the status is "Licence Rejected" — deriveStageCompletion
-  // has no data signal for govActive stages (9-15) under that status, so without this supplement
-  // the contiguous scan stops at stage 9. Any stage whose DB task rows are all completed
-  // is treated as done regardless of whether a data signal fired.
-  for (const s of LICENCE_STAGE_DEFINITIONS) {
-    if (completed.has(s.key)) continue;
-    const stageRows = byStage.get(s.key) || [];
-    if (stageRows.length > 0 && stageRows.every((r) => r.status === "completed")) {
-      completed.add(s.key);
-    }
-  }
-  // Recalculate currentKey now that completed may have grown (contiguous from start).
+  const staffViewer = [ROLES.ADMIN, ROLES.SUPERADMIN, ROLES.CASEWORKER].includes(Number(req?.user?.role_id ?? req?.user?.roleId));
+  let completed = new Set();
   let currentKey = null;
-  for (const s of LICENCE_STAGE_DEFINITIONS) {
-    if (!completed.has(s.key)) { currentKey = s.key; break; }
+
+  if (staffViewer) {
+    for (const s of LICENCE_STAGE_DEFINITIONS) {
+      const stageRows = byStage.get(s.key) || [];
+      if (stageRows.length > 0 && stageRows.every((r) => r.status === "completed")) {
+        completed.add(s.key);
+      } else {
+        currentKey = s.key;
+        break;
+      }
+    }
+  } else {
+    const derived = deriveStageCompletion(appShape);
+    completed = derived.completed;
+    currentKey = derived.currentKey;
+
+    // Supplement the data-signal completed set with DB task-row state for ALL stages.
+    // This prevents stage regression when the status is "Licence Rejected" — deriveStageCompletion
+    // has no data signal for govActive stages (9-15) under that status, so without this supplement
+    // the contiguous scan stops at stage 9. Any stage whose DB task rows are all completed
+    // is treated as done regardless of whether a data signal fired.
+    for (const s of LICENCE_STAGE_DEFINITIONS) {
+      if (completed.has(s.key)) continue;
+      const stageRows = byStage.get(s.key) || [];
+      if (stageRows.length > 0 && stageRows.every((r) => r.status === "completed")) {
+        completed.add(s.key);
+      }
+    }
+    // Recalculate currentKey now that completed may have grown (contiguous from start).
+    currentKey = null;
+    for (const s of LICENCE_STAGE_DEFINITIONS) {
+      if (!completed.has(s.key)) { currentKey = s.key; break; }
+    }
   }
 
   const stages = LICENCE_STAGE_DEFINITIONS.map((def) => {
