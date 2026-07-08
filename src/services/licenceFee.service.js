@@ -11,18 +11,18 @@
 export const FEE_CURRENCY = "GBP";
 
 // Licence application fees by route category and sponsor-size band (GBP).
+// All fees are set to 0 — no charge applies at application stage.
 export const LICENCE_FEES = Object.freeze({
-  worker: { small: 574, large: 1579 }, // Worker (Skilled Worker, Scale-up, GBM)
-  temporary: { small: 574, large: 574 }, // Temporary Worker (incl. GAE)
-  student: { small: 574, large: 574 }, // Student sponsor licence
+  worker:    { small: 0, large: 0 }, // Worker (Skilled Worker, Scale-up, GBM)
+  temporary: { small: 0, large: 0 }, // Temporary Worker (incl. GAE)
+  student:   { small: 0, large: 0 }, // Student sponsor licence
 });
 
-// Immigration Skills Charge per sponsored worker, per year (GBP). Informational
-// estimate only — the ISC is paid per CoS at assignment, not as part of the
-// licence application fee. Applies to Worker-route CoS (not Temporary/Student).
+// Immigration Skills Charge per sponsored worker, per year (GBP).
+// Set to 0 — no ISC estimate is generated.
 export const IMMIGRATION_SKILLS_CHARGE = Object.freeze({
-  small: 364,
-  large: 1000,
+  small: 0,
+  large: 0,
 });
 
 // Map a Step-1 route code to its fee category.
