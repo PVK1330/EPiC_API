@@ -10,7 +10,7 @@ import { hasFullAccessRole } from '../../middlewares/role.middleware.js';
 import * as sponsorshipNotify from '../../services/sponsorshipNotification.service.js';
 import { loadFullApplication as loadFullApplicationV2, serializeApplication as serializeApplicationV2 } from '../../services/licenceApplicationV2.service.js';
 import { ensureStageTasks } from '../../services/licenceStageTask.service.js';
-import { resolveLicenceDocumentPaths } from '../../utils/licenceDocuments.util.js';
+import { resolveLicenceDocumentDescriptors, resolveLicenceDocumentPaths } from '../../utils/licenceDocuments.util.js';
 import { validateTransition, WORKFLOW_TYPES } from '../../services/workflowEngine.service.js';
 import { getPaginationParams, buildPaginationMeta } from '../../utils/paginate.js';
 
@@ -61,7 +61,9 @@ export const getAssignedLicenceApplications = async (req, res) => {
         const data = await Promise.all(
             applications.map(async (app) => {
                 const plain = app.toJSON();
-                plain.documents = await resolveLicenceDocumentPaths(req.tenantDb, app);
+                const descriptors = await resolveLicenceDocumentDescriptors(req.tenantDb, app);
+                plain.documents = descriptors.map((d) => d.path);
+                plain.documentNames = descriptors.map((d) => d.name || (typeof d.path === 'string' ? d.path.split(/[\\/]/).pop() : 'Document'));
                 return plain;
             })
         );
