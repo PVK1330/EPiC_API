@@ -163,11 +163,11 @@ function safeFilenamePart(value, fallback = "case") {
 export function candidateDataCapturePortalUrl() {
   const base =
     process.env.FRONTEND_URL?.split(",")[0]?.trim() || "http://localhost:5173";
-  return `${base.replace(/\/$/, "")}/candidate/data-capture-sheet`;
+  return `${base.replace(/\/$/, "")}/candidate/upload-documents-form`;
 }
 
 /**
- * Build an XLSX Data Capture Sheet for email attachment (blank response column).
+ * Build an XLSX Upload Documents for email attachment (blank response column).
  * @returns {{ filename: string, content: Buffer, contentType: string } | null}
  */
 export function buildDataCaptureSheetAttachment({
@@ -181,7 +181,7 @@ export function buildDataCaptureSheetAttachment({
 
   const caseRef = caseRecord?.caseId || String(caseRecord?.id || "");
   const clientName = clientDisplayName(candidate);
-  const sheetName = template?.name || "Data Capture Sheet";
+  const sheetName = template?.name || "Upload Documents";
   const issuedDate = new Date().toLocaleDateString("en-GB", {
     day: "2-digit",
     month: "long",
@@ -211,9 +211,9 @@ export function buildDataCaptureSheetAttachment({
 
   const ws = XLSX.utils.aoa_to_sheet(aoa);
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Data Capture Sheet");
+  XLSX.utils.book_append_sheet(wb, ws, "Upload Documents");
   const content = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
-  const filename = `Data-Capture-Sheet-${safeFilenamePart(caseRef)}.xlsx`;
+  const filename = `Upload-Documents-${safeFilenamePart(caseRef)}.xlsx`;
 
   return {
     filename,
@@ -224,7 +224,7 @@ export function buildDataCaptureSheetAttachment({
 }
 
 /**
- * Build a branded PDF Data Capture Sheet for email attachment.
+ * Build a branded PDF Upload Documents for email attachment.
  * Includes the required-documents list and the data-capture fields (blank to
  * complete). Returns null if there is nothing to send.
  * @returns {Promise<{ filename: string, content: Buffer, contentType: string } | null>}
@@ -243,7 +243,7 @@ export async function buildDataCaptureSheetPdfAttachment({
 
   const caseRef = caseRecord?.caseId || String(caseRecord?.id || "");
   const clientName = clientDisplayName(candidate);
-  const sheetName = template?.name || "Data Capture Sheet";
+  const sheetName = template?.name || "Upload Documents";
   const issuedDate = new Date().toLocaleDateString("en-GB", {
     day: "2-digit",
     month: "long",
@@ -300,7 +300,7 @@ export async function buildDataCaptureSheetPdfAttachment({
     sections,
   });
 
-  const filename = `Data-Capture-Sheet-${safeFilenamePart(caseRef)}.pdf`;
+  const filename = `Upload-Documents-${safeFilenamePart(caseRef)}.pdf`;
   return {
     filename,
     content: buffer,

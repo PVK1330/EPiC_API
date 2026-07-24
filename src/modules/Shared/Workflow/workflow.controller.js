@@ -260,7 +260,7 @@ export const saveDataCaptureSubmission = async (req, res) => {
         tenantDb: req.tenantDb,
         caseId: caseRecord.id,
         actionType: "case_updated",
-        description: "Data Capture Sheet submitted by client",
+        description: "Upload Documents submitted by client",
         performedBy: userId,
         visibility: "public",
       });
@@ -276,7 +276,7 @@ export const saveDataCaptureSubmission = async (req, res) => {
             performedBy: userId,
             organisationId: organisationIdFromReq(req),
             reason:
-              "Data Capture Sheet submitted by client — application preparation started",
+              "Upload Documents submitted by client — application preparation started",
             sendEmail: false,
           });
           await caseRecord.reload();
@@ -288,7 +288,7 @@ export const saveDataCaptureSubmission = async (req, res) => {
 
     res.status(200).json({
       status: "success",
-      message: submit ? "Data Capture Sheet submitted" : "Draft saved",
+      message: submit ? "Upload Documents submitted" : "Draft saved",
       data: { submission },
     });
   } catch (err) {
@@ -404,7 +404,7 @@ export const sendDataCaptureRequest = async (req, res) => {
       tenantDb: req.tenantDb,
       caseId: caseRecord.id,
       actionType: "communication_sent",
-      description: "Data Capture Sheet request sent to client",
+      description: "Upload Documents request sent to client",
       performedBy: req.user?.userId,
       metadata: {
         emailSent: emailResult.sent,
@@ -423,7 +423,7 @@ export const sendDataCaptureRequest = async (req, res) => {
 
     res.status(200).json({
       status: "success",
-      message: "Data Capture request sent",
+      message: "Upload Documents request sent",
       data: { case: caseRecord, submission, email: emailResult },
     });
   } catch (err) {
@@ -564,7 +564,7 @@ export const reviewDataCaptureSubmission = async (req, res) => {
     await submission.update({ status, reviewNotes: reviewNotes || null });
 
     if (status === "approved") {
-      // Mark "Complete Data Capture Sheet" task as completed
+      // Mark "Complete Upload Documents" task as completed
       await req.tenantDb.Task.update(
         { status: "completed" },
         {
@@ -573,7 +573,7 @@ export const reviewDataCaptureSubmission = async (req, res) => {
             status: "pending",
             title: {
               [req.tenantDb.Sequelize.Op.iLike]:
-                "%Complete Data Capture Sheet%",
+                "%Complete Upload Documents%",
             },
             assigned_to: caseRecord.candidateId,
           },
@@ -586,7 +586,7 @@ export const reviewDataCaptureSubmission = async (req, res) => {
         nextStageId: "application_preparation",
         performedBy: req.user?.userId,
         organisationId: organisationIdFromReq(req),
-        reason: "Data Capture Sheet approved",
+        reason: "Upload Documents approved",
         sendEmail: false,
       });
     } else if (status === "rejected") {
@@ -1487,7 +1487,7 @@ export const getCandidatePaymentSchedule = async (req, res) => {
   }
 };
 
-/** Candidate: tasks assigned to them (e.g. Data Capture Sheet) */
+/** Candidate: tasks assigned to them (e.g. Upload Documents) */
 export const getCandidateTasks = async (req, res) => {
   try {
     const userId = req.user?.userId;
@@ -1564,8 +1564,8 @@ export const getCandidateTasks = async (req, res) => {
         isCasePayment,
         cclFeeAmount: feeFromCase != null ? Number(feeFromCase) : null,
         isDataCapture:
-          /data capture sheet/i.test(plain.title || "") ||
-          plain.title?.toLowerCase().includes("data capture"),
+          /upload documents/i.test(plain.title || "") ||
+          plain.title?.toLowerCase().includes("upload documents"),
         isBiometricAttend,
         biometricDetails:
           isBiometricAttend && caseRow
@@ -1649,7 +1649,7 @@ export const completeCandidateTask = async (req, res) => {
     await task.update({ status: "completed" });
 
     let caseStage = null;
-    if (task.case_id && /data capture/i.test(task.title || "")) {
+    if (task.case_id && /upload documents/i.test(task.title || "")) {
       try {
         const caseRecord = await req.tenantDb.Case.findByPk(task.case_id);
         if (caseRecord) {
@@ -1659,7 +1659,7 @@ export const completeCandidateTask = async (req, res) => {
             nextStageId: "application_preparation",
             performedBy: userId,
             organisationId: organisationIdFromReq(req),
-            reason: "Candidate marked Data Capture Sheet task as complete",
+            reason: "Candidate marked Upload Documents task as complete",
           });
           await caseRecord.reload();
           caseStage = resolveCaseStage(caseRecord);
@@ -1667,7 +1667,7 @@ export const completeCandidateTask = async (req, res) => {
       } catch (stageErr) {
         logger.error(
           { err: stageErr },
-          "completeCandidateTask Data Capture stage advance error",
+          "completeCandidateTask Upload Documents stage advance error",
         );
       }
     }

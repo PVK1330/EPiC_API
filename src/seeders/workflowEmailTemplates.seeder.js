@@ -113,12 +113,12 @@ The {{org_name}} Team`,
 const WORKFLOW_EMAIL_TEMPLATES = [
   {
     template_key: "data_capture_request",
-    subject: "[{{firm_name}}] Data Capture Sheet & Initial Documents Request",
+    subject: "[{{firm_name}}] Upload Documents & Initial Documents Request",
     body: `Dear {{client_name}},
 
 I hope you are well.
 
-Please find attached the Data Capture Sheet relating to your application. We would be grateful if you could kindly complete the form and return it to us at your earliest convenience.
+Please find attached the Upload Documents relating to your application. We would be grateful if you could kindly complete the form and return it to us at your earliest convenience.
 
 In addition, please provide clear copies of the following documents:
 - Passport
@@ -129,7 +129,7 @@ In addition, please provide clear copies of the following documents:
 
 We kindly ask that all documents provided are clear and legible to assist us with the preparation of your application and avoid any unnecessary delays.
 
-Once we have received the completed Data Capture Sheet and supporting documents, we will begin preparing your application and will contact you should any further information be required.
+Once we have received the completed Upload Documents and supporting documents, we will begin preparing your application and will contact you should any further information be required.
 
 If you have any questions or require any assistance completing the form, please do not hesitate to contact us. We will be happy to assist.
 
@@ -138,7 +138,7 @@ Kind regards,
     legacyBodies: [
       `Dear {{client_name}},
 
-Please complete the Data Capture Sheet and return it with your passport, BRP/eVisa, and any other documents requested.
+Please complete the Upload Documents and return it with your passport, BRP/eVisa, and any other documents requested.
 
 Kind regards,
 {{caseworker_name}}`,
