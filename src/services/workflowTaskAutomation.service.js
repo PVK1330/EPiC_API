@@ -109,7 +109,7 @@ const STAGE_TASK_MATRIX = {
     caseworkers: [{ title: "Conduct initial consultation", priority: "medium", dueInDays: 3 }],
   },
   data_capture_initial_docs: {
-    caseworkers: [{ title: "Send Data Capture Sheet to client", priority: "high", dueInDays: 2 }],
+    caseworkers: [{ title: "Send Upload Documents to client", priority: "high", dueInDays: 2 }],
   },
   application_preparation: {
     caseworkers: [{ title: "Prepare visa application", priority: "medium", dueInDays: 5 }],
@@ -442,7 +442,7 @@ export async function createTasksOnDataCaptureSent({
     tenantDb,
     caseRecord,
     assigneeId: caseRecord.candidateId,
-    title: `Complete Data Capture Sheet — ${caseLabel}`,
+    title: `Complete Upload Documents — ${caseLabel}`,
     createdBy: sentBy,
     priority: "high",
     dueInDays: 5,
@@ -453,8 +453,8 @@ export async function createTasksOnDataCaptureSent({
     tenantDb,
     type: NotificationTypes.INFO,
     priority: NotificationPriority.HIGH,
-    title: `Data Capture Sheet — ${caseLabel}`,
-    message: "Please complete your Data Capture Sheet and upload required documents in the portal.",
+    title: `Upload Documents — ${caseLabel}`,
+    message: "Please complete your Upload Documents and upload required documents in the portal.",
     actionType: "data_capture_request",
     entityId: caseRecord.id,
     entityType: "case",
@@ -477,14 +477,14 @@ export async function createTasksOnDataCaptureRejected({
   if (!caseRecord?.candidateId) return [];
   const caseLabel = caseRecord.caseId || `#${caseRecord.id}`;
   const msg = reviewNotes
-    ? `Please correct your Data Capture Sheet: ${reviewNotes}`
-    : "Please correct and resubmit your Data Capture Sheet.";
+    ? `Please correct your Upload Documents: ${reviewNotes}`
+    : "Please correct and resubmit your Upload Documents.";
 
   const task = await createWorkflowTask({
     tenantDb,
     caseRecord,
     assigneeId: caseRecord.candidateId,
-    title: `Revise Data Capture Sheet — ${caseLabel}`,
+    title: `Revise Upload Documents — ${caseLabel}`,
     createdBy: reviewedBy,
     priority: "high",
     dueInDays: 3,
@@ -495,7 +495,7 @@ export async function createTasksOnDataCaptureRejected({
     tenantDb,
     type: NotificationTypes.WARNING,
     priority: NotificationPriority.HIGH,
-    title: `Data Capture Sheet needs revision — ${caseLabel}`,
+    title: `Upload Documents needs revision — ${caseLabel}`,
     message: msg,
     actionType: "data_capture_rejected",
     entityId: caseRecord.id,
