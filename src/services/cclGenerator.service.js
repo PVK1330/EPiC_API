@@ -226,24 +226,53 @@ function normalizeTablesForPdfmake(node) {
   if (node.table && Array.isArray(node.table.body)) {
     const body = node.table.body;
     let maxCols = 1;
+    
+    // First pass: find the maximum number of columns
     for (const row of body) {
       if (!Array.isArray(row)) continue;
+      // Recursive function to strip layout constraints that break pdfmake table sizing
+      const stripLayout = (obj) => {
+        if (Array.isArray(obj)) {
+          obj.forEach(stripLayout);
+        } else if (obj && typeof obj === "object") {
+          if (!obj.image) {
+            delete obj.width;
+            delete obj.margin;
+          }
+          delete obj.noWrap;
+          
+          for (const k of Object.keys(obj)) {
+            // Do not recurse into primitives or properties we just checked
+            if (k !== "table" && typeof obj[k] === "object") {
+               stripLayout(obj[k]);
+            }
+          }
+        }
+      };
+
       for (const cell of row) {
         if (cell && typeof cell === "object") {
-          delete cell.colSpan;
-          delete cell.rowSpan;
+          stripLayout(cell); // strip from cell and all nested children
         }
       }
       maxCols = Math.max(maxCols, row.length);
     }
+    
+    // Strip fixed width/margin from the table container itself
+    delete node.width;
+    delete node.margin;
+    
+    // Second pass: pad ragged rows with empty cells so pdfmake doesn't crash
     for (const row of body) {
       if (!Array.isArray(row)) continue;
-      while (row.length < maxCols) row.push({ text: "" });
+      // Pad missing columns at the end of the row
+      while (row.length < maxCols) {
+        row.push({ text: "" });
+      }
     }
-    const w = node.table.widths;
-    if (!Array.isArray(w) || w.length !== maxCols) {
-      node.table.widths = new Array(maxCols).fill("*");
-    }
+    
+    node.table.widths = new Array(maxCols).fill("*");
+    
     for (const row of body) {
       if (Array.isArray(row)) row.forEach(normalizeTablesForPdfmake);
     }
@@ -260,7 +289,9 @@ function normalizeTablesForPdfmake(node) {
  */
 export async function renderCclPdfBuffer({ html, organisation = null }) {
   const safeHtml = await sanitizeHtmlImagesForPdf(html);
-  const content = htmlToPdfmake(safeHtml || "<p></p>", {
+  // Replace non-breaking spaces with normal spaces so pdfmake can wrap long table contents
+  const breakableHtml = (safeHtml || "<p></p>").replace(/&nbsp;/g, " ");
+  const content = htmlToPdfmake(breakableHtml, {
     window: sharedWindow,
   });
   normalizeTablesForPdfmake(content);
