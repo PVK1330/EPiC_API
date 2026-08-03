@@ -1,4 +1,5 @@
 import "dotenv/config";
+import fs from "fs";
 import { normalizePostgresDatabaseName } from "../utils/postgresDbName.js";
 
 function dbPassword() {
@@ -57,9 +58,15 @@ function buildBaseConfig(databaseName) {
     // or PEM content of the managed DB provider's CA bundle (Render, Neon, RDS…).
     // If DB_SSL_CA is not set we fall back to the system CA store which works for
     // providers that use public CAs (e.g. Let's Encrypt-based Neon, Supabase).
-    const caOption = process.env.DB_SSL_CA
-      ? { ca: process.env.DB_SSL_CA }
-      : {};
+    const caOption =
+      process.env.DB_SSL_CA && fs.existsSync(process.env.DB_SSL_CA)
+        ? {
+          ca: fs.readFileSync(process.env.DB_SSL_CA, "utf8"),
+        }
+        : {};
+    //const caOption = process.env.DB_SSL_CA
+    //  ? { ca: process.env.DB_SSL_CA }
+    //  : {};
     cfg.dialectOptions = {
       ssl: {
         require: true,
@@ -68,6 +75,17 @@ function buildBaseConfig(databaseName) {
       },
     };
   }
+  //   const caOption = process.env.DB_SSL_CA
+  //     ? { ca: process.env.DB_SSL_CA }
+  //     : {};
+  //   cfg.dialectOptions = {
+  //     ssl: {
+  //       require: true,
+  //       rejectUnauthorized: true,
+  //       ...caOption,
+  //     },
+  //   };
+  // }
 
   return cfg;
 }
