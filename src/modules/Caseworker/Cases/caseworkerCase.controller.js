@@ -1200,7 +1200,7 @@ export const exportMyCases = catchAsync(async (req, res) => {
 
     const columns = [
       { key: "caseId", header: "Case ID" },
-      { key: "candidate", header: "Candidate" },
+      { key: "candidate", header: "Client" },
       { key: "candidateEmail", header: "Candidate Email" },
       { key: "sponsor", header: "Sponsor" },
       { key: "sponsorEmail", header: "Sponsor Email" },

@@ -11,6 +11,10 @@ import logger from '../utils/logger.js';
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 export const enforcePortalClosureRule = async (req, res, next) => {
+  // Bypass 30-day closure restriction for UAT/testing as requested
+  return next();
+
+  /*
   const tenantDb = req.tenantDb;
   const userId = req.user?.userId;
 
@@ -49,4 +53,5 @@ export const enforcePortalClosureRule = async (req, res, next) => {
     logger.error({ err }, 'candidatePortalAccess: error checking portal access rule');
     return next();
   }
+  */
 };

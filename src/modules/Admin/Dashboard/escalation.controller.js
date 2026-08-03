@@ -456,7 +456,7 @@ export const exportEscalationsExcel = async (req, res) => {
     const columns = [
       { key: "id", header: "ID" },
       { key: "caseId", header: "Case ID" },
-      { key: "candidate", header: "Candidate" },
+      { key: "candidate", header: "Client" },
       { key: "severity", header: "Severity" },
       { key: "triggerType", header: "Trigger Type" },
       { key: "trigger", header: "Trigger Reason" },

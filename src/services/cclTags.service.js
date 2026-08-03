@@ -24,14 +24,14 @@ export const CCL_TAGS = [
   { tag: "org_phone", label: "Organisation phone", group: "Organisation", type: "text", sample: "+44 20 1234 5678" },
 
   // Candidate
-  { tag: "candidate_name", label: "Candidate full name", group: "Candidate", type: "text", sample: "Jane Doe" },
-  { tag: "candidate_first_name", label: "Candidate first name", group: "Candidate", type: "text", sample: "Jane" },
-  { tag: "candidate_email", label: "Candidate email", group: "Candidate", type: "text", sample: "jane.doe@example.com" },
-  { tag: "candidate_address", label: "Candidate address", group: "Candidate", type: "text", sample: "22 Park Lane, Manchester, M1 2AB" },
-  { tag: "candidate_phone", label: "Candidate phone", group: "Candidate", type: "text", sample: "+44 7700 900123" },
-  { tag: "candidate_dob", label: "Candidate date of birth", group: "Candidate", type: "text", sample: "14 March 1992" },
-  { tag: "passport_number", label: "Passport number", group: "Candidate", type: "text", sample: "123456789" },
-  { tag: "nationality", label: "Nationality", group: "Candidate", type: "text", sample: "Indian" },
+  { tag: "candidate_name", label: "Client full name", group: "Client", type: "text", sample: "Jane Doe" },
+  { tag: "candidate_first_name", label: "Client first name", group: "Client", type: "text", sample: "Jane" },
+  { tag: "candidate_email", label: "Client email", group: "Client", type: "text", sample: "jane.doe@example.com" },
+  { tag: "candidate_address", label: "Client address", group: "Client", type: "text", sample: "22 Park Lane, Manchester, M1 2AB" },
+  { tag: "candidate_phone", label: "Client phone", group: "Client", type: "text", sample: "+44 7700 900123" },
+  { tag: "candidate_dob", label: "Client date of birth", group: "Client", type: "text", sample: "14 March 1992" },
+  { tag: "passport_number", label: "Passport number", group: "Client", type: "text", sample: "123456789" },
+  { tag: "nationality", label: "Nationality", group: "Client", type: "text", sample: "Indian" },
 
   // Case
   { tag: "case_ref", label: "Case reference", group: "Case", type: "text", sample: "EPIC-2026-0042" },
