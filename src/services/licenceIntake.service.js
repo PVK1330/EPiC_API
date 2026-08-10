@@ -125,23 +125,46 @@ function baseName(p) {
  */
 export function planAppendixImports(intakeDocs, appendixDocs) {
   const appendixByKey = new Map();
+  const appendixByName = new Map();
+
   for (const a of appendixDocs || []) {
     const usable = a && a.filePath && a.verificationStatus !== "Rejected";
-    if (usable && !appendixByKey.has(a.documentKey)) appendixByKey.set(a.documentKey, a);
+    if (usable) {
+      if (!appendixByKey.has(a.documentKey)) appendixByKey.set(a.documentKey, a);
+      if (a.documentName && !appendixByName.has(a.documentName.toLowerCase())) {
+        appendixByName.set(a.documentName.toLowerCase(), a);
+      }
+    }
   }
 
   const plan = [];
   for (const intakeDoc of intakeDocs || []) {
     // Skip slots the sponsor has already populated or that a caseworker has acted on.
     if (intakeDoc.status !== "pending" || intakeDoc.filePath) continue;
+    
+    let matchedAppendixDoc = null;
     const candidates = INTAKE_TO_APPENDIX_MAP[intakeDoc.documentKey];
-    if (!candidates) continue; // no Stage 4 equivalent — manual upload required
-    for (const appKey of candidates) {
-      const appendixDoc = appendixByKey.get(appKey);
-      if (appendixDoc) {
-        plan.push({ intakeDoc, appendixDoc });
-        break;
+    
+    if (candidates) {
+      for (const appKey of candidates) {
+        const doc = appendixByKey.get(appKey);
+        if (doc) {
+          matchedAppendixDoc = doc;
+          break;
+        }
       }
+    }
+
+    // Fallback: match by document name (e.g. if uploaded directly via business/licence-documents)
+    if (!matchedAppendixDoc && intakeDoc.documentName) {
+      const docByName = appendixByName.get(intakeDoc.documentName.toLowerCase());
+      if (docByName) {
+        matchedAppendixDoc = docByName;
+      }
+    }
+
+    if (matchedAppendixDoc) {
+      plan.push({ intakeDoc, appendixDoc: matchedAppendixDoc });
     }
   }
   return plan;
@@ -515,9 +538,37 @@ export async function recordDocumentUpload(tenantDb, licenceApplicationId, organ
   doc.status = "uploaded";
   doc.uploadedAt = new Date();
   doc.uploadedByUserId = userId;
-  // A direct sponsor upload supersedes any imported file — this is now their own.
   doc.source = INTAKE_DOC_SOURCE.MANUAL;
-  doc.sourceAppendixDocumentId = null;
+  
+  // Sync the uploaded file back to the LicenceAppendixDocument so it appears
+  // in the global "Licence Documents" table.
+  if (tenantDb.LicenceAppendixDocument) {
+    let appendixDoc = await tenantDb.LicenceAppendixDocument.findOne({
+      where: { licenceApplicationId, documentKey }
+    });
+
+    if (appendixDoc) {
+      await appendixDoc.update({
+        filePath: fileData.filePath,
+        verificationStatus: 'Pending',
+        receivedStatus: 'Received'
+      });
+    } else {
+      appendixDoc = await tenantDb.LicenceAppendixDocument.create({
+        licenceApplicationId,
+        organisationId,
+        documentKey,
+        documentName: doc.documentName,
+        required: doc.category === 'mandatory',
+        filePath: fileData.filePath,
+        verificationStatus: 'Pending',
+        receivedStatus: 'Received'
+      });
+    }
+    // Link them so that verifyDocument can sync status back later.
+    doc.sourceAppendixDocumentId = appendixDoc.id;
+  }
+
   // Clear previous rejection state on re-upload
   doc.rejectionReason = null;
   doc.caseworkerNotes = null;
@@ -883,7 +934,7 @@ export async function getIntakeSummary(tenantDb, licenceApplicationId, organisat
   );
 
   const docs = await tenantDb.LicenceIntakeDocument.findAll({
-    where: { licenceApplicationId },
+    where: { licenceApplicationId, isRequired: true },
     order: [["sort_order", "ASC"], ["id", "ASC"]],
   });
 
@@ -899,6 +950,24 @@ export async function getIntakeSummary(tenantDb, licenceApplicationId, organisat
     conditionalByType[doc.conditionType].push(doc);
   }
 
+  // Find unmapped ad-hoc uploads to display as "Additional Documents"
+  const allAppendixDocs = await tenantDb.LicenceAppendixDocument.findAll({
+    where: { licenceApplicationId }
+  });
+  const linkedIds = new Set(docs.map(d => d.sourceAppendixDocumentId).filter(Boolean));
+  const additionalDocuments = allAppendixDocs
+    .filter(a => !linkedIds.has(a.id) && a.filePath)
+    .map(a => ({
+      id: `additional-${a.id}`,
+      documentKey: a.documentKey,
+      documentName: a.documentName || "Additional Document",
+      filePath: a.filePath,
+      status: a.verificationStatus === "Verified" ? "verified" : a.verificationStatus === "Rejected" ? "rejected" : "uploaded",
+      isRequired: false,
+      isAdditional: true,
+      category: "additional"
+    }));
+
   // Dashboard stats
   const total = docs.filter((d) => d.isRequired).length;
   const uploaded = docs.filter((d) => d.isRequired && ["uploaded", "verified"].includes(d.status)).length;
@@ -911,6 +980,7 @@ export async function getIntakeSummary(tenantDb, licenceApplicationId, organisat
     documents: docs,
     mandatory,
     conditionalByType,
+    additionalDocuments,
     readiness: { isReady, reasons },
     stats: { total, uploaded, verified, rejected, pending },
   };
