@@ -584,6 +584,25 @@ export class CandidateService {
       if (exists) throw new Error("Mobile number already exists");
     }
 
+    // ── Uniqueness checks for Passport, BRP, NI ────────────────────────────────
+    const uniqueChecks = [
+      { field: 'brpNumber', label: 'BRP permit number' },
+      { field: 'niNumber', label: 'National Insurance number' },
+      { field: 'passportNumber', label: 'Passport number' },
+    ];
+    for (const { field, label } of uniqueChecks) {
+      const value = sanitizedApplication[field]?.toString().trim();
+      if (!value) continue;
+      const duplicate = await this.repository.tenantDb.CandidateApplication.findOne({
+        where: { [field]: { [Op.iLike]: value }, userId: { [Op.ne]: userId } },
+        attributes: ['id'],
+      });
+      if (duplicate) {
+        throw new Error(`This ${label} is already registered to another applicant.`);
+      }
+    }
+
+
     // Map labels for changes
     const fieldLabels = {
       first_name: "First Name",
