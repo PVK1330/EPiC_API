@@ -1159,26 +1159,43 @@ export const exportCaseworkers = async (req, res) => {
   try {
     const { search, status, department } = req.query;
 
-    const whereClause = {
-      role_id: CASEWORKER_ROLE,
-    };
+    // Mirror the same filter logic as getAllCaseworkers so the export always
+    // reflects exactly what the admin sees in the table.
+    let userFilters = { role_id: CASEWORKER_ROLE };
+
+    // status=="all" means "show every status" (same as no filter).
+    // Any other non-empty value is used as a literal status filter.
+    if (status && status !== 'all') {
+      userFilters.status = status;
+    }
+    // When nothing is provided default to excluding inactive (same as list).
+    else if (!status) {
+      userFilters.status = { [Op.ne]: 'inactive' };
+    }
+    // status === 'all' → no status filter applied (return every status)
 
     if (search) {
-      whereClause[Op.or] = [
-        { first_name: { [Op.iLike]: `%${search}%` } },
-        { last_name: { [Op.iLike]: `%${search}%` } },
-        { email: { [Op.iLike]: `%${search}%` } },
-        { mobile: { [Op.iLike]: `%${search}%` } },
-      ];
+      userFilters = {
+        [Op.and]: [
+          userFilters,
+          {
+            [Op.or]: [
+              { first_name: { [Op.iLike]: `%${search}%` } },
+              { last_name: { [Op.iLike]: `%${search}%` } },
+              { email: { [Op.iLike]: `%${search}%` } },
+              { mobile: { [Op.iLike]: `%${search}%` } },
+            ],
+          },
+        ],
+      };
     }
 
-    if (status) {
-      whereClause.status = status;
-    }
+    // Apply organisation scoping (same as getAllCaseworkers)
+    const whereClause = mergeUserWhere(req, userFilters);
 
     // Build include clause for filtering by department
     const includeClause = caseworkerInclude(req);
-    
+
     if (department) {
       includeClause[1].where = { department: { [Op.like]: `%${department}%` } };
       includeClause[1].required = true;
@@ -1190,6 +1207,14 @@ export const exportCaseworkers = async (req, res) => {
       include: includeClause,
       order: [["createdAt", "DESC"]],
     });
+
+    if (caseworkers.length === 0) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'No caseworkers found matching the current filters. Nothing to export.',
+        data: null,
+      });
+    }
 
     const columns = [
       { key: 'id', header: 'ID' },
@@ -1226,7 +1251,7 @@ export const exportCaseworkers = async (req, res) => {
       status: "error",
       message: "Internal server error",
       data: null,
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };

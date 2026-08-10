@@ -1,4 +1,5 @@
 import { Op } from 'sequelize';
+import crypto from 'crypto';
 import logger from '../../../utils/logger.js';
 import { sendTransactionalEmail } from '../../../services/mail.service.js';
 import { generateNotificationEmailTemplate } from '../../../utils/emailTemplates.js';
@@ -52,6 +53,17 @@ export const submitLicenceApplication = async (req, res) => {
         }
 
         const application = await req.tenantDb.LicenceApplication.create(applicationData);
+
+        if (req.tenantDb.LicenceAppendixDocument && req.files && req.files.length > 0) {
+            const appendixDocsToCreate = req.files.map(f => ({
+                licenceApplicationId: application.id,
+                documentKey: crypto.randomUUID(),
+                documentName: f.originalname,
+                filePath: f.path.replace(/\\/g, '/'),
+                verificationStatus: 'Pending',
+            }));
+            await req.tenantDb.LicenceAppendixDocument.bulkCreate(appendixDocsToCreate);
+        }
 
         res.status(201).json({
             status: 'success',
@@ -489,6 +501,10 @@ export const getLicenceDocuments = async (req, res) => {
                 // uploaded file/image name. Fall back to the filename for legacy
                 // V1 evidence that has no appendix record.
                 const documentName = matchedAppDoc?.documentName?.trim() || filename || 'Unnamed Document';
+                const isUUID = (str) => /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(str || "");
+                const canDelete = !matchedAppDoc?.documentKey || isUUID(matchedAppDoc.documentKey);
+                
+                const docIndex = Array.isArray(app.documents) ? app.documents.findIndex(p => p.replace(/\\/g, '/').toLowerCase() === normalizedPath) : -1;
 
                 allDocuments.push({
                     id: docIdCounter++,
@@ -501,7 +517,11 @@ export const getLicenceDocuments = async (req, res) => {
                     category: `${app.type} Evidence`,
                     size: 'N/A',
                     applicationId: app.id,
-                    applicationType: app.type
+                    applicationType: app.type,
+                    documentKey: matchedAppDoc?.documentKey || null,
+                    docIndex,
+                    canDelete,
+                    canReplace: true
                 });
             }
         }
@@ -611,7 +631,7 @@ const LICENCE_MUTABLE_STATUSES = ['Draft', 'Pending', 'Information Requested'];
 export const uploadLicenceDocument = async (req, res) => {
     try {
         const userId = req.user.userId;
-        const { applicationId, documentType, notes } = req.body;
+        const { applicationId, documentType, notes, documentKey } = req.body;
 
         if (!applicationId) {
             return res.status(400).json({ status: 'error', message: 'applicationId is required' });
@@ -631,9 +651,42 @@ export const uploadLicenceDocument = async (req, res) => {
         }
 
         const newPaths = (req.files || []).map(f => f.path.replace(/\\/g, '/'));
-        const existing = Array.isArray(application.documents) ? application.documents : [];
-        const updatedDocs = [...existing, ...newPaths];
+        let existing = Array.isArray(application.documents) ? application.documents : [];
 
+        if (req.tenantDb.LicenceAppendixDocument && req.files && req.files.length > 0) {
+            for (const f of req.files) {
+                const newPath = f.path.replace(/\\/g, '/');
+                if (documentKey) {
+                    const existingDoc = await req.tenantDb.LicenceAppendixDocument.findOne({
+                        where: { licenceApplicationId: application.id, documentKey }
+                    });
+                    if (existingDoc) {
+                        // Remove the old path from the V1 array to prevent duplicates
+                        if (existingDoc.filePath) {
+                            existing = existing.filter(p => p !== existingDoc.filePath);
+                        }
+                        
+                        await existingDoc.update({
+                            filePath: newPath,
+                            verificationStatus: 'Pending',
+                            receivedStatus: 'Received'
+                        });
+                        continue;
+                    }
+                }
+                
+                await req.tenantDb.LicenceAppendixDocument.create({
+                    licenceApplicationId: application.id,
+                    documentKey: documentKey || crypto.randomUUID(),
+                    documentName: documentType || f.originalname,
+                    filePath: newPath,
+                    verificationStatus: 'Pending',
+                    receivedStatus: 'Received'
+                });
+            }
+        }
+
+        const updatedDocs = [...existing, ...newPaths];
         await application.update({ documents: updatedDocs });
 
         res.json({ 
@@ -701,15 +754,42 @@ export const deleteLicenceDocument = async (req, res) => {
         }
 
         const docs = [...(application.documents || [])];
-        const index = parseInt(docIndex);
+        const isUUID = (str) => /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(str);
         
-        if (isNaN(index) || index < 0 || index >= docs.length) {
-            return res.status(400).json({ status: 'error', message: 'Invalid document index' });
+        let removedPath = null;
+        let indexToRemove = -1;
+
+        if (isUUID(docIndex)) {
+            // It's a documentKey for a V2 ad-hoc document
+            if (req.tenantDb.LicenceAppendixDocument) {
+                const appDoc = await req.tenantDb.LicenceAppendixDocument.findOne({
+                    where: { licenceApplicationId: applicationId, documentKey: docIndex }
+                });
+                if (appDoc) {
+                    removedPath = appDoc.filePath;
+                    await appDoc.destroy();
+                }
+            }
+            if (removedPath) {
+                const normalizedRemovedPath = removedPath.replace(/\\/g, '/').toLowerCase();
+                indexToRemove = docs.findIndex(p => p.replace(/\\/g, '/').toLowerCase() === normalizedRemovedPath);
+            }
+        } else {
+            // Legacy V1 numeric index
+            indexToRemove = parseInt(docIndex);
+            if (!isNaN(indexToRemove) && indexToRemove >= 0 && indexToRemove < docs.length) {
+                removedPath = docs[indexToRemove];
+            }
         }
 
-        const removedPath = docs[index];
-        docs.splice(index, 1);
-        await application.update({ documents: docs });
+        if (indexToRemove !== -1 && removedPath) {
+            docs.splice(indexToRemove, 1);
+            await application.update({ documents: docs });
+        } else if (isUUID(docIndex) && removedPath) {
+            // It was a V2 doc that was deleted from the DB but wasn't in the V1 array. This is fine.
+        } else {
+            return res.status(400).json({ status: 'error', message: 'Document not found or invalid identifier' });
+        }
 
         res.json({ status: 'success', message: 'Document removed', data: docs });
 
