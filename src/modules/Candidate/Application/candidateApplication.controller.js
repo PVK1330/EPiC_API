@@ -701,6 +701,32 @@ export const saveDraft = async (req, res) => {
 
     const payload = pickFields(req.body || {});
 
+    // ── Uniqueness: BRP, National Insurance and passport numbers must each be
+    // unique across applicants even for drafts.
+    const uniqueChecks = [
+      { field: 'brpNumber', label: 'BRP permit number' },
+      { field: 'niNumber', label: 'National Insurance number' },
+      { field: 'passportNumber', label: 'Passport number' },
+    ];
+    const Op = req.tenantDb.Sequelize.Op;
+    for (const { field, label } of uniqueChecks) {
+      const value = payload[field]?.toString().trim();
+      if (!value) continue;
+      const duplicate = await req.tenantDb.CandidateApplication.findOne({
+        where: { [field]: { [Op.iLike]: value }, userId: { [Op.ne]: userId } },
+        attributes: ['id'],
+      });
+      if (duplicate) {
+        return res.status(409).json({
+          status: 'error',
+          success: false,
+          message: `This ${label} is already registered to another applicant. Please check and correct it.`,
+          field,
+          data: null,
+        });
+      }
+    }
+
     let application;
     if (existing) {
       await existing.update(payload);
