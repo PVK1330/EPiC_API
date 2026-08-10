@@ -28,19 +28,44 @@ const microsoftController = await import(
   "../src/modules/Shared/Integrations/microsoft/microsoft.controller.js"
 );
 
+const tenantDbStub = () => ({
+  AuditLog: { create: async () => true },
+  CaseTimeline: { create: async () => true },
+});
+
 const app = express();
 app.use(express.json());
 app.use((req, res, next) => {
   req.user = { id: 1, role: "caseworker", organisation_id: 1 };
-  req.tenantDb = {
-    AuditLog: { create: async () => true },
-    CaseTimeline: { create: async () => true },
-  };
+  req.tenantDb = tenantDbStub();
+  // Mirrors oauthCallbackSession('microsoft'): the middleware validates AND
+  // consumes the single-use state nonce, then exposes the verified binding.
+  req.oauthState = { userId: 1, organisationId: 1, provider: "microsoft" };
   next();
 });
 app.get("/api/microsoft/auth-url", microsoftController.getMicrosoftAuthUrl);
 app.get("/api/microsoft/callback", microsoftController.getMicrosoftCallback);
 app.post("/api/microsoft/disconnect", microsoftController.disconnectMicrosoft);
+
+// Same routes, but with no verified state binding attached — the shape a
+// forged/replayed callback that bypassed the middleware would arrive in.
+const unboundApp = express();
+unboundApp.use((req, res, next) => {
+  req.user = { id: 1, role: "caseworker", organisation_id: 1 };
+  req.tenantDb = tenantDbStub();
+  next();
+});
+unboundApp.get("/api/microsoft/callback", microsoftController.getMicrosoftCallback);
+
+// Bound to a DIFFERENT user than the one completing the callback.
+const crossUserApp = express();
+crossUserApp.use((req, res, next) => {
+  req.user = { id: 1, role: "caseworker", organisation_id: 1 };
+  req.tenantDb = tenantDbStub();
+  req.oauthState = { userId: 99, organisationId: 1, provider: "microsoft" };
+  next();
+});
+crossUserApp.get("/api/microsoft/callback", microsoftController.getMicrosoftCallback);
 
 describe("Microsoft Integration Controller", () => {
   beforeEach(() => {
@@ -73,6 +98,20 @@ describe("Microsoft Integration Controller", () => {
     assert.equal(res.status, 302);
     assert.ok(res.header.location.includes("microsoft_success"));
     assert.ok(service.saveConnection.mock.calls.length > 0);
+  });
+
+  it("GET /callback rejects when no verified state binding is present", async () => {
+    const res = await request(unboundApp).get("/api/microsoft/callback?code=validcode");
+    assert.equal(res.status, 302);
+    assert.ok(res.header.location.includes("microsoft_invalid_state"));
+    assert.equal(service.saveConnection.mock.calls.length, 0);
+  });
+
+  it("GET /callback rejects when the state is bound to a different user", async () => {
+    const res = await request(crossUserApp).get("/api/microsoft/callback?code=validcode");
+    assert.equal(res.status, 302);
+    assert.ok(res.header.location.includes("microsoft_invalid_state"));
+    assert.equal(service.saveConnection.mock.calls.length, 0);
   });
 
   it("POST /disconnect disconnects and returns success", async () => {

@@ -2,6 +2,10 @@
 // Created at: 2026-05-29
 
 import { encryptValue, decryptValue } from "../../../../services/settings.service.js";
+import {
+  loadTenantMicrosoftConfig,
+  resolveMicrosoftOAuthConfig,
+} from "./microsoft.oauth.js";
 import logger from "../../../../utils/logger.js";
 
 /**
@@ -31,20 +35,29 @@ export const getOrRefreshAccessToken = async (tenantDb, connection) => {
   try {
     logger.info({ userId: connection.user_id }, "Refreshing Microsoft Graph access token");
 
-    const clientId = process.env.MICROSOFT_CLIENT_ID;
-    const clientSecret = process.env.MICROSOFT_CLIENT_SECRET;
-    const redirectUri = process.env.MICROSOFT_REDIRECT_URI;
-    const authority = process.env.MICROSOFT_AUTHORITY || "https://login.microsoftonline.com/common";
+    // Refresh against the SAME app registration that minted the token. An
+    // organisation may run its own Azure app (organisations.smtp_settings
+    // .integrations.microsoft); refreshing a tenant-issued token against the
+    // platform env credentials fails with invalid_grant once the initial
+    // access token expires (~1h after connecting).
+    const tenantConfig = await loadTenantMicrosoftConfig(connection.organisation_id);
+    const config = resolveMicrosoftOAuthConfig(tenantConfig);
+
+    if (!config) {
+      throw new Error(
+        "Microsoft OAuth configuration is missing. Set MICROSOFT_CLIENT_ID/MICROSOFT_CLIENT_SECRET (or the organisation's Microsoft credentials) before refreshing tokens.",
+      );
+    }
 
     const params = new URLSearchParams({
-      client_id: clientId,
-      client_secret: clientSecret,
+      client_id: config.client_id,
+      client_secret: config.client_secret,
       refresh_token: decryptedRefresh,
       grant_type: "refresh_token",
-      redirect_uri: redirectUri,
+      redirect_uri: config.redirect_uri,
     });
 
-    const response = await fetch(`${authority}/oauth2/v2.0/token`, {
+    const response = await fetch(`${config.authority}/oauth2/v2.0/token`, {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",

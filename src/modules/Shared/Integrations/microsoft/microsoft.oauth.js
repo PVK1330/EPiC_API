@@ -12,10 +12,32 @@ const GRAPH_SCOPES = [
   "Calendars.ReadWrite",
 ].join(" ");
 
+const AUTHORITY_HOST = "https://login.microsoftonline.com";
+
+// The Express route that actually handles the provider redirect. Kept as a
+// constant so the derived redirect URI can never drift from routes/index.js
+// (`router.use('/microsoft', microsoftRoutes)` + `router.get('/callback')`).
+export const MICROSOFT_CALLBACK_PATH = "/api/microsoft/callback";
+
 function trimOrNull(value) {
   if (value == null) return null;
   const trimmed = String(value).trim();
   return trimmed || null;
+}
+
+/** Accept either a full authority URL or a bare directory GUID / alias. */
+function normaliseAuthority(value) {
+  const raw = trimOrNull(value);
+  if (!raw) return null;
+  if (/^https?:\/\//i.test(raw)) return raw.replace(/\/+$/, "");
+  return `${AUTHORITY_HOST}/${raw.replace(/^\/+|\/+$/g, "")}`;
+}
+
+function apiBaseUrl() {
+  const base =
+    trimOrNull(process.env.BASE_URL) ||
+    trimOrNull(process.env.API_URL)?.replace(/\/api\/?$/i, "");
+  return base ? base.replace(/\/+$/, "") : null;
 }
 
 /**
@@ -29,22 +51,43 @@ export function resolveMicrosoftOAuthConfig(tenantConfig = null) {
 
   const tenantSecret = trimOrNull(tenant.client_secret || tenant.clientSecret);
 
+  // Fall back to the API's own callback route rather than leaving this blank —
+  // a redirect URI pointing anywhere else 404s after the user consents.
+  const base = apiBaseUrl();
+  const envRedirect =
+    trimOrNull(process.env.MICROSOFT_REDIRECT_URI) ||
+    (base ? `${base}${MICROSOFT_CALLBACK_PATH}` : null);
+
   const merged = {
     client_id: trimOrNull(tenant.client_id || tenant.clientId) ||
       trimOrNull(process.env.MICROSOFT_CLIENT_ID),
     client_secret:
       (tenantSecret ? decryptValue(tenantSecret) : null) ||
       trimOrNull(process.env.MICROSOFT_CLIENT_SECRET),
-    redirect_uri: trimOrNull(tenant.redirect_uri || tenant.redirectUri) ||
-      trimOrNull(process.env.MICROSOFT_REDIRECT_URI),
-    authority: trimOrNull(tenant.authority) ||
-      trimOrNull(process.env.MICROSOFT_AUTHORITY) ||
-      "https://login.microsoftonline.com/common",
+    redirect_uri: trimOrNull(tenant.redirect_uri || tenant.redirectUri) || envRedirect,
+    // `MICROSOFT_TENANT_ID` is honoured so a directory GUID alone is enough to
+    // pin sign-in to one organisation. Default is `organizations` (any work or
+    // school account) — NOT `common`, which also admits personal Microsoft
+    // accounts that cannot call /me/onlineMeetings and so 403 after connecting.
+    authority:
+      normaliseAuthority(tenant.authority) ||
+      normaliseAuthority(tenant.tenant_id || tenant.tenantId) ||
+      normaliseAuthority(process.env.MICROSOFT_AUTHORITY) ||
+      normaliseAuthority(process.env.MICROSOFT_TENANT_ID) ||
+      `${AUTHORITY_HOST}/organizations`,
   };
 
   if (!merged.client_id || !merged.client_secret || !merged.redirect_uri) {
     return null;
   }
+
+  if (!merged.redirect_uri.endsWith(MICROSOFT_CALLBACK_PATH)) {
+    logger.warn(
+      { redirectUri: merged.redirect_uri, expectedPath: MICROSOFT_CALLBACK_PATH },
+      "Microsoft redirect URI does not point at the callback route; Microsoft will redirect to a path this API does not serve",
+    );
+  }
+
   return merged;
 }
 
