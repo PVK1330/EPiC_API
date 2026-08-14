@@ -11,7 +11,7 @@ import {
 // the shared shell renders the sending organisation's logo + name. When branding
 // is omitted the shell falls back to a neutral platform identity, so existing
 // callers keep working unchanged.
-const brandName = (branding) => branding?.orgName || "EPiC";
+const brandName = (branding) => branding?.orgName || process.env.PLATFORM_NAME || "ImCamHub";
 
 // Escape user-controlled text before embedding it in email HTML. Callers pass
 // PLAIN TEXT (subjects, names, messages — some with \n line breaks that are split
@@ -87,7 +87,7 @@ export function generateCredentialsTemplate(
     branding,
     pageTitle: `${name} — Your Account`,
     badge: "Account Ready",
-    title: "Welcome to EPiC",
+    title: `Welcome to ${name}`,
     messageHtml:
       "Your account is active. Use the credentials below to sign in and continue your immigration case.",
     bodyHtml: credentialsBlockHtml({ email, password, loginUrl, mainLoginUrl }),
@@ -146,7 +146,7 @@ export function generateOrganisationWelcomeTemplate({
     pageTitle: `${organisationName} — Workspace Ready`,
     badge: organisationName,
     title: `Welcome, ${adminName}`,
-    messageHtml: `Your organisation workspace on EPiC is ready. Sign in to set up <strong>${escapeHtml(organisationName)}</strong> and invite your team.${alt}`,
+    messageHtml: `Your organisation workspace on ${brandName(branding)} is ready. Sign in to set up <strong>${escapeHtml(organisationName)}</strong> and invite your team.${alt}`,
     bodyHtml: credentialsBlockHtml({
       email,
       password,
@@ -222,7 +222,7 @@ export function generateCandidateWelcomeTemplate({
     badge: "Client Enquiry",
     title: `Welcome, ${candidateName}`,
     messageHtml:
-      "Your EPiC account is ready. Sign in to submit your visa enquiry, upload documents, and track your case.",
+      `Your ${brandName(branding)} account is ready. Sign in to submit your visa enquiry, upload documents, and track your case.`,
     bodyHtml: credentialsBlockHtml({ email, password, loginUrl, mainLoginUrl }),
     ctaUrl: loginUrl,
     ctaLabel: "Sign in & start visa enquiry",
@@ -233,10 +233,10 @@ export function generateCandidateWelcomeTemplate({
 function resolveBadge(notificationType, priority) {
   const t = String(notificationType).toLowerCase();
   const p = String(priority).toLowerCase();
-  if (t === "error" || p === "critical") return { label: "Urgent Notice",      color: "#D4351C" };
-  if (t === "success")                   return { label: "Completed",           color: "#00703C" };
-  if (t === "warning" || p === "high")   return { label: "Action Required",     color: "#B04A00" };
-  return                                        { label: "Application Update",  color: "#1D70B8" };
+  if (t === "error" || p === "critical") return { label: "Urgent Notice", color: "#D4351C" };
+  if (t === "success") return { label: "Completed", color: "#00703C" };
+  if (t === "warning" || p === "high") return { label: "Action Required", color: "#B04A00" };
+  return { label: "Application Update", color: "#1D70B8" };
 }
 
 // Converts plain text paragraphs separated by newlines into HTML <p> tags so
@@ -303,12 +303,11 @@ export function generateNotificationEmailTemplate({
       <div style="margin-bottom:24px;">
         ${paragraphsHtml}
       </div>
-      ${
-        actionUrl
-          ? `<div style="background:#EAF0F7; border:1px solid #C4D4E8; border-radius:8px; padding:14px 18px; margin-bottom:8px; font-size:13px; color:#1D70B8; line-height:1.55;">
+      ${actionUrl
+        ? `<div style="background:#EAF0F7; border:1px solid #C4D4E8; border-radius:8px; padding:14px 18px; margin-bottom:8px; font-size:13px; color:#1D70B8; line-height:1.55;">
               Log in to your ${org} portal to view the full details and take any required action.
              </div>`
-          : ""
+        : ""
       }
     `,
     ctaUrl: actionUrl,
@@ -399,7 +398,7 @@ export function generateDiagnosticTemplate({ source, message, branding = {} }) {
     badge: "SMTP Test",
     title: "SMTP Connection Verified",
     messageHtml:
-      "This is a diagnostic test email dispatched from your EPiC platform.",
+      `This is a diagnostic test email dispatched from your ${brandName(branding)} platform.`,
     bodyHtml: metadataBlockHtml({ Status: "Success", TransportSource: source }),
     securityHtml:
       "This email was triggered manually by an administrator via the connectivity settings.",
@@ -446,8 +445,8 @@ export function generateLicenceGrantedTemplate({
   actionUrl = null,
 }) {
   const org = brandName(branding);
-  const issuedStr  = issuedDate  ? new Date(issuedDate).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) : null;
-  const expiryStr  = expiryDate  ? new Date(expiryDate).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) : null;
+  const issuedStr = issuedDate ? new Date(issuedDate).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) : null;
+  const expiryStr = expiryDate ? new Date(expiryDate).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) : null;
 
   const C = {
     ink: "#0B0C0C", muted: "#6B7785", border: "#DDE3EA", pageBg: "#EEF1F5",
@@ -458,9 +457,9 @@ export function generateLicenceGrantedTemplate({
   const rows = [
     // injection-xss-6: licenceNumber + companyName are user/registration data.
     { label: "Licence Number", value: `<span style="font-family:'SFMono-Regular',Consolas,'Liberation Mono',monospace;font-size:16px;font-weight:800;color:${C.success};letter-spacing:1px;">${escapeHtml(licenceNumber)}</span>` },
-    { label: "Company",        value: escapeHtml(companyName) },
-    ...(issuedStr  ? [{ label: "Date Issued",    value: issuedStr  }] : []),
-    ...(expiryStr  ? [{ label: "Expiry Date",     value: expiryStr  }] : []),
+    { label: "Company", value: escapeHtml(companyName) },
+    ...(issuedStr ? [{ label: "Date Issued", value: issuedStr }] : []),
+    ...(expiryStr ? [{ label: "Expiry Date", value: expiryStr }] : []),
     ...(cosAllocation != null ? [{ label: "CoS Allocation", value: String(cosAllocation) }] : []),
   ];
   const detailsBlock = `<div style="border:1px solid ${C.border};border-radius:10px;overflow:hidden;margin-bottom:24px;">
@@ -490,6 +489,7 @@ export function generateLicenceGrantedTemplate({
 }
 
 export function generateUKVIPortalCredentialsTemplate({
+  branding = {},
   recipientName,
   companyName,
   ukviPortalUserId,
@@ -505,7 +505,8 @@ export function generateUKVIPortalCredentialsTemplate({
     mainLoginUrl: null,
   });
   return wrapEpicEmail({
-    pageTitle: "EPiC — UKVI Portal Credentials",
+    branding,
+    pageTitle: `${brandName(branding)} — UKVI Portal Credentials`,
     badge: "Government Portal",
     title: "Your UKVI Portal Credentials",
     messageHtml: `Hi ${escapeHtml(recipientName)},<br/><br/>Your UKVI Sponsorship Management System (SMS) portal login credentials for <strong>${escapeHtml(companyName)}</strong> are ready. Use these to access the UKVI online portal and complete your sponsor licence application.`,
@@ -518,6 +519,7 @@ export function generateUKVIPortalCredentialsTemplate({
 }
 
 export function generateDocumentDispatchTemplate({
+  branding = {},
   recipientName,
   companyName,
   senderName,
@@ -537,17 +539,18 @@ export function generateDocumentDispatchTemplate({
     }[documentType] || "Document";
 
   return wrapEpicEmail({
-    pageTitle: `EPiC — ${typeLabel} from your caseworker`,
+    branding,
+    pageTitle: `${brandName(branding)} — ${typeLabel} from your caseworker`,
     badge: "Document Received",
     title: `A document has been sent to you`,
     messageHtml: `Hi ${escapeHtml(recipientName)},<br/><br/>Your caseworker <strong>${escapeHtml(senderName)}</strong> has sent you a <strong>${typeLabel}</strong> for <strong>${escapeHtml(companyName)}</strong>.<br/><br/>Document: <strong>${escapeHtml(documentName)}</strong>${message ? `<br/><br/>Message from ${escapeHtml(senderName)}: <em>${escapeHtml(message)}</em>` : ""}`,
     bodyHtml: infoBlockHtml(
-      `The document is attached to this email. You can also view and download all documents sent to you from your EPiC sponsor portal.`,
+      `The document is attached to this email. You can also view and download all documents sent to you from your sponsor portal.`,
     ),
     ctaUrl: portalUrl || null,
     ctaLabel: portalUrl ? "Open Sponsor Portal" : "",
     securityHtml:
-      "This document was sent by your assigned EPiC caseworker or administrator. If you were not expecting this, please contact your caseworker directly.",
+      "This document was sent by your assigned caseworker or administrator. If you were not expecting this, please contact your caseworker directly.",
   });
 }
 
@@ -603,29 +606,29 @@ export function generateMonthlyComplianceReportTemplate({
         1. Compliance Summary
       </h2>
       ${metadataBlockHtml({
-        "Total Workers": complianceSummary.totalWorkers ?? 0,
-        "High Risk": complianceSummary.highRiskCount ?? 0,
-        "Medium Risk": complianceSummary.mediumRiskCount ?? 0,
-        "Low Risk": complianceSummary.lowRiskCount ?? 0,
-        "Compliance Score": complianceSummary.complianceScore != null ? `${complianceSummary.complianceScore}%` : "N/A",
-        "Risk Level": complianceSummary.riskLevel || "N/A",
-        "Licence Status": complianceSummary.licenceStatus || "N/A",
-      })}
+    "Total Workers": complianceSummary.totalWorkers ?? 0,
+    "High Risk": complianceSummary.highRiskCount ?? 0,
+    "Medium Risk": complianceSummary.mediumRiskCount ?? 0,
+    "Low Risk": complianceSummary.lowRiskCount ?? 0,
+    "Compliance Score": complianceSummary.complianceScore != null ? `${complianceSummary.complianceScore}%` : "N/A",
+    "Risk Level": complianceSummary.riskLevel || "N/A",
+    "Licence Status": complianceSummary.licenceStatus || "N/A",
+  })}
     </div>`;
 
   // ── Section 2: Workers Expiring in 90 Days ─────────────────────────────────
   const expiryRows = workersExpiring.length
     ? workersExpiring
-        .map(
-          (w) =>
-            `<tr>
+      .map(
+        (w) =>
+          `<tr>
               <td style="padding:8px 12px; font-size:13px; color:#0B0C0C; border-bottom:1px solid #EEF1F5;">${escapeHtml(w.candidateName || "—")}</td>
               <td style="padding:8px 12px; font-size:13px; color:#0B0C0C; border-bottom:1px solid #EEF1F5;">${escapeHtml(w.visaType || "—")}</td>
               <td style="padding:8px 12px; font-size:13px; color:#0B0C0C; border-bottom:1px solid #EEF1F5;">${escapeHtml(w.visaEndDate || "—")}</td>
               <td style="padding:8px 12px; font-size:13px; font-weight:700; color:${w.urgency === "high" ? "#D4351C" : "#B04A00"}; border-bottom:1px solid #EEF1F5;">${w.daysRemaining != null ? `${w.daysRemaining}d` : "—"}</td>
              </tr>`,
-        )
-        .join("")
+      )
+      .join("")
     : `<tr><td colspan="4" style="padding:12px; font-size:13px; color:#6B7785; text-align:center;">No workers expiring within 90 days.</td></tr>`;
 
   const expiryHtml = `
@@ -653,27 +656,27 @@ export function generateMonthlyComplianceReportTemplate({
         3. Reporting History (${reportMonth})
       </h2>
       ${metadataBlockHtml({
-        "Total Actions": reportingHistory.total ?? 0,
-        "Submitted / Re-submitted": reportingHistory.submitted ?? 0,
-        "Under Review": reportingHistory.underReview ?? 0,
-        "Approved": reportingHistory.approved ?? 0,
-        "Rejected": reportingHistory.rejected ?? 0,
-        "Information Requested": reportingHistory.informationRequested ?? 0,
-      })}
+    "Total Actions": reportingHistory.total ?? 0,
+    "Submitted / Re-submitted": reportingHistory.submitted ?? 0,
+    "Under Review": reportingHistory.underReview ?? 0,
+    "Approved": reportingHistory.approved ?? 0,
+    "Rejected": reportingHistory.rejected ?? 0,
+    "Information Requested": reportingHistory.informationRequested ?? 0,
+  })}
     </div>`;
 
   // ── Section 4: Missing Documents ───────────────────────────────────────────
   const missingRows = missingDocuments.length
     ? missingDocuments
-        .map(
-          (d) =>
-            `<tr>
+      .map(
+        (d) =>
+          `<tr>
               <td style="padding:8px 12px; font-size:13px; color:#0B0C0C; border-bottom:1px solid #EEF1F5;">${escapeHtml(d.documentType || "—")}</td>
               <td style="padding:8px 12px; font-size:13px; font-weight:700; color:#D4351C; border-bottom:1px solid #EEF1F5; text-transform:capitalize;">${escapeHtml(d.status || "—")}</td>
               <td style="padding:8px 12px; font-size:13px; color:#6B7785; border-bottom:1px solid #EEF1F5;">${escapeHtml(d.expiryDate || "—")}</td>
              </tr>`,
-        )
-        .join("")
+      )
+      .join("")
     : `<tr><td colspan="3" style="padding:12px; font-size:13px; color:#00703C; text-align:center; font-weight:600;">No missing or expired documents.</td></tr>`;
 
   const missingHtml = `
@@ -698,14 +701,14 @@ export function generateMonthlyComplianceReportTemplate({
     riskMovement.direction === "improved"
       ? "▼ Improved"
       : riskMovement.direction === "worse"
-      ? "▲ Worsened"
-      : "→ Unchanged";
+        ? "▲ Worsened"
+        : "→ Unchanged";
   const riskColor =
     riskMovement.direction === "improved"
       ? "#00703C"
       : riskMovement.direction === "worse"
-      ? "#D4351C"
-      : "#6B7785";
+        ? "#D4351C"
+        : "#6B7785";
 
   const riskHtml = `
     <div style="margin-bottom:28px;">
@@ -713,17 +716,17 @@ export function generateMonthlyComplianceReportTemplate({
         5. Risk Movement
       </h2>
       ${metadataBlockHtml({
-        "Current Risk Score": riskMovement.currentRiskScore != null ? `${riskMovement.currentRiskScore}` : "N/A",
-        "Previous Risk Score": riskMovement.previousRiskScore != null ? `${riskMovement.previousRiskScore}` : "No prior report",
-        "Change": riskMovement.delta != null ? `${riskMovement.delta > 0 ? "+" : ""}${riskMovement.delta}` : "N/A",
-        "Trend": riskMovement.direction ? `${riskArrow}` : "N/A",
-        "Compared to Month": riskMovement.previousReportMonth || "N/A",
-      })}
+    "Current Risk Score": riskMovement.currentRiskScore != null ? `${riskMovement.currentRiskScore}` : "N/A",
+    "Previous Risk Score": riskMovement.previousRiskScore != null ? `${riskMovement.previousRiskScore}` : "No prior report",
+    "Change": riskMovement.delta != null ? `${riskMovement.delta > 0 ? "+" : ""}${riskMovement.delta}` : "N/A",
+    "Trend": riskMovement.direction ? `${riskArrow}` : "N/A",
+    "Compared to Month": riskMovement.previousReportMonth || "N/A",
+  })}
       ${riskMovement.direction && riskMovement.direction !== "unchanged"
-        ? `<div style="background:${riskMovement.direction === "improved" ? "#E7F2EC" : "#FBE9E6"}; border:1px solid ${riskMovement.direction === "improved" ? "#B7DCC6" : "#F3B6AC"}; border-radius:8px; padding:12px 16px; margin-top:10px; font-size:13px; font-weight:700; color:${riskColor};">
+      ? `<div style="background:${riskMovement.direction === "improved" ? "#E7F2EC" : "#FBE9E6"}; border:1px solid ${riskMovement.direction === "improved" ? "#B7DCC6" : "#F3B6AC"}; border-radius:8px; padding:12px 16px; margin-top:10px; font-size:13px; font-weight:700; color:${riskColor};">
             ${riskArrow} — Your compliance risk score has ${riskMovement.direction === "improved" ? "improved" : "deteriorated"} since last month.
            </div>`
-        : ""}
+      : ""}
     </div>`;
 
   return wrapEpicEmail({
