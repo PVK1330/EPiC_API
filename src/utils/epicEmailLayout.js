@@ -42,7 +42,7 @@ export function esc(value) {
 
 /** Header brand mark: tenant logo image, or the org-name wordmark when no logo. */
 function brandMark(branding) {
-  const orgName = esc(branding?.orgName || "EPiC");
+  const orgName = esc(branding?.orgName || process.env.PLATFORM_NAME || "ImCamHub");
   const logoUrl = branding?.logoUrl ? esc(branding.logoUrl) : "";
 
   if (logoUrl) {
@@ -68,15 +68,15 @@ export function wrapEpicEmail({
   securityHtml = "",
   branding = null,
 } = {}) {
-  const orgName = esc(branding?.orgName || "EPiC");
+  const orgName = esc(branding?.orgName || process.env.PLATFORM_NAME || "ImCamHub");
   const supportEmail = branding?.supportEmail ? esc(branding.supportEmail) : "";
   const year = new Date().getFullYear();
-  const resolvedPageTitle = esc(pageTitle || branding?.orgName || "EPiC");
+  const resolvedPageTitle = esc(pageTitle || branding?.orgName || process.env.PLATFORM_NAME || "ImCamHub");
 
   // When badgeColor is supplied (e.g. from notification emails) use it; otherwise
   // fall back to the default blue-tint style for welcome/credential/OTP emails.
-  const badgeBg   = badgeColor ? `${badgeColor}18` : C.blueTint; // 18 = ~10% alpha hex
-  const badgeFg   = badgeColor || C.navy;
+  const badgeBg = badgeColor ? `${badgeColor}18` : C.blueTint; // 18 = ~10% alpha hex
+  const badgeFg = badgeColor || C.navy;
   const badgeBlock = badge
     ? `<div style="display:inline-block; background-color:${badgeBg}; color:${badgeFg}; font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; padding:5px 11px; border-radius:6px; margin-bottom:18px; border:1px solid ${badgeFg}22;">${esc(badge)}</div>`
     : "";
@@ -92,10 +92,9 @@ export function wrapEpicEmail({
          </table>`
       : "";
 
-  const securityBlock = `<div style="background:${C.pageBg}; border-left:3px solid ${C.navy}; padding:12px 16px; font-size:13px; color:${C.muted}; line-height:1.55; border-radius:0 8px 8px 0; margin-top:30px;">${
-    securityHtml ||
+  const securityBlock = `<div style="background:${C.pageBg}; border-left:3px solid ${C.navy}; padding:12px 16px; font-size:13px; color:${C.muted}; line-height:1.55; border-radius:0 8px 8px 0; margin-top:30px;">${securityHtml ||
     "<strong>Security notice:</strong> Keep this message private. If you did not expect it, please contact your administrator."
-  }</div>`;
+    }</div>`;
 
   const supportLine = supportEmail
     ? `<p style="font-size:12px; color:${C.muted}; line-height:1.6; margin:0 0 4px 0;">Need help? Contact <a href="mailto:${supportEmail}" style="color:${C.blue}; text-decoration:none;">${supportEmail}</a></p>`
