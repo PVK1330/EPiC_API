@@ -56,16 +56,9 @@ export async function resolveOrganisationLoginUrls(organisationId) {
     process.env.FRONTEND_URL?.split(",")[0]?.trim() || "http://localhost:5173";
   const fallback = `${fallbackBase.replace(/\/$/, "")}/login`;
 
-  if (!organisationId) return { loginUrl: fallback, mainLoginUrl: fallback };
-
-  const org = await platformDb.Organisation.findByPk(organisationId, {
-    attributes: ["slug"],
-  });
-  if (!org?.slug) return { loginUrl: fallback, mainLoginUrl: fallback };
-
-  const { subdomain } = buildTenantFrontendUrls(org.slug);
+  // Only return the main portal login URL
   return { 
-    loginUrl: `${subdomain.replace(/\/$/, "")}/login`, 
+    loginUrl: fallback, 
     mainLoginUrl: fallback 
   };
 }

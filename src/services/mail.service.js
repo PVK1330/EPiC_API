@@ -750,16 +750,7 @@ export async function sendOrganisationAdminWelcomeEmail({
   if (organisationId) {
     const fallbackBase = process.env.FRONTEND_URL?.split(",")[0]?.trim() || "http://localhost:5173";
     mainUrl = `${fallbackBase.replace(/\/$/, "")}/login`;
-    
-    // Attempt to get slug
-    const org = await platformDb.Organisation.findByPk(organisationId, { attributes: ["slug"] });
-    if (org?.slug) {
-      const { buildTenantFrontendUrls } = await import('../utils/organisationHost.js');
-      const { subdomain } = buildTenantFrontendUrls(org.slug);
-      orgUrl = `${subdomain.replace(/\/$/, "")}/login`;
-    } else {
-      orgUrl = mainUrl;
-    }
+    orgUrl = mainUrl; // Only send the main portal login
   }
 
   const firstName = String(admin?.first_name || "Admin").trim();

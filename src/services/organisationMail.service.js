@@ -33,7 +33,7 @@ export function generateOrganisationAdminPassword(length = 14) {
  */
 export async function sendOrganisationAdminWelcomeEmail({ organisation, admin, plainPassword }) {
   const tenantUrls = buildTenantFrontendUrls(organisation.slug);
-  const loginUrl = `${tenantUrls.subdomain.replace(/\/$/, "")}/login`;
+  const loginUrl = `${tenantUrls.main.replace(/\/$/, "")}/login`;
   const adminName = [admin.first_name, admin.last_name].filter(Boolean).join(" ").trim() || "Admin";
 
   // Newly-created org: bust any stale cache so the just-uploaded logo/name resolve.
