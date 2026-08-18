@@ -4,6 +4,11 @@
 import * as microsoftOauth from "./microsoft.oauth.js";
 import * as microsoftService from "./microsoft.service.js";
 import { createOAuthState } from "../../../../services/oauthState.service.js";
+// Provider-agnostic despite living in the google folder: it maps the signed-in
+// role to a route that actually exists in AppRouter.jsx. Microsoft previously
+// hand-rolled `/{role}/settings/integrations`, which no role has — every
+// callback, success included, landed on NotFoundPage.
+import { buildFrontendOAuthRedirect } from "../google/google.integration.util.js";
 import logger from "../../../../utils/logger.js";
 
 /**
@@ -54,16 +59,17 @@ export const getMicrosoftAuthUrl = async (req, res) => {
  */
 export const getMicrosoftCallback = async (req, res) => {
   const { code } = req.query;
-  const frontendUrl = (process.env.FRONTEND_URL?.split(",")[0]?.trim() || "http://localhost:5173").replace(/\/$/, "");
 
   if (!req.user) {
     logger.error("Unauthorized callback request - missing Microsoft user context");
-    return res.redirect(`${frontendUrl}/${req.user?.role || 'caseworker'}/settings/integrations?sync=microsoft_unauthorized`);
+    // No user means no role to route by — send them to log in, as Google does.
+    const fallback = (process.env.FRONTEND_URL?.split(",")[0]?.trim() || "http://localhost:5173").replace(/\/$/, "");
+    return res.redirect(`${fallback}/login?sync=microsoft_unauthorized`);
   }
 
   if (!code) {
     logger.warn("Microsoft callback triggered without auth code");
-    return res.redirect(`${frontendUrl}/${req.user?.role || 'caseworker'}/settings/integrations?sync=microsoft_error`);
+    return res.redirect(buildFrontendOAuthRedirect(req, "microsoft_error"));
   }
 
   // BUG-007: the OAuth `state` (CSRF nonce) is single-use, expiry-checked, and
@@ -76,7 +82,7 @@ export const getMicrosoftCallback = async (req, res) => {
   const consumed = req.oauthState;
   if (!consumed || Number(consumed.userId) !== Number(req.user.id)) {
     logger.warn({ userId: req.user.id }, "Microsoft callback failed OAuth state validation (possible CSRF)");
-    return res.redirect(`${frontendUrl}/${req.user?.role || 'caseworker'}/settings/integrations?sync=microsoft_invalid_state`);
+    return res.redirect(buildFrontendOAuthRedirect(req, "microsoft_invalid_state"));
   }
 
   try {
@@ -130,10 +136,10 @@ export const getMicrosoftCallback = async (req, res) => {
     }
 
     logger.info({ userId: req.user.id }, "Successfully connected Microsoft Teams Calendar integration");
-    return res.redirect(`${frontendUrl}/${req.user?.role || 'caseworker'}/settings/integrations?sync=microsoft_success`);
+    return res.redirect(buildFrontendOAuthRedirect(req, "microsoft_success"));
   } catch (error) {
     logger.error({ err: error, userId: req.user?.id }, "Microsoft OAuth Callback failed");
-    return res.redirect(`${frontendUrl}/${req.user?.role || 'caseworker'}/settings/integrations?sync=microsoft_error`);
+    return res.redirect(buildFrontendOAuthRedirect(req, "microsoft_error"));
   }
 };
 
