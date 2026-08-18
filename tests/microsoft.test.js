@@ -36,7 +36,10 @@ const tenantDbStub = () => ({
 const app = express();
 app.use(express.json());
 app.use((req, res, next) => {
-  req.user = { id: 1, role: "caseworker", organisation_id: 1 };
+  // auth.middleware.js sets `role_name` (from the JWT), never `role` — the User
+  // model has no such attribute. Mirror that here so redirect routing is tested
+  // against the shape the real middleware actually produces.
+  req.user = { id: 1, role_name: "caseworker", organisation_id: 1 };
   req.tenantDb = tenantDbStub();
   // Mirrors oauthCallbackSession('microsoft'): the middleware validates AND
   // consumes the single-use state nonce, then exposes the verified binding.
@@ -66,6 +69,21 @@ crossUserApp.use((req, res, next) => {
   next();
 });
 crossUserApp.get("/api/microsoft/callback", microsoftController.getMicrosoftCallback);
+
+// Admin role — routed to the settings page rather than the calendar.
+const adminApp = express();
+adminApp.use((req, res, next) => {
+  req.user = { id: 1, role_name: "admin", organisation_id: 1 };
+  req.tenantDb = tenantDbStub();
+  req.oauthState = { userId: 1, organisationId: 1, provider: "microsoft" };
+  next();
+});
+adminApp.get("/api/microsoft/callback", microsoftController.getMicrosoftCallback);
+
+// Every route the callback may redirect to must exist in AppRouter.jsx.
+// `/{role}/settings/integrations` does not exist for any role and previously
+// sent even successful connections to NotFoundPage.
+const ROUTELESS_PATH = "/settings/integrations";
 
 describe("Microsoft Integration Controller", () => {
   beforeEach(() => {
@@ -112,6 +130,33 @@ describe("Microsoft Integration Controller", () => {
     assert.equal(res.status, 302);
     assert.ok(res.header.location.includes("microsoft_invalid_state"));
     assert.equal(service.saveConnection.mock.calls.length, 0);
+  });
+
+  it("GET /callback lands a caseworker on the calendar page, not a dead route", async () => {
+    const res = await request(app).get("/api/microsoft/callback?code=validcode");
+    assert.equal(res.status, 302);
+    assert.ok(
+      res.header.location.includes("/caseworker/calendar"),
+      `expected the calendar route, got ${res.header.location}`,
+    );
+    assert.ok(!res.header.location.includes(ROUTELESS_PATH));
+  });
+
+  it("GET /callback lands an admin on the integrations settings tab", async () => {
+    const res = await request(adminApp).get("/api/microsoft/callback?code=validcode");
+    assert.equal(res.status, 302);
+    assert.ok(
+      res.header.location.includes("/admin/settings?tab=integrations"),
+      `expected the admin settings route, got ${res.header.location}`,
+    );
+    assert.ok(!res.header.location.includes(ROUTELESS_PATH));
+  });
+
+  it("GET /callback keeps failure redirects on real routes too", async () => {
+    const noCode = await request(app).get("/api/microsoft/callback");
+    assert.ok(!noCode.header.location.includes(ROUTELESS_PATH));
+    const badState = await request(crossUserApp).get("/api/microsoft/callback?code=validcode");
+    assert.ok(!badState.header.location.includes(ROUTELESS_PATH));
   });
 
   it("POST /disconnect disconnects and returns success", async () => {
