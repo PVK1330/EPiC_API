@@ -741,3 +741,80 @@ export function generateMonthlyComplianceReportTemplate({
     securityHtml: `This automated monthly compliance report was generated on ${new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })} for <strong>${name}</strong>. Please log in to your portal to take any required action.`,
   });
 }
+
+/**
+ * Calendar meeting invitation / update / cancellation.
+ *
+ * Used by the calendar module (/api/teams-meetings), which previously stored the
+ * attendee list and sent nobody anything — the join link only existed inside the
+ * app. `variant` switches the wording; the layout stays identical so a
+ * reschedule is recognisably the same meeting.
+ */
+export function generateMeetingInviteTemplate({
+  branding = {},
+  subject,
+  description,
+  date,
+  time,
+  timezoneLabel = "UTC",
+  platform,
+  meetingUrl,
+  location,
+  organiserName,
+  attendees = [],
+  variant = "created",
+}) {
+  const safeOrganiser = escapeHtml(organiserName || brandName(branding));
+  const safeSubject = escapeHtml(subject);
+
+  const copy = {
+    created: {
+      badge: "Meeting Invitation",
+      message: `<strong>${safeOrganiser}</strong> has invited you to <strong>${safeSubject}</strong>.`,
+      cta: "Join Meeting",
+    },
+    updated: {
+      badge: "Meeting Updated",
+      message: `<strong>${safeOrganiser}</strong> has updated <strong>${safeSubject}</strong>. The latest details are below — please update your diary.`,
+      cta: "Join Meeting",
+    },
+    cancelled: {
+      badge: "Meeting Cancelled",
+      message: `<strong>${safeSubject}</strong> has been cancelled by <strong>${safeOrganiser}</strong>. No action is needed from you.`,
+      cta: "",
+    },
+  }[variant] || {};
+
+  const details = {
+    Date: date,
+    Time: `${time} (${timezoneLabel})`,
+  };
+  if (platform) details.Platform = platform;
+  if (location) details.Location = location;
+  if (attendees.length) details.Attendees = attendees.join(", ");
+
+  // The raw URL is repeated under the button because some corporate mail clients
+  // strip buttons, and an attendee with no link cannot join at all.
+  const linkFallback =
+    meetingUrl && variant !== "cancelled"
+      ? `<p style="font-size:12px; color:#64748b; margin:16px 0 0; word-break:break-all;">
+           Or paste this link into your browser:<br/>
+           <span style="color:#1B4B72;">${escapeHtml(meetingUrl)}</span>
+         </p>`
+      : "";
+
+  const agenda = description
+    ? `<p style="font-size:14px; color:#334155; margin:0 0 24px; white-space:pre-wrap;">${escapeHtml(description)}</p>`
+    : "";
+
+  return wrapEpicEmail({
+    branding,
+    pageTitle: `${brandName(branding)} — ${copy.badge}`,
+    badge: copy.badge,
+    title: subject,
+    messageHtml: copy.message,
+    bodyHtml: `${agenda}${metadataBlockHtml(details)}${linkFallback}`,
+    ctaUrl: variant === "cancelled" ? "" : meetingUrl || "",
+    ctaLabel: variant === "cancelled" ? "" : meetingUrl ? copy.cta : "",
+  });
+}
