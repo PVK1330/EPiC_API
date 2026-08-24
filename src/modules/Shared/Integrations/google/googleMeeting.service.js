@@ -93,6 +93,9 @@ export const createGoogleMeetMeeting = async ({
       calendarId: "primary",
       resource: eventPayload,
       conferenceDataVersion: 1, // Crucial: triggers meet url generation
+      // Without this Google defaults to sendUpdates:"none" and silently skips
+      // the invitation emails, so attendees never receive the Meet link.
+      sendUpdates: "all",
     });
 
     const eventData = response.data;
@@ -163,6 +166,7 @@ export const updateGoogleCalendarEvent = async ({ tenantDb, userId, eventId, tit
       calendarId: "primary",
       eventId,
       resource: eventPayload,
+      sendUpdates: "all",
     });
     return response.data;
   } catch (error) {
@@ -202,10 +206,94 @@ export const deleteGoogleCalendarEvent = async ({ tenantDb, userId, eventId }) =
     await calendar.events.delete({
       calendarId: "primary",
       eventId,
+      sendUpdates: "all",
     });
     return true;
   } catch (error) {
     if (error.code === 404 || error.response?.status === 404) return true;
     throw new Error("Google Calendar API error: " + (error.message || error));
   }
+};
+
+/**
+ * Lists the user's Google Calendar events in a window.
+ *
+ * `singleEvents: true` expands recurring series into individual occurrences,
+ * which is what a calendar grid needs — without it a weekly meeting appears
+ * once, on the date the series was created.
+ */
+export const listGoogleCalendarEvents = async ({ tenantDb, userId, startTime, endTime, maxPages = 5 }) => {
+  const connection = await getConnection(tenantDb, userId);
+  if (!connection) return [];
+
+  const accessToken = await getOrRefreshAccessToken(tenantDb, connection);
+
+  let tenantGoogleConfig = null;
+  try {
+    const platformDb = (await import("../../../../models/index.js")).default;
+    const org = await platformDb.Organisation.findByPk(connection.organisation_id, { attributes: ["smtp_settings"] });
+    tenantGoogleConfig = org?.smtp_settings?.google || org?.smtp_settings?.integrations?.google || null;
+  } catch (err) {
+    logger.warn({ err }, "Failed to load tenant Google config; falling back to defaults");
+  }
+
+  const oauth2Client = getOAuth2Client(tenantGoogleConfig);
+  if (!oauth2Client) throw new Error("Google OAuth client not configured.");
+  oauth2Client.setCredentials({ access_token: accessToken });
+
+  const calendar = google.calendar({ version: "v3", auth: oauth2Client });
+
+  const events = [];
+  let pageToken;
+
+  for (let page = 0; page < maxPages; page += 1) {
+    const response = await calendar.events.list({
+      calendarId: "primary",
+      timeMin: new Date(startTime).toISOString(),
+      timeMax: new Date(endTime).toISOString(),
+      singleEvents: true,
+      orderBy: "startTime",
+      maxResults: 250,
+      showDeleted: false,
+      pageToken,
+    });
+
+    for (const item of response.data.items || []) {
+      // All-day events carry `date` (YYYY-MM-DD) instead of `dateTime`.
+      const isAllDay = Boolean(item.start?.date && !item.start?.dateTime);
+      const rawStart = item.start?.dateTime || item.start?.date;
+      const rawEnd = item.end?.dateTime || item.end?.date;
+      if (!rawStart || !rawEnd) continue;
+
+      const start = new Date(rawStart);
+      const end = new Date(rawEnd);
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) continue;
+
+      let joinUrl = item.hangoutLink || null;
+      if (!joinUrl && Array.isArray(item.conferenceData?.entryPoints)) {
+        joinUrl = item.conferenceData.entryPoints.find((ep) => ep.entryPointType === "video")?.uri || null;
+      }
+
+      events.push({
+        externalId: item.id,
+        subject: item.summary || "(No subject)",
+        description: item.description || "",
+        startTime: start,
+        endTime: end,
+        location: item.location || "",
+        joinUrl,
+        attendees: (item.attendees || []).map((a) => a?.email).filter(Boolean),
+        organiserEmail: item.organizer?.email || null,
+        isCancelled: item.status === "cancelled",
+        isAllDay,
+        webLink: item.htmlLink || null,
+      });
+    }
+
+    pageToken = response.data.nextPageToken;
+    if (!pageToken) break;
+  }
+
+  logger.info({ userId, count: events.length }, "Fetched Google Calendar events");
+  return events;
 };

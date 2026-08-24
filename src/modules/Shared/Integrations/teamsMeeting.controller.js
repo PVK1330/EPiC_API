@@ -2,6 +2,8 @@ import { Op } from 'sequelize';
 import logger from '../../../utils/logger.js';
 import { getConnection } from './google/google.service.js';
 import { createGoogleMeetMeeting } from './google/googleMeeting.service.js';
+import { syncUserCalendars, refreshCalendarsQuietly } from './calendarSync.service.js';
+import { sendMeetingInvites, extractAttendeeEmails } from './meetingInvite.service.js';
 
 const normalizeMeeting = (row) => {
   const plain = row.get ? row.get({ plain: true }) : row;
@@ -38,9 +40,23 @@ const normalizeMeeting = (row) => {
   };
 };
 
+/**
+ * Dispatches invite/update/cancellation mail without blocking the HTTP response.
+ *
+ * SMTP here is synchronous and a slow relay can outlast the frontend's request
+ * timeout, so the meeting is saved and answered first and the mail goes out
+ * behind it — the same fire-and-forget shape the notification path uses.
+ */
+const dispatchInvites = (params) => {
+  sendMeetingInvites(params).catch((err) => {
+    logger.error({ err, meetingId: params?.meeting?.id }, 'Meeting invite dispatch failed');
+  });
+};
+
 export const createTeamsMeeting = async (req, res) => {
   try {
     const userId = req.user.userId;
+    const organisationId = req.user.organisation_id;
     const {
       subject,
       description,
@@ -75,9 +91,7 @@ export const createTeamsMeeting = async (req, res) => {
     const wantsGoogle = provider === 'google' || provider === 'google_meet';
     const wantsMicrosoft = provider === 'microsoft' || provider === 'teams';
 
-    const attendeeEmails = Array.isArray(attendees)
-      ? attendees.map(a => (typeof a === 'string' ? a : a.email)).filter(Boolean)
-      : [];
+    const attendeeEmails = extractAttendeeEmails(attendees);
 
     // ── Google Meet (explicitly requested) ─────────────────────────────────
     if (wantsGoogle) {
@@ -145,14 +159,20 @@ export const createTeamsMeeting = async (req, res) => {
       }
 
       try {
-        const { createTeamsOnlineMeeting } = await import('./microsoft/microsoftMeeting.service.js');
-        const teamsResult = await createTeamsOnlineMeeting({
+        // createTeamsCalendarMeeting, not createTeamsOnlineMeeting: the latter
+        // posts to /me/onlineMeetings, which mints a join link but creates no
+        // calendar entry and invites nobody — the meeting was invisible in
+        // Outlook and Teams, and so could never sync back to this calendar.
+        const { createTeamsCalendarMeeting } = await import('./microsoft/microsoftMeeting.service.js');
+        const teamsResult = await createTeamsCalendarMeeting({
           tenantDb: req.tenantDb,
+          userId,
           title: subject,
           description: description || '',
           startTime: start_time,
           endTime: end_time,
-          userId,
+          attendees: attendeeEmails,
+          location: 'Microsoft Teams',
         });
         meetingProvider = 'microsoft';
         externalEventId = teamsResult.eventId;
@@ -189,10 +209,22 @@ export const createTeamsMeeting = async (req, res) => {
       status: 'scheduled',
     });
 
+    const meeting = normalizeMeeting(row);
+
+    dispatchInvites({
+      tenantDb: req.tenantDb,
+      meeting,
+      organiserId: userId,
+      organisationId,
+      variant: 'created',
+    });
+
     res.status(201).json({
       status: 'success',
-      message: 'Meeting created',
-      data: normalizeMeeting(row),
+      message: attendeeEmails.length
+        ? `Meeting created. The joining link is on its way to ${attendeeEmails.length} attendee${attendeeEmails.length === 1 ? '' : 's'}.`
+        : 'Meeting created',
+      data: { ...meeting, invited: attendeeEmails },
     });
   } catch (error) {
     logger.error({ err: error }, 'createTeamsMeeting error');
@@ -204,12 +236,41 @@ export const createTeamsMeeting = async (req, res) => {
   }
 };
 
+/**
+ * POST /api/teams-meetings/sync
+ * Pulls the user's existing Outlook/Teams and Google Calendar events into the
+ * in-app calendar. Was previously a stub that always reported 0 synced.
+ */
 export const syncTeamsMeetings = async (req, res) => {
   try {
+    const userId = req.user.userId;
+    const { start_date, end_date } = req.query;
+
+    const summary = await syncUserCalendars({
+      tenantDb: req.tenantDb,
+      userId,
+      startDate: start_date,
+      endDate: end_date,
+      force: true,
+    });
+
+    if (!summary.connected) {
+      return res.status(200).json({
+        status: 'success',
+        message: 'No calendar is connected yet. Connect Microsoft or Google to pull in your existing meetings.',
+        data: { ...summary },
+      });
+    }
+
+    const failed = summary.providers.filter((p) => p.error);
+    const message = failed.length
+      ? `Synced ${summary.synced} meeting(s). ${failed.map((f) => `${f.provider}: ${f.error}`).join('; ')}`
+      : `Synced ${summary.synced} meeting(s) from your connected calendar${summary.providers.length > 1 ? 's' : ''}.`;
+
     res.status(200).json({
-      status: 'success',
-      message: 'Sync completed (no external calendar connected)',
-      data: { synced: 0 },
+      status: failed.length === summary.providers.length && failed.length ? 'error' : 'success',
+      message,
+      data: summary,
     });
   } catch (error) {
     logger.error({ err: error }, 'syncTeamsMeetings error');
@@ -225,6 +286,16 @@ export const getTeamsMeetings = async (req, res) => {
   try {
     const userId = req.user.userId;
     const { start_date, end_date } = req.query;
+
+    // Refresh from the connected providers before answering, so meetings booked
+    // directly in Outlook or Google appear here without anyone pressing Sync.
+    // Rate-limited and fail-soft inside the service.
+    await refreshCalendarsQuietly({
+      tenantDb: req.tenantDb,
+      userId,
+      startDate: start_date,
+      endDate: end_date,
+    });
 
     const where = {
       user_id: userId,
@@ -270,6 +341,8 @@ export const getUpcomingTeamsMeetings = async (req, res) => {
     );
     const now = new Date();
     const until = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+
+    await refreshCalendarsQuietly({ tenantDb: req.tenantDb, userId });
 
     const rows = await req.tenantDb.CalendarMeeting.findAll({
       where: {
@@ -324,9 +397,50 @@ export const getTeamsMeetingById = async (req, res) => {
   }
 };
 
+/**
+ * Pushes a local edit out to whichever provider owns the event. Best-effort:
+ * the local row is the source of truth for the in-app calendar, and a provider
+ * hiccup must not block the edit.
+ */
+const pushUpdateToProvider = async ({ tenantDb, userId, row, attendeeEmails }) => {
+  if (!row.meeting_provider || !row.external_event_id) return;
+
+  try {
+    if (row.meeting_provider === 'microsoft') {
+      const { updateOutlookCalendarEvent } = await import('./microsoft/microsoftMeeting.service.js');
+      await updateOutlookCalendarEvent({
+        tenantDb,
+        userId,
+        eventId: row.external_event_id,
+        title: row.subject,
+        startTime: row.start_time,
+        endTime: row.end_time,
+      });
+    } else if (row.meeting_provider === 'google') {
+      const { updateGoogleCalendarEvent } = await import('./google/googleMeeting.service.js');
+      await updateGoogleCalendarEvent({
+        tenantDb,
+        userId,
+        eventId: row.external_event_id,
+        title: row.subject,
+        description: row.description || '',
+        startTime: row.start_time,
+        endTime: row.end_time,
+        attendees: attendeeEmails,
+      });
+    }
+  } catch (err) {
+    logger.error(
+      { err, userId, provider: row.meeting_provider, eventId: row.external_event_id },
+      'Failed to push meeting update to provider',
+    );
+  }
+};
+
 export const updateTeamsMeeting = async (req, res) => {
   try {
     const userId = req.user.userId;
+    const organisationId = req.user.organisation_id;
     const id = parseInt(req.params.id, 10);
     const row = await req.tenantDb.CalendarMeeting.findOne({
       where: { id, user_id: userId },
@@ -355,13 +469,35 @@ export const updateTeamsMeeting = async (req, res) => {
     for (const key of allowed) {
       if (req.body[key] !== undefined) patch[key] = req.body[key];
     }
+
+    // Only the fields that attendees would need to re-read warrant an email.
+    const notifiable = ['subject', 'start_time', 'end_time', 'location', 'description'];
+    const changed = notifiable.some(
+      (key) => patch[key] !== undefined && String(patch[key]) !== String(row[key]),
+    );
+
     await row.update(patch);
     await row.reload();
+
+    const meeting = normalizeMeeting(row);
+    const attendeeEmails = extractAttendeeEmails(meeting.attendees);
+
+    await pushUpdateToProvider({ tenantDb: req.tenantDb, userId, row, attendeeEmails });
+
+    if (changed) {
+      dispatchInvites({
+        tenantDb: req.tenantDb,
+        meeting,
+        organiserId: userId,
+        organisationId,
+        variant: 'updated',
+      });
+    }
 
     res.status(200).json({
       status: 'success',
       message: 'Meeting updated',
-      data: normalizeMeeting(row),
+      data: meeting,
     });
   } catch (error) {
     logger.error({ err: error }, 'updateTeamsMeeting error');
@@ -376,6 +512,7 @@ export const updateTeamsMeeting = async (req, res) => {
 export const cancelTeamsMeeting = async (req, res) => {
   try {
     const userId = req.user.userId;
+    const organisationId = req.user.organisation_id;
     const id = parseInt(req.params.id, 10);
     const row = await req.tenantDb.CalendarMeeting.findOne({
       where: { id, user_id: userId },
@@ -387,7 +524,36 @@ export const cancelTeamsMeeting = async (req, res) => {
         data: null,
       });
     }
+
+    const meeting = normalizeMeeting(row);
     await row.update({ status: 'cancelled' });
+
+    // Remove it from the provider too, otherwise the next sync pulls it straight
+    // back in as a live meeting.
+    if (row.meeting_provider && row.external_event_id) {
+      try {
+        if (row.meeting_provider === 'microsoft') {
+          const { deleteOutlookCalendarEvent } = await import('./microsoft/microsoftMeeting.service.js');
+          await deleteOutlookCalendarEvent({ tenantDb: req.tenantDb, userId, eventId: row.external_event_id });
+        } else if (row.meeting_provider === 'google') {
+          const { deleteGoogleCalendarEvent } = await import('./google/googleMeeting.service.js');
+          await deleteGoogleCalendarEvent({ tenantDb: req.tenantDb, userId, eventId: row.external_event_id });
+        }
+      } catch (err) {
+        logger.error(
+          { err, userId, provider: row.meeting_provider },
+          'Failed to cancel meeting on provider; local row is cancelled',
+        );
+      }
+    }
+
+    dispatchInvites({
+      tenantDb: req.tenantDb,
+      meeting,
+      organiserId: userId,
+      organisationId,
+      variant: 'cancelled',
+    });
 
     res.status(200).json({
       status: 'success',
