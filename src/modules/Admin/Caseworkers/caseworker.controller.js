@@ -6,7 +6,13 @@ import { ROLES } from '../../../middlewares/role.middleware.js';
 import { rowsToXlsxBuffer, sendXlsxDownload } from '../../../utils/excelExport.util.js';
 import { generateStrongPassword } from '../../../utils/passwordGenerator.js';
 import { checkPasswordStrength } from '../../../validations/common.validation.js';
-import { createUserOnPlatformAndTenant, syncUserToPlatformOnly } from '../../../services/userSync.service.js';
+import {
+  createUserOnPlatformAndTenant,
+  syncUserToPlatformOnly,
+  syncUserIdentityToPlatform,
+  releaseUserIdentifiersOnDelete,
+  reclaimIdentifiersFromInactiveUsers,
+} from '../../../services/userSync.service.js';
 import { sendTenantCaseworkerWelcomeEmail } from '../../../services/tenantUserMail.service.js';
 import platformDb from '../../../models/index.js';
 import { isPlatformEmailTaken, normalizePlatformEmail } from '../../../utils/platformUserEmail.js';
@@ -530,6 +536,15 @@ export const createCaseworker = async (req, res) => {
       });
     }
 
+    // BUG-002: a DEACTIVATED account must not keep an email/mobile hostage —
+    // release its identifiers so this new record can use them. Active holders
+    // are untouched and still fail the duplicate checks below.
+    await reclaimIdentifiersFromInactiveUsers(req.tenantDb, organisationId, {
+      email: emailNorm,
+      countryCode: country_code,
+      mobile,
+    }).catch((err) => logger.warn({ err }, "createCaseworker: identifier reclaim failed"));
+
     if (await isPlatformEmailTaken(platformDb, emailNorm, organisationId)) {
       await t.rollback();
       return res.status(400).json({
@@ -909,8 +924,20 @@ export const updateCaseworker = async (req, res) => {
     const organisationId = req.user?.organisation_id != null ? Number(req.user.organisation_id) : null;
     const emailNorm = normalizePlatformEmail(email);
 
+    // BUG-002: release an email/mobile held only by a deactivated account so
+    // it can be moved onto this caseworker (see reclaimIdentifiersFromInactiveUsers).
+    await reclaimIdentifiersFromInactiveUsers(req.tenantDb, organisationId, {
+      email: emailNorm,
+      countryCode: country_code,
+      mobile,
+      excludeUserId: caseworker.id,
+    }).catch((err) => logger.warn({ err }, "updateCaseworker: identifier reclaim failed"));
+
     if (emailNorm !== normalizePlatformEmail(caseworker.email)) {
-      if (organisationId && (await isPlatformEmailTaken(platformDb, emailNorm, organisationId))) {
+      // BUG-002: exclude this caseworker's own platform mirror — a stale mirror
+      // still holding the address made re-adding a previously used email
+      // impossible ("Email already exists" against the user's own row).
+      if (organisationId && (await isPlatformEmailTaken(platformDb, emailNorm, organisationId, caseworker.id))) {
         return res.status(400).json({
           status: "error",
           message: "Email already exists for this organisation",
@@ -959,6 +986,11 @@ export const updateCaseworker = async (req, res) => {
     }
 
     const resolvedStatus = status !== undefined ? status : caseworker.status;
+    // BUG-002: capture the pre-update email — the platform mirror is matched by
+    // id+org first, then by this previous email for legacy rows whose ids
+    // diverged; without the fallback an email change stranded the old address
+    // on the stale platform row forever.
+    const previousEmail = caseworker.email;
     await caseworker.update({
       first_name,
       last_name,
@@ -969,13 +1001,15 @@ export const updateCaseworker = async (req, res) => {
     });
     // Mirror identity + status to the platform registry so login/auth stay in
     // sync with the tenant row (email is the login key; status gates access).
-    await syncUserToPlatformOnly(caseworker.id, {
+    await syncUserIdentityToPlatform(caseworker.id, organisationId, previousEmail, {
       first_name,
       last_name,
-      email,
+      email: emailNorm,
+      country_code,
+      mobile,
       status: resolvedStatus,
     }).catch((err) =>
-      logger.warn({ err, caseworkerId: caseworker.id }, "updateCaseworker: platform sync failed"),
+      logger.error({ err, caseworkerId: caseworker.id }, "updateCaseworker: platform sync failed"),
     );
 
     const profile = caseworker.caseworkerProfile;
@@ -1024,13 +1058,11 @@ export const deleteCaseworker = async (req, res) => {
       });
     }
 
-    await caseworker.update({ status: "inactive" });
-    // Mirror the status to the platform registry — login and the auth middleware
-    // both gate on platformDb.User.status, so a tenant-only update would leave the
-    // caseworker able to log in. Best-effort; never block the response.
-    await syncUserToPlatformOnly(caseworker.id, { status: "inactive" }).catch((err) =>
-      logger.warn({ err, caseworkerId: caseworker.id }, "deleteCaseworker: platform status sync failed"),
-    );
+    // BUG-002: deleting must FREE the email/mobile for reuse (both users tables
+    // have hard unique indexes, so an inactive row otherwise occupies them
+    // forever). Tombstones the email, clears the mobile, and deactivates the
+    // account on the tenant row and its platform mirror.
+    await releaseUserIdentifiersOnDelete(caseworker, req.user?.organisation_id ?? null);
 
     res.status(200).json({
       status: "success",

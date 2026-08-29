@@ -30,9 +30,16 @@ export async function findPlatformUserByEmail(platformDb, email, organisationId)
   });
 }
 
-export async function isPlatformEmailTaken(platformDb, email, organisationId) {
+/**
+ * BUG-002: `excludeUserId` lets update flows re-add an email the user already
+ * owns — without it, the user's own platform mirror row counted as "taken",
+ * which permanently blocked restoring a previously used address.
+ */
+export async function isPlatformEmailTaken(platformDb, email, organisationId, excludeUserId = null) {
   const row = await findPlatformUserByEmail(platformDb, email, organisationId);
-  return Boolean(row);
+  if (!row) return false;
+  if (excludeUserId != null && Number(row.id) === Number(excludeUserId)) return false;
+  return true;
 }
 
 /**
