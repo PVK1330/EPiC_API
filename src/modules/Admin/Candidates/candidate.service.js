@@ -8,7 +8,12 @@ import { ROLES } from '../../../middlewares/role.middleware.js';
 import {
   createUserOnPlatformAndTenant,
   syncUserToPlatformOnly,
+  syncUserIdentityToPlatform,
+  releaseUserIdentifiersOnDelete,
+  reclaimIdentifiersFromInactiveUsers,
 } from '../../../services/userSync.service.js';
+import platformDb from '../../../models/index.js';
+import { isPlatformEmailTaken } from '../../../utils/platformUserEmail.js';
 import { sendCandidateWelcomeEmail } from '../../../services/candidateMail.service.js';
 import { ensureCandidateEnquiryCase } from '../../../services/candidateOnboarding.service.js';
 import { DEFAULT_CASE_STAGE } from '../../../constants/immigrationCaseProcess.js';
@@ -18,6 +23,13 @@ import logger from '../../../utils/logger.js';
 import { recordTimelineEntry } from '../../../services/caseTimeline.service.js';
 import eventPublisher from '../../../core/events/eventPublisher.js';
 import { EVENTS } from '../../../core/events/eventRegistry.js';
+
+/** 4xx validation error — without a status the global handler answers 500. */
+function badRequest(message) {
+  const err = new Error(message);
+  err.status = 400;
+  return err;
+}
 
 const APPLICATION_PAYLOAD_USER_KEYS = new Set([
   'first_name',
@@ -139,12 +151,20 @@ export class CandidateService {
       throw new Error("organisation_id is required — users must belong to an organisation");
     }
 
-    // Email/Mobile Check
+    // BUG-002: a deactivated account must not keep an email/mobile hostage —
+    // release its identifiers so this new client can use them.
+    await reclaimIdentifiersFromInactiveUsers(this.repository.tenantDb, organisation_id, {
+      email,
+      countryCode: country_code,
+      mobile,
+    }).catch((err) => logger.warn({ err }, "createCandidate: identifier reclaim failed"));
+
+    // Email/Mobile Check (badRequest -> 400; a plain Error surfaced as 500)
     const existingEmail = await this.repository.findByEmail(email);
-    if (existingEmail) throw new Error("Email already exists");
+    if (existingEmail) throw badRequest("Email already exists");
 
     const existingMobile = await this.repository.findByMobile(country_code, mobile);
-    if (existingMobile) throw new Error("Mobile number already exists");
+    if (existingMobile) throw badRequest("Mobile number already exists");
 
     const role = await this.repository.findRoleById(role_id);
     if (!role) throw new Error("Invalid role ID");
@@ -462,15 +482,35 @@ export class CandidateService {
 
     const { email, country_code, mobile, application } = data;
 
+    // BUG-002: release an email/mobile held only by a deactivated account so
+    // it can be moved onto this client.
+    await reclaimIdentifiersFromInactiveUsers(this.repository.tenantDb, candidate.organisation_id ?? null, {
+      email,
+      countryCode: country_code,
+      mobile,
+      excludeUserId: id,
+    }).catch((err) => logger.warn({ err }, "updateCandidate: identifier reclaim failed"));
+
     if (email && email !== candidate.email) {
       const exists = await this.repository.findByEmail(email, id);
-      if (exists) throw new Error("Email already exists");
+      if (exists) throw badRequest("Email already exists");
+      // BUG-002: also check the platform registry (login source of truth),
+      // excluding this candidate's own mirror row so a previously used email
+      // can be re-added to the same record.
+      const orgId = candidate.organisation_id ?? null;
+      if (orgId && (await isPlatformEmailTaken(platformDb, email, orgId, id))) {
+        throw badRequest("Email already exists for this organisation");
+      }
     }
 
     if ((country_code || mobile) && (country_code !== candidate.country_code || mobile !== candidate.mobile)) {
       const exists = await this.repository.findByMobile(country_code || candidate.country_code, mobile || candidate.mobile, id);
-      if (exists) throw new Error("Mobile number already exists");
+      if (exists) throw badRequest("Mobile number already exists");
     }
+
+    // BUG-002: pre-update email — lets the platform sync heal a mirror row
+    // whose id diverged from the tenant row (matched by old email + org).
+    const previousEmail = candidate.email;
 
     await this.repository.transaction(async (t) => {
       await candidate.update(updateData, { transaction: t });
@@ -506,6 +546,22 @@ export class CandidateService {
         }
       }
     });
+
+    // BUG-002: mirror identity changes to the platform registry — this update
+    // path previously never synced, so email/mobile edits left the platform
+    // row stale, and the old address then blocked every future re-use.
+    const identityUpdates = {};
+    for (const key of ["first_name", "last_name", "email", "country_code", "mobile"]) {
+      if (updateData[key] !== undefined) identityUpdates[key] = updateData[key];
+    }
+    if (Object.keys(identityUpdates).length > 0) {
+      await syncUserIdentityToPlatform(
+        id,
+        candidate.organisation_id ?? null,
+        previousEmail,
+        identityUpdates,
+      ).catch((err) => logger.error({ err, candidateId: id }, "updateCandidate: platform sync failed"));
+    }
 
     return await this.repository.findById(id);
   }
@@ -548,7 +604,9 @@ export class CandidateService {
   async deleteCandidate(id) {
     const candidate = await this.repository.findById(id);
     if (!candidate) throw new Error("Candidate not found");
-    await candidate.update({ status: "inactive" });
+    // BUG-002: free the email/mobile for reuse (tombstone + platform mirror)
+    // instead of leaving them locked on the soft-deleted row forever.
+    await releaseUserIdentifiersOnDelete(candidate, candidate.organisation_id ?? null);
     return true;
   }
 
@@ -569,9 +627,25 @@ export class CandidateService {
       splitApplicationUpdatePayload(applicationData);
     const sanitizedApplication = sanitizeApplicationPayload(applicationPatch);
 
+    // BUG-002: release an email/mobile held only by a deactivated account so
+    // the Edit Client form can move it onto this client.
+    if (userPatch.email !== undefined || userPatch.mobile !== undefined) {
+      await reclaimIdentifiersFromInactiveUsers(this.repository.tenantDb, candidate.organisation_id ?? null, {
+        email: userPatch.email,
+        countryCode: userPatch.country_code ?? candidate.country_code,
+        mobile: userPatch.mobile,
+        excludeUserId: userId,
+      }).catch((err) => logger.warn({ err }, "updateCandidateApplication: identifier reclaim failed"));
+    }
+
     if (userPatch.email && userPatch.email !== candidate.email) {
       const exists = await this.repository.findByEmail(userPatch.email, userId);
-      if (exists) throw new Error("Email already exists");
+      if (exists) throw badRequest("Email already exists");
+      // BUG-002: platform registry check with self-exclusion — see updateCandidate.
+      const orgId = candidate.organisation_id ?? null;
+      if (orgId && (await isPlatformEmailTaken(platformDb, userPatch.email, orgId, userId))) {
+        throw badRequest("Email already exists for this organisation");
+      }
     }
 
     const cc = userPatch.country_code ?? candidate.country_code;
@@ -581,7 +655,7 @@ export class CandidateService {
       (cc !== candidate.country_code || mob !== candidate.mobile)
     ) {
       const exists = await this.repository.findByMobile(cc, mob, userId);
-      if (exists) throw new Error("Mobile number already exists");
+      if (exists) throw badRequest("Mobile number already exists");
     }
 
     // ── Uniqueness checks for Passport, BRP, NI ────────────────────────────────
@@ -598,7 +672,7 @@ export class CandidateService {
         attributes: ['id'],
       });
       if (duplicate) {
-        throw new Error(`This ${label} is already registered to another applicant.`);
+        throw badRequest(`This ${label} is already registered to another applicant.`);
       }
     }
 
@@ -726,6 +800,10 @@ export class CandidateService {
       organisationId: candidate.organisation_id ?? null,
     };
 
+    // BUG-002: capture before the update mutates the instance — the platform
+    // sync uses this to find a legacy mirror row by its old email.
+    const previousEmail = candidate.email;
+
     await this.repository.transaction(async (t) => {
       if (Object.keys(userPatch).length > 0) {
         await candidate.update(userPatch, { transaction: t, ...hookOptions });
@@ -772,8 +850,16 @@ export class CandidateService {
     });
 
     if (Object.keys(userPatch).length > 0) {
-      syncUserToPlatformOnly(userId, userPatch).catch((err) => {
-        logger.error({ err }, 'Platform user sync after client update');
+      // BUG-002: awaited identity sync with legacy-row fallback (matched by the
+      // pre-update email) so the platform login row never silently drifts from
+      // the tenant row after an email/mobile edit.
+      await syncUserIdentityToPlatform(
+        userId,
+        candidate.organisation_id ?? null,
+        previousEmail,
+        userPatch,
+      ).catch((err) => {
+        logger.error({ err, candidateId: userId }, 'Platform user sync after client update');
       });
     }
 

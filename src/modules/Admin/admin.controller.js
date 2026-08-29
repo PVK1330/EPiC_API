@@ -7,7 +7,12 @@ import { checkPasswordStrength } from '../../validations/common.validation.js';
 import { ROLES } from '../../middlewares/role.middleware.js';
 import platformDb from '../../models/index.js';
 import { isPlatformEmailTaken } from '../../utils/platformUserEmail.js';
-import { createUserOnPlatformAndTenant, syncUserToPlatformOnly } from '../../services/userSync.service.js';
+import {
+  createUserOnPlatformAndTenant,
+  syncUserToPlatformOnly,
+  releaseUserIdentifiersOnDelete,
+  reclaimIdentifiersFromInactiveUsers,
+} from '../../services/userSync.service.js';
 import { sendTenantAdminWelcomeEmail } from '../../services/tenantUserMail.service.js';
 import { ensureAdminHasAllPermissions } from '../../seeders/permission.seeder.js';
 import { rowsToXlsxBuffer, sendXlsxDownload } from '../../utils/excelExport.util.js';
@@ -49,6 +54,14 @@ export const createAdmin = catchAsync(async (req, res) => {
   if (!organisationId) {
     return ApiResponse.badRequest(res, "Organisation context is required to create an admin");
   }
+
+  // BUG-002: a deactivated account must not keep an email/mobile hostage —
+  // release its identifiers so this new admin can use them.
+  await reclaimIdentifiersFromInactiveUsers(req.tenantDb, organisationId, {
+    email: emailNorm,
+    countryCode: country_code,
+    mobile,
+  }).catch((err) => logger.warn({ err }, "createAdmin: identifier reclaim failed"));
 
   if (await isPlatformEmailTaken(platformDb, emailNorm, organisationId)) {
     return ApiResponse.badRequest(res, "Email already exists for this organisation");
@@ -229,6 +242,15 @@ export const updateAdmin = catchAsync(async (req, res) => {
     return ApiResponse.badRequest(res, "First name, last name, email, country code, and mobile are required");
   }
 
+  // BUG-002: release an email/mobile held only by a deactivated account so it
+  // can be moved onto this admin.
+  await reclaimIdentifiersFromInactiveUsers(req.tenantDb, req.user?.organisation_id ?? null, {
+    email,
+    countryCode: country_code,
+    mobile,
+    excludeUserId: admin.id,
+  }).catch((err) => logger.warn({ err }, "updateAdmin: identifier reclaim failed"));
+
   if (email !== admin.email) {
     const existingEmail = await req.tenantDb.User.findOne({ 
       where: { email, id: { [Op.ne]: id } }
@@ -318,12 +340,11 @@ export const deleteAdmin = catchAsync(async (req, res) => {
     }
   }
 
-  await admin.update({ status: 'inactive' });
-  // Login / auth middleware gate on the platform copy of `status`; mirror it so
-  // a deactivated admin can no longer authenticate. Best-effort.
-  await syncUserToPlatformOnly(admin.id, { status: 'inactive' }).catch((err) =>
-    logger.warn({ err, adminId: admin.id }, "deleteAdmin: platform status sync failed"),
-  );
+  // BUG-002: deleting must FREE the email/mobile for reuse — tombstones the
+  // email, clears the mobile, and deactivates the account on the tenant row
+  // and its platform mirror (a soft-deleted row otherwise occupies the staff
+  // member's address forever).
+  await releaseUserIdentifiersOnDelete(admin, orgId ?? null);
 
   return ApiResponse.success(res, "Admin deleted successfully");
 });

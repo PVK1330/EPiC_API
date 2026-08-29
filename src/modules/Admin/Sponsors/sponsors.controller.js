@@ -12,6 +12,8 @@ import * as sponsorshipNotify from '../../../services/sponsorshipNotification.se
 import {
   createUserOnPlatformAndTenant,
   syncUserToPlatformAndTenant,
+  releaseUserIdentifiersOnDelete,
+  reclaimIdentifiersFromInactiveUsers,
 } from '../../../services/userSync.service.js';
 import { sendTenantSponsorWelcomeEmail } from '../../../services/tenantUserMail.service.js';
 import catchAsync from '../../../utils/catchAsync.js';
@@ -79,6 +81,14 @@ export const createSponsor = async (req, res) => {
         data: null,
       });
     }
+
+    // BUG-002: a deactivated account must not keep an email/mobile hostage —
+    // release its identifiers so this new sponsor can use them.
+    await reclaimIdentifiersFromInactiveUsers(req.tenantDb, organisationId, {
+      email: emailNorm,
+      countryCode: country_code,
+      mobile,
+    }).catch((err) => logger.warn({ err }, "createSponsor: identifier reclaim failed"));
 
     if (await isPlatformEmailTaken(platformDb, emailNorm, organisationId)) {
       return res.status(400).json({
@@ -510,6 +520,14 @@ export const updateSponsor = async (req, res) => {
 
     const organisationId = req.user?.organisation_id != null ? Number(req.user.organisation_id) : null;
     const emailNorm = normalizePlatformEmail(email || sponsor.email);
+    // BUG-002: release an email/mobile held only by a deactivated account so
+    // it can be moved onto this sponsor.
+    await reclaimIdentifiersFromInactiveUsers(req.tenantDb, organisationId, {
+      email: emailNorm,
+      countryCode: country_code,
+      mobile,
+      excludeUserId: sponsor.id,
+    }).catch((err) => logger.warn({ err }, "updateSponsor: identifier reclaim failed"));
     if (emailNorm !== normalizePlatformEmail(sponsor.email)) {
       if (organisationId && (await isPlatformEmailTaken(platformDb, emailNorm, organisationId))) {
         return res.status(400).json({
@@ -686,7 +704,10 @@ export const deleteSponsor = async (req, res) => {
       });
     }
 
-    await syncUserToPlatformAndTenant(req.tenantDb, sponsor.id, { status: "inactive" });
+    // BUG-002: deleting must FREE the email/mobile for reuse — tombstones the
+    // email, clears the mobile, and deactivates the account on the tenant row
+    // and its platform mirror.
+    await releaseUserIdentifiersOnDelete(sponsor, req.user?.organisation_id ?? null);
 
     res.status(200).json({
       status: "success",

@@ -133,6 +133,31 @@ async function resolveTenantDbForAuth(req) {
   return resolveDefaultTenantDb();
 }
 
+/**
+ * BUG-001: resolve an organisation from whatever identifier a self-registering
+ * candidate was given by their adviser — the numeric organisation id, the
+ * organisation slug, or the organisation name (case- and space-insensitive).
+ * Non-numeric values previously went straight into findByPk, which threw a
+ * Postgres integer-cast error (500) for inputs like "EPIC2026 - 111".
+ * Returns null when nothing (or more than one name) matches.
+ */
+async function findOrganisationByPublicId(rawValue) {
+  const value = String(rawValue ?? "").trim();
+  if (!value) return null;
+  const attributes = ["id", "slug", "name", "database_name", "status"];
+  if (/^\d+$/.test(value)) {
+    return platformDb.Organisation.findByPk(Number(value), { attributes });
+  }
+  const norm = value.toLowerCase().replace(/\s+/g, "");
+  const orgs = await platformDb.Organisation.findAll({ attributes });
+  const matches = orgs.filter((org) => {
+    const slug = String(org.slug || "").toLowerCase().replace(/\s+/g, "");
+    const name = String(org.name || "").toLowerCase().replace(/\s+/g, "");
+    return (slug && slug === norm) || (name && name === norm);
+  });
+  return matches.length === 1 ? matches[0] : null;
+}
+
 async function resolveAllowedModules(user) {
   if (isSuperAdminRole(user.role_id)) return ['*'];
   if (isPlatformStaffUser(user)) {
@@ -342,11 +367,9 @@ export const register = catchAsync(async (req, res) => {
   // without a subdomain), inject it into the organisation context so
   // resolveTenantDbForAuth can pick it up.
   if (bodyOrgId && !req.organisationContext?.organisation) {
-    const org = await platformDb.Organisation.findByPk(bodyOrgId, {
-      attributes: ["id", "slug", "name", "database_name", "status"],
-    });
+    const org = await findOrganisationByPublicId(bodyOrgId);
     if (!org) {
-      return ApiResponse.notFound(res, "Organisation not found. Please check your organisation ID.");
+      return ApiResponse.notFound(res, "Organisation not found. Please check the Organisation ID or code given by your adviser.");
     }
     if (org.status === "suspended") {
       return ApiResponse.error(res, "This organisation is suspended. Please contact support.", 403);
@@ -456,14 +479,15 @@ export const register = catchAsync(async (req, res) => {
  * Verify OTP and activate user
  */
 export const verifyOTP = catchAsync(async (req, res) => {
-  const { email, otp, organisation_id: bodyOrgId } = req.validated.body;
+  const { email, otp } = req.validated.body;
+  // BUG-001: the frontend sends organisation_id; older clients sent
+  // organisationId. Honour either so the tenant lookup matches registration.
+  const bodyOrgId = req.validated.body.organisation_id ?? req.validated.body.organisationId;
   const emailNorm = normalizePlatformEmail(email);
 
   // ── Resolve organisation context from body (same as register) ──────────
   if (bodyOrgId && !req.organisationContext?.organisation) {
-    const org = await platformDb.Organisation.findByPk(bodyOrgId, {
-      attributes: ["id", "slug", "name", "database_name", "status"],
-    });
+    const org = await findOrganisationByPublicId(bodyOrgId);
     if (org && org.status !== "suspended" && org.database_name) {
       req.organisationContext = req.organisationContext || {};
       req.organisationContext.organisation = org;
@@ -574,14 +598,14 @@ export const verifyOTP = catchAsync(async (req, res) => {
  * Resend OTP for registration
  */
 export const resendOTP = catchAsync(async (req, res) => {
-  const { email, organisation_id: bodyOrgId } = req.validated.body;
+  const { email } = req.validated.body;
+  // BUG-001: accept both organisation_id and organisationId (see verifyOTP).
+  const bodyOrgId = req.validated.body.organisation_id ?? req.validated.body.organisationId;
   const emailNorm = normalizePlatformEmail(email);
 
   // ── Resolve organisation context from body (same as register/verifyOTP) ──
   if (bodyOrgId && !req.organisationContext?.organisation) {
-    const org = await platformDb.Organisation.findByPk(bodyOrgId, {
-      attributes: ["id", "slug", "name", "database_name", "status"],
-    });
+    const org = await findOrganisationByPublicId(bodyOrgId);
     if (org && org.status !== "suspended" && org.database_name) {
       req.organisationContext = req.organisationContext || {};
       req.organisationContext.organisation = org;

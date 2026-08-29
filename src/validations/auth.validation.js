@@ -13,7 +13,9 @@ export const registerSchema = z.object({
     role_id: z.coerce.number().int().optional(),
     date_of_birth: z.string().optional().nullable(),
     userType: z.string().optional(),
-    organisation_id: z.string().optional(), // In the controller it destructures as organisation_id
+    // Accepts the numeric organisation id OR the organisation code/slug the
+    // adviser shares with the candidate (resolved in the controller — BUG-001).
+    organisation_id: z.coerce.string().optional(),
   }).strict(),
 });
 
@@ -29,14 +31,20 @@ export const verifyOtpSchema = z.object({
   body: z.object({
     email: emailSchema,
     otp: z.string().length(6, 'OTP must be 6 digits'),
-    organisationId: z.string().optional(),
+    // BUG-001: the frontend sends organisation_id (snake_case) but this strict
+    // schema only knew organisationId, so any verify-OTP call carrying the org
+    // was rejected with "Unrecognized key". Accept both spellings.
+    organisationId: z.coerce.string().optional(),
+    organisation_id: z.coerce.string().optional(),
   }).strict(),
 });
 
 export const resendOtpSchema = z.object({
   body: z.object({
     email: emailSchema,
-    organisationId: z.string().optional(),
+    // BUG-001: accept both spellings (same mismatch as verifyOtpSchema).
+    organisationId: z.coerce.string().optional(),
+    organisation_id: z.coerce.string().optional(),
   }).strict(),
 });
 
