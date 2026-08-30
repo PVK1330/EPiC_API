@@ -61,6 +61,21 @@ function splitApplicationUpdatePayload(data) {
     userPatch.mobile = String(payload.mobile).trim().replace(/\s/g, '');
   }
 
+  // BUG-020: the users table has hard VARCHAR limits (mobile 20, country_code 10,
+  // names 100, email 255). Anything longer used to reach Postgres and come back as
+  // "value too long for type character varying" → "Internal server error".
+  for (const [key, value] of Object.entries(userPatch)) {
+    const limit = USER_FIELD_LIMITS[key];
+    if (limit && value.length > limit) {
+      throw badRequest(
+        `${USER_FIELD_LABELS[key]} must be ${limit} characters or fewer (you entered ${value.length}).`,
+      );
+    }
+  }
+  if (userPatch.email !== undefined && userPatch.email !== '' && !/^\S+@\S+\.\S+$/.test(userPatch.email)) {
+    throw badRequest('Enter a valid email address.');
+  }
+
   const caseworkerId = payload.caseworkerId;
   for (const key of APPLICATION_PAYLOAD_USER_KEYS) {
     delete payload[key];
@@ -68,6 +83,16 @@ function splitApplicationUpdatePayload(data) {
 
   return { userPatch, applicationPatch: payload, caseworkerId };
 }
+
+// Column sizes from migrations/tenants/005_users.sql.
+const USER_FIELD_LIMITS = { first_name: 100, last_name: 100, email: 255, country_code: 10, mobile: 20 };
+const USER_FIELD_LABELS = {
+  first_name: 'First name',
+  last_name: 'Last name',
+  email: 'Email',
+  country_code: 'Country code',
+  mobile: 'Mobile number',
+};
 
 // ── Candidate update field policy ──────────────────────────────────────────
 // Whitelist: only these profile fields may be updated via updateCandidate().

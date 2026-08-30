@@ -129,22 +129,48 @@ app.use((err, req, res, _next) => {
   // otherwise fall back to the root logger.
   const log = req.log || logger;
 
-  // Normalise malformed-input DB errors (e.g. a non-numeric value passed where an
-  // integer id is expected) into a clean 400. Postgres raises SQLSTATE 22P02
-  // ("invalid input syntax for type ...") which Sequelize wraps. Without this,
-  // such requests surface as a 500 that leaks the raw DB error text to the client.
+  // Translate common database/ORM failures into clear 4xx responses. Without this
+  // they surface as an opaque 500 — "Internal server error" in production — which
+  // is what the Edit Client form showed when a value was longer than its column
+  // (BUG-020). Postgres SQLSTATE codes come wrapped by Sequelize in err.parent.
   const pgCode = err?.parent?.code || err?.original?.code || err?.code;
-  const isInvalidInput =
+  const pgDetail = err?.parent?.message || err?.original?.message || '';
+  let mapped = null;
+  if (
     pgCode === '22P02' ||        // invalid_text_representation (bad int/uuid/enum literal)
     pgCode === '22003' ||        // numeric_value_out_of_range
-    err?.name === 'SequelizeDatabaseError' && /invalid input syntax/i.test(err?.message || '');
-  if (isInvalidInput && !res.headersSent) {
-    log.warn({ pgCode, url: req.originalUrl, method: req.method }, 'Rejected malformed request parameter');
-    return res.status(400).json({
-      status: 'error',
-      message: 'Invalid request parameter format.',
-      data: null,
-    });
+    (err?.name === 'SequelizeDatabaseError' && /invalid input syntax/i.test(err?.message || ''))
+  ) {
+    mapped = { status: 400, message: 'Invalid request parameter format.' };
+  } else if (pgCode === '22001') { // string_data_right_truncation
+    const limit = /character varying\((\d+)\)/.exec(pgDetail)?.[1];
+    mapped = {
+      status: 400,
+      message: limit
+        ? `One of the values you entered is too long (maximum ${limit} characters). Please shorten it and try again.`
+        : 'One of the values you entered is too long. Please shorten it and try again.',
+    };
+  } else if (pgCode === '22007' || pgCode === '22008') { // invalid datetime
+    mapped = { status: 400, message: 'One of the dates you entered is not valid.' };
+  } else if (err?.name === 'SequelizeValidationError') {
+    mapped = { status: 400, message: err.errors?.[0]?.message || 'Some of the values you entered are not valid.' };
+  } else if (err?.name === 'SequelizeUniqueConstraintError' || pgCode === '23505') {
+    const field = err?.errors?.[0]?.path;
+    mapped = {
+      status: 409,
+      message: field ? `This ${String(field).replace(/_/g, ' ')} is already in use.` : 'This record already exists.',
+    };
+  } else if (pgCode === '23503') { // foreign_key_violation
+    mapped = { status: 400, message: 'A linked record no longer exists, so this change cannot be saved.' };
+  } else if (pgCode === '23502') { // not_null_violation
+    mapped = { status: 400, message: 'A required field is missing.' };
+  }
+  if (mapped && !res.headersSent) {
+    log.warn(
+      { pgCode, errName: err?.name, detail: pgDetail, url: req.originalUrl, method: req.method },
+      'Rejected request with invalid data',
+    );
+    return res.status(mapped.status).json({ status: 'error', message: mapped.message, data: null });
   }
 
   const statusCode = err?.status || err?.statusCode || 500;
@@ -158,13 +184,17 @@ app.use((err, req, res, _next) => {
   }, 'Unhandled server error');
 
   // Surface client-error (4xx) messages even in production — they are safe and
-  // actionable (e.g. "invalid csrf token"). Only 5xx messages are masked.
+  // actionable (e.g. "invalid csrf token"). 5xx messages are masked, but carry the
+  // request id so support can find the matching log line.
+  const masked = process.env.NODE_ENV === 'production' && !isClientError;
+  const reference = req.requestId ? String(req.requestId).slice(0, 8) : null;
   res.status(statusCode).json({
     status: 'error',
-    message: (process.env.NODE_ENV === 'production' && !isClientError)
-      ? 'Internal server error'
+    message: masked
+      ? `Something went wrong on our side${reference ? ` (ref ${reference})` : ''}. Please try again, or contact support quoting this reference.`
       : err?.message || 'Internal server error',
     errors: err?.errors,
+    ...(masked && req.requestId ? { reference: req.requestId } : {}),
   });
 });
 

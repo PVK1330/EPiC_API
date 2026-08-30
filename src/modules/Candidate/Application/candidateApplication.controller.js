@@ -1,4 +1,5 @@
 import logger from '../../../utils/logger.js';
+import { sanitizeApplicationPayload } from '../../../utils/applicationPayload.util.js';
 import { excludeSensitiveUserAttrs } from '../../../utils/userAttributes.js';
 import { MAX_BULK_IMPORT_ROWS } from '../../../middlewares/upload.middleware.js';
 import path from 'path';
@@ -79,62 +80,32 @@ const DATE_FIELDS = new Set([
 ]);
 
 /**
- * Every field that maps to a PostgreSQL ENUM column.
- * PostgreSQL rejects "" for ENUM — it must be a valid enum value or NULL.
- */
-const ENUM_FIELDS = new Set([
-  'applicationType',
-  'passportAvailable',
-  'ukLicense',
-  'medicalTreatment',
-  'sameNationality',
-  'parent2SameNationality',
-  'illegalEntry',
-  'overstayed',
-  'breach',
-  'falseInfo',
-  'otherBreach',
-  'refusedVisa',
-  'refusedEntry',
-  'refusedPermission',
-  'refusedAsylum',
-  'deported',
-  'removed',
-  'requiredToLeave',
-  'banned',
-  'visitedOther',
-  'sponsored',
-  'englishProof',
-]);
-
-/**
- * Pick only permitted fields from the request body and sanitize:
- *  - DATE fields   : "" or unparseable strings → null
- *  - ENUM fields   : "" (or any string not in the allowed set) → null
+ * Pick only permitted fields from the request body and sanitize them
+ * (see utils/applicationPayload.util.js for the DATE / ENUM / length rules).
  */
 function pickFields(body) {
-  const payload = {};
-  for (const key of APPLICATION_FIELDS) {
-    if (body[key] === undefined) continue;
+  // BUG-020: shared sanitiser — also enforces the VARCHAR limits, Yes/No +
+  // application-type values and date validity, throwing a 400 that names the
+  // field instead of letting Postgres reject the row with a raw "value too long".
+  return sanitizeApplicationPayload(body);
+}
 
-    const v = body[key];
-
-    if (DATE_FIELDS.has(key)) {
-      if (!v || typeof v !== 'string' || v.trim() === '') {
-        payload[key] = null;
-      } else {
-        const parsed = new Date(v);
-        payload[key] = isNaN(parsed.getTime()) ? null : parsed;
-      }
-    } else if (ENUM_FIELDS.has(key)) {
-      payload[key] = (v === null || v === undefined || String(v).trim() === '')
-        ? null
-        : v;
-    } else {
-      payload[key] = v;
-    }
+/**
+ * Error exit for the hand-written handlers in this file (BUG-020). Validation
+ * errors carry a 4xx status and are shown to the user as-is; anything else goes
+ * to the global handler in app.js, which turns database errors into clear 4xx
+ * messages and masks genuine 5xx with a support reference.
+ */
+function failRequest(err, res, next, label) {
+  if (res.headersSent) {
+    logger.error({ err }, `${label} error after response was sent`);
+    return undefined;
   }
-  return payload;
+  const status = Number(err?.status || err?.statusCode);
+  if (status >= 400 && status < 500) {
+    return res.status(status).json({ status: 'error', success: false, message: err.message, data: null });
+  }
+  return next(err);
 }
 
 // ── Section definitions used for completeness scoring ────────────────────────
@@ -456,7 +427,7 @@ export const getMyApplication = async (req, res) => {
 };
 
 /** POST /api/candidate/application — submit the application (creates or updates, marks as submitted) */
-export const submitApplication = async (req, res) => {
+export const submitApplication = async (req, res, next) => {
   try {
     const userId = resolveUserId(req);
     if (!userId) {
@@ -661,18 +632,12 @@ export const submitApplication = async (req, res) => {
       logger.error({ err: taskErr }, 'Error syncing workflow tasks after application submit');
     }
   } catch (err) {
-    logger.error({ err }, 'submitApplication error');
-    res.status(500).json({
-      status: 'error',
-      message: 'Internal server error',
-      data: null,
-      error: process.env.NODE_ENV === 'development' ? err.message : undefined,
-    });
+    return failRequest(err, res, next, 'submitApplication');
   }
 };
 
 /** PUT /api/candidate/application — save a draft without changing submission status */
-export const saveDraft = async (req, res) => {
+export const saveDraft = async (req, res, next) => {
   try {
     const userId = resolveUserId(req);
     if (!userId) {
@@ -746,13 +711,7 @@ export const saveDraft = async (req, res) => {
       data: { application },
     });
   } catch (err) {
-    logger.error({ err }, 'saveDraft error');
-    res.status(500).json({
-      status: 'error',
-      message: 'Internal server error',
-      data: null,
-      error: process.env.NODE_ENV === 'development' ? err.message : undefined,
-    });
+    return failRequest(err, res, next, 'saveDraft');
   }
 };
 
@@ -1296,7 +1255,13 @@ export const importCandidateApplicationsExcel = async (req, res) => {
           });
         });
       } catch (err) {
-        results.errors.push({ row: rowNum, error: process.env.NODE_ENV === 'development' ? err.message : undefined });
+        // Validation errors (4xx) are user-safe and tell the importer which value to
+        // fix; anything else stays masked outside development.
+        const isValidation = Number(err?.status) >= 400 && Number(err?.status) < 500;
+        results.errors.push({
+          row: rowNum,
+          error: isValidation || process.env.NODE_ENV === 'development' ? err.message : 'Row could not be imported.',
+        });
       }
       rowNum += 1;
     }

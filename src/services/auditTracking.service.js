@@ -50,8 +50,12 @@ export async function trackFieldChanges(instance, options = {}) {
       const oldValue = instance.previous(field);
       const newValue = instance.getDataValue(field);
 
-      // Create granular Audit Log
-      await AuditLog.create({
+      // Create granular Audit Log. When the caller passed a transaction, insert
+      // inside a SAVEPOINT: if this row fails (schema drift, FK, ...) only the
+      // savepoint rolls back. Previously the failure left the caller's whole
+      // transaction aborted, so every later query in it failed too and the user
+      // saw "Internal server error" for an ordinary profile edit (BUG-020).
+      const auditRow = {
         user_id: performedBy,
         action: `UPDATE_FIELD`,
         resource: entityId,
@@ -66,7 +70,14 @@ export async function trackFieldChanges(instance, options = {}) {
         organisation_id: organisationId,
         status: 'Success',
         details: `Field '${field}' updated on ${entityType} ${entityId}`
-      }, { transaction: options.transaction });
+      };
+      if (options.transaction) {
+        await sequelize.transaction({ transaction: options.transaction }, (savepoint) =>
+          AuditLog.create(auditRow, { transaction: savepoint }),
+        );
+      } else {
+        await AuditLog.create(auditRow);
+      }
 
       // Build human readable sentence for timeline
       // Example: "Candidate Passport Number changed from AB123456 to AB987654"
