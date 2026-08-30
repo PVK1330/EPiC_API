@@ -938,6 +938,16 @@ export const updatePipelineStage = async (req, res) => {
         });
       } catch (stageErr) {
         logger.error({ err: stageErr }, "applyCaseStageChange (pipeline)");
+        // BUG-003 finding: a move the state machine rejects used to be swallowed
+        // and answered "Pipeline stage updated" (200) with the stage unchanged,
+        // so the UI looked successful while nothing moved. Say so instead.
+        if (/State Transition Error|Invalid transition/i.test(stageErr?.message || "")) {
+          return res.status(400).json({
+            status: "error",
+            message: String(stageErr.message).replace(/^State Transition Error:\s*/i, ""),
+            data: null,
+          });
+        }
       }
       await caseData.reload();
     } else if (nextStage === "biometrics_booked" && !caseData.biometricsDate) {
