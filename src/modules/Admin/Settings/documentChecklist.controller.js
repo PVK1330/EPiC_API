@@ -194,10 +194,23 @@ export const getCaseChecklist = async (req, res) => {
     }
 
     if (!caseData.visaTypeId) {
-      return res.status(400).json({
-        status: "error",
-        message: "Case has no visa type assigned",
-        data: null,
+      // BUG-030: a case without a visa type has no default checklist yet. This
+      // used to be a 400, which the Documents tabs treated as "no checklist" and
+      // — on the caseworker tab — hid the Upload button entirely. Report it as an
+      // empty checklist instead so the screens render normally.
+      return res.status(200).json({
+        status: "success",
+        message: "Case has no visa type assigned yet, so no document checklist applies",
+        data: {
+          caseId: numericCaseId,
+          isCustomized: false,
+          visaTypeMissing: true,
+          checklist: {},
+          completionPercentage: 0,
+          total: 0,
+          required: 0,
+          completed: 0,
+        },
       });
     }
 
