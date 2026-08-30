@@ -5,6 +5,7 @@ import {
   getStageOrder,
 } from "../../../constants/immigrationCaseProcess.js";
 import { applyCaseStageChange } from "../../../services/caseStageAutomation.service.js";
+import { findTransitionPath, WORKFLOW_TYPES } from "../../../services/workflowEngine.service.js";
 import { sendWorkflowStageEmail } from "../../../services/workflowEmail.service.js";
 import {
   buildDataCaptureSheetPdfAttachment,
@@ -502,33 +503,87 @@ export const sendDraftApplicationForReview = async (req, res) => {
     // Moving to draft_application_review locks the candidate's form to read-only,
     // creates the candidate review task, and emails them (draft_application_review
     // template). The candidate reviews the draft in the portal and confirms.
-    await applyCaseStageChange({
-      tenantDb: req.tenantDb,
-      caseRecord,
-      nextStageId: "draft_application_review",
-      performedBy: req.user?.userId,
-      reason: "Draft application sent to client for review",
-      sendEmail: true,
-      organisationId: organisationIdFromReq(req),
-    });
+    //
+    // BUG-003 finding: the stage is not always a direct neighbour of the current
+    // one (e.g. after "Request further information" the matrix only allows
+    // further_information_request → application_preparation | document_review),
+    // and a direct jump threw "State Transition Error" → 500. Walk the shortest
+    // legal path instead, exactly like the CCL fee flow does; only the final hop
+    // fires the client email and stage-entry hooks.
+    const target = "draft_application_review";
+    const currentStage = resolveCaseStage(caseRecord);
+    let resent = false;
+    if (currentStage === target) {
+      // Already at draft review: treat as a reminder to the client.
+      await sendWorkflowStageEmail({
+        tenantDb: req.tenantDb,
+        caseRecord,
+        stageId: target,
+        organisationId: organisationIdFromReq(req),
+      }).catch((err) => logger.error({ err }, "sendDraftApplicationForReview: reminder email"));
+      resent = true;
+    } else {
+      if (getStageOrder(currentStage) > getStageOrder(target)) {
+        return res.status(400).json({
+          status: "error",
+          message: `The case has already moved past the draft review stage (current stage: ${currentStage}).`,
+          data: null,
+        });
+      }
+      const path = findTransitionPath(WORKFLOW_TYPES.CASE, currentStage, target);
+      if (!path || !path.length) {
+        return res.status(400).json({
+          status: "error",
+          message: `The draft application cannot be sent for review from the "${currentStage}" stage.`,
+          data: null,
+        });
+      }
+      for (let i = 0; i < path.length; i += 1) {
+        const isFinal = i === path.length - 1;
+        await applyCaseStageChange({
+          tenantDb: req.tenantDb,
+          caseRecord,
+          nextStageId: path[i],
+          performedBy: req.user?.userId,
+          reason: isFinal
+            ? "Draft application sent to client for review"
+            : "Advanced automatically on the way to draft application review",
+          sendEmail: isFinal,
+          intermediate: !isFinal,
+          organisationId: organisationIdFromReq(req),
+        });
+      }
+    }
 
     await recordTimelineEntry({
       tenantDb: req.tenantDb,
       caseId: caseRecord.id,
       actionType: "communication_sent",
-      description: "Draft application sent to client for review",
+      description: resent
+        ? "Draft application review reminder sent to client"
+        : "Draft application sent to client for review",
       performedBy: req.user?.userId,
       visibility: "public",
     });
 
     res.status(200).json({
       status: "success",
-      message: "Draft application sent to the client for review",
+      message: resent
+        ? "Draft application review reminder sent to the client"
+        : "Draft application sent to the client for review",
       data: null,
     });
   } catch (err) {
     logger.error({ err }, "sendDraftApplicationForReview");
-    res.status(500).json({ status: "error", message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? err.message : undefined, data: null });
+    // A rejected stage transition is a business-rule problem, not a server fault.
+    const transitionError = /State Transition Error|Invalid transition/i.test(err?.message || "");
+    const status = Number(err?.status) || (transitionError ? 400 : 500);
+    res.status(status).json({
+      status: "error",
+      message: status < 500 ? String(err.message).replace(/^State Transition Error:\s*/i, "") : "Internal server error",
+      error: process.env.NODE_ENV === "development" ? err.message : undefined,
+      data: null,
+    });
   }
 };
 
@@ -580,15 +635,23 @@ export const reviewDataCaptureSubmission = async (req, res) => {
         },
       ).catch((err) => logger.error({ err }, "Failed to mark DCS task complete"));
 
-      await applyCaseStageChange({
-        tenantDb: req.tenantDb,
-        caseRecord,
-        nextStageId: "application_preparation",
-        performedBy: req.user?.userId,
-        organisationId: organisationIdFromReq(req),
-        reason: "Upload Documents approved",
-        sendEmail: false,
-      });
+      // BUG-003 finding: approving the sheet after the case had already moved on
+      // (e.g. document automation advanced it to draft review) tried a backward
+      // transition, which threw and turned the whole approval into a 500. Only
+      // advance when the case is still at the data-capture stage; the approval
+      // itself is recorded either way.
+      await caseRecord.reload().catch(() => {});
+      if (resolveCaseStage(caseRecord) === "data_capture_initial_docs") {
+        await applyCaseStageChange({
+          tenantDb: req.tenantDb,
+          caseRecord,
+          nextStageId: "application_preparation",
+          performedBy: req.user?.userId,
+          organisationId: organisationIdFromReq(req),
+          reason: "Upload Documents approved",
+          sendEmail: false,
+        });
+      }
     } else if (status === "rejected") {
       await createTasksOnDataCaptureRejected({
         tenantDb: req.tenantDb,

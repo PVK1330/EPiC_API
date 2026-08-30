@@ -208,6 +208,13 @@ export function isCaseFeeSatisfied(caseRecord) {
  * Rule 1 — block pipeline moves at/after submission until CCL accepted and payment received.
  */
 export async function assertSubmissionGate(tenantDb, caseRecord, nextStageId) {
+  // Closing (withdrawing / no-go) a case never requires a signed CCL or payment —
+  // the matrix allows case_closure from every stage, but its order (16) sits
+  // past the submission gate, so an early enquiry could not be closed at all
+  // (BUG-003 finding).
+  if (normalizeCaseStage(nextStageId) === "case_closure") {
+    return { ok: true };
+  }
   if (!isAtOrPastSubmissionStage(nextStageId)) {
     return { ok: true };
   }
