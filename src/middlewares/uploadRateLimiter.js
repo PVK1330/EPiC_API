@@ -35,4 +35,7 @@ export const uploadLimiter = rateLimit({
   handler: uploadRateLimitHandler,
   standardHeaders: true,
   legacyHeaders: false,
+  // Same deliberate local-only switch the auth limiters honour (see
+  // authRateLimiter.js skipIfInternal). Never set DISABLE_RATE_LIMIT on UAT/prod.
+  skip: () => process.env.DISABLE_RATE_LIMIT === 'true',
 });

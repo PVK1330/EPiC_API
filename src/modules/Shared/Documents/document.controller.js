@@ -26,6 +26,26 @@ import { ROLES } from '../../../middlewares/role.middleware.js';
 const DECISION_DOC_TYPES = ['Decision Letter', 'Approval Notice'];
 const FINAL_DOC_TYPES = ['Visa Copy', 'BRP Information'];
 
+// Mirrors the Document.documentCategory ENUM. Anything else (e.g. the old
+// 'general' default, or a capitalised value) failed model validation with a 500.
+const DOCUMENT_CATEGORIES = ['candidate', 'business', 'personal', 'legal', 'financial', 'other'];
+const normaliseDocumentCategory = (value) => {
+  const v = String(value ?? '').trim().toLowerCase();
+  return DOCUMENT_CATEGORIES.includes(v) ? v : 'candidate';
+};
+
+// multipart/form-data turns undefined/null into the strings "undefined"/"null";
+// treat those (and blanks) as "not provided".
+const cleanFormValue = (value) => {
+  if (value === undefined || value === null) return null;
+  const v = String(value).trim();
+  return v === '' || v === 'undefined' || v === 'null' ? null : v;
+};
+const parsePositiveInt = (value) => {
+  const n = Number.parseInt(cleanFormValue(value) ?? '', 10);
+  return Number.isInteger(n) && n > 0 ? n : null;
+};
+
 // Case-level access check shared by document listings and downloads. Mirrors
 // the per-case ownership rules: admin/superadmin/sponsor have org-wide access;
 // a caseworker must be assigned to the case; a candidate must own it. Does NOT
@@ -175,50 +195,38 @@ export const uploadDocuments = async (req, res) => {
       return res.status(400).json({ message: 'Tenant context required' });
     }
     // Multer processes files and form fields differently
-    const documentCategory = req.body?.documentCategory || 'general';
-    let userId = req.body?.userId;
+    const uploadedFiles = Array.isArray(req.files) ? req.files : [];
 
-    // Candidates may only upload to their own account
+    // Multer has already written the temp files by the time we validate, so a
+    // rejected request must clean them up instead of leaving orphans in
+    // storage/private/temp.
+    const discardUploadedFiles = () =>
+      Promise.all(uploadedFiles.map((f) => fs.promises.unlink(f.path).catch(() => {})));
+    const fail = async (httpStatus, message) => {
+      await discardUploadedFiles();
+      return res.status(httpStatus).json({ status: "error", message, data: null });
+    };
+
+    if (uploadedFiles.length === 0) {
+      return fail(400, "No files uploaded");
+    }
+
+    const documentCategory = normaliseDocumentCategory(req.body?.documentCategory);
     const roleId = Number(req.user?.role_id);
-    if (roleId === 1) {
-      userId = req.user.userId ?? req.user.id;
-    }
+    // Candidates may only upload to their own account
+    let userId =
+      roleId === 1
+        ? Number(req.user.userId ?? req.user.id)
+        : parsePositiveInt(req.body?.userId);
 
-    if (!userId) {
-      return res.status(400).json({
-        status: "error",
-        message: "userId is required",
-        data: null,
-      });
-    }
-    const caseId = req.body?.caseId;
+    const caseId = cleanFormValue(req.body?.caseId);
     const documentType = req.body?.documentType || 'General';
     const userFileName = req.body?.userFileName;
     const expiryDate = req.body?.expiryDate || null;
     const notes = req.body?.notes || null;
     let resolvedDocumentType = documentType || "General";
 
-    const uploadedFiles = req.files;
-
-    if (!uploadedFiles || uploadedFiles.length === 0) {
-      return res.status(400).json({
-        status: "error",
-        message: "No files uploaded",
-        data: null,
-      });
-    }
-
-    // Validate user exists
-    const user = await req.tenantDb.User.findByPk(userId);
-    if (!user) {
-      return res.status(404).json({
-        status: "error",
-        message: "User not found",
-        data: null,
-      });
-    }
-
-  // Validate case if provided - handle both numeric id and string caseId
+    // Validate case if provided - handle both numeric id and string caseId
     let numericCaseId = null;
     let caseRecord = null;
 
@@ -232,12 +240,28 @@ export const uploadDocuments = async (req, res) => {
         if (caseRecord) numericCaseId = caseRecord.id;
       }
       if (!caseRecord) {
-        return res.status(404).json({
-          status: "error",
-          message: "Case not found",
-          data: null,
-        });
+        return fail(404, "Case not found");
       }
+    }
+
+    // BUG-019: staff uploads from a case page carried no userId (the form has no
+    // such field) and were rejected with "userId is required". The document
+    // belongs to the case's client, so derive it from the case instead.
+    if (!userId && caseRecord?.candidateId) {
+      userId = Number(caseRecord.candidateId);
+    }
+
+    if (!userId) {
+      return fail(
+        400,
+        "We couldn't identify the client this document belongs to. Please open the client's case and upload it from there.",
+      );
+    }
+
+    // Validate user exists
+    const user = await req.tenantDb.User.findByPk(userId);
+    if (!user) {
+      return fail(404, "User not found");
     }
 
     // Candidates: always attach to their active case when possible

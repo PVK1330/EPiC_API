@@ -273,6 +273,14 @@ export const withSecurityProcessing = (uploadMiddleware) => {
             : 'File is too large.';
           return res.status(400).json({ status: "error", message: msg });
         }
+        if (err.code === "LIMIT_UNEXPECTED_FILE") {
+          // Bare multer text is "Unexpected field" (BUG-030) — say what was wrong.
+          const field = err.field ? ` "${err.field}"` : "";
+          return res.status(400).json({
+            status: "error",
+            message: `Upload rejected: unexpected file field${field} or too many files. Please refresh the page and try again.`,
+          });
+        }
         return res.status(400).json({ status: "error", message: err.message || "File upload failed" });
       }
 
@@ -322,7 +330,31 @@ export const handleSponsorRegistrationUpload = withSecurityProcessing(
     { name: 'recruitmentDocs', maxCount: 1 },
   ])
 );
-export const handleDocumentUpload = withSecurityProcessing(upload.array("files", 10));
+// Case / candidate document uploads (BUG-019 / BUG-030). Different screens send the
+// file under different field names — the admin case page and the caseworker case
+// tab use `files`, the caseworker Documents page (and older clients) use
+// `documents`. `.array("files")` rejected every other name with a bare multer
+// "Unexpected field" error, so accept all known names and flatten the result back
+// to the array shape the controllers already read from `req.files`.
+const DOCUMENT_UPLOAD_FIELDS = ["files", "documents", "file", "document"];
+const MAX_DOCUMENT_UPLOAD_FILES = 10;
+const documentFieldsUpload = withSecurityProcessing(
+  upload.fields(DOCUMENT_UPLOAD_FIELDS.map((name) => ({ name, maxCount: MAX_DOCUMENT_UPLOAD_FILES }))),
+);
+export const handleDocumentUpload = (req, res, next) =>
+  documentFieldsUpload(req, res, async () => {
+    if (req.files && !Array.isArray(req.files)) {
+      req.files = DOCUMENT_UPLOAD_FIELDS.flatMap((name) => req.files[name] || []);
+    }
+    if (Array.isArray(req.files) && req.files.length > MAX_DOCUMENT_UPLOAD_FILES) {
+      await Promise.all(req.files.map((f) => fs.promises.unlink(f.path).catch(() => {})));
+      return res.status(400).json({
+        status: "error",
+        message: `Too many files. You can upload up to ${MAX_DOCUMENT_UPLOAD_FILES} files at a time.`,
+      });
+    }
+    next();
+  });
 
 /**
  * upload-security-1/4: one-liner for route files that previously used a raw
