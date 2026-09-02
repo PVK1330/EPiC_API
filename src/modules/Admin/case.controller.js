@@ -79,7 +79,9 @@ export const createCase = async (req, res) => {
     const errors = [];
     
     if (candidateId === undefined || candidateId === null || candidateId === '') errors.push("candidateId is required");
-    if (sponsorId === undefined || sponsorId === null || sponsorId === '') errors.push("sponsorId is required");
+    // BUG-031: sponsorId is OPTIONAL — private clients have no sponsor. Requiring
+    // one forced staff to pick an unrelated sponsor just to pass validation, which
+    // then showed a wrong sponsor name on the case.
     if (visaTypeId === undefined || visaTypeId === null || visaTypeId === '') errors.push("visaTypeId is required");
     // Caseworker optional at creation — admin task prompts assignment
     if (targetSubmissionDate === undefined || targetSubmissionDate === null || targetSubmissionDate === '') errors.push("targetSubmissionDate is required");
@@ -103,14 +105,16 @@ export const createCase = async (req, res) => {
       });
     }
 
-    // Check if sponsor exists
-    const sponsor = await req.tenantDb.User.findByPk(sponsorId);
-    if (!sponsor) {
-      return res.status(404).json({
-        status: "error",
-        message: "Sponsor not found",
-        data: null,
-      });
+    // Check the sponsor exists — only when one was chosen (sponsor is optional)
+    if (sponsorId) {
+      const sponsor = await req.tenantDb.User.findByPk(sponsorId);
+      if (!sponsor) {
+        return res.status(404).json({
+          status: "error",
+          message: "Sponsor not found",
+          data: null,
+        });
+      }
     }
 
     const organisationId = req.user?.organisation_id != null ? Number(req.user.organisation_id) : null;
@@ -134,7 +138,7 @@ export const createCase = async (req, res) => {
       caseId,
       organisation_id: organisationId,
       candidateId,
-      sponsorId,
+      sponsorId: sponsorId || null,
       visaTypeId,
       petitionTypeId: petitionTypeId || null,
       priority: priority || "medium",
@@ -152,7 +156,7 @@ export const createCase = async (req, res) => {
       totalAmount: totalAmount || 0,
       paidAmount: paidAmount || 0,
       notes: notes || "",
-      businessId: businessId || sponsorId, // Ensure businessId is set
+      businessId: businessId || sponsorId || null,
       proposedAmount:
         !Number.isNaN(parsedProposedOnCreate) && parsedProposedOnCreate >= 0
           ? parsedProposedOnCreate

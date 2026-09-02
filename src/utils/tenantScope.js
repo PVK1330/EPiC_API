@@ -102,14 +102,17 @@ export async function resolveDefaultOrganisationId() {
 export async function assertUsersInOrganisation(tenantDb, candidateId, sponsorId) {
   const [candidate, sponsor] = await Promise.all([
     tenantDb.User.findByPk(candidateId, { attributes: ["id"] }),
-    tenantDb.User.findByPk(sponsorId, { attributes: ["id"] }),
+    sponsorId != null
+      ? tenantDb.User.findByPk(sponsorId, { attributes: ["id"] })
+      : Promise.resolve(null),
   ]);
   if (!candidate) {
     const err = new Error("Candidate not found");
     err.status = 404;
     throw err;
   }
-  if (!sponsor) {
+  // A sponsor is optional (BUG-031) — only validate one that was actually given.
+  if (sponsorId != null && !sponsor) {
     const err = new Error("Sponsor not found");
     err.status = 404;
     throw err;
