@@ -132,7 +132,13 @@ export async function submitCclFeeProposal({
     };
   }
 
-  const plan = normalizeInstallments(installments);
+  // BUG-032: an instalment schedule is optional — most clients pay in one go.
+  // No schedule means a single "Full fee" payment, so proposals are never
+  // blocked by "Instalments (£0.00) must equal total".
+  let plan = normalizeInstallments(installments);
+  if (plan.length === 0) {
+    plan = [{ label: "Full fee", amount: Number.parseFloat(feeAmount) || 0, dueDate: null }];
+  }
   const validation = validateInstallmentPlan(feeAmount, plan);
   if (!validation.ok) {
     return { ok: false, status: 400, message: validation.message };
