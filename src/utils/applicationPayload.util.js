@@ -10,7 +10,9 @@
 
 export const APPLICATION_FIELDS = [
   'firstName', 'lastName', 'email', 'contactNumber',
-  'applicationType', 'gender', 'relationshipStatus', 'address', 'contactNumber2',
+  'applicationType', 'gender', 'relationshipStatus', 'address',
+  'addressStartDate', 'housingStatus', 'landlordName', 'landlordContactNumber', 'landlordEmail', 'landlordAddress',
+  'contactNumber2',
   'previousFullAddress', 'previousAddress', 'startDate', 'endDate',
   'nationality', 'birthCountry', 'placeOfBirth', 'dob',
   'passportNumber', 'issuingAuthority', 'issueDate', 'expiryDate', 'passportAvailable',
@@ -37,6 +39,12 @@ export const APPLICATION_FIELD_LABELS = {
   gender: 'Gender',
   relationshipStatus: 'Relationship status',
   address: 'Current address',
+  addressStartDate: 'Move-in / start date',
+  housingStatus: 'Housing status',
+  landlordName: 'Landlord name',
+  landlordContactNumber: 'Landlord contact number',
+  landlordEmail: 'Landlord email',
+  landlordAddress: 'Landlord address',
   contactNumber2: 'Alternate contact number',
   previousFullAddress: 'Previous full address',
   previousAddress: 'Previous address',
@@ -99,6 +107,7 @@ export const APPLICATION_FIELD_LABELS = {
 export const APPLICATION_FIELD_LIMITS = {
   firstName: 100, lastName: 100, email: 255, contactNumber: 50,
   gender: 30, relationshipStatus: 50, contactNumber2: 50,
+  housingStatus: 50, landlordName: 200, landlordContactNumber: 50, landlordEmail: 255,
   nationality: 100, birthCountry: 100, placeOfBirth: 100,
   passportNumber: 50, issuingAuthority: 100,
   nationalIdCardNumber: 50, nationalIdNumber: 50,
@@ -113,6 +122,7 @@ export const APPLICATION_FIELD_LIMITS = {
 const DATE_FIELDS = new Set([
   'dob', 'issueDate', 'expiryDate',
   'startDate', 'endDate',
+  'addressStartDate',
   'parentDob', 'parent2Dob',
   'entryDate', 'leaveDate',
   'visaEndDate',
@@ -144,6 +154,7 @@ const YES_NO_FIELDS = new Set([
 
 const ENUM_VALUES = {
   applicationType: ['Single', 'Family'],
+  housingStatus: ['Rent', 'Own', 'Other'],
 };
 
 const ENUM_FIELDS = new Set([...YES_NO_FIELDS, ...Object.keys(ENUM_VALUES)]);
@@ -181,16 +192,28 @@ function normaliseEnumValue(key, v) {
 
 function normaliseDateValue(key, v) {
   if (v === null || v === undefined) return null;
+  let parsed;
   if (v instanceof Date) {
     if (Number.isNaN(v.getTime())) throw applicationValidationError(`${labelOf(key)} is not a valid date.`);
-    return v;
+    parsed = v;
+  } else {
+    const s = String(v).trim();
+    if (s === '') return null;
+    parsed = new Date(s);
+    if (Number.isNaN(parsed.getTime())) {
+      throw applicationValidationError(`${labelOf(key)} is not a valid date.`);
+    }
   }
-  const s = String(v).trim();
-  if (s === '') return null;
-  const parsed = new Date(s);
-  if (Number.isNaN(parsed.getTime())) {
-    throw applicationValidationError(`${labelOf(key)} is not a valid date.`);
+
+  // BUG-007: addressStartDate cannot be in the future (today is permitted)
+  if (key === 'addressStartDate' && parsed) {
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    if (parsed > today) {
+      throw applicationValidationError('Move-in date cannot be in the future.');
+    }
   }
+
   return parsed;
 }
 
@@ -227,4 +250,37 @@ export function sanitizeApplicationPayload(body) {
   }
 
   return payload;
+}
+
+/**
+ * Validate required fields on final candidate application submission.
+ * Enforces move-in date and landlord details when housingStatus === 'Rent'.
+ */
+export function validateFinalApplicationSubmission(payload) {
+  if (!payload || typeof payload !== 'object') {
+    throw applicationValidationError('Application payload is required.');
+  }
+
+  // addressStartDate is required for final application submission
+  if (!payload.addressStartDate) {
+    throw applicationValidationError('Move-in date is required.');
+  }
+
+  // Landlord validations when renting
+  if (payload.housingStatus === 'Rent') {
+    if (!payload.landlordName || !String(payload.landlordName).trim()) {
+      throw applicationValidationError('Landlord name is required when renting.');
+    }
+    if (!payload.landlordContactNumber || !String(payload.landlordContactNumber).trim()) {
+      throw applicationValidationError('Landlord contact number is required when renting.');
+    }
+    if (payload.landlordEmail && String(payload.landlordEmail).trim()) {
+      const email = String(payload.landlordEmail).trim();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        throw applicationValidationError('Please enter a valid landlord email address.');
+      }
+    }
+  }
+
+  return true;
 }

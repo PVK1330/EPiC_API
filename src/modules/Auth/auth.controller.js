@@ -341,6 +341,18 @@ export const register = catchAsync(async (req, res) => {
     role_id,
     date_of_birth,
     organisation_id: bodyOrgId,
+    address,
+    addressStartDate,
+    housingStatus,
+    landlordName,
+    landlordContactNumber,
+    landlordEmail,
+    landlordAddress,
+    city,
+    state,
+    country,
+    pincode,
+    nationality,
   } = req.validated.body;
 
   const parsedRoleId = Number(role_id);
@@ -437,6 +449,21 @@ export const register = catchAsync(async (req, res) => {
   const otp = randomInt(100000, 1000000).toString(); // S-08 fix: CSPRNG
   const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
 
+  const profile_data = {
+    address: address || null,
+    addressStartDate: addressStartDate || null,
+    housingStatus: housingStatus || null,
+    landlordName: landlordName || null,
+    landlordContactNumber: landlordContactNumber || null,
+    landlordEmail: landlordEmail || null,
+    landlordAddress: landlordAddress || null,
+    city: city || null,
+    state: state || null,
+    country: country || null,
+    pincode: pincode || null,
+    nationality: nationality || null,
+  };
+
   await UnverifiedUser.create({
     first_name: String(first_name).trim(),
     last_name: String(last_name).trim(),
@@ -450,6 +477,7 @@ export const register = catchAsync(async (req, res) => {
     otp_expiry: otpExpiry,
     temp_password: null,
     organisation_id: orgId,
+    profile_data,
   });
 
   const registerBranding = await getOrganisationEmailBranding(orgId);
@@ -542,7 +570,10 @@ export const verifyOTP = catchAsync(async (req, res) => {
   });
 
   if (Number(verifiedUser.role_id) === 1) {
-    await ensureCandidateEnquiryCase(tenantDb, verifiedUser.id, { organisationId: orgId });
+    await ensureCandidateEnquiryCase(tenantDb, verifiedUser.id, {
+      organisationId: orgId,
+      profileData: unverifiedUser.profile_data || {},
+    });
   }
 
   const verifyBranding = await getOrganisationEmailBranding(orgId);

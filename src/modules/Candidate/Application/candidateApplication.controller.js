@@ -1,5 +1,5 @@
 import logger from '../../../utils/logger.js';
-import { sanitizeApplicationPayload } from '../../../utils/applicationPayload.util.js';
+import { sanitizeApplicationPayload, validateFinalApplicationSubmission } from '../../../utils/applicationPayload.util.js';
 import { excludeSensitiveUserAttrs } from '../../../utils/userAttributes.js';
 import { MAX_BULK_IMPORT_ROWS } from '../../../middlewares/upload.middleware.js';
 import path from 'path';
@@ -30,7 +30,9 @@ const APPLICATION_FIELDS = [
   'firstName', 'lastName', 'email', 'contactNumber',
 
   // Personal
-  'applicationType', 'gender', 'relationshipStatus', 'address', 'contactNumber2',
+  'applicationType', 'gender', 'relationshipStatus', 'address',
+  'addressStartDate', 'housingStatus', 'landlordName', 'landlordContactNumber', 'landlordEmail', 'landlordAddress',
+  'contactNumber2',
   'previousFullAddress', 'previousAddress', 'startDate', 'endDate',
 
   // Nationality & Passport
@@ -74,6 +76,7 @@ function resolveUserId(req) {
 const DATE_FIELDS = new Set([
   'dob', 'issueDate', 'expiryDate',
   'startDate', 'endDate',
+  'addressStartDate',
   'parentDob', 'parent2Dob',
   'entryDate', 'leaveDate',
   'visaEndDate',
@@ -115,6 +118,7 @@ const PDF_APPLICATION_SECTIONS = [
     fields: [
       'firstName', 'lastName', 'email', 'contactNumber', 'contactNumber2',
       'applicationType', 'gender', 'relationshipStatus', 'address',
+      'addressStartDate', 'housingStatus', 'landlordName', 'landlordContactNumber', 'landlordEmail', 'landlordAddress',
       'previousFullAddress', 'previousAddress', 'startDate', 'endDate',
     ],
   },
@@ -463,6 +467,9 @@ export const submitApplication = async (req, res, next) => {
     }
 
     const payload = pickFields(req.body || {});
+
+    // BUG-007: Validate required fields on final submission (move-in date + landlord details if renting)
+    validateFinalApplicationSubmission(payload);
 
     // ── Uniqueness: BRP, National Insurance and passport numbers must each be
     // unique across applicants (a duplicate usually means a typo or reused doc).

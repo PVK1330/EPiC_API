@@ -52,6 +52,30 @@ export default (sequelize, DataTypes) => {
                 type: DataTypes.TEXT,
                 allowNull: true,
             },
+            addressStartDate: {
+                type: DataTypes.DATEONLY,
+                allowNull: true,
+            },
+            housingStatus: {
+                type: DataTypes.STRING(50),
+                allowNull: true,
+            },
+            landlordName: {
+                type: DataTypes.STRING(200),
+                allowNull: true,
+            },
+            landlordContactNumber: {
+                type: DataTypes.STRING(50),
+                allowNull: true,
+            },
+            landlordEmail: {
+                type: DataTypes.STRING(255),
+                allowNull: true,
+            },
+            landlordAddress: {
+                type: DataTypes.TEXT,
+                allowNull: true,
+            },
             contactNumber2: {
                 type: DataTypes.STRING(50),
                 allowNull: true,
