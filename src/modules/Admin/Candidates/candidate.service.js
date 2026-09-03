@@ -23,6 +23,7 @@ import logger from '../../../utils/logger.js';
 import { recordTimelineEntry } from '../../../services/caseTimeline.service.js';
 import eventPublisher from '../../../core/events/eventPublisher.js';
 import { EVENTS } from '../../../core/events/eventRegistry.js';
+import { generateCaseId } from '../../../utils/case.utils.js';
 
 /** 4xx validation error — without a status the global handler answers 500. */
 function badRequest(message) {
@@ -231,9 +232,10 @@ export class CandidateService {
 
         const caseworkerId = application.caseworkerId;
         const assignedcaseworkerId = caseworkerId ? [Number(caseworkerId)] : null;
+        const caseId = await generateCaseId(this.tenantDb, { transaction: t });
 
         await this.repository.createCase({
-          caseId: `CAS-${randomInt(100000, 1000000)}`,
+          caseId,
           candidateId: newUser.id,
           visaTypeId,
           status: 'Lead',
