@@ -25,7 +25,7 @@ export const APPLICATION_FIELDS = [
   'illegalEntry', 'illegalEntryDetails', 'overstayed', 'overstayedDetails', 'breach', 'breachDetails', 'falseInfo', 'falseInfoDetails', 'otherBreach', 'otherBreachDetails',
   'refusedVisa', 'refusedVisaDetails', 'refusedEntry', 'refusedEntryDetails', 'refusedPermission', 'refusedPermissionDetails', 'refusedAsylum', 'refusedAsylumDetails',
   'deported', 'deportedDetails', 'removed', 'removedDetails', 'requiredToLeave', 'requiredToLeaveDetails', 'banned', 'bannedDetails',
-  'visitedOther', 'countryVisited', 'visitReason', 'entryDate', 'leaveDate',
+  'visitedOther', 'travelHistory', 'countryVisited', 'visitReason', 'entryDate', 'leaveDate',
   'visaType', 'brpNumber', 'visaEndDate', 'niNumber', 'sponsored', 'sponsoredDetails', 'englishProof',
   'customResponses',
 ];
@@ -113,6 +113,7 @@ export const APPLICATION_FIELD_LABELS = {
   banned: 'Banned / excluded',
   bannedDetails: 'Exclusion / ban details',
   visitedOther: 'Visited other countries',
+  travelHistory: 'Travel history',
   countryVisited: 'Country visited',
   visitReason: 'Visit reason',
   entryDate: 'Entry date (visit)',
@@ -308,6 +309,32 @@ export function sanitizeApplicationPayload(body) {
         }
       }
       payload[key] = sanitizedAddresses;
+    } else if (key === 'travelHistory') {
+      // BUG-014: multiple trips, each { countryVisited, visitReason, entryDate,
+      // leaveDate, duration, details }.
+      let rawList = [];
+      if (Array.isArray(v)) {
+        rawList = v;
+      } else if (typeof v === 'string' && v.trim()) {
+        try { const parsed = JSON.parse(v); if (Array.isArray(parsed)) rawList = parsed; } catch { rawList = []; }
+      }
+      const trips = [];
+      for (const item of rawList) {
+        if (!item || typeof item !== 'object') continue;
+        const country = typeof item.countryVisited === 'string' ? item.countryVisited.trim() : '';
+        const reason = typeof item.visitReason === 'string' ? item.visitReason.trim() : '';
+        const entry = item.entryDate ? normaliseDateValue('entryDate', item.entryDate) : null;
+        const leave = item.leaveDate ? normaliseDateValue('leaveDate', item.leaveDate) : null;
+        const duration = typeof item.duration === 'string' ? item.duration.trim() : '';
+        const details = typeof item.details === 'string' ? item.details.trim() : '';
+        if (entry && leave && new Date(entry) > new Date(leave)) {
+          throw applicationValidationError('Travel history: the leave date cannot be before the entry date.');
+        }
+        if (country || reason || entry || leave || duration || details) {
+          trips.push({ countryVisited: country, visitReason: reason, entryDate: entry, leaveDate: leave, duration, details });
+        }
+      }
+      payload[key] = trips;
     } else {
       if (typeof v === 'string') v = v.trim();
       const limit = APPLICATION_FIELD_LIMITS[key];
@@ -346,6 +373,26 @@ export function sanitizeApplicationPayload(body) {
         previousAddress: payload.previousAddress,
         startDate: payload.startDate || null,
         endDate: payload.endDate || null,
+      },
+    ];
+  }
+
+  // BUG-014: keep the legacy single-trip columns in step with the travelHistory array.
+  if (Array.isArray(payload.travelHistory) && payload.travelHistory.length > 0) {
+    const first = payload.travelHistory[0];
+    if (payload.countryVisited === undefined && first?.countryVisited) payload.countryVisited = first.countryVisited;
+    if (payload.visitReason === undefined && first?.visitReason) payload.visitReason = first.visitReason;
+    if (payload.entryDate === undefined && first?.entryDate) payload.entryDate = first.entryDate;
+    if (payload.leaveDate === undefined && first?.leaveDate) payload.leaveDate = first.leaveDate;
+  } else if (payload.countryVisited && (!payload.travelHistory || payload.travelHistory.length === 0)) {
+    payload.travelHistory = [
+      {
+        countryVisited: payload.countryVisited,
+        visitReason: payload.visitReason || '',
+        entryDate: payload.entryDate || null,
+        leaveDate: payload.leaveDate || null,
+        duration: '',
+        details: '',
       },
     ];
   }
