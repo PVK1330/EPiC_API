@@ -18,14 +18,15 @@ export const APPLICATION_FIELDS = [
   'passportNumber', 'issuingAuthority', 'issueDate', 'expiryDate', 'passportAvailable',
   'nationalIdCardNumber', 'nationalIdNumber',
   'idIssuingAuthorityCard', 'idIssuingAuthorityNational',
-  'otherNationality', 'ukLicense', 'ukLicenseNumber', 'medicalTreatment', 'ukStayDuration',
+  'otherNationality', 'ukLicense', 'ukLicenseNumber',
+  'medicalTreatment', 'medicalTreatmentHospitalClinicName', 'medicalTreatmentHospitalClinicAddress', 'medicalTreatmentStartDate', 'medicalTreatmentEndDate', 'medicalTreatmentDetails', 'ukStayDuration',
   'parentName', 'parentRelation', 'parentDob', 'parentNationality', 'sameNationality',
   'parent2Name', 'parent2Relation', 'parent2Dob', 'parent2Nationality', 'parent2SameNationality',
-  'illegalEntry', 'overstayed', 'breach', 'falseInfo', 'otherBreach',
-  'refusedVisa', 'refusedEntry', 'refusedPermission', 'refusedAsylum',
-  'deported', 'removed', 'requiredToLeave', 'banned',
+  'illegalEntry', 'illegalEntryDetails', 'overstayed', 'overstayedDetails', 'breach', 'breachDetails', 'falseInfo', 'falseInfoDetails', 'otherBreach', 'otherBreachDetails',
+  'refusedVisa', 'refusedVisaDetails', 'refusedEntry', 'refusedEntryDetails', 'refusedPermission', 'refusedPermissionDetails', 'refusedAsylum', 'refusedAsylumDetails',
+  'deported', 'deportedDetails', 'removed', 'removedDetails', 'requiredToLeave', 'requiredToLeaveDetails', 'banned', 'bannedDetails',
   'visitedOther', 'countryVisited', 'visitReason', 'entryDate', 'leaveDate',
-  'visaType', 'brpNumber', 'visaEndDate', 'niNumber', 'sponsored', 'englishProof',
+  'visaType', 'brpNumber', 'visaEndDate', 'niNumber', 'sponsored', 'sponsoredDetails', 'englishProof',
   'customResponses',
 ];
 
@@ -69,6 +70,11 @@ export const APPLICATION_FIELD_LABELS = {
   ukLicense: 'UK driving licence',
   ukLicenseNumber: 'UK driving licence number',
   medicalTreatment: 'Medical treatment in UK',
+  medicalTreatmentHospitalClinicName: 'Hospital / clinic name',
+  medicalTreatmentHospitalClinicAddress: 'Hospital / clinic address',
+  medicalTreatmentStartDate: 'Treatment start date',
+  medicalTreatmentEndDate: 'Treatment end date',
+  medicalTreatmentDetails: 'Other treatment details',
   ukStayDuration: 'How long in UK',
   parentName: 'Parent one — full name',
   parentRelation: 'Parent one — relationship',
@@ -81,18 +87,31 @@ export const APPLICATION_FIELD_LABELS = {
   parent2Nationality: 'Parent two — nationality',
   parent2SameNationality: 'Parent two — same nationality',
   illegalEntry: 'Entered UK illegally',
+  illegalEntryDetails: 'Illegal entry details',
   overstayed: 'Overstayed visa',
+  overstayedDetails: 'Overstaying details',
   breach: 'Breached leave conditions',
+  breachDetails: 'Leave condition breach details',
   falseInfo: 'False information on application',
+  falseInfoDetails: 'False information details',
   otherBreach: 'Other immigration breach',
+  otherBreachDetails: 'Other immigration breach details',
   refusedVisa: 'Refused visa',
+  refusedVisaDetails: 'Visa refusal details',
   refusedEntry: 'Refused entry',
+  refusedEntryDetails: 'Refused entry details',
   refusedPermission: 'Refused permission to stay',
+  refusedPermissionDetails: 'Refused permission details',
   refusedAsylum: 'Refused asylum',
+  refusedAsylumDetails: 'Refused asylum details',
   deported: 'Deported',
+  deportedDetails: 'Deportation details',
   removed: 'Removed',
+  removedDetails: 'Removal details',
   requiredToLeave: 'Required to leave',
+  requiredToLeaveDetails: 'Required to leave details',
   banned: 'Banned / excluded',
+  bannedDetails: 'Exclusion / ban details',
   visitedOther: 'Visited other countries',
   countryVisited: 'Country visited',
   visitReason: 'Visit reason',
@@ -103,6 +122,7 @@ export const APPLICATION_FIELD_LABELS = {
   visaEndDate: 'Permission end date',
   niNumber: 'National Insurance number',
   sponsored: 'Government / scholarship sponsor',
+  sponsoredDetails: 'Sponsorship details',
   englishProof: 'English language evidence',
 };
 
@@ -111,6 +131,7 @@ export const APPLICATION_FIELD_LIMITS = {
   firstName: 100, lastName: 100, email: 255, contactNumber: 50,
   gender: 30, relationshipStatus: 50, contactNumber2: 50,
   housingStatus: 50, landlordName: 200, landlordContactNumber: 50, landlordEmail: 255,
+  medicalTreatmentHospitalClinicName: 255,
   nationality: 100, birthCountry: 100, placeOfBirth: 100,
   passportNumber: 50, issuingAuthority: 100,
   nationalIdCardNumber: 50, nationalIdNumber: 50,
@@ -366,6 +387,55 @@ export function validateFinalApplicationSubmission(payload) {
   if (payload.ukLicense === 'Yes') {
     if (!payload.ukLicenseNumber || !String(payload.ukLicenseNumber).trim()) {
       throw applicationValidationError('UK driving licence number is required when you have a UK driving licence.');
+    }
+  }
+
+  // Medical Treatment structured details validation (BUG-012)
+  if (payload.medicalTreatment === 'Yes') {
+    if (!payload.medicalTreatmentHospitalClinicName || !String(payload.medicalTreatmentHospitalClinicName).trim()) {
+      throw applicationValidationError('Hospital or clinic name is required when you have received medical treatment in the UK.');
+    }
+    if (!payload.medicalTreatmentHospitalClinicAddress || !String(payload.medicalTreatmentHospitalClinicAddress).trim()) {
+      throw applicationValidationError('Hospital or clinic address is required when you have received medical treatment in the UK.');
+    }
+    if (!payload.medicalTreatmentStartDate) {
+      throw applicationValidationError('Treatment start date is required when you have received medical treatment in the UK.');
+    }
+    if (!payload.medicalTreatmentEndDate) {
+      throw applicationValidationError('Treatment end date is required when you have received medical treatment in the UK.');
+    }
+    if (payload.medicalTreatmentStartDate && payload.medicalTreatmentEndDate) {
+      const start = new Date(payload.medicalTreatmentStartDate);
+      const end = new Date(payload.medicalTreatmentEndDate);
+      if (!isNaN(start.getTime()) && !isNaN(end.getTime()) && end < start) {
+        throw applicationValidationError('Treatment end date cannot be before treatment start date.');
+      }
+    }
+  }
+
+  // Conditional Yes/No details validation for visa refusal, immigration history, sponsorship
+  const CONDITIONAL_YES_DETAIL_RULES = [
+    { parent: 'refusedVisa', detail: 'refusedVisaDetails', msg: 'Visa refusal details are required when you have had a visa refused.' },
+    { parent: 'refusedEntry', detail: 'refusedEntryDetails', msg: 'Refused entry details are required when you have been refused entry at the border.' },
+    { parent: 'refusedPermission', detail: 'refusedPermissionDetails', msg: 'Refused permission details are required when you have been refused permission to stay.' },
+    { parent: 'refusedAsylum', detail: 'refusedAsylumDetails', msg: 'Refused asylum details are required when you have been refused asylum.' },
+    { parent: 'deported', detail: 'deportedDetails', msg: 'Deportation details are required when you have been deported.' },
+    { parent: 'removed', detail: 'removedDetails', msg: 'Removal details are required when you have been removed.' },
+    { parent: 'requiredToLeave', detail: 'requiredToLeaveDetails', msg: 'Details are required when you have been required to leave.' },
+    { parent: 'banned', detail: 'bannedDetails', msg: 'Exclusion/ban details are required when you have been excluded or banned.' },
+    { parent: 'illegalEntry', detail: 'illegalEntryDetails', msg: 'Illegal entry details are required when you entered the UK illegally.' },
+    { parent: 'overstayed', detail: 'overstayedDetails', msg: 'Overstaying details are required when you have overstayed a visa.' },
+    { parent: 'breach', detail: 'breachDetails', msg: 'Condition breach details are required when you have breached leave conditions.' },
+    { parent: 'falseInfo', detail: 'falseInfoDetails', msg: 'Details are required when false information was previously given.' },
+    { parent: 'otherBreach', detail: 'otherBreachDetails', msg: 'Immigration breach details are required when you have breached UK immigration law.' },
+    { parent: 'sponsored', detail: 'sponsoredDetails', msg: 'Sponsorship details are required when you have received government or scholarship sponsorship.' },
+  ];
+
+  for (const rule of CONDITIONAL_YES_DETAIL_RULES) {
+    if (payload[rule.parent] === 'Yes') {
+      if (!payload[rule.detail] || !String(payload[rule.detail]).trim()) {
+        throw applicationValidationError(rule.msg);
+      }
     }
   }
 

@@ -176,6 +176,26 @@ export default (sequelize, DataTypes) => {
                 type: DataTypes.ENUM('Yes', 'No'),
                 allowNull: true,
             },
+            medicalTreatmentHospitalClinicName: {
+                type: DataTypes.STRING(255),
+                allowNull: true,
+            },
+            medicalTreatmentHospitalClinicAddress: {
+                type: DataTypes.TEXT,
+                allowNull: true,
+            },
+            medicalTreatmentStartDate: {
+                type: DataTypes.DATE,
+                allowNull: true,
+            },
+            medicalTreatmentEndDate: {
+                type: DataTypes.DATE,
+                allowNull: true,
+            },
+            medicalTreatmentDetails: {
+                type: DataTypes.TEXT,
+                allowNull: true,
+            },
             ukStayDuration: {
                 type: DataTypes.STRING(50),
                 allowNull: true,
@@ -228,52 +248,104 @@ export default (sequelize, DataTypes) => {
                 type: DataTypes.ENUM('Yes', 'No'),
                 allowNull: true,
             },
+            illegalEntryDetails: {
+                type: DataTypes.TEXT,
+                allowNull: true,
+            },
             overstayed: {
                 type: DataTypes.ENUM('Yes', 'No'),
+                allowNull: true,
+            },
+            overstayedDetails: {
+                type: DataTypes.TEXT,
                 allowNull: true,
             },
             breach: {
                 type: DataTypes.ENUM('Yes', 'No'),
                 allowNull: true,
             },
+            breachDetails: {
+                type: DataTypes.TEXT,
+                allowNull: true,
+            },
             falseInfo: {
                 type: DataTypes.ENUM('Yes', 'No'),
+                allowNull: true,
+            },
+            falseInfoDetails: {
+                type: DataTypes.TEXT,
                 allowNull: true,
             },
             otherBreach: {
                 type: DataTypes.ENUM('Yes', 'No'),
                 allowNull: true,
             },
+            otherBreachDetails: {
+                type: DataTypes.TEXT,
+                allowNull: true,
+            },
             refusedVisa: {
                 type: DataTypes.ENUM('Yes', 'No'),
+                allowNull: true,
+            },
+            refusedVisaDetails: {
+                type: DataTypes.TEXT,
                 allowNull: true,
             },
             refusedEntry: {
                 type: DataTypes.ENUM('Yes', 'No'),
                 allowNull: true,
             },
+            refusedEntryDetails: {
+                type: DataTypes.TEXT,
+                allowNull: true,
+            },
             refusedPermission: {
                 type: DataTypes.ENUM('Yes', 'No'),
+                allowNull: true,
+            },
+            refusedPermissionDetails: {
+                type: DataTypes.TEXT,
                 allowNull: true,
             },
             refusedAsylum: {
                 type: DataTypes.ENUM('Yes', 'No'),
                 allowNull: true,
             },
+            refusedAsylumDetails: {
+                type: DataTypes.TEXT,
+                allowNull: true,
+            },
             deported: {
                 type: DataTypes.ENUM('Yes', 'No'),
+                allowNull: true,
+            },
+            deportedDetails: {
+                type: DataTypes.TEXT,
                 allowNull: true,
             },
             removed: {
                 type: DataTypes.ENUM('Yes', 'No'),
                 allowNull: true,
             },
+            removedDetails: {
+                type: DataTypes.TEXT,
+                allowNull: true,
+            },
             requiredToLeave: {
                 type: DataTypes.ENUM('Yes', 'No'),
                 allowNull: true,
             },
+            requiredToLeaveDetails: {
+                type: DataTypes.TEXT,
+                allowNull: true,
+            },
             banned: {
                 type: DataTypes.ENUM('Yes', 'No'),
+                allowNull: true,
+            },
+            bannedDetails: {
+                type: DataTypes.TEXT,
                 allowNull: true,
             },
             
@@ -318,6 +390,10 @@ export default (sequelize, DataTypes) => {
             },
             sponsored: {
                 type: DataTypes.ENUM('Yes', 'No'),
+                allowNull: true,
+            },
+            sponsoredDetails: {
+                type: DataTypes.TEXT,
                 allowNull: true,
             },
             englishProof: {

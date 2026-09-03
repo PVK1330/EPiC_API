@@ -42,7 +42,8 @@ const APPLICATION_FIELDS = [
   // Identity documents
   'nationalIdCardNumber', 'nationalIdNumber',
   'idIssuingAuthorityCard', 'idIssuingAuthorityNational',
-  'otherNationality', 'ukLicense', 'ukLicenseNumber', 'medicalTreatment', 'ukStayDuration',
+  'otherNationality', 'ukLicense', 'ukLicenseNumber',
+  'medicalTreatment', 'medicalTreatmentHospitalClinicName', 'medicalTreatmentHospitalClinicAddress', 'medicalTreatmentStartDate', 'medicalTreatmentEndDate', 'medicalTreatmentDetails', 'ukStayDuration',
 
   // Parent one
   'parentName', 'parentRelation', 'parentDob', 'parentNationality', 'sameNationality',
@@ -51,15 +52,15 @@ const APPLICATION_FIELDS = [
   'parent2Name', 'parent2Relation', 'parent2Dob', 'parent2Nationality', 'parent2SameNationality',
 
   // Immigration history
-  'illegalEntry', 'overstayed', 'breach', 'falseInfo', 'otherBreach',
-  'refusedVisa', 'refusedEntry', 'refusedPermission', 'refusedAsylum',
-  'deported', 'removed', 'requiredToLeave', 'banned',
+  'illegalEntry', 'illegalEntryDetails', 'overstayed', 'overstayedDetails', 'breach', 'breachDetails', 'falseInfo', 'falseInfoDetails', 'otherBreach', 'otherBreachDetails',
+  'refusedVisa', 'refusedVisaDetails', 'refusedEntry', 'refusedEntryDetails', 'refusedPermission', 'refusedPermissionDetails', 'refusedAsylum', 'refusedAsylumDetails',
+  'deported', 'deportedDetails', 'removed', 'removedDetails', 'requiredToLeave', 'requiredToLeaveDetails', 'banned', 'bannedDetails',
 
   // Travel history
   'visitedOther', 'countryVisited', 'visitReason', 'entryDate', 'leaveDate',
 
   // Current visa status & English language
-  'visaType', 'brpNumber', 'visaEndDate', 'niNumber', 'sponsored', 'englishProof',
+  'visaType', 'brpNumber', 'visaEndDate', 'niNumber', 'sponsored', 'sponsoredDetails', 'englishProof',
 
   // Admin-defined custom questions
   'customResponses',
@@ -138,7 +139,8 @@ const PDF_APPLICATION_SECTIONS = [
     fields: [
       'nationalIdCardNumber', 'nationalIdNumber',
       'idIssuingAuthorityCard', 'idIssuingAuthorityNational',
-      'otherNationality', 'ukLicense', 'ukLicenseNumber', 'medicalTreatment', 'ukStayDuration',
+      'otherNationality', 'ukLicense', 'ukLicenseNumber',
+      'medicalTreatment', 'medicalTreatmentHospitalClinicName', 'medicalTreatmentHospitalClinicAddress', 'medicalTreatmentStartDate', 'medicalTreatmentEndDate', 'medicalTreatmentDetails', 'ukStayDuration',
     ],
   },
   {
@@ -158,9 +160,9 @@ const PDF_APPLICATION_SECTIONS = [
   {
     title: 'Immigration History',
     fields: [
-      'illegalEntry', 'overstayed', 'breach', 'falseInfo', 'otherBreach',
-      'refusedVisa', 'refusedEntry', 'refusedPermission', 'refusedAsylum',
-      'deported', 'removed', 'requiredToLeave', 'banned',
+      'illegalEntry', 'illegalEntryDetails', 'overstayed', 'overstayedDetails', 'breach', 'breachDetails', 'falseInfo', 'falseInfoDetails', 'otherBreach', 'otherBreachDetails',
+      'refusedVisa', 'refusedVisaDetails', 'refusedEntry', 'refusedEntryDetails', 'refusedPermission', 'refusedPermissionDetails', 'refusedAsylum', 'refusedAsylumDetails',
+      'deported', 'deportedDetails', 'removed', 'removedDetails', 'requiredToLeave', 'requiredToLeaveDetails', 'banned', 'bannedDetails',
     ],
   },
   {
@@ -172,7 +174,7 @@ const PDF_APPLICATION_SECTIONS = [
   {
     title: 'Current Visa Status & English Language',
     fields: [
-      'visaType', 'brpNumber', 'visaEndDate', 'niNumber', 'sponsored',
+      'visaType', 'brpNumber', 'visaEndDate', 'niNumber', 'sponsored', 'sponsoredDetails',
       'englishProof',
     ],
   },
