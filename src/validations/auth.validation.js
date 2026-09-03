@@ -16,6 +16,20 @@ export const registerSchema = z.object({
     // Accepts the numeric organisation id OR the organisation code/slug the
     // adviser shares with the candidate (resolved in the controller — BUG-001).
     organisation_id: z.coerce.string().optional(),
+    // Candidate profile & landlord fields (BUG-007)
+    address: z.string().optional().nullable(),
+    addressStartDate: z.string().optional().nullable(),
+    housingStatus: z.enum(['Rent', 'Own', 'Other']).optional().nullable(),
+    landlordName: z.string().max(200).optional().nullable(),
+    landlordContactNumber: z.string().max(50).optional().nullable(),
+    landlordEmail: z.string().max(255).optional().nullable(),
+    landlordAddress: z.string().optional().nullable(),
+    city: z.string().optional().nullable(),
+    state: z.string().optional().nullable(),
+    country: z.string().optional().nullable(),
+    pincode: z.string().optional().nullable(),
+    nationality: z.string().optional().nullable(),
+    nationalities: z.union([z.array(z.string()), z.string()]).optional().nullable(),
   }).strict(),
 });
 

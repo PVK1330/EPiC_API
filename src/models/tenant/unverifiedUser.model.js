@@ -79,6 +79,11 @@ export default (sequelize, DataTypes) => {
                 onUpdate: "CASCADE",
                 onDelete: "SET NULL",
             },
+            profile_data: {
+                type: DataTypes.JSONB,
+                allowNull: true,
+                defaultValue: {},
+            },
         },
         {
             tableName: "unverified_users",

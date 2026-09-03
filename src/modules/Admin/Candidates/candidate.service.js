@@ -23,6 +23,7 @@ import logger from '../../../utils/logger.js';
 import { recordTimelineEntry } from '../../../services/caseTimeline.service.js';
 import eventPublisher from '../../../core/events/eventPublisher.js';
 import { EVENTS } from '../../../core/events/eventRegistry.js';
+import { generateCaseId } from '../../../utils/case.utils.js';
 
 /** 4xx validation error — without a status the global handler answers 500. */
 function badRequest(message) {
@@ -231,9 +232,10 @@ export class CandidateService {
 
         const caseworkerId = application.caseworkerId;
         const assignedcaseworkerId = caseworkerId ? [Number(caseworkerId)] : null;
+        const caseId = await generateCaseId(this.tenantDb, { transaction: t });
 
         await this.repository.createCase({
-          caseId: `CAS-${randomInt(100000, 1000000)}`,
+          caseId,
           candidateId: newUser.id,
           visaTypeId,
           status: 'Lead',
@@ -726,6 +728,7 @@ export class CandidateService {
       contactNumber2: "Secondary Contact Number",
       previousFullAddress: "Previous Full Address",
       previousAddress: "Previous Address",
+      previousAddresses: "Previous Addresses",
       startDate: "Start Date",
       endDate: "End Date",
       birthCountry: "Country of Birth",
@@ -737,7 +740,13 @@ export class CandidateService {
       idIssuingAuthorityNational: "National ID Issuing Authority",
       otherNationality: "Other Nationality",
       ukLicense: "UK License",
+      ukLicenseNumber: "UK Driving Licence Number",
       medicalTreatment: "Medical Treatment Details",
+      medicalTreatmentHospitalClinicName: "Hospital / Clinic Name",
+      medicalTreatmentHospitalClinicAddress: "Hospital / Clinic Address",
+      medicalTreatmentStartDate: "Treatment Start Date",
+      medicalTreatmentEndDate: "Treatment End Date",
+      medicalTreatmentDetails: "Other Treatment Details",
       ukStayDuration: "Duration of stay in the UK",
       parentName: "Parent Name",
       parentRelation: "Parent Relation",
@@ -750,24 +759,38 @@ export class CandidateService {
       parent2Nationality: "Second Parent Nationality",
       parent2SameNationality: "Second Parent Same Nationality",
       illegalEntry: "Illegal Entry",
+      illegalEntryDetails: "Illegal Entry Details",
       overstayed: "Overstayed",
+      overstayedDetails: "Overstayed Details",
       breach: "Breach of Conditions",
+      breachDetails: "Breach of Conditions Details",
       falseInfo: "False Information Provided",
+      falseInfoDetails: "False Information Details",
       otherBreach: "Other Breach of Conditions",
+      otherBreachDetails: "Other Breach Details",
       refusedVisa: "Visa Refusal",
+      refusedVisaDetails: "Visa Refusal Details",
       refusedEntry: "Entry Refusal",
+      refusedEntryDetails: "Entry Refusal Details",
       refusedPermission: "Permission Refusal",
+      refusedPermissionDetails: "Permission Refusal Details",
       refusedAsylum: "Asylum Refusal",
+      refusedAsylumDetails: "Asylum Refusal Details",
       deported: "Deported",
+      deportedDetails: "Deportation Details",
       removed: "Removed",
+      removedDetails: "Removal Details",
       requiredToLeave: "Required to Leave",
+      requiredToLeaveDetails: "Required to Leave Details",
       banned: "Banned",
+      bannedDetails: "Exclusion / Ban Details",
       visitedOther: "Visited Other Countries",
       countryVisited: "Countries Visited",
       visitReason: "Visit Reason",
       entryDate: "Visit Entry Date",
       leaveDate: "Visit Leave Date",
       sponsored: "Sponsored Case",
+      sponsoredDetails: "Sponsored Case Details",
       englishProof: "English Proof Type",
     };
 

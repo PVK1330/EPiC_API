@@ -1053,7 +1053,7 @@ export const exportCaseCSV = catchAsync(async (req, res) => {
       { key: 'value', header: 'Value' },
     ];
     const overviewRows = [
-      { field: 'Case ID',             value: caseData.caseId || '' },
+      { field: 'Case Number',         value: caseData.caseId || '' },
       { field: 'Status',              value: caseData.status || '' },
       { field: 'Case Stage',          value: caseData.caseStage || '' },
       { field: 'Priority',            value: caseData.priority || '' },

@@ -1,5 +1,5 @@
 import logger from '../../../utils/logger.js';
-import { sanitizeApplicationPayload } from '../../../utils/applicationPayload.util.js';
+import { sanitizeApplicationPayload, validateFinalApplicationSubmission } from '../../../utils/applicationPayload.util.js';
 import { excludeSensitiveUserAttrs } from '../../../utils/userAttributes.js';
 import { MAX_BULK_IMPORT_ROWS } from '../../../middlewares/upload.middleware.js';
 import path from 'path';
@@ -30,17 +30,20 @@ const APPLICATION_FIELDS = [
   'firstName', 'lastName', 'email', 'contactNumber',
 
   // Personal
-  'applicationType', 'gender', 'relationshipStatus', 'address', 'contactNumber2',
-  'previousFullAddress', 'previousAddress', 'startDate', 'endDate',
+  'applicationType', 'gender', 'relationshipStatus', 'address',
+  'addressStartDate', 'housingStatus', 'landlordName', 'landlordContactNumber', 'landlordEmail', 'landlordAddress',
+  'contactNumber2',
+  'previousFullAddress', 'previousAddress', 'previousAddresses', 'startDate', 'endDate',
 
   // Nationality & Passport
-  'nationality', 'birthCountry', 'placeOfBirth', 'dob',
+  'nationality', 'nationalities', 'birthCountry', 'placeOfBirth', 'dob',
   'passportNumber', 'issuingAuthority', 'issueDate', 'expiryDate', 'passportAvailable',
 
   // Identity documents
   'nationalIdCardNumber', 'nationalIdNumber',
   'idIssuingAuthorityCard', 'idIssuingAuthorityNational',
-  'otherNationality', 'ukLicense', 'medicalTreatment', 'ukStayDuration',
+  'otherNationality', 'ukLicense', 'ukLicenseNumber',
+  'medicalTreatment', 'medicalTreatmentHospitalClinicName', 'medicalTreatmentHospitalClinicAddress', 'medicalTreatmentStartDate', 'medicalTreatmentEndDate', 'medicalTreatmentDetails', 'ukStayDuration',
 
   // Parent one
   'parentName', 'parentRelation', 'parentDob', 'parentNationality', 'sameNationality',
@@ -49,15 +52,15 @@ const APPLICATION_FIELDS = [
   'parent2Name', 'parent2Relation', 'parent2Dob', 'parent2Nationality', 'parent2SameNationality',
 
   // Immigration history
-  'illegalEntry', 'overstayed', 'breach', 'falseInfo', 'otherBreach',
-  'refusedVisa', 'refusedEntry', 'refusedPermission', 'refusedAsylum',
-  'deported', 'removed', 'requiredToLeave', 'banned',
+  'illegalEntry', 'illegalEntryDetails', 'overstayed', 'overstayedDetails', 'breach', 'breachDetails', 'falseInfo', 'falseInfoDetails', 'otherBreach', 'otherBreachDetails',
+  'refusedVisa', 'refusedVisaDetails', 'refusedEntry', 'refusedEntryDetails', 'refusedPermission', 'refusedPermissionDetails', 'refusedAsylum', 'refusedAsylumDetails',
+  'deported', 'deportedDetails', 'removed', 'removedDetails', 'requiredToLeave', 'requiredToLeaveDetails', 'banned', 'bannedDetails',
 
   // Travel history
   'visitedOther', 'countryVisited', 'visitReason', 'entryDate', 'leaveDate',
 
   // Current visa status & English language
-  'visaType', 'brpNumber', 'visaEndDate', 'niNumber', 'sponsored', 'englishProof',
+  'visaType', 'brpNumber', 'visaEndDate', 'niNumber', 'sponsored', 'sponsoredDetails', 'englishProof',
 
   // Admin-defined custom questions
   'customResponses',
@@ -74,6 +77,7 @@ function resolveUserId(req) {
 const DATE_FIELDS = new Set([
   'dob', 'issueDate', 'expiryDate',
   'startDate', 'endDate',
+  'addressStartDate',
   'parentDob', 'parent2Dob',
   'entryDate', 'leaveDate',
   'visaEndDate',
@@ -115,12 +119,13 @@ const PDF_APPLICATION_SECTIONS = [
     fields: [
       'firstName', 'lastName', 'email', 'contactNumber', 'contactNumber2',
       'applicationType', 'gender', 'relationshipStatus', 'address',
-      'previousFullAddress', 'previousAddress', 'startDate', 'endDate',
+      'addressStartDate', 'housingStatus', 'landlordName', 'landlordContactNumber', 'landlordEmail', 'landlordAddress',
+      'previousFullAddress', 'previousAddress', 'previousAddresses', 'startDate', 'endDate',
     ],
   },
   {
     title: 'Nationality & Birth',
-    fields: ['nationality', 'birthCountry', 'placeOfBirth', 'dob'],
+    fields: ['nationality', 'nationalities', 'birthCountry', 'placeOfBirth', 'dob'],
   },
   {
     title: 'Passport & Travel Document',
@@ -134,7 +139,8 @@ const PDF_APPLICATION_SECTIONS = [
     fields: [
       'nationalIdCardNumber', 'nationalIdNumber',
       'idIssuingAuthorityCard', 'idIssuingAuthorityNational',
-      'otherNationality', 'ukLicense', 'medicalTreatment', 'ukStayDuration',
+      'otherNationality', 'ukLicense', 'ukLicenseNumber',
+      'medicalTreatment', 'medicalTreatmentHospitalClinicName', 'medicalTreatmentHospitalClinicAddress', 'medicalTreatmentStartDate', 'medicalTreatmentEndDate', 'medicalTreatmentDetails', 'ukStayDuration',
     ],
   },
   {
@@ -154,9 +160,9 @@ const PDF_APPLICATION_SECTIONS = [
   {
     title: 'Immigration History',
     fields: [
-      'illegalEntry', 'overstayed', 'breach', 'falseInfo', 'otherBreach',
-      'refusedVisa', 'refusedEntry', 'refusedPermission', 'refusedAsylum',
-      'deported', 'removed', 'requiredToLeave', 'banned',
+      'illegalEntry', 'illegalEntryDetails', 'overstayed', 'overstayedDetails', 'breach', 'breachDetails', 'falseInfo', 'falseInfoDetails', 'otherBreach', 'otherBreachDetails',
+      'refusedVisa', 'refusedVisaDetails', 'refusedEntry', 'refusedEntryDetails', 'refusedPermission', 'refusedPermissionDetails', 'refusedAsylum', 'refusedAsylumDetails',
+      'deported', 'deportedDetails', 'removed', 'removedDetails', 'requiredToLeave', 'requiredToLeaveDetails', 'banned', 'bannedDetails',
     ],
   },
   {
@@ -168,7 +174,7 @@ const PDF_APPLICATION_SECTIONS = [
   {
     title: 'Current Visa Status & English Language',
     fields: [
-      'visaType', 'brpNumber', 'visaEndDate', 'niNumber', 'sponsored',
+      'visaType', 'brpNumber', 'visaEndDate', 'niNumber', 'sponsored', 'sponsoredDetails',
       'englishProof',
     ],
   },
@@ -463,6 +469,9 @@ export const submitApplication = async (req, res, next) => {
     }
 
     const payload = pickFields(req.body || {});
+
+    // BUG-007: Validate required fields on final submission (move-in date + landlord details if renting)
+    validateFinalApplicationSubmission(payload);
 
     // ── Uniqueness: BRP, National Insurance and passport numbers must each be
     // unique across applicants (a duplicate usually means a typo or reused doc).
@@ -1404,6 +1413,17 @@ function humanizeFieldKey(key) {
 
 function formatApplicationScalar(fieldKey, raw) {
   if (raw === null || raw === undefined || raw === '') return '—';
+  if (fieldKey === 'previousAddresses' && Array.isArray(raw)) {
+    if (raw.length === 0) return '—';
+    return raw.map((item, idx) => {
+      const addr = item.previousAddress || item.address || '';
+      const dates = [item.startDate, item.endDate].filter(Boolean).join(' to ');
+      return `${idx + 1}. ${addr}${dates ? ` (${dates})` : ''}`;
+    }).join('\n');
+  }
+  if (Array.isArray(raw)) {
+    return raw.filter(Boolean).join(', ') || '—';
+  }
   if (DATE_FIELDS.has(fieldKey)) {
     const d = raw instanceof Date ? raw : new Date(raw);
     if (!isNaN(d.getTime())) return localDateStr(d);

@@ -54,7 +54,8 @@ export const IMPERSONATION_TOKEN_EXPIRY = process.env.JWT_IMPERSONATION_EXPIRY |
  */
 export function getCookieConfig(overrides = {}) {
   const isProduction = process.env.NODE_ENV === "production";
-  const platformDomain = process.env.PLATFORM_DOMAIN || "localhost";
+  const rawDomain = (process.env.PLATFORM_DOMAIN || "localhost").trim();
+  const platformDomain = rawDomain.replace(/^https?:\/\//i, "").split(":")[0].trim();
 
   // Share cookies across all tenant subdomains whenever a real domain is configured.
   // Browsers reject domain=.localhost (localhost is a public suffix in the PSL), so
@@ -63,7 +64,9 @@ export function getCookieConfig(overrides = {}) {
   // (e.g. a custom hosts-file entry like epic.local) need the same cross-subdomain
   // sharing or every tenant subdomain becomes an isolated session silo.
   const isLocalhost =
-    platformDomain === "localhost" || platformDomain === "127.0.0.1";
+    !platformDomain ||
+    platformDomain === "localhost" ||
+    platformDomain === "127.0.0.1";
 
   return {
     httpOnly: true,

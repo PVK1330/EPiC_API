@@ -5,11 +5,20 @@ import { generateCaseId } from "../utils/case.utils.js";
 /**
  * Ensures a new candidate has an enquiry-stage case (Standard Immigration Case Process step 1).
  */
-export async function ensureCandidateEnquiryCase(tenantDb, userId, { visaTypeName = null, organisationId = null } = {}) {
+export async function ensureCandidateEnquiryCase(tenantDb, userId, { visaTypeName = null, organisationId = null, profileData = {} } = {}) {
   const { Case, CandidateApplication } = tenantDb;
 
   const existing = await Case.findOne({ where: { candidateId: userId } });
-  if (existing) return existing;
+  if (existing) {
+    // If CandidateApplication exists, update with any new profile data if missing
+    if (profileData && Object.keys(profileData).length > 0) {
+      const app = await CandidateApplication.findOne({ where: { userId } });
+      if (app) {
+        await app.update(profileData);
+      }
+    }
+    return existing;
+  }
 
   let visaTypeId = null;
   if (visaTypeName && tenantDb.VisaType) {
@@ -35,7 +44,10 @@ export async function ensureCandidateEnquiryCase(tenantDb, userId, { visaTypeNam
       status: "draft",
       visaType: visaTypeName || null,
       organisation_id: resolvedOrgId,
+      ...(profileData || {}),
     });
+  } else if (profileData && Object.keys(profileData).length > 0) {
+    await app.update(profileData);
   }
 
   return Case.create({
