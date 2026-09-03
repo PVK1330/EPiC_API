@@ -353,6 +353,7 @@ export const register = catchAsync(async (req, res) => {
     country,
     pincode,
     nationality,
+    nationalities,
   } = req.validated.body;
 
   const parsedRoleId = Number(role_id);
@@ -461,7 +462,8 @@ export const register = catchAsync(async (req, res) => {
     state: state || null,
     country: country || null,
     pincode: pincode || null,
-    nationality: nationality || null,
+    nationality: nationality || (Array.isArray(nationalities) ? nationalities[0] : nationalities) || null,
+    nationalities: Array.isArray(nationalities) ? nationalities : (nationalities ? [nationalities] : (nationality ? [nationality] : [])),
   };
 
   await UnverifiedUser.create({

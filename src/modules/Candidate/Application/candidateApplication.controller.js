@@ -33,16 +33,16 @@ const APPLICATION_FIELDS = [
   'applicationType', 'gender', 'relationshipStatus', 'address',
   'addressStartDate', 'housingStatus', 'landlordName', 'landlordContactNumber', 'landlordEmail', 'landlordAddress',
   'contactNumber2',
-  'previousFullAddress', 'previousAddress', 'startDate', 'endDate',
+  'previousFullAddress', 'previousAddress', 'previousAddresses', 'startDate', 'endDate',
 
   // Nationality & Passport
-  'nationality', 'birthCountry', 'placeOfBirth', 'dob',
+  'nationality', 'nationalities', 'birthCountry', 'placeOfBirth', 'dob',
   'passportNumber', 'issuingAuthority', 'issueDate', 'expiryDate', 'passportAvailable',
 
   // Identity documents
   'nationalIdCardNumber', 'nationalIdNumber',
   'idIssuingAuthorityCard', 'idIssuingAuthorityNational',
-  'otherNationality', 'ukLicense', 'medicalTreatment', 'ukStayDuration',
+  'otherNationality', 'ukLicense', 'ukLicenseNumber', 'medicalTreatment', 'ukStayDuration',
 
   // Parent one
   'parentName', 'parentRelation', 'parentDob', 'parentNationality', 'sameNationality',
@@ -119,12 +119,12 @@ const PDF_APPLICATION_SECTIONS = [
       'firstName', 'lastName', 'email', 'contactNumber', 'contactNumber2',
       'applicationType', 'gender', 'relationshipStatus', 'address',
       'addressStartDate', 'housingStatus', 'landlordName', 'landlordContactNumber', 'landlordEmail', 'landlordAddress',
-      'previousFullAddress', 'previousAddress', 'startDate', 'endDate',
+      'previousFullAddress', 'previousAddress', 'previousAddresses', 'startDate', 'endDate',
     ],
   },
   {
     title: 'Nationality & Birth',
-    fields: ['nationality', 'birthCountry', 'placeOfBirth', 'dob'],
+    fields: ['nationality', 'nationalities', 'birthCountry', 'placeOfBirth', 'dob'],
   },
   {
     title: 'Passport & Travel Document',
@@ -138,7 +138,7 @@ const PDF_APPLICATION_SECTIONS = [
     fields: [
       'nationalIdCardNumber', 'nationalIdNumber',
       'idIssuingAuthorityCard', 'idIssuingAuthorityNational',
-      'otherNationality', 'ukLicense', 'medicalTreatment', 'ukStayDuration',
+      'otherNationality', 'ukLicense', 'ukLicenseNumber', 'medicalTreatment', 'ukStayDuration',
     ],
   },
   {
@@ -1411,6 +1411,17 @@ function humanizeFieldKey(key) {
 
 function formatApplicationScalar(fieldKey, raw) {
   if (raw === null || raw === undefined || raw === '') return '—';
+  if (fieldKey === 'previousAddresses' && Array.isArray(raw)) {
+    if (raw.length === 0) return '—';
+    return raw.map((item, idx) => {
+      const addr = item.previousAddress || item.address || '';
+      const dates = [item.startDate, item.endDate].filter(Boolean).join(' to ');
+      return `${idx + 1}. ${addr}${dates ? ` (${dates})` : ''}`;
+    }).join('\n');
+  }
+  if (Array.isArray(raw)) {
+    return raw.filter(Boolean).join(', ') || '—';
+  }
   if (DATE_FIELDS.has(fieldKey)) {
     const d = raw instanceof Date ? raw : new Date(raw);
     if (!isNaN(d.getTime())) return localDateStr(d);

@@ -13,12 +13,12 @@ export const APPLICATION_FIELDS = [
   'applicationType', 'gender', 'relationshipStatus', 'address',
   'addressStartDate', 'housingStatus', 'landlordName', 'landlordContactNumber', 'landlordEmail', 'landlordAddress',
   'contactNumber2',
-  'previousFullAddress', 'previousAddress', 'startDate', 'endDate',
-  'nationality', 'birthCountry', 'placeOfBirth', 'dob',
+  'previousFullAddress', 'previousAddress', 'previousAddresses', 'startDate', 'endDate',
+  'nationality', 'nationalities', 'birthCountry', 'placeOfBirth', 'dob',
   'passportNumber', 'issuingAuthority', 'issueDate', 'expiryDate', 'passportAvailable',
   'nationalIdCardNumber', 'nationalIdNumber',
   'idIssuingAuthorityCard', 'idIssuingAuthorityNational',
-  'otherNationality', 'ukLicense', 'medicalTreatment', 'ukStayDuration',
+  'otherNationality', 'ukLicense', 'ukLicenseNumber', 'medicalTreatment', 'ukStayDuration',
   'parentName', 'parentRelation', 'parentDob', 'parentNationality', 'sameNationality',
   'parent2Name', 'parent2Relation', 'parent2Dob', 'parent2Nationality', 'parent2SameNationality',
   'illegalEntry', 'overstayed', 'breach', 'falseInfo', 'otherBreach',
@@ -48,9 +48,11 @@ export const APPLICATION_FIELD_LABELS = {
   contactNumber2: 'Alternate contact number',
   previousFullAddress: 'Previous full address',
   previousAddress: 'Previous address',
+  previousAddresses: 'Previous addresses',
   startDate: 'Address start date',
   endDate: 'Address end date',
   nationality: 'Country of nationality',
+  nationalities: 'Nationalities',
   birthCountry: 'Country of birth',
   placeOfBirth: 'Place of birth',
   dob: 'Date of birth',
@@ -65,6 +67,7 @@ export const APPLICATION_FIELD_LABELS = {
   idIssuingAuthorityNational: 'ID issuing authority',
   otherNationality: 'Other nationality / citizenship',
   ukLicense: 'UK driving licence',
+  ukLicenseNumber: 'UK driving licence number',
   medicalTreatment: 'Medical treatment in UK',
   ukStayDuration: 'How long in UK',
   parentName: 'Parent one — full name',
@@ -112,7 +115,7 @@ export const APPLICATION_FIELD_LIMITS = {
   passportNumber: 50, issuingAuthority: 100,
   nationalIdCardNumber: 50, nationalIdNumber: 50,
   idIssuingAuthorityCard: 100, idIssuingAuthorityNational: 100,
-  otherNationality: 100, ukStayDuration: 50,
+  otherNationality: 100, ukStayDuration: 50, ukLicenseNumber: 100,
   parentName: 200, parentRelation: 50, parentNationality: 100,
   parent2Name: 200, parent2Relation: 50, parent2Nationality: 100,
   countryVisited: 100, visitReason: 200,
@@ -237,6 +240,53 @@ export function sanitizeApplicationPayload(body) {
       payload[key] = normaliseEnumValue(key, v);
     } else if (key === 'customResponses') {
       payload[key] = v && typeof v === 'object' && !Array.isArray(v) ? v : {};
+    } else if (key === 'nationalities') {
+      let list = [];
+      if (Array.isArray(v)) {
+        list = v;
+      } else if (typeof v === 'string' && v.trim()) {
+        list = v.includes(',') ? v.split(',').map((x) => x.trim()) : [v.trim()];
+      }
+      const unique = Array.from(new Set(list.map((item) => (typeof item === 'string' ? item.trim() : '')).filter(Boolean)));
+      for (const item of unique) {
+        if (item.length > 100) {
+          throw applicationValidationError(`Nationality value "${item}" must be 100 characters or fewer.`);
+        }
+      }
+      payload[key] = unique;
+    } else if (key === 'previousAddresses') {
+      let rawList = [];
+      if (Array.isArray(v)) {
+        rawList = v;
+      } else if (typeof v === 'string' && v.trim()) {
+        try {
+          const parsed = JSON.parse(v);
+          if (Array.isArray(parsed)) rawList = parsed;
+        } catch {
+          rawList = [{ previousAddress: v.trim() }];
+        }
+      }
+      const sanitizedAddresses = [];
+      for (const item of rawList) {
+        if (!item || typeof item !== 'object') continue;
+        const addr = typeof item.previousAddress === 'string'
+          ? item.previousAddress.trim()
+          : (typeof item.address === 'string' ? item.address.trim() : '');
+        const sDate = item.startDate ? normaliseDateValue('startDate', item.startDate) : null;
+        const eDate = item.endDate ? normaliseDateValue('endDate', item.endDate) : null;
+        
+        if (sDate && eDate && new Date(sDate) > new Date(eDate)) {
+          throw applicationValidationError('Previous address end date cannot be before start date.');
+        }
+        if (addr || sDate || eDate) {
+          sanitizedAddresses.push({
+            previousAddress: addr,
+            startDate: sDate,
+            endDate: eDate,
+          });
+        }
+      }
+      payload[key] = sanitizedAddresses;
     } else {
       if (typeof v === 'string') v = v.trim();
       const limit = APPLICATION_FIELD_LIMITS[key];
@@ -247,6 +297,36 @@ export function sanitizeApplicationPayload(body) {
       }
       payload[key] = v;
     }
+  }
+
+  // Bidirectional synchronization between nationalities array and legacy nationality string
+  if (Array.isArray(payload.nationalities) && payload.nationalities.length > 0) {
+    if (!payload.nationality) {
+      payload.nationality = payload.nationalities[0];
+    }
+  } else if (payload.nationality && (!payload.nationalities || payload.nationalities.length === 0)) {
+    payload.nationalities = [payload.nationality];
+  }
+
+  // Bidirectional synchronization between previousAddresses array and legacy previousAddress columns
+  if (Array.isArray(payload.previousAddresses) && payload.previousAddresses.length > 0) {
+    if (payload.previousAddress === undefined && payload.previousAddresses[0]?.previousAddress) {
+      payload.previousAddress = payload.previousAddresses[0].previousAddress;
+    }
+    if (payload.startDate === undefined && payload.previousAddresses[0]?.startDate) {
+      payload.startDate = payload.previousAddresses[0].startDate;
+    }
+    if (payload.endDate === undefined && payload.previousAddresses[0]?.endDate) {
+      payload.endDate = payload.previousAddresses[0].endDate;
+    }
+  } else if (payload.previousAddress && (!payload.previousAddresses || payload.previousAddresses.length === 0)) {
+    payload.previousAddresses = [
+      {
+        previousAddress: payload.previousAddress,
+        startDate: payload.startDate || null,
+        endDate: payload.endDate || null,
+      },
+    ];
   }
 
   return payload;
@@ -279,6 +359,13 @@ export function validateFinalApplicationSubmission(payload) {
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         throw applicationValidationError('Please enter a valid landlord email address.');
       }
+    }
+  }
+
+  // UK Driving Licence Number validation when applicant holds a UK licence
+  if (payload.ukLicense === 'Yes') {
+    if (!payload.ukLicenseNumber || !String(payload.ukLicenseNumber).trim()) {
+      throw applicationValidationError('UK driving licence number is required when you have a UK driving licence.');
     }
   }
 

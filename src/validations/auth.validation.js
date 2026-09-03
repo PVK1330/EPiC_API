@@ -29,6 +29,7 @@ export const registerSchema = z.object({
     country: z.string().optional().nullable(),
     pincode: z.string().optional().nullable(),
     nationality: z.string().optional().nullable(),
+    nationalities: z.union([z.array(z.string()), z.string()]).optional().nullable(),
   }).strict(),
 });
 

@@ -88,6 +88,11 @@ export default (sequelize, DataTypes) => {
                 type: DataTypes.TEXT,
                 allowNull: true,
             },
+            previousAddresses: {
+                type: DataTypes.JSONB,
+                allowNull: true,
+                defaultValue: [],
+            },
             startDate: {
                 type: DataTypes.DATE,
                 allowNull: true,
@@ -101,6 +106,11 @@ export default (sequelize, DataTypes) => {
             nationality: {
                 type: DataTypes.STRING(100),
                 allowNull: true,
+            },
+            nationalities: {
+                type: DataTypes.JSONB,
+                allowNull: true,
+                defaultValue: [],
             },
             birthCountry: {
                 type: DataTypes.STRING(100),
@@ -156,6 +166,10 @@ export default (sequelize, DataTypes) => {
             },
             ukLicense: {
                 type: DataTypes.ENUM('Yes', 'No'),
+                allowNull: true,
+            },
+            ukLicenseNumber: {
+                type: DataTypes.STRING(100),
                 allowNull: true,
             },
             medicalTreatment: {
