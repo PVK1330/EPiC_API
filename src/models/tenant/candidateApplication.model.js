@@ -288,6 +288,26 @@ export default (sequelize, DataTypes) => {
                 type: DataTypes.ENUM('Yes', 'No'),
                 allowNull: true,
             },
+            refusedVisaReason: {
+                type: DataTypes.TEXT,
+                allowNull: true,
+            },
+            refusedVisaDate: {
+                type: DataTypes.DATEONLY,
+                allowNull: true,
+            },
+            refusedVisaCountry: {
+                type: DataTypes.STRING(100),
+                allowNull: true,
+            },
+            refusedVisaType: {
+                type: DataTypes.STRING(100),
+                allowNull: true,
+            },
+            refusedVisaReference: {
+                type: DataTypes.STRING(100),
+                allowNull: true,
+            },
             refusedVisaDetails: {
                 type: DataTypes.TEXT,
                 allowNull: true,
