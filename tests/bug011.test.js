@@ -115,6 +115,9 @@ async function runBug011Tests() {
     addressStartDate: '2023-01-01',
     housingStatus: 'Own',
     refusedVisa: 'Yes',
+    refusedVisaDate: '2019-05-01',
+    refusedVisaCountry: 'Canada',
+    refusedVisaType: 'Tourist Visa',
     refusedVisaDetails: 'Refused Canada tourist visa in 2019 due to missing bank statement.',
   });
   validateFinalApplicationSubmission(payload4);
