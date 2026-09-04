@@ -59,13 +59,22 @@ export async function pickLeastLoadedCaseworker(tenantDb, { transaction } = {}) 
 export async function recordCaseAssignmentOutcome({
   tenantDb,
   caseRecord,
-  caseworker,
-  sponsorId,
+  caseworker = null,
+  assignedCaseworkerId = null,
+  sponsorId = null,
   actorId = null,
   candidateName = "the worker",
   req = null,
+  emailService = null,
 }) {
-  const assigned = !!caseworker;
+  let resolvedCw = caseworker;
+  if (!resolvedCw && assignedCaseworkerId) {
+    resolvedCw = await tenantDb.User.findByPk(assignedCaseworkerId, {
+      attributes: ['id', 'email', 'first_name', 'last_name', 'organisation_id'],
+    }).catch(() => null);
+  }
+
+  const assigned = !!resolvedCw;
 
   await recordAuditLog({
     tenantDb,
@@ -86,40 +95,23 @@ export async function recordCaseAssignmentOutcome({
   }).catch((err) => logger.error({ err, caseId: caseRecord?.caseId, caseRowId: caseRecord?.id }, "Failed to audit case assignment"));
 
   if (assigned) {
-    // Event 10 — Immigration Case Created: in-app + email to the caseworker.
+    // Event 10 — Immigration Case Created: in-app + professional email to the caseworker.
     try {
-      const notification = await notifyCaseAssigned(tenantDb, caseworker.id, {
+      const notification = await notifyCaseAssigned(tenantDb, resolvedCw.id, {
         id: caseRecord.id,
         caseId: caseRecord.caseId,
+        candidateName,
+        caseworker: resolvedCw,
+        organisationId: caseRecord.organisation_id ?? null,
         title: `New Case Assigned: ${caseRecord.caseId}`,
         message: `A new sponsored-worker immigration case (${candidateName}) has been assigned to you. Review can begin.`,
+        emailService,
       });
       if (!notification) {
-        logger.error({ caseId: caseRecord?.caseId, caseworkerId: caseworker.id }, "Failed to persist in-app assignment notification");
+        logger.error({ caseId: caseRecord?.caseId, caseworkerId: resolvedCw.id }, "Failed to persist in-app assignment notification");
       }
     } catch (err) {
-      logger.error({ err, caseId: caseRecord?.caseId, caseworkerId: caseworker.id }, "Failed to notify assigned caseworker");
-    }
-    try {
-      if (caseworker.email) {
-        await sendTransactionalEmail({
-          organisationId: caseRecord.organisation_id ?? null,
-          to: caseworker.email,
-          subject: `New Case Assigned: ${caseRecord.caseId}`,
-          html: generateNotificationEmailTemplate({
-            recipientName: caseworker.first_name || "there",
-            title: "New Immigration Case Assigned",
-            message: `A new sponsored-worker immigration case (${candidateName}) — ${caseRecord.caseId} — has been assigned to you. Review can begin.`,
-            priority: NotificationPriority.HIGH,
-            notificationType: NotificationTypes.INFO,
-            actionUrl: `${process.env.FRONTEND_URL || ""}/caseworker/cases`,
-          }),
-        });
-      } else {
-        logger.warn({ caseId: caseRecord?.caseId, caseworkerId: caseworker.id }, "Assigned caseworker has no email address configured");
-      }
-    } catch (err) {
-      logger.error({ err, caseId: caseRecord?.caseId, caseworkerId: caseworker.id, email: caseworker.email }, "Failed to email assigned caseworker");
+      logger.error({ err, caseId: caseRecord?.caseId, caseworkerId: resolvedCw.id }, "Failed to notify assigned caseworker");
     }
   } else {
     try {
