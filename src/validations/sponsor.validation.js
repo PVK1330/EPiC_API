@@ -26,7 +26,8 @@ export const createSponsorSchema = z.object({
     last_name: z.string().trim().min(1, 'Last name is required').max(100),
     email: emailSchema,
     country_code: z.string().trim().min(1, 'Country code is required').max(10),
-    mobile: phoneSchema,
+    // BUG-015: mobile is optional for sponsors (blank string or omitted both OK).
+    mobile: z.union([z.literal(''), phoneSchema]).optional().nullable(),
     role_id: z.coerce.number().int().optional().default(4),
     password: optionalStrongPassword,
     confirm_password: z.string().optional().nullable(),
@@ -71,7 +72,7 @@ export const updateSponsorSchema = z.object({
     last_name: z.string().trim().max(100).optional(),
     email: emailSchema.optional(),
     country_code: z.string().trim().max(10).optional(),
-    mobile: phoneSchema.optional(),
+    mobile: z.union([z.literal(''), phoneSchema]).optional().nullable(),
     role_id: z.coerce.number().int().optional(),
     status: UserStatusEnum.optional(),
     companyName: z.string().trim().max(200).optional(),

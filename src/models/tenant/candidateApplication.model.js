@@ -374,6 +374,14 @@ export default (sequelize, DataTypes) => {
                 type: DataTypes.ENUM('Yes', 'No'),
                 allowNull: true,
             },
+            // BUG-014: multiple trips. The single countryVisited/visitReason/
+            // entryDate/leaveDate columns below are kept as the "first trip"
+            // mirror for backward compatibility.
+            travelHistory: {
+                type: DataTypes.JSONB,
+                allowNull: true,
+                defaultValue: [],
+            },
             countryVisited: {
                 type: DataTypes.STRING(100),
                 allowNull: true,

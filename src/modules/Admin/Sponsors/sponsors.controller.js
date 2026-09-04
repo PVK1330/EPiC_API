@@ -72,6 +72,8 @@ export const createSponsor = async (req, res) => {
     }
 
     const emailNorm = String(email).trim().toLowerCase();
+    // BUG-015: mobile is optional for sponsors — a blank value is stored as NULL.
+    const mobileNorm = mobile && String(mobile).trim() ? String(mobile).trim() : null;
     const sponsorRoleId = Number(role_id) || ROLES.BUSINESS;
 
     if (sponsorRoleId !== ROLES.BUSINESS) {
@@ -87,7 +89,7 @@ export const createSponsor = async (req, res) => {
     await reclaimIdentifiersFromInactiveUsers(req.tenantDb, organisationId, {
       email: emailNorm,
       countryCode: country_code,
-      mobile,
+      mobile: mobileNorm,
     }).catch((err) => logger.warn({ err }, "createSponsor: identifier reclaim failed"));
 
     if (await isPlatformEmailTaken(platformDb, emailNorm, organisationId)) {
@@ -98,13 +100,15 @@ export const createSponsor = async (req, res) => {
       });
     }
 
-    const existingMobile = await req.tenantDb.User.findOne({ where: { country_code, mobile } });
-    if (existingMobile) {
-      return res.status(400).json({
-        status: "error",
-        message: "Mobile number already exists",
-        data: null,
-      });
+    if (mobileNorm) {
+      const existingMobile = await req.tenantDb.User.findOne({ where: { country_code, mobile: mobileNorm } });
+      if (existingMobile) {
+        return res.status(400).json({
+          status: "error",
+          message: "Mobile number already exists",
+          data: null,
+        });
+      }
     }
 
     const role = await req.tenantDb.Role.findByPk(sponsorRoleId);
@@ -144,7 +148,7 @@ export const createSponsor = async (req, res) => {
       last_name,
       email: emailNorm,
       country_code,
-      mobile,
+      mobile: mobileNorm,
       role_id: sponsorRoleId,
       password: hashedPassword,
       // Force a password change on first login: the sponsor's initial password
@@ -520,12 +524,15 @@ export const updateSponsor = async (req, res) => {
 
     const organisationId = req.user?.organisation_id != null ? Number(req.user.organisation_id) : null;
     const emailNorm = normalizePlatformEmail(email || sponsor.email);
+    // BUG-015: mobile is optional — a blank value clears it (stored as NULL).
+    const mobileProvided = mobile !== undefined;
+    const mobileNorm = mobile && String(mobile).trim() ? String(mobile).trim() : null;
     // BUG-002: release an email/mobile held only by a deactivated account so
     // it can be moved onto this sponsor.
     await reclaimIdentifiersFromInactiveUsers(req.tenantDb, organisationId, {
       email: emailNorm,
       countryCode: country_code,
-      mobile,
+      mobile: mobileNorm,
       excludeUserId: sponsor.id,
     }).catch((err) => logger.warn({ err }, "updateSponsor: identifier reclaim failed"));
     if (emailNorm !== normalizePlatformEmail(sponsor.email)) {
@@ -548,10 +555,13 @@ export const updateSponsor = async (req, res) => {
       }
     }
 
-    // Check if mobile is being changed and if it already exists
-    if (country_code !== sponsor.country_code || mobile !== sponsor.mobile) {
-      const existingMobile = await req.tenantDb.User.findOne({ 
-        where: { country_code, mobile, id: { [Op.ne]: id } }
+    // Check if a real mobile is being changed and if it already exists. Use the
+    // effective country code (the request may omit it and only change the mobile),
+    // so the query never receives an undefined value.
+    const effectiveCountryCode = country_code || sponsor.country_code;
+    if (mobileNorm && (effectiveCountryCode !== sponsor.country_code || mobileNorm !== sponsor.mobile)) {
+      const existingMobile = await req.tenantDb.User.findOne({
+        where: { country_code: effectiveCountryCode, mobile: mobileNorm, id: { [Op.ne]: id } }
       });
       if (existingMobile) {
         return res.status(400).json({
@@ -580,7 +590,7 @@ export const updateSponsor = async (req, res) => {
       last_name: last_name || sponsor.last_name,
       email: emailNorm,
       country_code: country_code || sponsor.country_code,
-      mobile: mobile || sponsor.mobile,
+      mobile: mobileProvided ? mobileNorm : sponsor.mobile,
       role_id: role_id || sponsor.role_id,
       status: status || sponsor.status,
     };

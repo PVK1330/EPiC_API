@@ -30,8 +30,11 @@ export default (sequelize, DataTypes) => {
             },
 
             mobile: {
+                // BUG-015: a mobile number is optional (e.g. sponsors). The unique
+                // index on (country_code, mobile) is partial (see the make-mobile-
+                // optional migration) so multiple users may have no mobile.
                 type: DataTypes.STRING(20),
-                allowNull: false,
+                allowNull: true,
             },
 
             password: {
