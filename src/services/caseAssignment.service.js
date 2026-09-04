@@ -91,7 +91,7 @@ export async function recordCaseAssignmentOutcome({
       const notification = await notifyCaseAssigned(tenantDb, caseworker.id, {
         id: caseRecord.id,
         caseId: caseRecord.caseId,
-        title: `New Case Assigned: ${caseRecord.caseId}`,
+        title: `New Case Assigned: ${candidateName || caseRecord.caseId}`,
         message: `A new sponsored-worker immigration case (${candidateName}) has been assigned to you. Review can begin.`,
       });
       if (!notification) {
