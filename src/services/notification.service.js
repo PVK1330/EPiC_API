@@ -435,10 +435,9 @@ export async function notifyCaseAssigned(arg1, arg2, arg3 = {}) {
   // 1. In-app notification
   const notification = await notifyUser(tenantDb, userId, {
     type: NotificationTypes.INFO,
-    priority: NotificationPriority.HIGH,
     category: 'case',
-    title: data.title ?? `Case Assigned: ${caseRef}`,
-    message: data.message ?? `Case ${caseRef} (${candidateName}) has been assigned to you.`,
+    title: data.title ?? `Case Assigned: ${caseRef}${candidateName ? ` - ${candidateName}` : ''}`,
+    message: data.message ?? `Case ${caseRef} (${candidateName}) has been assigned to you. Review can begin.`,
     entityType: 'case',
     entityId: data.id ?? null,
     actionType: 'case_assigned',
@@ -494,7 +493,7 @@ export async function notifyCaseStatusChanged(tenantDb, userIds, data = {}, from
     type: NotificationTypes.INFO,
     priority: NotificationPriority.HIGH,
     category: 'case',
-    title: data.title ?? `Case Status Updated`,
+    title: data.title ?? `Case Status Updated: ${data.candidateName ?? data.caseId ?? ''}`,
     message: data.message ?? `Case status changed${fromStatus ? ` from ${fromStatus}` : ''}${toStatus ? ` to ${toStatus}` : ''}.`,
     entityType: 'case',
     entityId: data.id ?? null,

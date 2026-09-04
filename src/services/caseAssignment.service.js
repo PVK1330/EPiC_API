@@ -103,7 +103,7 @@ export async function recordCaseAssignmentOutcome({
         candidateName,
         caseworker: resolvedCw,
         organisationId: caseRecord.organisation_id ?? null,
-        title: `New Case Assigned: ${caseRecord.caseId}`,
+        title: `New Case Assigned: ${candidateName ? `${caseRecord.caseId} - ${candidateName}` : caseRecord.caseId}`,
         message: `A new sponsored-worker immigration case (${candidateName}) has been assigned to you. Review can begin.`,
         emailService,
       });

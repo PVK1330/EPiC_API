@@ -9,7 +9,7 @@ export const createCaseNote = async (req, res) => {
     // SECURITY (stored XSS): case notes are plain text — strip any HTML markup.
     const content = sanitizePlainText(req.body?.content, { maxLength: 10000 });
     const userId = req.user?.userId;
-    const roleId = req.user?.role_id;
+    const roleId = Number(req.user?.role_id);
 
     if (!caseId || !content) {
       return res.status(400).json({
@@ -45,6 +45,21 @@ export const createCaseNote = async (req, res) => {
         message: "Case not found",
         data: null,
       });
+    }
+
+    // BUG-027 fix / IDOR guard (mirrors getCaseNoteByNoteId's S-07 fix): only the
+    // case's assigned caseworker (or an admin) may add notes to it.
+    // Admins (3) and Superadmins (5) may add notes to any case.
+    // Caseworkers may only add notes to cases assigned to them.
+    // Candidates/Sponsors may only add notes to their own cases.
+    if (roleId !== ROLES.ADMIN && roleId !== 5) {
+      const assignedIds = caseRecord.assignedcaseworkerId ?? [];
+      const isCaseworkerAssigned = roleId === ROLES.CASEWORKER && assignedIds.includes(userId);
+      const isCandidate = caseRecord.candidateId && Number(caseRecord.candidateId) === Number(userId);
+      const isSponsor = caseRecord.sponsorId && Number(caseRecord.sponsorId) === Number(userId);
+      if (!isCaseworkerAssigned && !isCandidate && !isSponsor) {
+        return res.status(403).json({ status: "error", message: "Access denied" });
+      }
     }
 
     // Validate parent note exists (if provided)
