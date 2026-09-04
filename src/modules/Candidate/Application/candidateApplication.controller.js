@@ -78,6 +78,7 @@ const DATE_FIELDS = new Set([
   'dob', 'issueDate', 'expiryDate',
   'startDate', 'endDate',
   'addressStartDate',
+  'refusedVisaDate',
   'parentDob', 'parent2Dob',
   'entryDate', 'leaveDate',
   'visaEndDate',
@@ -161,7 +162,7 @@ const PDF_APPLICATION_SECTIONS = [
     title: 'Immigration History',
     fields: [
       'illegalEntry', 'illegalEntryDetails', 'overstayed', 'overstayedDetails', 'breach', 'breachDetails', 'falseInfo', 'falseInfoDetails', 'otherBreach', 'otherBreachDetails',
-      'refusedVisa', 'refusedVisaDetails', 'refusedEntry', 'refusedEntryDetails', 'refusedPermission', 'refusedPermissionDetails', 'refusedAsylum', 'refusedAsylumDetails',
+      'refusedVisa', 'refusedVisaReason', 'refusedVisaDate', 'refusedVisaCountry', 'refusedVisaType', 'refusedVisaReference', 'refusedVisaDetails', 'refusedEntry', 'refusedEntryDetails', 'refusedPermission', 'refusedPermissionDetails', 'refusedAsylum', 'refusedAsylumDetails',
       'deported', 'deportedDetails', 'removed', 'removedDetails', 'requiredToLeave', 'requiredToLeaveDetails', 'banned', 'bannedDetails',
     ],
   },
@@ -1474,12 +1475,20 @@ export const downloadFilledApplicationPdf = catchAsync(async (req, res) => {
 
     const appJson = application.toJSON();
     const labelMap = await buildFieldLabelMap(req.tenantDb);
+    const REFUSAL_DETAIL_KEYS = new Set([
+      'refusedVisaReason', 'refusedVisaDate', 'refusedVisaCountry', 'refusedVisaType', 'refusedVisaReference', 'refusedVisaDetails',
+    ]);
     const sections = PDF_APPLICATION_SECTIONS.map((sec) => ({
       sectionTitle: sec.title,
-      rows: sec.fields.map((fieldKey) => ({
-        label: labelMap[fieldKey] || humanizeFieldKey(fieldKey),
-        value: formatApplicationScalar(fieldKey, appJson[fieldKey]),
-      })),
+      rows: sec.fields
+        .filter((fieldKey) => {
+          if (REFUSAL_DETAIL_KEYS.has(fieldKey) && appJson.refusedVisa !== 'Yes') return false;
+          return true;
+        })
+        .map((fieldKey) => ({
+          label: labelMap[fieldKey] || humanizeFieldKey(fieldKey),
+          value: formatApplicationScalar(fieldKey, appJson[fieldKey]),
+        })),
     }));
 
     const customDefs = await req.tenantDb.ApplicationCustomField.findAll({
@@ -1743,13 +1752,21 @@ export const downloadCandidateApplicationPdf = catchAsync(async (req, res) => {
 
   const appJson = application.toJSON();
   const labelMap = await buildFieldLabelMap(req.tenantDb);
+  const REFUSAL_DETAIL_KEYS = new Set([
+    'refusedVisaReason', 'refusedVisaDate', 'refusedVisaCountry', 'refusedVisaType', 'refusedVisaReference', 'refusedVisaDetails',
+  ]);
 
   const sections = PDF_APPLICATION_SECTIONS.map((sec) => ({
     sectionTitle: sec.title,
-    rows: sec.fields.map((fieldKey) => ({
-      label: labelMap[fieldKey] || humanizeFieldKey(fieldKey),
-      value: formatApplicationScalar(fieldKey, appJson[fieldKey]),
-    })),
+    rows: sec.fields
+      .filter((fieldKey) => {
+        if (REFUSAL_DETAIL_KEYS.has(fieldKey) && appJson.refusedVisa !== 'Yes') return false;
+        return true;
+      })
+      .map((fieldKey) => ({
+        label: labelMap[fieldKey] || humanizeFieldKey(fieldKey),
+        value: formatApplicationScalar(fieldKey, appJson[fieldKey]),
+      })),
   }));
 
   const customDefs = await req.tenantDb.ApplicationCustomField.findAll({

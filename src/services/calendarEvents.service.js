@@ -70,6 +70,32 @@ function taskToEvent(task, assigneeName) {
   };
 }
 
+function targetSubmissionToEvent(caseRecord) {
+  const dateStr = caseRecord.targetSubmissionDate;
+  if (!dateStr) return null;
+
+  const start = new Date(dateStr);
+  if (Number.isNaN(start.getTime())) return null;
+
+  const caseRef = caseRecord.caseId || `#${caseRecord.id}`;
+  const end = new Date(start.getTime() + 60 * 60 * 1000);
+
+  return {
+    id: `target-submission-${caseRecord.id}`,
+    title: `Target submission due · ${caseRef}`,
+    start: start.toISOString(),
+    end: end.toISOString(),
+    type: "deadline",
+    location: "Case submission",
+    attendees: [caseRef],
+    description: `Target submission date for case ${caseRef}`,
+    color: start < new Date() ? "bg-red-500" : "bg-amber-500",
+    completed: false,
+    caseId: caseRef,
+    isDeadline: true,
+  };
+}
+
 function biometricToEvent(caseRecord, bookedSlot) {
   const times = parseBiometricDateTime(bookedSlot);
   if (!times) return null;
@@ -145,7 +171,7 @@ async function loadTasksForCalendar(tenantDb, userId, roleId) {
 }
 
 async function loadCasesForBiometrics(tenantDb, userId, roleId) {
-  const attributes = ["id", "caseId", "candidateId", "workflowState", "biometricsDate"];
+  const attributes = ["id", "caseId", "candidateId", "workflowState", "biometricsDate", "targetSubmissionDate"];
 
   if (roleId === ROLES.CANDIDATE) {
     return tenantDb.Case.findAll({
@@ -286,6 +312,9 @@ export async function getWorkflowCalendarEvents(tenantDb, userId, roleId) {
       const ev = biometricToEvent(caseRecord, bookedSlot);
       if (ev) events.push(ev);
     }
+
+    const deadlineEv = targetSubmissionToEvent(caseRecord);
+    if (deadlineEv) events.push(deadlineEv);
   }
 
   const stageTasks = await loadLicenceStageTasks(tenantDb, userId, roleId);

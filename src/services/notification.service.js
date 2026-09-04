@@ -6,6 +6,8 @@ import { ROLES } from '../middlewares/role.middleware.js';
 import { getIO } from '../realtime/ioRegistry.js';
 import { userRoom } from '../realtime/messagingRealtime.js';
 import { sendPushToUser } from './webPush.service.js';
+import { sendCaseAssignmentEmail } from './caseAssignmentEmail.service.js';
+import { buildCaseworkerDirectCaseUrl } from '../utils/crmUrl.util.js';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
@@ -411,18 +413,77 @@ export async function notifyPaymentReceived(tenantDb, userId, data = {}) {
   });
 }
 
-export async function notifyCaseAssigned(tenantDb, userId, data = {}) {
-  return notifyUser(tenantDb, userId, {
+export async function notifyCaseAssigned(arg1, arg2, arg3 = {}) {
+  let tenantDb;
+  let userId;
+  let data;
+
+  if (arg1 && typeof arg1 === 'object' && ('recipientId' in arg1 || 'userId' in arg1 || 'tenantDb' in arg1)) {
+    tenantDb = arg1.tenantDb;
+    userId = arg1.recipientId ?? arg1.userId;
+    data = { ...arg1, ...arg2 };
+  } else {
+    tenantDb = arg1;
+    userId = arg2;
+    data = arg3;
+  }
+
+  const caseRef = data.caseId || (data.id != null ? String(data.id) : '');
+  const candidateName = data.candidateName || 'Client';
+  const directCaseUrl = buildCaseworkerDirectCaseUrl(caseRef);
+
+  // 1. In-app notification
+  const notification = await notifyUser(tenantDb, userId, {
     type: NotificationTypes.INFO,
-    priority: NotificationPriority.HIGH,
     category: 'case',
-    title: data.title ?? `Case Assigned: ${data.caseId ?? ''}`,
-    message: data.message ?? 'A case has been assigned to you.',
+    title: data.title ?? `Case Assigned: ${caseRef}${candidateName ? ` - ${candidateName}` : ''}`,
+    message: data.message ?? `Case ${caseRef} (${candidateName}) has been assigned to you. Review can begin.`,
     entityType: 'case',
     entityId: data.id ?? null,
     actionType: 'case_assigned',
-    metadata: data,
+    actionUrl: `/caseworker/cases?caseId=${encodeURIComponent(caseRef)}`,
+    metadata: {
+      caseId: caseRef,
+      candidateName,
+      assignedBy: data.assignedBy || 'Admin',
+      visaType: data.visaType || '',
+      directCaseUrl,
+    },
+    sendEmail: false, // Handled authoritatively by sendCaseAssignmentEmail below to prevent duplicate emails
   });
+
+  // 2. Clear, professional Case Assignment email with direct portal link
+  if (data.sendEmail !== false) {
+    try {
+      const caseworker =
+        data.caseworker ||
+        (await tenantDb.User.findByPk(userId, {
+          attributes: ['id', 'email', 'first_name', 'last_name', 'organisation_id'],
+        }).catch(() => null));
+
+      if (caseworker?.email) {
+        await sendCaseAssignmentEmail({
+          tenantDb,
+          organisationId: caseworker.organisation_id || data.organisationId || null,
+          caseworker,
+          caseData: {
+            id: data.id,
+            caseId: caseRef,
+            candidateName,
+            visaType: data.visaType || '',
+            assignedBy: data.assignedBy || 'Admin',
+            assignedDate: data.assignedDate || '',
+          },
+          directCaseUrl,
+          emailService: data.emailService || null,
+        });
+      }
+    } catch (emailErr) {
+      logger.error({ err: emailErr, userId, caseRef }, 'Failed to dispatch case assignment email');
+    }
+  }
+
+  return notification;
 }
 
 export async function notifyCaseStatusChanged(tenantDb, userIds, data = {}, fromStatus, toStatus) {
@@ -432,7 +493,7 @@ export async function notifyCaseStatusChanged(tenantDb, userIds, data = {}, from
     type: NotificationTypes.INFO,
     priority: NotificationPriority.HIGH,
     category: 'case',
-    title: data.title ?? `Case Status Updated`,
+    title: data.title ?? `Case Status Updated: ${data.candidateName ?? data.caseId ?? ''}`,
     message: data.message ?? `Case status changed${fromStatus ? ` from ${fromStatus}` : ''}${toStatus ? ` to ${toStatus}` : ''}.`,
     entityType: 'case',
     entityId: data.id ?? null,

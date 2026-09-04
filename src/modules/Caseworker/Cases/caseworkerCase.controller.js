@@ -810,8 +810,13 @@ export const getCaseDetails = async (req, res) => {
       });
     }
 
-    // Support both numeric PK (id) and human-readable case reference (caseId e.g. CAS-000001)
-    const whereClause = isNaN(id) ? { caseId: id } : { id: parseInt(id) };
+    // Support both numeric PK (id) and human-readable case reference (caseId e.g. Case-01 or #Case-01)
+    const rawId = String(id).trim();
+    const cleanRef = rawId.replace(/^#/, '');
+    const isNumeric = /^\d+$/.test(rawId);
+    const whereClause = isNumeric
+      ? { id: parseInt(rawId, 10) }
+      : { [Op.or]: [{ caseId: rawId }, { caseId: cleanRef }, { caseId: `#${cleanRef}` }] };
 
     // Get main case details with all relationships (only if assigned to caseworker)
     const caseData = await req.tenantDb.Case.findOne({
