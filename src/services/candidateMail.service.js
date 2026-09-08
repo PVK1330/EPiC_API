@@ -57,3 +57,68 @@ export async function sendCandidateWelcomeEmail({ user, plainPassword, organisat
   const result = await sendTransactionalEmail({ organisationId, to: user.email, subject, html });
   return { ...result, loginUrl };
 }
+
+export async function sendCandidateCredentialsEmail({
+  user,
+  clientName,
+  plainPassword,
+  organisationId,
+  tenantDb = null,
+}) {
+  const { loginUrl, mainLoginUrl } = await resolveOrganisationLoginUrls(organisationId);
+  const branding = await getOrganisationEmailBranding(organisationId);
+
+  const name =
+    clientName ||
+    [user.first_name, user.last_name].filter(Boolean).join(" ").trim() ||
+    "Client";
+
+  const subject = "Your Client Portal Login Credentials";
+  const safeName = escapeHtml(name);
+  const safeOrgName = escapeHtml(branding.orgName);
+
+  const messageHtml = `
+    <p style="margin:0 0 12px 0;">Hello <strong>${safeName}</strong>,</p>
+    <p style="margin:0 0 12px 0;">Your Client Portal account has been created by our team.</p>
+    <p style="margin:0 0 12px 0;">You can use the credentials below to access your application:</p>
+  `;
+
+  const credBlock = credentialsBlockHtml({
+    email: user.email,
+    password: plainPassword,
+    loginUrl,
+    mainLoginUrl,
+    loginUrlLabel: "Client Portal Login",
+  });
+
+  const securityHtml = `
+    <p style="margin:0 0 8px 0; font-size:13px; color:#6B7785;">Please log in and complete your application.</p>
+    <p style="margin:0 0 12px 0; font-size:13px; color:#6B7785;">Please keep your login credentials secure.</p>
+    <p style="margin:16px 0 0 0; font-size:14px; font-weight:600; color:#33414F;">Regards,<br>${safeOrgName}</p>
+  `;
+
+  const html = wrapEpicEmail({
+    branding,
+    pageTitle: subject,
+    badge: "Client Portal",
+    title: subject,
+    messageHtml,
+    bodyHtml: credBlock,
+    ctaUrl: loginUrl,
+    ctaLabel: "Sign in to Client Portal",
+    securityHtml,
+  });
+
+  try {
+    const result = await sendTransactionalEmail({
+      organisationId,
+      to: user.email,
+      subject,
+      html,
+    });
+    return { ok: result?.ok ?? true, loginUrl };
+  } catch (err) {
+    return { ok: false, error: err.message, loginUrl };
+  }
+}
+
