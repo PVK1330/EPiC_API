@@ -27,6 +27,37 @@ export const createCandidate = catchAsync(async (req, res) => {
   return ApiResponse.created(res, "Candidate created successfully", result);
 });
 
+// Send Credentials to Client
+export const sendCredentialsToClient = catchAsync(async (req, res) => {
+  logger.info({
+    route: req.originalUrl,
+    method: req.method,
+    stage: 'candidate.controller.sendCredentialsToClient',
+    schema: 'sendCredentialsToClientSchema',
+  });
+  const service = new CandidateService(req.tenantDb);
+  const result = await service.sendCredentialsToClient(
+    req.validated.body,
+    {
+      tenantDb: req.tenantDb,
+      io: req.app?.get?.('io'),
+      organisationId: req.user.organisation_id,
+      req,
+    },
+    req.user,
+  );
+
+  const message = result.emailSent
+    ? "Client account created successfully and login credentials have been sent to the client’s email address."
+    : "Client account created successfully, but credential email delivery failed.";
+
+  return ApiResponse.created(res, message, {
+    candidateId: result.candidateId,
+    emailSent: result.emailSent,
+  });
+});
+
+
 // Get All Candidates
 export const getAllCandidates = catchAsync(async (req, res) => {
   const service = new CandidateService(req.tenantDb);
