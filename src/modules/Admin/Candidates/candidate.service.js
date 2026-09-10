@@ -14,7 +14,8 @@ import {
 } from '../../../services/userSync.service.js';
 import platformDb from '../../../models/index.js';
 import { isPlatformEmailTaken } from '../../../utils/platformUserEmail.js';
-import { sendCandidateWelcomeEmail } from '../../../services/candidateMail.service.js';
+import { sendCandidateWelcomeEmail, sendCandidateCredentialsEmail } from '../../../services/candidateMail.service.js';
+import { recordAuditLog } from '../../../services/audit.service.js';
 import { ensureCandidateEnquiryCase } from '../../../services/candidateOnboarding.service.js';
 import { DEFAULT_CASE_STAGE } from '../../../constants/immigrationCaseProcess.js';
 import { sanitizeApplicationPayload } from '../../../utils/applicationPayload.util.js';
@@ -1070,4 +1071,205 @@ export class CandidateService {
         : null,
     };
   }
+
+  async sendCredentialsToClient(data, context = {}, performedByUser) {
+    const {
+      name,
+      email,
+      contact_number,
+      country_code: explicitCountryCode,
+      visa_type,
+    } = data;
+
+    const organisation_id = performedByUser?.organisation_id;
+    if (!organisation_id) {
+      throw badRequest("organisation_id is required — users must belong to an organisation");
+    }
+
+    const emailNorm = String(email || "").trim().toLowerCase();
+    if (!emailNorm || !/^\S+@\S+\.\S+$/.test(emailNorm)) {
+      throw badRequest("Enter a valid email address");
+    }
+
+    // Parse name into first_name and last_name
+    const trimmedName = String(name || "").trim();
+    if (!trimmedName) {
+      throw badRequest("Client name is required");
+    }
+    const nameParts = trimmedName.split(/\s+/);
+    const first_name = nameParts[0];
+    const last_name = nameParts.length > 1 ? nameParts.slice(1).join(" ") : "-";
+
+    // Clean / parse phone
+    const rawContact = String(contact_number || "").trim();
+    let country_code = explicitCountryCode ? String(explicitCountryCode).trim() : "+44";
+    let mobile = rawContact.replace(/\s+/g, "");
+    if (rawContact.startsWith("+")) {
+      const match = rawContact.match(/^(\+\d{1,4})(.*)$/);
+      if (match) {
+        country_code = match[1];
+        mobile = match[2].trim().replace(/\s+/g, "");
+      }
+    }
+    const fullContactNumber = country_code ? `${country_code} ${mobile}`.trim() : rawContact;
+
+    // Check duplicate email in SAME organisation
+    const existingEmail = await this.repository.findByEmail(emailNorm);
+    if (existingEmail) {
+      throw badRequest("This email address is already registered.");
+    }
+    const isPlatformTaken = await isPlatformEmailTaken(platformDb, emailNorm, organisation_id);
+    if (isPlatformTaken) {
+      throw badRequest("This email address is already registered.");
+    }
+
+    // Reclaim identifiers if previously held by inactive/deleted user
+    await reclaimIdentifiersFromInactiveUsers(this.repository.tenantDb, organisation_id, {
+      email: emailNorm,
+      countryCode: country_code,
+      mobile,
+    }).catch((err) => logger.warn({ err }, "sendCredentialsToClient: identifier reclaim failed"));
+
+    // Check mobile in this tenant
+    if (mobile) {
+      const existingMobile = await this.repository.findByMobile(country_code, mobile);
+      if (existingMobile) {
+        throw badRequest("Mobile number already exists");
+      }
+    }
+
+    // Generate secure credentials
+    const generatedPassword = generateStrongPassword(12);
+    const hashedPassword = await bcrypt.hash(generatedPassword, 12);
+
+    // Atomically create User, CandidateApplication, and Enquiry Case
+    let createdPlatformUser = null;
+    let newUser = null;
+    let caseRecord = null;
+    try {
+      const result = await this.repository.transaction(async (t) => {
+        // 1. Create on Platform & mirror to Tenant DB
+        const user = await createUserOnPlatformAndTenant(this.repository.tenantDb, {
+          first_name,
+          last_name,
+          email: emailNorm,
+          country_code,
+          mobile,
+          role_id: ROLES.CANDIDATE,
+          password: hashedPassword,
+          is_email_verified: true,
+          is_otp_verified: true,
+          status: "active",
+          organisation_id,
+        });
+        createdPlatformUser = user;
+
+        // 2. Create CandidateApplication in draft status
+        await this.repository.createApplication(
+          {
+            userId: user.id,
+            firstName: first_name,
+            lastName: last_name === "-" ? "" : last_name,
+            email: emailNorm,
+            contactNumber: fullContactNumber,
+            visaType: visa_type,
+            status: "draft",
+            isLocked: false,
+            organisation_id,
+          },
+          t,
+        );
+
+        // 3. Find or resolve VisaType
+        let visaTypeId = null;
+        if (visa_type && this.repository.tenantDb.VisaType) {
+          const vt = await this.repository.findVisaTypeByName(visa_type, t).catch(() => null);
+          if (vt) visaTypeId = vt.id;
+        }
+
+        // 4. Create enquiry Case
+        const caseId = await generateCaseId(this.repository.tenantDb, { transaction: t });
+        const createdCase = await this.repository.createCase(
+          {
+            caseId,
+            candidateId: user.id,
+            visaTypeId,
+            status: "Lead",
+            caseStage: DEFAULT_CASE_STAGE,
+            priority: "medium",
+            targetSubmissionDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+            jobTitle: "Client enquiry",
+            assignedcaseworkerId: null,
+            organisation_id,
+          },
+          t,
+        );
+
+        return { newUser: user, caseRecord: createdCase };
+      });
+      newUser = result.newUser;
+      caseRecord = result.caseRecord;
+    } catch (dbErr) {
+      if (createdPlatformUser) {
+        await createdPlatformUser.destroy().catch(() => null);
+      }
+      throw dbErr;
+    }
+
+    // 5. Send Credentials Email outside transaction (no rollback if SMTP delivery fails)
+    const sendEmail = context?.sendEmailFn || sendCandidateCredentialsEmail;
+    let emailResult = { ok: false };
+    try {
+      emailResult = await sendEmail({
+        user: newUser,
+        clientName: trimmedName,
+        plainPassword: generatedPassword,
+        organisationId: organisation_id,
+        tenantDb: this.repository.tenantDb,
+      });
+    } catch (mailErr) {
+      logger.error({ err: mailErr }, "sendCredentialsToClient: email dispatch error");
+      emailResult = { ok: false, error: mailErr.message };
+    }
+
+    // 6. Record Audit Log (never logs plaintext password or hash!)
+    recordAuditLog({
+      tenantDb: this.repository.tenantDb,
+      userId: performedByUser?.id || performedByUser?.userId,
+      action: "SEND_CREDENTIALS_TO_CLIENT",
+      resource: `Candidate:${newUser.id}`,
+      status: emailResult.ok ? "Success" : "EmailFailed",
+      details: {
+        candidateId: newUser.id,
+        clientName: trimmedName,
+        email: emailNorm,
+        contactNumber: fullContactNumber,
+        countryCode: country_code,
+        mobile,
+        visaType: visa_type,
+        emailSent: Boolean(emailResult.ok),
+      },
+      req: context?.req,
+      organisationId: organisation_id,
+    }).catch((err) => logger.error({ err }, "sendCredentialsToClient: audit log error"));
+
+    // 7. Background Event & Task notification
+    eventPublisher.publish(
+      EVENTS.USER_CREATED,
+      {
+        candidateId: newUser.id,
+        email: newUser.email,
+        first_name: newUser.first_name,
+        last_name: newUser.last_name,
+        organisationId: organisation_id,
+      },
+      context,
+    ).catch((err) => logger.error({ err }, "Event Publish Error"));
+
+    return {
+      candidateId: newUser.id,
+      emailSent: Boolean(emailResult.ok),
+    };
+  }
 }
+

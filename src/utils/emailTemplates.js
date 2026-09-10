@@ -316,6 +316,93 @@ export function generateNotificationEmailTemplate({
   });
 }
 
+export function generateCaseAssignmentEmailTemplate({
+  branding = {},
+  recipientName = "",
+  caseworkerName = "",
+  candidateName = "Client",
+  caseNumber = "",
+  visaType = "",
+  assignedDate = "",
+  assignedBy = "Admin",
+  actionUrl = "",
+  orgName = "",
+}) {
+  const org = orgName || brandName(branding);
+  const nameToUse = recipientName || caseworkerName || "Caseworker";
+  const safeRecipientName = escapeHtml(nameToUse);
+  const safeCandidateName = escapeHtml(candidateName);
+  const safeCaseNumber = escapeHtml(caseNumber);
+  const safeVisaType = escapeHtml(visaType);
+  const safeAssignedDate = escapeHtml(
+    assignedDate ||
+      new Date().toLocaleDateString("en-GB", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      }),
+  );
+  const safeAssignedBy = escapeHtml(assignedBy);
+  const safeActionUrl = escapeHtml(actionUrl);
+
+  const detailRows = [
+    { label: "Candidate / Client", value: safeCandidateName },
+    { label: "Case Number", value: safeCaseNumber },
+    ...(safeVisaType ? [{ label: "Visa / Application Type", value: safeVisaType }] : []),
+    { label: "Assigned Date", value: safeAssignedDate },
+    { label: "Assigned By", value: safeAssignedBy },
+  ];
+
+  const metadataHtml = `
+    <div style="background:#F4F6F9; border:1px solid #DDE3EA; border-radius:8px; padding:14px 18px; margin:20px 0 24px 0;">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%; border-collapse:collapse;">
+        ${detailRows
+          .map(
+            ({ label, value }) => `
+          <tr style="border-bottom:1px solid #E8EEF5;">
+            <td style="padding:8px 0; font-size:12px; font-weight:700; color:#556376; text-transform:uppercase; letter-spacing:0.5px; width:40%;">${label}</td>
+            <td style="padding:8px 0; font-size:14px; font-weight:600; color:#0B0C0C; text-align:right;">${value}</td>
+          </tr>
+        `,
+          )
+          .join("")}
+      </table>
+    </div>
+  `;
+
+  return wrapEpicEmail({
+    branding,
+    pageTitle: `${org} — New Case Assigned: ${safeCaseNumber}`,
+    badge: "Case Assigned",
+    badgeColor: "#0B2E5E",
+    title: "New Case Assigned to You",
+    messageHtml: `Hello ${safeRecipientName},`,
+    bodyHtml: `
+      <p style="margin:0 0 16px 0; font-size:15px; color:#33414F; line-height:1.6;">
+        A new case has been assigned to you in the CRM.
+      </p>
+
+      ${metadataHtml}
+
+      <p style="margin:0 0 16px 0; font-size:14px; color:#33414F; line-height:1.6;">
+        Please log in to the CRM Caseworker Portal to review the case and complete the required actions.
+      </p>
+
+      ${
+        safeActionUrl
+          ? `<div style="margin-top:24px; font-size:12px; color:#6B7785; line-height:1.5;">
+              If the button above does not work, copy and paste this link into your browser:<br/>
+              <a href="${safeActionUrl}" style="color:#1D70B8; word-break:break-all;">${safeActionUrl}</a>
+             </div>`
+          : ""
+      }
+    `,
+    ctaUrl: actionUrl,
+    ctaLabel: "VIEW ASSIGNED CASE",
+    securityHtml: `This is an automated message from <strong>${org}</strong>. If you believe this case was assigned in error, please contact your system administrator.`,
+  });
+}
+
 export function generateAppointmentTemplate({
   branding = {},
   title,
@@ -818,3 +905,4 @@ export function generateMeetingInviteTemplate({
     ctaLabel: variant === "cancelled" ? "" : meetingUrl ? copy.cta : "",
   });
 }
+

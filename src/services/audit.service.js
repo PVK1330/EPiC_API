@@ -37,7 +37,7 @@ export const recordAuditLog = async ({
       resource,
       ip_address:      ipAddress,
       status:          status || 'Success',
-      details,
+      details:         typeof details === 'object' && details !== null ? JSON.stringify(details) : (details != null ? String(details) : null),
     });
   } catch (error) {
     logger.error({ err: error }, "Failed to record audit log");

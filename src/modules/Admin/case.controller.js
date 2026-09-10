@@ -196,11 +196,16 @@ export const createCase = async (req, res) => {
       const visaType = await req.tenantDb.VisaType.findByPk(visaTypeId);
       const visaTypeName = visaType ? visaType.name : 'Not specified';
       
+      const assignedByName = req.user
+        ? [req.user.first_name, req.user.last_name].filter(Boolean).join(' ').trim() || req.user.name || 'Admin'
+        : 'Admin';
+
       const caseData = {
         id: newCase.id,
         caseId: newCase.caseId,
         candidateName: `${candidate.first_name} ${candidate.last_name}`,
         visaType: visaTypeName,
+        assignedBy: assignedByName,
       };
       for (const caseworkerId of cwIds) {
         try {
@@ -729,11 +734,15 @@ export const updateCase = async (req, res) => {
         try {
             const visaType = await req.tenantDb.VisaType.findByPk(caseData.visaTypeId);
             const candidate = await req.tenantDb.User.findByPk(caseData.candidateId);
+            const assignedByName = req.user
+                ? [req.user.first_name, req.user.last_name].filter(Boolean).join(' ').trim() || req.user.name || 'Admin'
+                : 'Admin';
             const caseInfo = {
                 id: caseData.id,
                 caseId: caseData.caseId,
                 candidateName: candidate ? `${candidate.first_name} ${candidate.last_name}` : 'Unknown',
                 visaType: visaType ? visaType.name : 'Not specified',
+                assignedBy: assignedByName,
             };
             const organisationId = req.user?.organisation_id ?? null;
             for (const cwId of newCwIds) {
@@ -1263,12 +1272,16 @@ export const assignCase = async (req, res) => {
     if (normalizedCwIds.length > 0) {
       const candidate = await req.tenantDb.User.findByPk(caseData.candidateId);
       const visaType = await req.tenantDb.VisaType.findByPk(caseData.visaTypeId);
+      const assignedByName = req.user
+        ? [req.user.first_name, req.user.last_name].filter(Boolean).join(' ').trim() || req.user.name || 'Admin'
+        : 'Admin';
       const notifData = {
         id: caseData.id,
         caseId: caseData.caseId,
         candidateName: candidate ? `${candidate.first_name || ''} ${candidate.last_name || ''}`.trim() : 'Unknown Candidate',
         visaType: visaType ? visaType.name : 'Not specified',
         proposedAmount: caseData.proposedAmount ?? parsedProposed ?? null,
+        assignedBy: assignedByName,
       };
       const newCwIds = normalizedCwIds.filter((id) => !oldCwIds.includes(id));
       for (const cwId of normalizedCwIds) {
