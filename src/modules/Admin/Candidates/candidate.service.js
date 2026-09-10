@@ -232,7 +232,7 @@ export class CandidateService {
 
         const caseworkerId = application.caseworkerId;
         const assignedcaseworkerId = caseworkerId ? [Number(caseworkerId)] : null;
-        const caseId = await generateCaseId(this.tenantDb, { transaction: t });
+        const caseId = await generateCaseId(this.repository.tenantDb, { transaction: t, organisationId: organisation_id, visaTypeId });
 
         await this.repository.createCase({
           caseId,

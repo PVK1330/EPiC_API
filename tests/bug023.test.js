@@ -14,6 +14,9 @@ async function runBug023Tests() {
 
   const org = await Organisation.findOne({ order: [['id', 'ASC']] });
   const orgId = org ? org.id : 1;
+  const orgCode = (org?.code ? org.code : (org?.name || 'ORG').replace(/[^a-zA-Z]/g, '').toUpperCase().slice(0, 4)) || 'ORG';
+  const yearCode = String(new Date().getFullYear()).slice(-2);
+  const caseIdPattern = new RegExp(`^${orgCode}-OTH${yearCode}-(\\d{3})$`);
 
   let userCounter = Date.now();
   async function nextTestUser() {
@@ -32,16 +35,13 @@ async function runBug023Tests() {
     });
   }
 
-  // Ensure sequence exists and test generation
-  await tenantDb.sequelize.query(`CREATE SEQUENCE IF NOT EXISTS case_number_seq;`);
-
-  // TEST 1: First new case gets correct sequential number
-  console.log('TEST 1: First new case gets sequential number');
+  // TEST 1: First new case gets correct structured ID (EPIC-OTH26-XXX with no visa type given)
+  console.log('TEST 1: First new case gets a structured Case ID');
   const u1 = await nextTestUser();
-  const caseId1 = await generateCaseId(tenantDb);
-  const match1 = caseId1.match(/^Case-(\d+)$/);
+  const caseId1 = await generateCaseId(tenantDb, { organisationId: orgId });
+  const match1 = caseId1.match(caseIdPattern);
   if (!match1) {
-    throw new Error(`TEST 1 Failed: Expected format Case-XX, got "${caseId1}"`);
+    throw new Error(`TEST 1 Failed: Expected format ${orgCode}-OTH${yearCode}-XXX, got "${caseId1}"`);
   }
   const num1 = parseInt(match1[1], 10);
   const c1 = await Case.create({
@@ -53,13 +53,16 @@ async function runBug023Tests() {
     targetSubmissionDate: new Date(),
     organisation_id: orgId,
   });
-  console.log(`  [PASS] First case created with sequential ID: ${c1.caseId}\n`);
+  console.log(`  [PASS] First case created with structured ID: ${c1.caseId}\n`);
 
-  // TEST 2: Second new case gets next number
+  // TEST 2: Second new case gets next number in the same (org, visa, year) bucket
   console.log('TEST 2: Second new case gets next number');
   const u2 = await nextTestUser();
-  const caseId2 = await generateCaseId(tenantDb);
-  const match2 = caseId2.match(/^Case-(\d+)$/);
+  const caseId2 = await generateCaseId(tenantDb, { organisationId: orgId });
+  const match2 = caseId2.match(caseIdPattern);
+  if (!match2) {
+    throw new Error(`TEST 2 Failed: Expected format ${orgCode}-OTH${yearCode}-XXX, got "${caseId2}"`);
+  }
   const num2 = parseInt(match2[1], 10);
   if (num2 !== num1 + 1) {
     throw new Error(`TEST 2 Failed: Expected sequential increment from ${num1} to ${num1 + 1}, got ${num2}`);
@@ -80,7 +83,7 @@ async function runBug023Tests() {
   const createdIds = [c1.caseId, c2.caseId];
   for (let i = 0; i < 3; i++) {
     const u = await nextTestUser();
-    const nextCaseId = await generateCaseId(tenantDb);
+    const nextCaseId = await generateCaseId(tenantDb, { organisationId: orgId });
     const c = await Case.create({
       caseId: nextCaseId,
       candidateId: u.id,
@@ -116,7 +119,7 @@ async function runBug023Tests() {
   const deletedNumber = c2.caseId;
   await c2.destroy();
   const uAfterDel = await nextTestUser();
-  const caseIdAfterDel = await generateCaseId(tenantDb);
+  const caseIdAfterDel = await generateCaseId(tenantDb, { organisationId: orgId });
   if (caseIdAfterDel === deletedNumber) {
     throw new Error(`TEST 5 Failed: Deleted case number ${deletedNumber} was recycled!`);
   }
@@ -153,7 +156,7 @@ async function runBug023Tests() {
   const concurrentCount = 10;
   const promises = [];
   for (let i = 0; i < concurrentCount; i++) {
-    promises.push(generateCaseId(tenantDb));
+    promises.push(generateCaseId(tenantDb, { organisationId: orgId }));
   }
   const generatedNumbers = await Promise.all(promises);
   const distinctNumbers = new Set(generatedNumbers);
@@ -161,6 +164,25 @@ async function runBug023Tests() {
     throw new Error(`TEST 9 Failed: Concurrency clash! Generated: ${JSON.stringify(generatedNumbers)}`);
   }
   console.log(`  [PASS] ${concurrentCount} concurrent calls produced ${distinctNumbers.size} unique IDs.\n`);
+
+  // TEST 10: A brand-new (org, visa, year) bucket starts its own sequence at 001,
+  // independent of the "OTH" bucket used by every test above.
+  console.log('TEST 10: A distinct visa code gets its own sequence, starting at 001');
+  const testVisaType = await tenantDb.VisaType.create({
+    name: `Bug023 Test Visa ${Date.now()}`,
+    code: `B23${Date.now()}`.slice(0, 20),
+    sort_order: 999,
+  });
+  const swCaseId = await generateCaseId(tenantDb, { organisationId: orgId, visaTypeId: testVisaType.id });
+  const swMatch = swCaseId.match(new RegExp(`^${orgCode}-${testVisaType.code}${yearCode}-(\\d{3})$`));
+  if (!swMatch) {
+    throw new Error(`TEST 10 Failed: Expected format ${orgCode}-${testVisaType.code}${yearCode}-XXX, got "${swCaseId}"`);
+  }
+  if (parseInt(swMatch[1], 10) !== 1) {
+    throw new Error(`TEST 10 Failed: Expected a fresh bucket to start at 001, got ${swMatch[1]}`);
+  }
+  console.log(`  [PASS] Distinct visa code produced an independently-sequenced ID: ${swCaseId}\n`);
+  await testVisaType.destroy();
 
   console.log('============================================================');
   console.log('ALL BUG-023 AUTOMATED TESTS PASSED 100%');

@@ -557,7 +557,7 @@ export const submitApplication = async (req, res, next) => {
           { transaction: t }
         );
       } else {
-        const caseIdStr = await generateCaseId(req.tenantDb);
+        const caseIdStr = await generateCaseId(req.tenantDb, { organisationId, visaTypeId, transaction: t });
         const caseRecord = await req.tenantDb.Case.create(
           {
             caseId: caseIdStr,
@@ -849,7 +849,7 @@ export const adminUpdateCandidateApplication = async (req, res) => {
       } else if (payload.nationality || payload.visaType || visaTypeId) {
         const organisationId = req.user?.organisation_id != null ? Number(req.user.organisation_id) : null;
         await req.tenantDb.Case.create({
-          caseId: await generateCaseId(req.tenantDb),
+          caseId: await generateCaseId(req.tenantDb, { organisationId, visaTypeId, transaction: t }),
           candidateId,
           visaTypeId,
           status: 'Lead',

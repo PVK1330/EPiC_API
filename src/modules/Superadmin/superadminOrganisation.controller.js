@@ -850,10 +850,14 @@ export const updateOrganisation = async (req, res) => {
     if (!org) {
       return res.status(404).json({ status: "error", message: "Organisation not found", data: null });
     }
-    const { name, slug, plan, plan_id, status, primaryEmail, country } = req.body;
+    const { name, slug, plan, plan_id, status, primaryEmail, country, code } = req.body;
     const updates = {};
     if (name !== undefined) updates.name = String(name).trim();
     if (slug !== undefined) updates.slug = String(slug).trim().toLowerCase();
+    if (code !== undefined) {
+      const cleanedCode = String(code || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+      updates.code = cleanedCode || null;
+    }
     if (plan_id !== undefined) {
       const parsedPlanId = parseInt(plan_id, 10);
       updates.plan_id = Number.isFinite(parsedPlanId) ? parsedPlanId : null;
@@ -888,17 +892,17 @@ export const updateOrganisation = async (req, res) => {
       invalidateOrgCache(id);
     }
 
-    if (updates.name !== undefined && org.slug) {
+    if ((updates.name !== undefined || updates.code !== undefined) && org.database_name) {
       try {
-        const tenantDb = await getTenantDb(org.slug);
+        const tenantDb = await getTenantDb(org.database_name);
         if (tenantDb && tenantDb.Organisation) {
-          await tenantDb.Organisation.update(
-            { name: updates.name },
-            { where: { id: org.id } }
-          );
+          const tenantUpdates = {};
+          if (updates.name !== undefined) tenantUpdates.name = updates.name;
+          if (updates.code !== undefined) tenantUpdates.code = updates.code;
+          await tenantDb.Organisation.update(tenantUpdates, { where: { id: org.id } });
         }
       } catch (syncErr) {
-        logger.error({ err: syncErr }, "Failed to sync organisation name to tenant DB");
+        logger.error({ err: syncErr }, "Failed to sync organisation name/code to tenant DB");
       }
     }
 
