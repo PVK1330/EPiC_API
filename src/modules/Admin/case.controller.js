@@ -129,7 +129,7 @@ export const createCase = async (req, res) => {
       });
     }
 
-    const caseId = await generateCaseId(req.tenantDb);
+    const caseId = await generateCaseId(req.tenantDb, { organisationId, visaTypeId });
 
     const reqDeptId = req.body.departmentId !== undefined ? req.body.departmentId : req.body.department;
     const parsedDeptId = reqDeptId !== undefined && reqDeptId !== null && reqDeptId !== '' ? parseInt(reqDeptId, 10) : null;

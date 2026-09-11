@@ -11,12 +11,20 @@ function mapVisaType(row) {
   return {
     id: plain.id,
     name: plain.name,
+    code: plain.code ?? null,
     sort_order: plain.sort_order,
     ccl_template_path: templatePath,
     ccl_template_name: templateName,
     cclTemplatePath: templatePath,
     cclTemplateName: templateName,
   };
+}
+
+/** Normalize an admin-entered visa type code: trim, upper-case, strip anything but A-Z0-9. */
+function normalizeVisaCode(code) {
+  if (code === undefined) return undefined;
+  const cleaned = String(code || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return cleaned || null;
 }
 
 function deleteTemplateFileIfExists(filePath) {
@@ -83,9 +91,21 @@ export const createVisaType = async (req, res) => {
     if (existing) {
       return res.status(400).json({ status: "error", message: "A visa type with this name already exists", data: null });
     }
+    const code = normalizeVisaCode(req.body?.code);
+    if (code) {
+      const dupCode = await req.tenantDb.VisaType.findOne({
+        where: req.tenantDb.sequelize.where(
+          req.tenantDb.sequelize.fn("UPPER", req.tenantDb.sequelize.col("code")),
+          code
+        ),
+      });
+      if (dupCode) {
+        return res.status(400).json({ status: "error", message: "A visa type with this code already exists", data: null });
+      }
+    }
     const maxOrder = await req.tenantDb.VisaType.max("sort_order");
     const sort_order = (maxOrder ?? 0) + 1;
-    const row = await req.tenantDb.VisaType.create({ name, sort_order });
+    const row = await req.tenantDb.VisaType.create({ name, code, sort_order });
     res.status(201).json({
       status: "success",
       message: "Visa type created.",
@@ -129,7 +149,24 @@ export const updateVisaType = async (req, res) => {
     if (duplicate) {
       return res.status(400).json({ status: "error", message: "A visa type with this name already exists", data: null });
     }
-    await row.update({ name });
+    const code = normalizeVisaCode(req.body?.code);
+    if (code) {
+      const dupCode = await req.tenantDb.VisaType.findOne({
+        where: {
+          [Op.and]: [
+            { id: { [Op.ne]: id } },
+            req.tenantDb.sequelize.where(
+              req.tenantDb.sequelize.fn("UPPER", req.tenantDb.sequelize.col("code")),
+              code
+            ),
+          ],
+        },
+      });
+      if (dupCode) {
+        return res.status(400).json({ status: "error", message: "A visa type with this code already exists", data: null });
+      }
+    }
+    await row.update(code !== undefined ? { name, code } : { name });
     res.status(200).json({
       status: "success",
       message: "Visa type updated.",

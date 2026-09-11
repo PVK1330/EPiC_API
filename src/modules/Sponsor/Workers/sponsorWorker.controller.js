@@ -2,6 +2,7 @@ import path from 'path';
 import fs from 'fs';
 import archiver from 'archiver';
 import bcrypt from 'bcryptjs';
+import { Op } from 'sequelize';
 import { sendTransactionalEmail } from '../../../services/mail.service.js';
 import { generateCredentialsTemplate, generateNotificationEmailTemplate } from '../../../utils/emailTemplates.js';
 import { getOrganisationEmailBranding } from '../../../utils/emailBranding.js';
@@ -109,12 +110,21 @@ export const addSponsoredWorker = async (req, res) => {
 
     // 5. Create Case — auto-assign to the least-loaded caseworker (Option A);
     //    fall back to the unassigned queue when none are available (Option B).
-    const caseId = await generateCaseId(req.tenantDb);
+    let visaTypeId = null;
+    if (visaType) {
+      const vt = await req.tenantDb.VisaType.findOne({
+        where: { name: { [Op.iLike]: `%${visaType}%` } },
+        transaction,
+      });
+      if (vt) visaTypeId = vt.id;
+    }
+    const caseId = await generateCaseId(req.tenantDb, { organisationId, visaTypeId, transaction });
     const assignedCaseworker = await pickLeastLoadedCaseworker(req.tenantDb, { transaction });
     const newCase = await req.tenantDb.Case.create({
       caseId,
       candidateId: newUser.id,
       sponsorId: sponsorId,
+      visaTypeId,
       jobTitle,
       salaryOffered: salary,
       status: 'In Progress',
