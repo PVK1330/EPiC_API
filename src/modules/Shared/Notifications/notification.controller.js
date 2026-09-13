@@ -187,12 +187,14 @@ export const getNotifications = async (req, res) => {
       });
     }
 
+    const organisationId = req.user?.organisation_id;
     const result = await getUserNotifications(req.tenantDb, userId, {
       page: parsedPage,
       limit: parsedLimit,
       unreadOnly: unreadOnly === 'true',
       type,
       priority,
+      organisationId,
     });
 
     res.status(200).json({
@@ -210,6 +212,7 @@ export const getNotifications = async (req, res) => {
 export const getUnreadNotificationCount = async (req, res) => {
   try {
     const userId = req.user?.userId;
+    const organisationId = req.user?.organisation_id;
     if (!userId) {
       return res.status(401).json({
         status: 'error',
@@ -228,7 +231,7 @@ export const getUnreadNotificationCount = async (req, res) => {
     }
 
     const numericUserId = Number(userId);
-    const count = await getUnreadCount(req.tenantDb, numericUserId);
+    const count = await getUnreadCount(req.tenantDb, numericUserId, organisationId);
 
     res.status(200).json({
       status: 'success',
@@ -246,6 +249,7 @@ export const markNotificationAsRead = async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user?.userId;
+    const organisationId = req.user?.organisation_id;
 
     if (!userId) {
       return res.status(401).json({
@@ -255,9 +259,13 @@ export const markNotificationAsRead = async (req, res) => {
       });
     }
 
-    // Verify notification belongs to user
+    // Verify notification belongs to user & organisation
     const notification = await req.tenantDb.Notification.findOne({
-      where: { id, userId },
+      where: {
+        id,
+        userId,
+        ...(organisationId != null && { organisationId }),
+      },
     });
 
     if (!notification) {
@@ -312,6 +320,7 @@ export const deleteNotificationById = async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user?.userId;
+    const organisationId = req.user?.organisation_id;
 
     if (!userId) {
       return res.status(401).json({
@@ -321,9 +330,13 @@ export const deleteNotificationById = async (req, res) => {
       });
     }
 
-    // Verify notification belongs to user
+    // Verify notification belongs to user & organisation
     const notification = await req.tenantDb.Notification.findOne({
-      where: { id, userId },
+      where: {
+        id,
+        userId,
+        ...(organisationId != null && { organisationId }),
+      },
     });
 
     if (!notification) {
@@ -334,7 +347,7 @@ export const deleteNotificationById = async (req, res) => {
       });
     }
 
-    await deleteNotification(req.tenantDb, id);
+    await deleteNotification(req.tenantDb, id, userId, organisationId);
 
     res.status(200).json({
       status: 'success',

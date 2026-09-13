@@ -1,4 +1,5 @@
 import { getWorkflowCalendarEvents } from "../../../services/calendarEvents.service.js";
+import { ROLES } from "../../../middlewares/role.middleware.js";
 import logger from "../../../utils/logger.js";
 
 export const getWorkflowEvents = async (req, res) => {
@@ -14,16 +15,23 @@ export const getWorkflowEvents = async (req, res) => {
       });
     }
 
+    const requestedScope = String(req.query?.scope || "mine").trim().toLowerCase();
+    const isAdmin = roleId === ROLES.ADMIN || roleId === ROLES.SUPERADMIN;
+    
+    // Non-admin roles attempting scope=all are downgraded to personal scope "mine"
+    const effectiveScope = (requestedScope === "all" && isAdmin) ? "all" : "mine";
+
     const events = await getWorkflowCalendarEvents(
       req.tenantDb,
       userId,
       roleId,
+      effectiveScope
     );
 
     res.status(200).json({
       status: "success",
       message: "Calendar workflow events retrieved",
-      data: { events },
+      data: { events, scope: effectiveScope },
     });
   } catch (err) {
     logger.error({ err }, "getWorkflowEvents");
