@@ -136,6 +136,7 @@ export async function seedTenantOrganisation(tenantDb, platformOrg) {
     primaryEmail: plain.primaryEmail,
     country: plain.country ?? null,
     database_name: plain.database_name ?? null,
+    code: plain.code ?? null,
   };
 
   const [rows] = await tenantDb.sequelize.query(
@@ -153,6 +154,7 @@ export async function seedTenantOrganisation(tenantDb, platformOrg) {
         "primaryEmail" = :primaryEmail,
         country = :country,
         database_name = :database_name,
+        code = :code,
         "updatedAt" = NOW()
       WHERE id = :id`,
       { replacements: { id: plain.id, ...payload } },
@@ -160,9 +162,9 @@ export async function seedTenantOrganisation(tenantDb, platformOrg) {
   } else {
     await tenantDb.sequelize.query(
       `INSERT INTO organisations (
-        id, name, slug, plan_id, status, "primaryEmail", country, database_name, "createdAt", "updatedAt"
+        id, name, slug, plan_id, status, "primaryEmail", country, database_name, code, "createdAt", "updatedAt"
       ) VALUES (
-        :id, :name, :slug, :plan_id, :status, :primaryEmail, :country, :database_name, NOW(), NOW()
+        :id, :name, :slug, :plan_id, :status, :primaryEmail, :country, :database_name, :code, NOW(), NOW()
       )`,
       { replacements: { id: plain.id, ...payload } },
     );

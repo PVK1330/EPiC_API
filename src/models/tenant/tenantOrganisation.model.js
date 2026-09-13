@@ -37,6 +37,11 @@ export default (sequelize, DataTypes) => {
         type: DataTypes.STRING(100),
         allowNull: true,
       },
+      code: {
+        type: DataTypes.STRING(20),
+        allowNull: true,
+        comment: "Organisation initials used as the Case ID prefix (e.g. 'EPIC' in EPIC-SW26-001)",
+      },
       database_name: {
         type: DataTypes.STRING(63),
         allowNull: true,

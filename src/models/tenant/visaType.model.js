@@ -11,6 +11,11 @@ export default (sequelize, DataTypes) => {
         type: DataTypes.STRING(255),
         allowNull: false,
       },
+      code: {
+        type: DataTypes.STRING(20),
+        allowNull: true,
+        comment: "Short code embedded in generated Case IDs (e.g. 'SW' in EPIC-SW26-001)",
+      },
       sort_order: {
         type: DataTypes.INTEGER,
         allowNull: false,

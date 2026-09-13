@@ -1,6 +1,7 @@
 import { Op } from 'sequelize';
 import logger from '../../../utils/logger.js';
 import { ROLES } from '../../../middlewares/role.middleware.js';
+import { generateCaseId } from '../../../utils/case.utils.js';
 import { assertUsersInOrganisation } from '../../../utils/tenantScope.js';
 import { localDateStr } from '../../../utils/dateHelpers.js';
 import catchAsync from '../../../utils/catchAsync.js';
@@ -17,24 +18,6 @@ import {
 // Delegates to the shared, injection-safe builder (BUG-001).
 const buildCaseworkerWhereClause = (req, userId) =>
   buildCaseworkerAssignmentWhere(req.tenantDb.sequelize, userId);
-
-// Generate unique case ID (scoped to organisation when present on request)
-const generateCaseId = async (req) => {
-  const prefix = "C";
-  const today = new Date();
-  const year = today.getFullYear().toString().slice(-2);
-  const month = (today.getMonth() + 1).toString().padStart(2, "0");
-  const lastCase = await req.tenantDb.Case.findOne({
-    where: { caseId: { [Op.like]: `${prefix}-${year}${month}%` } },
-    order: [["caseId", "DESC"]],
-  });
-  let sequence = 1;
-  if (lastCase) {
-    const lastSequence = parseInt(lastCase.caseId.slice(-4), 10);
-    if (!Number.isNaN(lastSequence)) sequence = lastSequence + 1;
-  }
-  return `${prefix}-${year}${month}${String(sequence).padStart(4, "0")}`;
-};
 
 // Get Cases Assigned to Logged-in Caseworker with Filters
 export const getMyCases = async (req, res) => {
@@ -579,7 +562,7 @@ export const createMyCase = async (req, res) => {
     }
 
     // Generate case ID
-    const caseId = await generateCaseId(req);
+    const caseId = await generateCaseId(req.tenantDb, { organisationId, visaTypeId });
 
     // Handle caseworker assignment - include the creating caseworker if not specified
     const cwIds = Array.isArray(assignedcaseworkerId) ? assignedcaseworkerId : (assignedcaseworkerId ? [assignedcaseworkerId] : []);

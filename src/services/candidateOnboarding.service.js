@@ -51,7 +51,7 @@ export async function ensureCandidateEnquiryCase(tenantDb, userId, { visaTypeNam
   }
 
   return Case.create({
-    caseId: await generateCaseId(tenantDb),
+    caseId: await generateCaseId(tenantDb, { organisationId: resolvedOrgId, visaTypeId }),
     candidateId: userId,
     visaTypeId,
     status: "Lead",
