@@ -79,8 +79,12 @@ export const addSponsoredWorker = async (req, res) => {
       organisation_id: organisationId,
     }, { transaction });
 
-    // 4. Create Candidate Application
-    await req.tenantDb.CandidateApplication.create({
+    // 4. Create or update Candidate Application
+    const existingApp = await req.tenantDb.CandidateApplication.findOne({
+      where: { userId: newUser.id },
+      transaction,
+    });
+    const appData = {
       userId: newUser.id,
       firstName,
       lastName,
@@ -103,10 +107,16 @@ export const addSponsoredWorker = async (req, res) => {
       cosNumber,
       socCode,
       contractType,
+      jobTitle,
+      salary,
       workLocation,
-      workingHours,
       organisation_id: organisationId,
-    }, { transaction });
+    };
+    if (existingApp) {
+      await existingApp.update(appData, { transaction });
+    } else {
+      await req.tenantDb.CandidateApplication.create(appData, { transaction });
+    }
 
     // 5. Create Case — auto-assign to the least-loaded caseworker (Option A);
     //    fall back to the unassigned queue when none are available (Option B).

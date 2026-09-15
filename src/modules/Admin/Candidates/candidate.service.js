@@ -219,11 +219,17 @@ export class CandidateService {
       // newUser is the Platform User instance, but it's already mirrored to Tenant
 
       if (application && typeof application === "object") {
-        await this.repository.createApplication({
+        const existingApp = await this.repository.findApplicationByUserId(newUser.id, t);
+        const appPayload = {
           userId: newUser.id,
           ...sanitizeApplicationPayload(application),
           organisation_id,
-        }, t);
+        };
+        if (existingApp) {
+          await this.repository.updateApplication(existingApp, appPayload, t);
+        } else {
+          await this.repository.createApplication(appPayload, t);
+        }
 
         let visaTypeId = null;
         if (application.visaType) {
@@ -1164,21 +1170,24 @@ export class CandidateService {
         });
         createdPlatformUser = user;
 
-        // 2. Create CandidateApplication in draft status
-        await this.repository.createApplication(
-          {
-            userId: user.id,
-            firstName: first_name,
-            lastName: last_name === "-" ? "" : last_name,
-            email: emailNorm,
-            contactNumber: fullContactNumber,
-            visaType: visa_type,
-            status: "draft",
-            isLocked: false,
-            organisation_id,
-          },
-          t,
-        );
+        // 2. Create or update CandidateApplication in draft status
+        const existingApp = await this.repository.findApplicationByUserId(user.id, t);
+        const appPayload = {
+          userId: user.id,
+          firstName: first_name,
+          lastName: last_name === "-" ? "" : last_name,
+          email: emailNorm,
+          contactNumber: fullContactNumber,
+          visaType: visa_type,
+          status: "draft",
+          isLocked: false,
+          organisation_id,
+        };
+        if (existingApp) {
+          await this.repository.updateApplication(existingApp, appPayload, t);
+        } else {
+          await this.repository.createApplication(appPayload, t);
+        }
 
         // 3. Find or resolve VisaType
         let visaTypeId = null;

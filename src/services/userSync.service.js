@@ -202,11 +202,14 @@ export async function reclaimIdentifiersFromInactiveUsers(
   const holders = [];
   if (emailNorm && tenantDb?.User) {
     const { sequelize } = tenantDb;
+    const emailWhere = sequelize?.where && sequelize?.fn && sequelize?.col
+      ? sequelize.where(sequelize.fn("LOWER", sequelize.col("email")), emailNorm)
+      : { [Op.iLike]: emailNorm };
     holders.push(
       ...(await tenantDb.User.findAll({
         where: {
           [Op.and]: [
-            sequelize.where(sequelize.fn("LOWER", sequelize.col("email")), emailNorm),
+            emailWhere,
             notSelf,
           ],
         },

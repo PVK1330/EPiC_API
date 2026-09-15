@@ -155,10 +155,29 @@ app.use((err, req, res, _next) => {
   } else if (err?.name === 'SequelizeValidationError') {
     mapped = { status: 400, message: err.errors?.[0]?.message || 'Some of the values you entered are not valid.' };
   } else if (err?.name === 'SequelizeUniqueConstraintError' || pgCode === '23505') {
-    const field = err?.errors?.[0]?.path;
+    const rawField = err?.errors?.[0]?.path;
+    let fieldMessage = 'This record already exists.';
+    if (rawField) {
+      if (rawField === 'userId' || rawField === 'user_id') {
+        fieldMessage = 'An application or profile already exists for this user.';
+      } else if (rawField === 'email') {
+        fieldMessage = 'Email address is already in use.';
+      } else if (rawField === 'mobile' || rawField === 'phone') {
+        fieldMessage = 'Mobile number is already in use.';
+      } else if (rawField === 'slug') {
+        fieldMessage = 'Subdomain is already in use.';
+      } else {
+        const readable = String(rawField)
+          .replace(/([A-Z])/g, ' $1')
+          .replace(/_/g, ' ')
+          .toLowerCase()
+          .trim();
+        fieldMessage = `This ${readable} is already in use.`;
+      }
+    }
     mapped = {
       status: 409,
-      message: field ? `This ${String(field).replace(/_/g, ' ')} is already in use.` : 'This record already exists.',
+      message: fieldMessage,
     };
   } else if (pgCode === '23503') { // foreign_key_violation
     mapped = { status: 400, message: 'A linked record no longer exists, so this change cannot be saved.' };

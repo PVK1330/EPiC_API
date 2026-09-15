@@ -121,10 +121,11 @@ function biometricToEvent(caseRecord, bookedSlot) {
   };
 }
 
-async function loadTasksForCalendar(tenantDb, userId, roleId) {
+async function loadTasksForCalendar(tenantDb, userId, roleId, scope = "mine") {
   const where = {};
 
-  if (roleId === ROLES.CANDIDATE || roleId === ROLES.CASEWORKER) {
+  const isPlatformAdmin = roleId === ROLES.ADMIN || roleId === ROLES.SUPERADMIN;
+  if (scope !== "all" || !isPlatformAdmin) {
     where.assigned_to = userId;
   }
 
@@ -170,7 +171,7 @@ async function loadTasksForCalendar(tenantDb, userId, roleId) {
   });
 }
 
-async function loadCasesForBiometrics(tenantDb, userId, roleId) {
+async function loadCasesForBiometrics(tenantDb, userId, roleId, scope = "mine") {
   const attributes = ["id", "caseId", "candidateId", "workflowState", "biometricsDate", "targetSubmissionDate"];
 
   if (roleId === ROLES.CANDIDATE) {
@@ -197,18 +198,33 @@ async function loadCasesForBiometrics(tenantDb, userId, roleId) {
     });
   }
 
-  if (roleId === ROLES.ADMIN) {
+  if (roleId === ROLES.ADMIN || roleId === ROLES.SUPERADMIN) {
+    if (scope === "all") {
+      return tenantDb.Case.findAll({
+        attributes,
+        order: [["updated_at", "DESC"]],
+        limit: 200,
+      });
+    }
     return tenantDb.Case.findAll({
+      where: {
+        [Op.or]: [
+          tenantDb.sequelize.literal(
+            `"assignedcaseworkerId"::jsonb @> '[${Number(userId)}]'::jsonb`,
+          ),
+          { candidateId: userId },
+        ],
+      },
       attributes,
       order: [["updated_at", "DESC"]],
-      limit: 200,
+      limit: 100,
     });
   }
 
   return [];
 }
 
-async function loadLicenceStageTasks(tenantDb, userId, roleId) {
+async function loadLicenceStageTasks(tenantDb, userId, roleId, scope = "mine") {
   try {
     if (!tenantDb.LicenceStageTask) return [];
 
@@ -225,6 +241,11 @@ async function loadLicenceStageTasks(tenantDb, userId, roleId) {
       );
     } else if (roleId === ROLES.ADMIN || roleId === ROLES.SUPERADMIN) {
       taskRole = "admin";
+      if (scope === "mine") {
+        appWhere = tenantDb.sequelize.literal(
+          `"assignedcaseworkerId"::jsonb @> '[${Number(userId)}]'::jsonb`,
+        );
+      }
     } else {
       return [];
     }
@@ -236,15 +257,25 @@ async function loadLicenceStageTasks(tenantDb, userId, roleId) {
         attributes: ["id"],
       });
       applicationIds = apps.map((a) => a.id);
-      if (!applicationIds.length) return [];
+      if (!applicationIds.length && scope === "mine" && (roleId === ROLES.ADMIN || roleId === ROLES.SUPERADMIN)) {
+        // Continue to check assignedToUserId below
+      } else if (!applicationIds.length) {
+        return [];
+      }
     }
 
     const where = {
       role: taskRole,
       status: { [Op.ne]: "completed" },
     };
-    if (applicationIds) {
+    if (applicationIds && applicationIds.length) {
       where.licenceApplicationId = { [Op.in]: applicationIds };
+    }
+    if (scope === "mine" && (roleId === ROLES.ADMIN || roleId === ROLES.SUPERADMIN)) {
+      where[Op.or] = [
+        { assignedToUserId: userId },
+        ...(applicationIds && applicationIds.length ? [{ licenceApplicationId: { [Op.in]: applicationIds } }] : []),
+      ];
     }
 
     const rows = await tenantDb.LicenceStageTask.findAll({
@@ -294,17 +325,17 @@ async function loadLicenceStageTasks(tenantDb, userId, roleId) {
 /**
  * Tasks + biometric bookings + licence stage tasks for calendar views (all roles).
  */
-export async function getWorkflowCalendarEvents(tenantDb, userId, roleId) {
+export async function getWorkflowCalendarEvents(tenantDb, userId, roleId, scope = "mine") {
   const events = [];
 
-  const tasks = await loadTasksForCalendar(tenantDb, userId, roleId);
+  const tasks = await loadTasksForCalendar(tenantDb, userId, roleId, scope);
   for (const task of tasks) {
     if (task.due_date || task.title) {
       events.push(taskToEvent(task, task.assigneeName));
     }
   }
 
-  const cases = await loadCasesForBiometrics(tenantDb, userId, roleId);
+  const cases = await loadCasesForBiometrics(tenantDb, userId, roleId, scope);
   for (const caseRecord of cases) {
     const ws = getWorkflowState(caseRecord);
     const bookedSlot = ws?.biometrics?.bookedSlot;
@@ -317,7 +348,7 @@ export async function getWorkflowCalendarEvents(tenantDb, userId, roleId) {
     if (deadlineEv) events.push(deadlineEv);
   }
 
-  const stageTasks = await loadLicenceStageTasks(tenantDb, userId, roleId);
+  const stageTasks = await loadLicenceStageTasks(tenantDb, userId, roleId, scope);
   events.push(...stageTasks);
 
   return events;

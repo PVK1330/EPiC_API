@@ -69,7 +69,7 @@ export async function notifyUser(tenantDb, userId, payload = {}) {
     // the recipient when missing — otherwise rows land with NULL organisation_id
     // and never appear in the org-filtered notifications list.
     let organisationId = payloadOrganisationId;
-    if (organisationId == null) {
+    if (organisationId == null && tenantDb?.User) {
       const recipient = await tenantDb.User.findByPk(userId, {
         attributes: ['organisation_id'],
       }).catch(() => null);
@@ -266,8 +266,9 @@ export async function createNotification({ tenantDb, userId, ...rest }) {
 /**
  * Paginated fetch of notifications for a user.
  */
-export async function getUserNotifications(tenantDb, userId, { page = 1, limit = 20, unreadOnly = false, type, priority } = {}) {
+export async function getUserNotifications(tenantDb, userId, { page = 1, limit = 20, unreadOnly = false, type, priority, organisationId = null } = {}) {
   const where = { userId, isArchived: false };
+  if (organisationId != null) where.organisationId = organisationId;
   if (unreadOnly) where.isRead = false;
   if (type) where.type = type;
   if (priority) where.priority = priority;
@@ -284,15 +285,20 @@ export async function getUserNotifications(tenantDb, userId, { page = 1, limit =
 /**
  * Count unread notifications for a user.
  */
-export async function getUnreadCount(tenantDb, userId) {
-  return tenantDb.Notification.count({ where: { userId, isRead: false, isArchived: false } });
+export async function getUnreadCount(tenantDb, userId, organisationId = null) {
+  const where = { userId, isRead: false, isArchived: false };
+  if (organisationId != null) where.organisationId = organisationId;
+  return tenantDb.Notification.count({ where });
 }
 
 /**
  * Hard-delete a single notification by id.
  */
-export async function deleteNotification(tenantDb, id) {
-  return tenantDb.Notification.destroy({ where: { id } });
+export async function deleteNotification(tenantDb, id, userId = null, organisationId = null) {
+  const where = { id };
+  if (userId != null) where.userId = userId;
+  if (organisationId != null) where.organisationId = organisationId;
+  return tenantDb.Notification.destroy({ where });
 }
 
 /**
