@@ -267,8 +267,11 @@ export async function createNotification({ tenantDb, userId, ...rest }) {
  * Paginated fetch of notifications for a user.
  */
 export async function getUserNotifications(tenantDb, userId, { page = 1, limit = 20, unreadOnly = false, type, priority, organisationId = null } = {}) {
+  const { Op } = await import('sequelize');
   const where = { userId, isArchived: false };
-  if (organisationId != null) where.organisationId = organisationId;
+  if (organisationId != null) {
+    where.organisationId = { [Op.or]: [organisationId, null] };
+  }
   if (unreadOnly) where.isRead = false;
   if (type) where.type = type;
   if (priority) where.priority = priority;
@@ -286,8 +289,11 @@ export async function getUserNotifications(tenantDb, userId, { page = 1, limit =
  * Count unread notifications for a user.
  */
 export async function getUnreadCount(tenantDb, userId, organisationId = null) {
+  const { Op } = await import('sequelize');
   const where = { userId, isRead: false, isArchived: false };
-  if (organisationId != null) where.organisationId = organisationId;
+  if (organisationId != null) {
+    where.organisationId = { [Op.or]: [organisationId, null] };
+  }
   return tenantDb.Notification.count({ where });
 }
 
@@ -295,9 +301,12 @@ export async function getUnreadCount(tenantDb, userId, organisationId = null) {
  * Hard-delete a single notification by id.
  */
 export async function deleteNotification(tenantDb, id, userId = null, organisationId = null) {
+  const { Op } = await import('sequelize');
   const where = { id };
   if (userId != null) where.userId = userId;
-  if (organisationId != null) where.organisationId = organisationId;
+  if (organisationId != null) {
+    where.organisationId = { [Op.or]: [organisationId, null] };
+  }
   return tenantDb.Notification.destroy({ where });
 }
 
