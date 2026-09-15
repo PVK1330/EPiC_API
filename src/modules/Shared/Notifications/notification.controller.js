@@ -1,3 +1,4 @@
+import { Op } from 'sequelize';
 import logger from '../../../utils/logger.js';
 import {
   getUserNotifications,
@@ -88,7 +89,9 @@ export const getAllNotifications = async (req, res) => {
     }
 
     const whereClause = {
-      organisationId: req.user.organisation_id,
+      ...(req.user.organisation_id && {
+        organisationId: { [Op.or]: [req.user.organisation_id, null] }
+      }),
       ...(unreadOnly === 'true' && { isRead: false }),
       ...(type && { type }),
       ...(priority && { priority }),

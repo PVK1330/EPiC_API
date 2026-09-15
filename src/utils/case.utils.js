@@ -12,7 +12,13 @@ function normalizeCode(code) {
 
 /** Derive a short fallback code from a free-text name (letters only, upper-cased, max 4 chars). */
 function deriveCodeFromName(name, maxLen = 4) {
-  const letters = String(name || "").replace(/[^a-zA-Z]/g, "").toUpperCase();
+  if (!name) return null;
+  const words = String(name).trim().split(/\s+/).map(w => w.replace(/[^a-zA-Z0-9]/g, "")).filter(Boolean);
+  if (words.length > 1) {
+    const initials = words.map(w => w[0]).join("").toUpperCase();
+    return initials.slice(0, maxLen);
+  }
+  const letters = String(name).replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
   return letters.slice(0, maxLen) || null;
 }
 
@@ -33,7 +39,7 @@ async function resolveVisaCode(tenantDb, visaTypeId, transaction) {
   try {
     const visaType = await tenantDb.VisaType.findByPk(visaTypeId, { transaction });
     if (!visaType) return FALLBACK_VISA_CODE;
-    return normalizeCode(visaType.code) || FALLBACK_VISA_CODE;
+    return normalizeCode(visaType.code) || deriveCodeFromName(visaType.name, 3) || FALLBACK_VISA_CODE;
   } catch (err) {
     logger.warn({ err, visaTypeId }, "generateCaseId: failed to resolve visa type code");
     return FALLBACK_VISA_CODE;
