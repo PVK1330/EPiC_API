@@ -228,7 +228,11 @@ async function runCalendarAssignmentIsolationTests() {
   console.log('  [PASS] Candidate, Caseworker, and Sponsor scope=all requests strictly forced to scope=mine.\n');
 
   console.log('TEST C11: Superadmin & Admin scope=all tenant boundary enforcement');
-  const tenantBOrgId = orgId + 999;
+  const [orgB] = await Organisation.findOrCreate({
+    where: { slug: 'uat-cal-tenant-b' },
+    defaults: { name: 'UAT Cal Tenant B', slug: 'uat-cal-tenant-b', primaryEmail: 'uat_cal_b@example.com', status: 'active' }
+  });
+  const tenantBOrgId = orgB.id;
   const userTenantB = await createTestUser(ROLES.CASEWORKER, tenantBOrgId);
 
   // Admin scope=all returns tenant organisation tasks, but not another tenant

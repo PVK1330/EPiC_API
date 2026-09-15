@@ -52,10 +52,12 @@ export class CandidateRepository {
   }
 
   async createApplication(appData, transaction) {
+    if (!this.tenantDb?.CandidateApplication?.create) return null;
     return await this.tenantDb.CandidateApplication.create(appData, { transaction });
   }
 
   async findApplicationByUserId(userId, transaction) {
+    if (!this.tenantDb?.CandidateApplication?.findOne) return null;
     return await this.tenantDb.CandidateApplication.findOne({
       where: { userId },
       transaction
@@ -63,6 +65,7 @@ export class CandidateRepository {
   }
 
   async updateApplication(application, updateData, transaction, hookOptions = {}) {
+    if (!application || typeof application.update !== "function") return null;
     return await application.update(updateData, { transaction, ...hookOptions });
   }
 

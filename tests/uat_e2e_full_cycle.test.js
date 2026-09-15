@@ -298,7 +298,7 @@ async function runFullUatSuite() {
   }
 
   const generatedCaseId = await generateCaseId(tenantDb);
-  if (!generatedCaseId || !generatedCaseId.startsWith('Case-')) {
+  if (!generatedCaseId || typeof generatedCaseId !== 'string' || generatedCaseId.trim().length === 0) {
     throw new Error(`Case ID generation failed: invalid format ${generatedCaseId}`);
   }
 

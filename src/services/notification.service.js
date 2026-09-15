@@ -69,7 +69,7 @@ export async function notifyUser(tenantDb, userId, payload = {}) {
     // the recipient when missing — otherwise rows land with NULL organisation_id
     // and never appear in the org-filtered notifications list.
     let organisationId = payloadOrganisationId;
-    if (organisationId == null) {
+    if (organisationId == null && tenantDb?.User) {
       const recipient = await tenantDb.User.findByPk(userId, {
         attributes: ['organisation_id'],
       }).catch(() => null);

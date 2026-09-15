@@ -143,7 +143,11 @@ async function runCandidateNotificationIsolationTests() {
 
   // TEST N8: Cross-tenant notification isolation
   console.log('TEST N8: Cross-tenant notification isolation');
-  const tenantBOrgId = orgId + 999;
+  const [orgB] = await Organisation.findOrCreate({
+    where: { slug: 'uat-tenant-b-test' },
+    defaults: { name: 'UAT Tenant B Test', slug: 'uat-tenant-b-test', primaryEmail: 'uat_notif_b@example.com', status: 'active' }
+  });
+  const tenantBOrgId = orgB.id;
   const candidateTenantB = await createTestUser(4, tenantBOrgId);
   const notifTenantB = await notifyUser(tenantDb, candidateTenantB.id, {
     title: 'Tenant B Secret Alert',
