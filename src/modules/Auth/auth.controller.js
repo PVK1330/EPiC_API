@@ -144,16 +144,21 @@ async function resolveTenantDbForAuth(req) {
 async function findOrganisationByPublicId(rawValue) {
   const value = String(rawValue ?? "").trim();
   if (!value) return null;
-  const attributes = ["id", "slug", "name", "database_name", "status"];
+  const attributes = ["id", "slug", "name", "code", "database_name", "status"];
   if (/^\d+$/.test(value)) {
     return platformDb.Organisation.findByPk(Number(value), { attributes });
   }
-  const norm = value.toLowerCase().replace(/\s+/g, "");
+  const norm = value.toLowerCase().replace(/[\s._-]+/g, "");
   const orgs = await platformDb.Organisation.findAll({ attributes });
   const matches = orgs.filter((org) => {
-    const slug = String(org.slug || "").toLowerCase().replace(/\s+/g, "");
-    const name = String(org.name || "").toLowerCase().replace(/\s+/g, "");
-    return (slug && slug === norm) || (name && name === norm);
+    const slug = String(org.slug || "").toLowerCase().replace(/[\s._-]+/g, "");
+    const name = String(org.name || "").toLowerCase().replace(/[\s._-]+/g, "");
+    const code = String(org.code || "").toLowerCase().replace(/[\s._-]+/g, "");
+    return (
+      (slug && slug === norm) ||
+      (name && name === norm) ||
+      (code && (code === norm || norm.startsWith(code) || code.startsWith(norm)))
+    );
   });
   return matches.length === 1 ? matches[0] : null;
 }
@@ -356,7 +361,7 @@ export const register = catchAsync(async (req, res) => {
     nationalities,
   } = req.validated.body;
 
-  const parsedRoleId = Number(role_id);
+  const parsedRoleId = Number(role_id || 1);
 
   // ── Self-registration role guard (CRITICAL fix) ───────────────────────────
   // Public /register may only create candidate (1) or business/sponsor (4)
@@ -376,11 +381,16 @@ export const register = catchAsync(async (req, res) => {
     mobile != null && String(mobile).trim() !== "" ? String(mobile).trim() : null;
 
   // ── Resolve organisation / tenant DB ──────────────────────────────────────
-  // If a body organisation_id is supplied (e.g. from a plain /register call
-  // without a subdomain), inject it into the organisation context so
-  // resolveTenantDbForAuth can pick it up.
-  if (bodyOrgId && !req.organisationContext?.organisation) {
-    const org = await findOrganisationByPublicId(bodyOrgId);
+  // If an organisation identifier is supplied in body, query, or header,
+  // resolve it and attach to organisationContext. Otherwise fallback to
+  // subdomain organisation or default organisation for candidate self-registration.
+  const explicitOrgId =
+    bodyOrgId !== undefined && bodyOrgId !== null && String(bodyOrgId).trim() !== ""
+      ? String(bodyOrgId).trim()
+      : (req.query?.organisation_id || req.query?.org || req.query?.code || req.headers?.['x-organisation-id'] || null);
+
+  if (explicitOrgId && !req.organisationContext?.organisation) {
+    const org = await findOrganisationByPublicId(explicitOrgId);
     if (!org) {
       return ApiResponse.notFound(res, "Organisation not found. Please check the Organisation ID or code given by your adviser.");
     }
@@ -450,18 +460,27 @@ export const register = catchAsync(async (req, res) => {
   const otp = randomInt(100000, 1000000).toString(); // S-08 fix: CSPRNG
   const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
 
+  const formattedAddress = [address, city, state, pincode, country].filter(Boolean).join(", ") || address || null;
+
   const profile_data = {
-    address: address || null,
+    firstName: String(first_name).trim(),
+    lastName: String(last_name).trim(),
+    email: emailNorm,
+    contactNumber: mobileStr,
+    country_code: String(country_code).trim(),
+    dob: date_of_birth || null,
+    address: formattedAddress,
+    rawAddress: address || null,
+    city: city || null,
+    state: state || null,
+    country: country || null,
+    pincode: pincode || null,
     addressStartDate: addressStartDate || null,
     housingStatus: housingStatus || null,
     landlordName: landlordName || null,
     landlordContactNumber: landlordContactNumber || null,
     landlordEmail: landlordEmail || null,
     landlordAddress: landlordAddress || null,
-    city: city || null,
-    state: state || null,
-    country: country || null,
-    pincode: pincode || null,
     nationality: nationality || (Array.isArray(nationalities) ? nationalities[0] : nationalities) || null,
     nationalities: Array.isArray(nationalities) ? nationalities : (nationalities ? [nationalities] : (nationality ? [nationality] : [])),
   };
@@ -502,6 +521,7 @@ export const register = catchAsync(async (req, res) => {
   return ApiResponse.created(res, "User registered successfully. Please check your email for the OTP.", {
     email: emailNorm,
     otp_sent: true,
+    organisation_id: orgId,
   });
 });
 
@@ -513,11 +533,15 @@ export const verifyOTP = catchAsync(async (req, res) => {
   // BUG-001: the frontend sends organisation_id; older clients sent
   // organisationId. Honour either so the tenant lookup matches registration.
   const bodyOrgId = req.validated.body.organisation_id ?? req.validated.body.organisationId;
+  const explicitOrgId =
+    bodyOrgId !== undefined && bodyOrgId !== null && String(bodyOrgId).trim() !== ""
+      ? String(bodyOrgId).trim()
+      : (req.query?.organisation_id || req.query?.org || req.query?.code || req.headers?.['x-organisation-id'] || null);
   const emailNorm = normalizePlatformEmail(email);
 
-  // ── Resolve organisation context from body (same as register) ──────────
-  if (bodyOrgId && !req.organisationContext?.organisation) {
-    const org = await findOrganisationByPublicId(bodyOrgId);
+  // ── Resolve organisation context from body/query/headers (same as register) ──
+  if (explicitOrgId && !req.organisationContext?.organisation) {
+    const org = await findOrganisationByPublicId(explicitOrgId);
     if (org && org.status !== "suspended" && org.database_name) {
       req.organisationContext = req.organisationContext || {};
       req.organisationContext.organisation = org;
@@ -572,9 +596,36 @@ export const verifyOTP = catchAsync(async (req, res) => {
   });
 
   if (Number(verifiedUser.role_id) === 1) {
+    const rawProfile = unverifiedUser.profile_data || {};
+    const formattedAddress = [
+      rawProfile.address,
+      rawProfile.city,
+      rawProfile.state,
+      rawProfile.pincode,
+      rawProfile.country,
+    ].filter(Boolean).join(", ") || rawProfile.address || null;
+
+    const initialCandidateProfile = {
+      ...rawProfile,
+      firstName: verifiedUser.first_name || rawProfile.firstName,
+      lastName: verifiedUser.last_name || rawProfile.lastName,
+      email: verifiedUser.email || rawProfile.email,
+      contactNumber: verifiedUser.mobile || rawProfile.contactNumber || null,
+      dob: unverifiedUser.date_of_birth || rawProfile.dob || null,
+      address: formattedAddress,
+      addressStartDate: rawProfile.addressStartDate || null,
+      housingStatus: rawProfile.housingStatus || null,
+      landlordName: rawProfile.landlordName || null,
+      landlordContactNumber: rawProfile.landlordContactNumber || null,
+      landlordEmail: rawProfile.landlordEmail || null,
+      landlordAddress: rawProfile.landlordAddress || null,
+      nationality: rawProfile.nationality || null,
+      nationalities: rawProfile.nationalities || (rawProfile.nationality ? [rawProfile.nationality] : []),
+    };
+
     await ensureCandidateEnquiryCase(tenantDb, verifiedUser.id, {
       organisationId: orgId,
-      profileData: unverifiedUser.profile_data || {},
+      profileData: initialCandidateProfile,
     });
   }
 
@@ -634,11 +685,15 @@ export const resendOTP = catchAsync(async (req, res) => {
   const { email } = req.validated.body;
   // BUG-001: accept both organisation_id and organisationId (see verifyOTP).
   const bodyOrgId = req.validated.body.organisation_id ?? req.validated.body.organisationId;
+  const explicitOrgId =
+    bodyOrgId !== undefined && bodyOrgId !== null && String(bodyOrgId).trim() !== ""
+      ? String(bodyOrgId).trim()
+      : (req.query?.organisation_id || req.query?.org || req.query?.code || req.headers?.['x-organisation-id'] || null);
   const emailNorm = normalizePlatformEmail(email);
 
-  // ── Resolve organisation context from body (same as register/verifyOTP) ──
-  if (bodyOrgId && !req.organisationContext?.organisation) {
-    const org = await findOrganisationByPublicId(bodyOrgId);
+  // ── Resolve organisation context from body/query/headers (same as register/verifyOTP) ──
+  if (explicitOrgId && !req.organisationContext?.organisation) {
+    const org = await findOrganisationByPublicId(explicitOrgId);
     if (org && org.status !== "suspended" && org.database_name) {
       req.organisationContext = req.organisationContext || {};
       req.organisationContext.organisation = org;

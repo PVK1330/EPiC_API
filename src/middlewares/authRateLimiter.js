@@ -108,6 +108,7 @@ function getEmail(req) {
 function getTenantSlug(req) {
   return req.organisationContext?.organisation?.slug
     || req.organisationContext?.slug
+    || (req.body?.organisation_id ? String(req.body.organisation_id).trim().toLowerCase() : null)
     || 'no-tenant';
 }
 
@@ -119,7 +120,7 @@ function getTenantSlug(req) {
  *   - 'ip+email'  → tenant:ip:email
  *   - 'email'     → tenant:email
  */
-function buildKey(mode) {
+export function buildKey(mode) {
   return (req) => {
     const tenant = getTenantSlug(req);
     const ip = getClientIp(req);
@@ -196,7 +197,7 @@ const skipIfInternal = (req) => {
  * @param {'ip'|'ip+email'|'email'} opts.keyMode - key composition strategy
  * @param {string} [opts.message] - optional override for the 429 message
  */
-function createLimiter({ windowMs, max, keyMode, message }) {
+export function createLimiter({ windowMs, max, keyMode, message, skipSuccessfulRequests }) {
   const handler = message
     ? (req, res) => res.status(429).json({ status: 'error', message })
     : rateLimitHandler;
@@ -207,6 +208,7 @@ function createLimiter({ windowMs, max, keyMode, message }) {
     keyGenerator: buildKey(keyMode),
     handler,
     skip: skipIfInternal,
+    skipSuccessfulRequests: skipSuccessfulRequests === true,
     standardHeaders: true,   // RateLimit-Limit, RateLimit-Remaining, RateLimit-Reset
     legacyHeaders: false,    // disable X-RateLimit-* (use draft-6 standard headers)
     statusCode: 429,
@@ -221,39 +223,41 @@ function createLimiter({ windowMs, max, keyMode, message }) {
 const FIFTEEN_MINUTES = 15 * 60_000;
 const ONE_HOUR = 60 * 60_000;
 
-/** POST /api/auth/login — 10 attempts per 15 minutes per IP (tenant-scoped) */
+/** POST /api/auth/login — 20 attempts per 15 minutes per IP + email identity (tenant-scoped), successful logins skipped */
 export const loginLimiter = createLimiter({
   windowMs: FIFTEEN_MINUTES,
-  max: 10,
-  keyMode: 'ip',
+  max: 20,
+  keyMode: 'ip+email',
+  skipSuccessfulRequests: true,
 });
 
-/** POST /api/auth/register — 5 registrations per hour per IP (tenant-scoped) */
+/** POST /api/auth/register — 15 registrations per 15 minutes per IP + email identity (tenant-scoped) */
 export const registerLimiter = createLimiter({
-  windowMs: ONE_HOUR,
-  max: 5,
-  keyMode: 'ip',
+  windowMs: FIFTEEN_MINUTES,
+  max: 15,
+  keyMode: 'ip+email',
 });
 
-/** POST /api/auth/forgot-password — 5 requests per hour per IP (tenant-scoped) */
+/** POST /api/auth/forgot-password — 10 requests per hour per IP + email (tenant-scoped) */
 export const forgotPasswordLimiter = createLimiter({
   windowMs: ONE_HOUR,
-  max: 5,
-  keyMode: 'ip',
+  max: 10,
+  keyMode: 'ip+email',
 });
 
-/** POST /api/auth/resend-otp — 10 attempts per 15 minutes per IP (tenant-scoped) */
+/** POST /api/auth/resend-otp — 10 attempts per 15 minutes per IP + email (tenant-scoped) */
 export const resendOtpLimiter = createLimiter({
   windowMs: FIFTEEN_MINUTES,
   max: 10,
-  keyMode: 'ip',
+  keyMode: 'ip+email',
 });
 
-/** POST /api/auth/verify-otp — 10 attempts per 15 minutes per IP (tenant-scoped) */
+/** POST /api/auth/verify-otp — 15 attempts per 15 minutes per IP + email (tenant-scoped), successful verifications skipped */
 export const verifyOtpLimiter = createLimiter({
   windowMs: FIFTEEN_MINUTES,
-  max: 10,
-  keyMode: 'ip',
+  max: 15,
+  keyMode: 'ip+email',
+  skipSuccessfulRequests: true,
 });
 
 /** POST /api/auth/2fa/verify — 10 attempts per 15 minutes per IP (tenant-scoped) */

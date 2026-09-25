@@ -141,7 +141,117 @@ app.use((err, req, res, _next) => {
     pgCode === '22003' ||        // numeric_value_out_of_range
     (err?.name === 'SequelizeDatabaseError' && /invalid input syntax/i.test(err?.message || ''))
   ) {
-    mapped = { status: 400, message: 'Invalid request parameter format.' };
+    const rawMsg = pgDetail || err?.message || '';
+    const match = /invalid input syntax for (?:type )?([a-z0-9_ ]+): "(.*?)"/i.exec(rawMsg);
+    let expectedType = match ? match[1].trim() : 'number/parameter';
+    const hasMatchedVal = Boolean(match);
+    let invalidVal = match ? match[2] : '';
+    let paramName = null;
+    let paramLocation = null;
+
+    const isDateType = /date|time/i.test(expectedType);
+    const isNumType = /int|num|decimal|float|double/i.test(expectedType);
+    const isUuidType = /uuid/i.test(expectedType);
+
+    const matchesExpectedType = (k, v) => {
+      const lowerKey = k.toLowerCase();
+      if (isDateType) {
+        return /date|dob|at$|start|end/.test(lowerKey);
+      }
+      if (isNumType) {
+        return /id$|count|amount|total|number|page|limit|qty|rate/.test(lowerKey) || (typeof v === 'string' && isNaN(Number(v)));
+      }
+      if (isUuidType) {
+        return /uuid|id$/.test(lowerKey);
+      }
+      return true;
+    };
+
+    // Check req.params
+    if (req.params && typeof req.params === 'object') {
+      for (const [k, v] of Object.entries(req.params)) {
+        if (hasMatchedVal && String(v) === invalidVal) {
+          paramName = k;
+          paramLocation = 'route parameter';
+          break;
+        }
+        if (!hasMatchedVal && (v === 'undefined' || v === 'null' || v === 'NaN' || v === '')) {
+          paramName = k;
+          paramLocation = 'route parameter';
+          invalidVal = String(v);
+          break;
+        }
+      }
+    }
+
+    // Check req.query
+    if (!paramName && req.query && typeof req.query === 'object') {
+      for (const [k, v] of Object.entries(req.query)) {
+        if (hasMatchedVal && String(v) === invalidVal && matchesExpectedType(k, v)) {
+          paramName = k;
+          paramLocation = 'query parameter';
+          break;
+        }
+        if (!hasMatchedVal && (v === 'undefined' || v === 'null' || v === 'NaN') && matchesExpectedType(k, v)) {
+          paramName = k;
+          paramLocation = 'query parameter';
+          invalidVal = String(v);
+          break;
+        }
+      }
+    }
+
+    // Check req.body
+    if (!paramName && req.body && typeof req.body === 'object') {
+      for (const [k, v] of Object.entries(req.body)) {
+        if (hasMatchedVal && String(v) === invalidVal && matchesExpectedType(k, v)) {
+          paramName = k;
+          paramLocation = 'request body field';
+          break;
+        }
+        if (!hasMatchedVal && (v === 'undefined' || v === 'null' || v === 'NaN') && matchesExpectedType(k, v)) {
+          paramName = k;
+          paramLocation = 'request body field';
+          invalidVal = String(v);
+          break;
+        }
+      }
+    }
+
+    // If paramName couldn't be matched by value, check URL segments
+    if (!paramName) {
+      const urlSegments = (req.path || req.originalUrl || '').split('/').filter(Boolean);
+      for (const seg of urlSegments) {
+        if (seg === 'undefined' || seg === 'null' || seg === 'NaN' || (hasMatchedVal && invalidVal && seg === invalidVal)) {
+          paramName = 'id';
+          paramLocation = 'URL path parameter';
+          invalidVal = seg;
+          break;
+        }
+      }
+    }
+
+    let friendlyMessage = '';
+    if (paramName) {
+      friendlyMessage = `Invalid request parameter format: ${paramLocation} '${paramName}' received "${invalidVal}", but expected a valid ${expectedType}.`;
+    } else if (invalidVal !== undefined && invalidVal !== '') {
+      friendlyMessage = `Invalid request parameter format: received "${invalidVal}", but expected a valid ${expectedType} on ${req.method} ${req.path || req.originalUrl}.`;
+    } else {
+      friendlyMessage = `Invalid request parameter format: ${rawMsg || 'expected valid numeric or identifier parameter'}.`;
+    }
+
+    mapped = {
+      status: 400,
+      message: friendlyMessage,
+      data: {
+        parameter: paramName || null,
+        location: paramLocation || null,
+        receivedValue: invalidVal || null,
+        expectedType,
+        endpoint: `${req.method} ${req.originalUrl}`,
+        error: rawMsg || null,
+      },
+    };
   } else if (pgCode === '22001') { // string_data_right_truncation
     const limit = /character varying\((\d+)\)/.exec(pgDetail)?.[1];
     mapped = {
@@ -189,7 +299,11 @@ app.use((err, req, res, _next) => {
       { pgCode, errName: err?.name, detail: pgDetail, url: req.originalUrl, method: req.method },
       'Rejected request with invalid data',
     );
-    return res.status(mapped.status).json({ status: 'error', message: mapped.message, data: null });
+    return res.status(mapped.status).json({
+      status: 'error',
+      message: mapped.message,
+      data: mapped.data ?? null,
+    });
   }
 
   const statusCode = err?.status || err?.statusCode || 500;

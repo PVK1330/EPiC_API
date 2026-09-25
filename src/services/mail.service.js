@@ -733,25 +733,24 @@ export async function sendOrganisationAdminWelcomeEmail({
   admin,
   plainPassword,
   organisationId,
+  organisation,
   loginUrl,
 }) {
-  const url =
-    loginUrl ||
-    process.env.FRONTEND_URL ||
-    process.env.CLIENT_URL ||
-    "http://localhost:5173";
-  // The url here is from `resolveOrganisationLoginUrl` if passed.
-  // Actually, wait, `superadminOrganisation.controller.js` does NOT pass loginUrl!
-  // It calls: sendOrganisationAdminWelcomeEmail({ admin, plainPassword, organisationId: org.id })
-  // Let's resolve both here!
-  let orgUrl = url;
-  let mainUrl = url;
-  
-  if (organisationId) {
-    const fallbackBase = process.env.FRONTEND_URL?.split(",")[0]?.trim() || "http://localhost:5173";
-    mainUrl = `${fallbackBase.replace(/\/$/, "")}/login`;
-    orgUrl = mainUrl; // Only send the main portal login
+  const org = organisation || (organisationId ? await platformDb.Organisation.findByPk(organisationId) : null);
+  const resolvedOrgId = org?.id || organisationId || null;
+  const orgCode = org?.code || org?.slug || (resolvedOrgId ? String(resolvedOrgId) : null);
+
+  const fallbackBase = process.env.FRONTEND_URL?.split(",")[0]?.trim() || "http://localhost:5173";
+  let mainUrl = `${fallbackBase.replace(/\/$/, "")}/login`;
+  let orgUrl = mainUrl;
+
+  if (loginUrl) {
+    orgUrl = loginUrl;
   }
+
+  const selfRegistrationUrl = orgCode
+    ? `${fallbackBase.replace(/\/$/, "")}/login?tab=register&org=${encodeURIComponent(orgCode)}`
+    : `${fallbackBase.replace(/\/$/, "")}/login?tab=register`;
 
   const firstName = String(admin?.first_name || "Admin").trim();
   const email = String(admin?.email || "").trim();
@@ -759,21 +758,35 @@ export async function sendOrganisationAdminWelcomeEmail({
 
   // Resolve the org's branding so the welcome shows the org logo/name even though
   // it is sent via platform SMTP (the org may not have its own SMTP yet).
-  const branding = await getOrganisationEmailBranding(organisationId);
+  const branding = await getOrganisationEmailBranding(resolvedOrgId);
 
   // Import the standard template generator
   const { generateAdminCredentialsTemplate } = await import('../utils/emailTemplates.js');
-  const htmlContent = generateAdminCredentialsTemplate(email, plain, orgUrl, mainUrl, branding);
+  const htmlContent = generateAdminCredentialsTemplate(
+    email,
+    plain,
+    orgUrl,
+    mainUrl,
+    branding,
+    {
+      organisationId: resolvedOrgId,
+      organisationCode: orgCode,
+      selfRegistrationUrl,
+    },
+  );
+
+  const orgIdText = resolvedOrgId ? `Organisation ID: ${resolvedOrgId}\n` : '';
+  const orgCodeText = orgCode ? `Organisation Code (for candidate self-registration): ${orgCode}\nCandidate Registration Link: ${selfRegistrationUrl}\n` : '';
 
   return sendTransactionalEmail({
     to: email,
     subject: `Welcome to ${branding.orgName} — Your Admin Credentials`,
     html: htmlContent,
-    text: `Hi ${firstName},\n\nYour organisation administrator account is ready.\n\nEmail: ${email}\nTemporary password: ${plain}\n\nLog in: ${orgUrl}\nMain Portal: ${mainUrl}\n\nPlease change your password after your first login.`,
+    text: `Hi ${firstName},\n\nYour organisation administrator account is ready.\n\n${orgIdText}${orgCodeText}\nEmail: ${email}\nTemporary password: ${plain}\n\nLog in: ${orgUrl}\nMain Portal: ${mainUrl}\n\nPlease change your password after your first login.`,
     forcePlatformSmtp: true,
     organisationId: null,
     brandingOverride: branding,
-    failureContext: `Organisation admin welcome email (org #${organisationId ?? "new"})`,
+    failureContext: `Organisation admin welcome email (org #${resolvedOrgId ?? "new"})`,
   });
 }
 

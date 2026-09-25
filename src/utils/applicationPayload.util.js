@@ -158,6 +158,8 @@ const DATE_FIELDS = new Set([
   'parentDob', 'parent2Dob',
   'entryDate', 'leaveDate',
   'visaEndDate',
+  'medicalTreatmentStartDate',
+  'medicalTreatmentEndDate',
 ]);
 
 const YES_NO_FIELDS = new Set([
@@ -516,6 +518,21 @@ export function sanitizeApplicationPayload(body) {
         details: '',
       },
     ];
+  }
+
+  // Clear conditional fields when not applicable so empty strings or stale data don't cause DB errors
+  if (payload.housingStatus && payload.housingStatus !== 'Rent') {
+    payload.landlordName = null;
+    payload.landlordContactNumber = null;
+    payload.landlordEmail = null;
+    payload.landlordAddress = null;
+  }
+  if (payload.medicalTreatment === 'No') {
+    payload.medicalTreatmentHospitalClinicName = null;
+    payload.medicalTreatmentHospitalClinicAddress = null;
+    payload.medicalTreatmentStartDate = null;
+    payload.medicalTreatmentEndDate = null;
+    payload.medicalTreatmentDetails = null;
   }
 
   return payload;

@@ -6,19 +6,7 @@ import { generateCaseId } from "../utils/case.utils.js";
  * Ensures a new candidate has an enquiry-stage case (Standard Immigration Case Process step 1).
  */
 export async function ensureCandidateEnquiryCase(tenantDb, userId, { visaTypeName = null, organisationId = null, profileData = {} } = {}) {
-  const { Case, CandidateApplication } = tenantDb;
-
-  const existing = await Case.findOne({ where: { candidateId: userId } });
-  if (existing) {
-    // If CandidateApplication exists, update with any new profile data if missing
-    if (profileData && Object.keys(profileData).length > 0) {
-      const app = await CandidateApplication.findOne({ where: { userId } });
-      if (app) {
-        await app.update(profileData);
-      }
-    }
-    return existing;
-  }
+  const { Case, CandidateApplication, User } = tenantDb;
 
   let visaTypeId = null;
   if (visaTypeName && tenantDb.VisaType) {
@@ -37,6 +25,20 @@ export async function ensureCandidateEnquiryCase(tenantDb, userId, { visaTypeNam
     resolvedOrgId = firstOrg?.id ?? null;
   }
 
+  // Look up user to guarantee candidate identity fields are set
+  const user = User ? await User.findByPk(userId) : null;
+  const userFallback = user ? {
+    firstName: user.first_name,
+    lastName: user.last_name,
+    email: user.email,
+    contactNumber: user.mobile,
+  } : {};
+
+  const mergedProfile = {
+    ...userFallback,
+    ...(profileData || {}),
+  };
+
   const app = await CandidateApplication.findOne({ where: { userId } });
   if (!app) {
     await CandidateApplication.create({
@@ -44,10 +46,23 @@ export async function ensureCandidateEnquiryCase(tenantDb, userId, { visaTypeNam
       status: "draft",
       visaType: visaTypeName || null,
       organisation_id: resolvedOrgId,
-      ...(profileData || {}),
+      ...mergedProfile,
     });
-  } else if (profileData && Object.keys(profileData).length > 0) {
-    await app.update(profileData);
+  } else if (Object.keys(mergedProfile).length > 0) {
+    const updates = {};
+    for (const [k, v] of Object.entries(mergedProfile)) {
+      if (v !== undefined && v !== null && v !== "" && (app[k] === null || app[k] === undefined || app[k] === "")) {
+        updates[k] = v;
+      }
+    }
+    if (Object.keys(updates).length > 0) {
+      await app.update(updates);
+    }
+  }
+
+  const existing = await Case.findOne({ where: { candidateId: userId } });
+  if (existing) {
+    return existing;
   }
 
   return Case.create({
@@ -58,7 +73,7 @@ export async function ensureCandidateEnquiryCase(tenantDb, userId, { visaTypeNam
     caseStage: DEFAULT_CASE_STAGE,
     priority: "medium",
     targetSubmissionDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-    nationality: null,
+    nationality: mergedProfile.nationality || null,
     jobTitle: "Client enquiry",
     assignedcaseworkerId: null,
     organisation_id: resolvedOrgId,
