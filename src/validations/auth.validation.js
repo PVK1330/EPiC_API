@@ -10,12 +10,12 @@ export const registerSchema = z.object({
     password: strongPasswordSchema,
     country_code: z.string().trim().max(10).optional(),
     mobile: phoneSchema.optional(),
-    role_id: z.coerce.number().int().optional(),
+    role_id: z.coerce.number().int().default(1),
     date_of_birth: z.string().optional().nullable(),
     userType: z.string().optional(),
     // Accepts the numeric organisation id OR the organisation code/slug the
     // adviser shares with the candidate (resolved in the controller — BUG-001).
-    organisation_id: z.coerce.string().optional(),
+    organisation_id: z.union([z.string(), z.number()]).optional().nullable(),
     // Candidate profile & landlord fields (BUG-007)
     address: z.string().optional().nullable(),
     addressStartDate: z.string().optional().nullable(),

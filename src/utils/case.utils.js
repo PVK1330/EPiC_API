@@ -76,6 +76,15 @@ export const generateCaseId = async (reqOrTenantDb, options = {}) => {
     // Defensive guard mirroring the previous implementation's style — the
     // migration should already have created this table for every tenant DB,
     // this just protects a DB that hasn't picked up the migration yet.
+    if (typeof tenantDb?.sequelize?.query !== 'function') {
+      try {
+        const count = typeof tenantDb?.Case?.count === 'function' ? await tenantDb.Case.count({ paranoid: false, transaction }) : 0;
+        return `Case-${String(count + 1).padStart(2, "0")}`;
+      } catch {
+        return `Case-${Date.now()}`;
+      }
+    }
+
     await tenantDb.sequelize.query(
       `CREATE TABLE IF NOT EXISTS case_id_sequences (
         id SERIAL PRIMARY KEY,

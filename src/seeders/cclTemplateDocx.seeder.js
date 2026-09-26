@@ -27,7 +27,7 @@ const DOCX_RULES = [
   { test: /change of employment.*(2026|mar)/i, name: "Change of Employment (Mar 2026) — CCL", visaMatchers: ["skilled"], primary: false },
   { test: /change of employment/i, name: "Change of Employment — CCL", visaMatchers: ["skilled"], primary: false },
   { test: /dependent|dependant/i, name: "Dependent Partner & Child — CCL", visaMatchers: ["dependent", "dependant", "spouse", "partner"], primary: true },
-  { test: /\bilr\b|indefinite/i, name: "Indefinite Leave to Remain — CCL", visaMatchers: ["indefiniteleave", "ilr"], primary: true },
+  { test: /\bilr\b|indefinite/i, name: "Indefinite Leave to Remain — CCL", visaMatchers: ["indefiniteleave", "ilr", "settlement"], primary: true },
   { test: /spouse.*british/i, name: "Spouse of a British National — CCL", visaMatchers: ["spouse", "partner"], primary: true },
   { test: /nationality|naturalis/i, name: "Nationality / Naturalisation — CCL", visaMatchers: ["britishcitizen", "naturalis", "nationality", "citizenship"], primary: true },
   { test: /sponsor licence large/i, name: "Sponsor Licence (Large Companies) — CCL", visaMatchers: ["sponsorlicence", "sponsorlicense", "sponsor"], primary: true },
@@ -38,24 +38,65 @@ const DOCX_RULES = [
 /** Replace obvious .docx placeholders with auto-fill tags so letters self-fill. */
 function injectTags(html) {
   let out = String(html || "");
-  // Hardcoded date (e.g. "Date: 24/06/2024") → today's date tag.
+  // Hardcoded date (e.g. "Date: 24/06/2024" or "Date: 13/09/2024") → today's date tag.
   out = out.replace(/Date:\s*\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4}/gi, "Date: {{date_today}}");
-  // "Dear ____" → "Dear {{candidate_name}}".
-  out = out.replace(/Dear\s+(?:Mr\.?|Mrs\.?|Ms\.?|Miss)?\s*_{2,}/gi, "Dear {{candidate_name}}");
+
+  // Fix awkward date line wrapping: in mammoth output, tabs between Dear and Date push Date into wrapping
+  out = out.replace(
+    /(<p[^>]*>)?Dear\s+(?:Mr\.?|Mrs\.?|Ms\.?|Miss)?\s*[_.\u2026]*[^<]*?(?:[\t\s]{2,}|\s{4,})Date:\s*(?:\{\{date_today\}\}|[0-9/.\-]+)(<\/p>)?/gi,
+    `<p>Date: {{date_today}}</p><p>Dear {{candidate_first_name}},</p>`
+  );
+
+  // "Dear ____" or "Dear ……" → "Dear {{candidate_first_name}}".
+  out = out.replace(/Dear\s+(?:Mr\.?|Mrs\.?|Ms\.?|Miss)?\s*[_.\u2026]{2,}/gi, "Dear {{candidate_first_name}}");
+
   // Firm name → org name tag (so each org's own name is used).
   out = out.replace(/Elite\s*PIC\s*Ltd/gi, "{{org_name}}").replace(/Elite\s*PIC/gi, "{{org_name}}");
-  // The first two standalone "______" paragraphs are the recipient block
-  // (name then address) → fill with candidate details.
+
+  // Recipient block (first two standalone placeholder paragraphs) with underscores, dots, or ellipsis
   let blanks = 0;
   out = out.replace(
-    /(<p[^>]*>)(?:\s*<strong>)?\s*_{3,}\s*(?:<\/strong>\s*)?(<\/p>)/gi,
+    /(<p[^>]*>)(?:\s*<strong>)?\s*[_.\u2026]{3,}\s*(?:<\/strong>\s*)?(<\/p>)/gi,
     (match, open, close) => {
       blanks += 1;
       if (blanks === 1) return `${open}{{candidate_name}}${close}`;
       if (blanks === 2) return `${open}{{candidate_address}}${close}`;
-      return match; // leave other inline blanks for the caseworker to complete
+      return match;
     },
   );
+
+  // Caseworker replacement: remove hardcoded "David Robertson" and contact details
+  out = out.replace(
+    /I,\s*David Robertson\s*will be your caseworker[\s\S]*?as and when they arise\./gi,
+    "I, {{caseworker_name}} will be your primary caseworker and responsible for the conduct of your case. I can be contacted on {{caseworker_phone}} and email {{caseworker_email}} Whenever possible, I shall be available to advise and assist you and keep you informed of the progress of your case."
+  );
+  out = out.replace(
+    /Your caseworker will be Mr David Robertson under the supervision of Mr Khalid Mahmood\./gi,
+    "Your assigned caseworkers for this matter will be {{caseworkers_all}}."
+  );
+  out = out.replace(/david@elitepic\.co\.uk/gi, "{{caseworker_email}}");
+  out = out.replace(/01217782400/g, "{{caseworker_phone}}");
+  out = out.replace(/Mr David Robertson/gi, "{{caseworker_name}}");
+  out = out.replace(/David Robertson/gi, "{{caseworker_name}}");
+
+  // Fee table replacement: replace static disbursement tables with dynamic {{fee_section}}
+  out = out.replace(
+    /<table[^>]*>[\s\S]*?(?:Home office visa application fee|Health Surcharge|Home office visa fee|Sponsor Licence Application Fee)[\s\S]*?<\/table>/gi,
+    "{{fee_section}}"
+  );
+
+  // Sponsor clause replacement in templates that have hardcoded blanks:
+  out = out.replace(
+    /You instructed \{\{org_name\}\} via your Sponsor [_.\u2026]+,\s*to manage the application[^<]+?\./gi,
+    "{{sponsor_instruction_clause}}"
+  );
+
+  // Appendix A replacement: replace empty table with dynamic {{appendix_a}}
+  out = out.replace(
+    /<p[^>]*><strong>\s*Appendix\s*\(?A\)?[\s\S]*?<\/table>/gi,
+    "{{appendix_a}}"
+  );
+
   return out;
 }
 
@@ -146,11 +187,15 @@ export async function seedCclTemplatesFromDocxForDb(tenantDb) {
       });
       if (wasCreated) {
         created += 1;
-      } else if (row && !String(row.bodyHtml || "").includes("{{org_name}}")) {
-        // One-time upgrade of letters imported before the richer tag injection
-        // (they won't have {{org_name}} yet). Skipped once upgraded, so admin
-        // edits aren't clobbered on later restarts.
-        await row.update({ bodyHtml: tpl.html, visaTypeId, isActive });
+      } else if (
+        row &&
+        (!String(row.bodyHtml || "").includes("{{org_name}}") ||
+          !String(row.bodyHtml || "").includes("{{caseworker_name}}") ||
+          String(row.bodyHtml || "").includes("David Robertson"))
+      ) {
+        // Upgrade letters imported before the richer dynamic tag injection
+        // (e.g. still having hardcoded David Robertson or missing dynamic tags).
+        await row.update({ bodyHtml: tpl.html, visaTypeId: visaTypeId ?? row.visaTypeId, isActive: row.isActive || isActive });
         refreshed += 1;
       }
     } catch (err) {

@@ -34,11 +34,15 @@ const bad = (res, message, code = 400) =>
 // ── helpers ───────────────────────────────────────────────────────────────────
 async function findCase(tenantDb, caseRef) {
   const ref = String(caseRef || "").replace(/^#/, "");
+  const include = [
+    ...(tenantDb.VisaType ? [{ model: tenantDb.VisaType, as: "visaType" }] : []),
+    ...(tenantDb.PetitionType ? [{ model: tenantDb.PetitionType, as: "petitionType" }] : []),
+  ];
   if (/^\d+$/.test(ref)) {
-    const byPk = await tenantDb.Case.findByPk(Number(ref));
+    const byPk = await tenantDb.Case.findByPk(Number(ref), { include });
     if (byPk) return byPk;
   }
-  return tenantDb.Case.findOne({ where: { caseId: ref } });
+  return tenantDb.Case.findOne({ where: { caseId: ref }, include });
 }
 
 /**

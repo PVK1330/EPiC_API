@@ -24,8 +24,8 @@ import logger from "../utils/logger.js";
 // Reuse one JSDOM window for html-to-pdfmake (creating one per render is slow).
 const sharedWindow = new JSDOM("").window;
 
-/** Active org template for a visa type → else the org default (visa_type_id NULL). */
-export async function resolveDbCclTemplate(tenantDb, visaTypeId) {
+/** Active org template for a visa type → else by visa name match → else the org default (visa_type_id NULL). */
+export async function resolveDbCclTemplate(tenantDb, visaTypeId, visaTypeName = "") {
   if (!tenantDb?.CclTemplate) return null;
   if (visaTypeId) {
     const specific = await tenantDb.CclTemplate.findOne({
@@ -33,6 +33,35 @@ export async function resolveDbCclTemplate(tenantDb, visaTypeId) {
       order: [["id", "DESC"]],
     });
     if (specific) return specific;
+  }
+  if (visaTypeName) {
+    const norm = String(visaTypeName).toLowerCase();
+    let namePattern = null;
+    if (norm.includes("ilr") || norm.includes("indefinite") || norm.includes("settlement")) {
+      namePattern = "%Indefinite%";
+    } else if (norm.includes("switch") && norm.includes("skilled")) {
+      namePattern = "%Switch to Skilled%";
+    } else if (norm.includes("change") && norm.includes("employment")) {
+      namePattern = "%Change of Employment%";
+    } else if (norm.includes("dependent") || norm.includes("dependant")) {
+      namePattern = "%Dependent%";
+    } else if (norm.includes("skilled")) {
+      namePattern = "%Skilled Worker%";
+    } else if (norm.includes("sponsor")) {
+      namePattern = "%Sponsor Licence%";
+    } else if (norm.includes("spouse") || norm.includes("partner")) {
+      namePattern = "%Spouse%";
+    } else if (norm.includes("nationality") || norm.includes("naturalis")) {
+      namePattern = "%Nationality%";
+    }
+
+    if (namePattern) {
+      const byName = await tenantDb.CclTemplate.findOne({
+        where: { name: { [Op.iLike]: namePattern }, isActive: true },
+        order: [["id", "DESC"]],
+      });
+      if (byName) return byName;
+    }
   }
   return tenantDb.CclTemplate.findOne({
     where: { visaTypeId: { [Op.is]: null }, isActive: true },
@@ -123,7 +152,17 @@ export async function generateCclHtmlForCase({
     };
   }
 
-  const template = await resolveDbCclTemplate(tenantDb, caseRecord?.visaTypeId);
+  let visaName = caseRecord?.visaType?.name || "";
+  if (!visaName && caseRecord?.visaTypeId && tenantDb?.VisaType) {
+    try {
+      const vt = await tenantDb.VisaType.findByPk(caseRecord.visaTypeId, { attributes: ["name"] });
+      visaName = vt?.name || "";
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const template = await resolveDbCclTemplate(tenantDb, caseRecord?.visaTypeId, visaName);
   if (!template) return { html: null, source: "none", template: null };
 
   const org = await resolveOrganisation(tenantDb, organisation);

@@ -32,14 +32,27 @@ export const CCL_TAGS = [
   { tag: "candidate_dob", label: "Client date of birth", group: "Client", type: "text", sample: "14 March 1992" },
   { tag: "passport_number", label: "Passport number", group: "Client", type: "text", sample: "123456789" },
   { tag: "nationality", label: "Nationality", group: "Client", type: "text", sample: "Indian" },
+  { tag: "current_visa_type", label: "Current visa type", group: "Client", type: "text", sample: "Skilled Worker" },
+  { tag: "current_visa_expiry", label: "Current visa expiry", group: "Client", type: "text", sample: "15 August 2026" },
 
   // Case
   { tag: "case_ref", label: "Case reference", group: "Case", type: "text", sample: "EPIC-2026-0042" },
   { tag: "visa_type", label: "Visa type", group: "Case", type: "text", sample: "Skilled Worker" },
   { tag: "petition_type", label: "Petition type", group: "Case", type: "text", sample: "Initial application" },
-  { tag: "caseworker_name", label: "Caseworker name", group: "Case", type: "text", sample: "Alex Smith" },
+  { tag: "caseworker_name", label: "Primary Caseworker name", group: "Case", type: "text", sample: "Alex Smith" },
+  { tag: "caseworker_email", label: "Primary Caseworker email", group: "Case", type: "text", sample: "alex.smith@example.com" },
+  { tag: "caseworker_phone", label: "Primary Caseworker phone", group: "Case", type: "text", sample: "+44 20 1234 5678" },
+  { tag: "second_caseworker_name", label: "Second Caseworker name", group: "Case", type: "text", sample: "Sarah Connor" },
+  { tag: "second_caseworker_email", label: "Second Caseworker email", group: "Case", type: "text", sample: "sarah.connor@example.com" },
+  { tag: "caseworkers_all", label: "All caseworkers", group: "Case", type: "text", sample: "Alex Smith and Sarah Connor" },
+  { tag: "sponsor_name", label: "Sponsor name", group: "Case", type: "text", sample: "Acme Corp Ltd" },
+  { tag: "sponsor_licence", label: "Sponsor licence number", group: "Case", type: "text", sample: "123456789" },
+  { tag: "sponsor_statement", label: "Sponsor relationship statement", group: "Case", type: "text", sample: "under the sponsorship of Acme Corp Ltd" },
+  { tag: "sponsor_instruction_clause", label: "Sponsor / private client clause", group: "Case", type: "text", sample: "You instructed Elite PIC to manage your application..." },
+  { tag: "is_private_client", label: "Private client (Yes/No)", group: "Case", type: "text", sample: "Yes" },
   { tag: "date_today", label: "Today's date", group: "Case", type: "text", sample: "5 June 2026" },
   { tag: "date_issued", label: "CCL issue date", group: "Case", type: "text", sample: "5 June 2026" },
+  { tag: "appendix_a", label: "Appendix A (Immigration history)", group: "Case", type: "block", sample: "[appendix A table]" },
 
   // Fees
   { tag: "proposed_amount", label: "Proposed amount", group: "Fees", type: "text", sample: "£1,500.00" },
@@ -47,6 +60,7 @@ export const CCL_TAGS = [
   { tag: "fee_amount", label: "CCL fee amount", group: "Fees", type: "text", sample: "£1,500.00" },
   { tag: "amount_in_words", label: "Amount in words", group: "Fees", type: "text", sample: "One thousand five hundred pounds" },
   { tag: "installment_plan", label: "Installment plan (table)", group: "Fees", type: "block", sample: "[installment table]" },
+  { tag: "fee_section", label: "Dynamic fee breakdown table", group: "Fees", type: "block", sample: "[fee schedule table]" },
 ];
 
 /** Returns the tag catalogue grouped for the editor palette. */
@@ -60,6 +74,10 @@ export function getCclTagRegistry() {
       type: t.type,
       sample: t.sample,
     });
+  }
+  // Backward compatibility alias for Candidate group while preserving Client terminology
+  if (groups["Client"] && !groups["Candidate"]) {
+    groups["Candidate"] = groups["Client"];
   }
   return { tags: CCL_TAGS, groups };
 }
@@ -164,6 +182,118 @@ export function renderInstallmentPlanHtml(installmentPlan) {
   );
 }
 
+/** Builds dynamic Appendix A immigration history table from stored application data. */
+export function renderAppendixAHtml(application, caseRecord) {
+  const brp = escapeHtml(application?.brpNumber || "Not provided");
+  const currentVisa = escapeHtml(application?.visaType || caseRecord?.visaType?.name || "Current route");
+  const expiry = application?.visaEndDate ? escapeHtml(formatDate(application.visaEndDate)) : "Not provided";
+  const entry = application?.entryDate ? escapeHtml(formatDate(application.entryDate)) : "Not recorded";
+  const passport = escapeHtml(application?.passportNumber || "On file");
+  const nationality = escapeHtml(application?.nationality || "Not specified");
+
+  let travelSummary = "No recent international travel recorded";
+  if (Array.isArray(application?.travelHistory) && application.travelHistory.length > 0) {
+    const trips = application.travelHistory
+      .map((t) => {
+        const dest = t.country || t.countryVisited || "Overseas";
+        const dates = [t.entryDate ? formatDate(t.entryDate) : "", t.leaveDate ? formatDate(t.leaveDate) : ""]
+          .filter(Boolean)
+          .join(" – ");
+        return dates ? `${dest} (${dates})` : dest;
+      })
+      .filter(Boolean);
+    if (trips.length > 0) travelSummary = trips.join("; ");
+  } else if (application?.countryVisited) {
+    const dates = [application.entryDate ? formatDate(application.entryDate) : "", application.leaveDate ? formatDate(application.leaveDate) : ""]
+      .filter(Boolean)
+      .join(" – ");
+    travelSummary = dates ? `${application.countryVisited} (${dates})` : application.countryVisited;
+  }
+
+  const refusalStatus = application?.refusedVisa === "Yes"
+    ? `Visa refusal recorded (${escapeHtml(application.refusedVisaCountry || "UK")}${application.refusedVisaDate ? " on " + formatDate(application.refusedVisaDate) : ""})`
+    : "No adverse immigration history or visa refusals recorded";
+
+  return `
+<div class="ccl-appendix-a">
+  <p><strong>Appendix (A) – Immigration History</strong></p>
+  <p>Immigration history related to your stay in the UK and application for UK immigration:</p>
+  <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin-top:8px;margin-bottom:12px;">
+    <tbody>
+      <tr>
+        <td style="width:30%;background-color:#f8f9fa;font-weight:bold;">Current Status / BRP</td>
+        <td style="width:70%;">
+          <strong>BRP / Reference:</strong> ${brp}<br/>
+          <strong>Current Visa Category:</strong> ${currentVisa}<br/>
+          <strong>Expiry Date:</strong> ${expiry}
+        </td>
+      </tr>
+      <tr>
+        <td style="background-color:#f8f9fa;font-weight:bold;">Entry &amp; Residence</td>
+        <td>
+          <strong>Initial Arrival / Entry Date:</strong> ${entry}<br/>
+          <strong>Nationality / Passport:</strong> ${nationality} (Passport: ${passport})
+        </td>
+      </tr>
+      <tr>
+        <td style="background-color:#f8f9fa;font-weight:bold;">Immigration Compliance</td>
+        <td>${refusalStatus}</td>
+      </tr>
+      <tr>
+        <td style="background-color:#f8f9fa;font-weight:bold;">Travel History</td>
+        <td>${escapeHtml(travelSummary)}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>`.trim();
+}
+
+/** Builds dynamic fee section table without hardcoded amounts. */
+export function renderFeeSectionHtml({ fee, total, amountInWords, installmentPlanHtml, visaName, orgName }) {
+  const feeStr = formatGbp(fee);
+  const totalStr = formatGbp(total);
+  const org = escapeHtml(orgName || "the firm");
+  const visa = escapeHtml(visaName || "Immigration");
+
+  return `
+<div class="ccl-fees-section">
+  <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin-top:8px;margin-bottom:12px;">
+    <thead>
+      <tr style="background-color:#f8f9fa;">
+        <th><strong>Item</strong></th>
+        <th><strong>Cost</strong></th>
+        <th><strong>VAT</strong></th>
+        <th><strong>Total Cost</strong></th>
+        <th><strong>Comment</strong></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>${visa} Professional Legal Services</td>
+        <td>${feeStr}</td>
+        <td>£0.00 (Exempt/Included)</td>
+        <td>${totalStr}</td>
+        <td>Payable to ${org} as agreed</td>
+      </tr>
+      <tr>
+        <td>Home Office Visa Application Fee</td>
+        <td colspan="4">Disbursements payable directly to Home Office / UKVI at prevailing statutory rate</td>
+      </tr>
+      <tr>
+        <td>Immigration Health Surcharge (IHS)</td>
+        <td colspan="4">Disbursements payable directly to Home Office (if applicable to application route)</td>
+      </tr>
+      <tr>
+        <td>Biometric Appointment</td>
+        <td colspan="4">Payable directly to UKVCAS / commercial partner at booking</td>
+      </tr>
+    </tbody>
+  </table>
+  <p><strong>Agreed Professional Legal Fee:</strong> ${totalStr} (${amountInWords})</p>
+  ${installmentPlanHtml ? `<p><strong>Agreed Payment Schedule:</strong></p>${installmentPlanHtml}` : ""}
+</div>`.trim();
+}
+
 function fullName(first, last, fallback = "") {
   const name = `${first || ""} ${last || ""}`.trim();
   return name || fallback;
@@ -200,7 +330,7 @@ export async function buildCclContext({ tenantDb, caseRecord, ccl = null, organi
       }
       if (tenantDb?.User) {
         candidateUser = await tenantDb.User.findByPk(caseRecord.candidateId, {
-          attributes: ["id", "first_name", "last_name", "email"],
+          attributes: ["id", "first_name", "last_name", "email", "mobile"],
         });
       }
     }
@@ -214,10 +344,12 @@ export async function buildCclContext({ tenantDb, caseRecord, ccl = null, organi
   set("candidate_first_name", firstName || "Client");
   set("candidate_email", application?.email || candidateUser?.email || "");
   set("candidate_address", application?.address || "");
-  set("candidate_phone", application?.contactNumber || "");
+  set("candidate_phone", application?.contactNumber || candidateUser?.mobile || "");
   set("candidate_dob", formatDate(application?.dob));
   set("passport_number", application?.passportNumber || "");
   set("nationality", application?.nationality || "");
+  set("current_visa_type", application?.visaType || "");
+  set("current_visa_expiry", formatDate(application?.visaEndDate));
 
   // Visa / petition
   let visaName = caseRecord?.visaType?.name || "";
@@ -231,20 +363,91 @@ export async function buildCclContext({ tenantDb, caseRecord, ccl = null, organi
   set("visa_type", visaName || "your application");
   set("petition_type", petitionName || "");
 
-  // Caseworker (first assigned)
-  let caseworkerName = "";
+  // Caseworkers — each case has EXACTLY 2 assigned caseworkers.
+  // The first assigned caseworker (ids[0]) is the designated Primary/Lead caseworker
+  // who acts as the primary CCL contact and signs the letter.
+  // The second assigned caseworker (ids[1]) is the Joint caseworker. Both remain
+  // associated with the case and are clearly presented in the letter.
+  let cw1 = null;
+  let cw2 = null;
   try {
     const raw = caseRecord?.assignedcaseworkerId ?? caseRecord?.assignedCaseworkerId;
-    const ids = Array.isArray(raw) ? raw : raw != null ? [raw] : [];
-    const firstId = ids.map(Number).find((n) => Number.isFinite(n) && n > 0);
-    if (firstId && tenantDb?.User) {
-      const cw = await tenantDb.User.findByPk(firstId, { attributes: ["first_name", "last_name"] });
-      caseworkerName = fullName(cw?.first_name, cw?.last_name, "");
+    const ids = Array.isArray(raw) ? raw.map(Number).filter((n) => Number.isFinite(n) && n > 0) : [];
+    if (ids[0] && tenantDb?.User) {
+      cw1 = await tenantDb.User.findByPk(ids[0], { attributes: ["id", "first_name", "last_name", "email", "mobile"] });
+    }
+    if (ids[1] && tenantDb?.User) {
+      cw2 = await tenantDb.User.findByPk(ids[1], { attributes: ["id", "first_name", "last_name", "email", "mobile"] });
     }
   } catch (err) {
     logger.warn({ err }, "buildCclContext: caseworker load failed");
   }
-  set("caseworker_name", caseworkerName || "Your Caseworker");
+
+  const primaryName = cw1 ? fullName(cw1.first_name, cw1.last_name, "Your Caseworker") : "Your Caseworker";
+  const primaryEmail = cw1?.email || organisation?.primaryEmail || organisation?.email || "";
+  const primaryPhone = cw1?.mobile || organisation?.phone || "";
+  const secondName = cw2 ? fullName(cw2.first_name, cw2.last_name, "") : "";
+  const secondEmail = cw2?.email || "";
+
+  let allCaseworkersStr = primaryName;
+  if (secondName) {
+    allCaseworkersStr = `${primaryName} (Lead Caseworker) and ${secondName} (Joint Caseworker)`;
+  }
+
+  set("caseworker_name", primaryName);
+  set("caseworker_email", primaryEmail);
+  set("caseworker_phone", primaryPhone);
+  set("second_caseworker_name", secondName);
+  set("second_caseworker_email", secondEmail);
+  set("caseworkers_all", allCaseworkersStr);
+
+  // Sponsor / Private client handling
+  const isPrivate = Boolean(caseRecord?.isPrivateClient || !caseRecord?.sponsorId);
+  let sponsorName = "";
+  let sponsorLicence = "";
+  let sponsorStatement = "as an independent private client with no sponsor";
+  const orgNameDisplay = organisation?.name || "the firm";
+
+  if (!isPrivate && caseRecord?.sponsorId) {
+    try {
+      if (tenantDb?.SponsorProfile) {
+        const sp = await tenantDb.SponsorProfile.findOne({
+          where: { userId: caseRecord.sponsorId },
+        });
+        if (sp) {
+          sponsorName = sp.companyName || sp.tradingName || "";
+          sponsorLicence = sp.sponsorLicenceNumber || "";
+        }
+      }
+      if (!sponsorName && tenantDb?.User) {
+        const su = await tenantDb.User.findByPk(caseRecord.sponsorId, {
+          attributes: ["id", "first_name", "last_name", "company_name", "email"],
+        });
+        if (su) {
+          sponsorName = su.company_name || fullName(su.first_name, su.last_name, "");
+        }
+      }
+    } catch (err) {
+      logger.warn({ err }, "buildCclContext: sponsor load failed");
+    }
+
+    if (sponsorName) {
+      sponsorStatement = `under the sponsorship of ${sponsorName}${sponsorLicence ? ` (Sponsor Licence: ${sponsorLicence})` : ""}`;
+    }
+  }
+
+  let sponsorInstructionClause = "";
+  if (isPrivate) {
+    sponsorInstructionClause = `You instructed ${orgNameDisplay} to manage the application for ${visaName || "Settlement (ILR)"} as an independent private client with no sponsor.`;
+  } else {
+    sponsorInstructionClause = `You instructed ${orgNameDisplay} via your Sponsor ${sponsorName || "your sponsor"}, to manage the application of ${visaName || "your visa"} with the Sponsor/employer ${sponsorName || "your sponsor"}${sponsorLicence ? ` (sponsor licence number: ${sponsorLicence})` : ""}.`;
+  }
+
+  set("sponsor_name", isPrivate ? "" : sponsorName);
+  set("sponsor_licence", isPrivate ? "" : sponsorLicence);
+  set("sponsor_statement", sponsorStatement);
+  set("sponsor_instruction_clause", sponsorInstructionClause);
+  set("is_private_client", isPrivate ? "Yes" : "No");
 
   // Case + dates
   set("case_ref", caseRecord?.caseId || String(caseRecord?.id || ""));
@@ -267,11 +470,25 @@ export async function buildCclContext({ tenantDb, caseRecord, ccl = null, organi
   const fee = pickAmount(ccl?.feeAmount, caseRecord?.proposedAmount, caseRecord?.totalAmount, installmentSum);
   const total = pickAmount(caseRecord?.totalAmount, ccl?.feeAmount, caseRecord?.proposedAmount, installmentSum, fee);
   const proposed = pickAmount(caseRecord?.proposedAmount, ccl?.feeAmount, caseRecord?.totalAmount, fee);
+  const words = amountToWords(fee);
+  const instHtml = renderInstallmentPlanHtml(ccl?.installmentPlan);
+
   set("proposed_amount", formatGbp(proposed));
   set("total_amount", formatGbp(total));
   set("fee_amount", formatGbp(fee));
-  set("amount_in_words", amountToWords(fee));
-  set("installment_plan", renderInstallmentPlanHtml(ccl?.installmentPlan));
+  set("amount_in_words", words);
+  set("installment_plan", instHtml);
+  set("fee_section", renderFeeSectionHtml({
+    fee,
+    total,
+    amountInWords: words,
+    installmentPlanHtml: instHtml,
+    visaName: visaName || "Immigration",
+    orgName: orgNameDisplay,
+  }));
+
+  // Appendix A
+  set("appendix_a", renderAppendixAHtml(application, caseRecord));
 
   // Organisation — the tenant Organisation row exposes name / primaryEmail /
   // country / logoUrl (not address/email/phone), so map those correctly.
@@ -290,11 +507,75 @@ export async function buildCclContext({ tenantDb, caseRecord, ccl = null, organi
 /**
  * Replace every {{tag}} in the template with its value. Unknown/empty tags
  * resolve to an empty string. Values are pre-formatted/escaped by buildCclContext.
+ * Also performs sanitization to ensure no stale hardcoded values leak into the letter.
  */
 export function interpolateCclHtml(html, values = {}) {
   if (!html) return "";
-  return String(html).replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, key) => {
+
+  let out = String(html);
+
+  // 1. Sanitize awkward date line formatting (tabs/spaces pushing date across lines)
+  out = out.replace(
+    /(<p[^>]*>)?Dear\s+(?:Mr\.?|Mrs\.?|Ms\.?|Miss)?\s*[_.\u2026]*[^<]*?(?:[\t\s]{2,}|\s{4,})Date:\s*(?:\{\{date_today\}\}|[0-9/.\-]+)(<\/p>)?/gi,
+    `<p>Date: {{date_today}}</p><p>Dear {{candidate_first_name}},</p>`
+  );
+
+  // 2. Perform token replacement
+  out = out.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, key) => {
     const k = key.toLowerCase();
     return Object.prototype.hasOwnProperty.call(values, k) ? values[k] : "";
   });
+
+  // 3. Fallback sanitization for legacy templates containing hardcoded caseworker David Robertson
+  const cwName = values.caseworker_name || "Your Caseworker";
+  const cwEmail = values.caseworker_email || "";
+  const cwPhone = values.caseworker_phone || values.org_phone || "";
+  const allCw = values.caseworkers_all || cwName;
+
+  out = out.replace(
+    /I,\s*David Robertson\s*will be your caseworker[\s\S]*?as and when they arise\./gi,
+    `I, ${cwName} will be your caseworker and responsible for the conduct of your case. I can be contacted on ${cwPhone} and email ${cwEmail} Whenever possible, I shall be available to advise and assist you and keep you informed of the progress of your case.`
+  );
+  out = out.replace(
+    /Your caseworker will be Mr David Robertson under the supervision of Mr Khalid Mahmood\./gi,
+    `Your assigned caseworkers for this matter will be ${allCw}.`
+  );
+  out = out.replace(/david@elitepic\.co\.uk/gi, cwEmail);
+  out = out.replace(/01217782400/g, cwPhone);
+  out = out.replace(/Mr David Robertson/gi, cwName);
+  out = out.replace(/David Robertson/gi, cwName);
+
+  // 4. Fallback sanitization for hardcoded fee tables (e.g. £1420 / £5175 / £2885)
+  if (values.fee_section && /Home office visa application fee/i.test(out)) {
+    out = out.replace(
+      /<table[^>]*>[\s\S]*?Home office visa application fee[\s\S]*?<\/table>/gi,
+      values.fee_section
+    );
+  }
+
+  // 5. Fallback sanitization for private client sponsor blanks:
+  if (values.is_private_client === "Yes") {
+    out = out.replace(
+      /You instructed\s+[^<]+?\s+via your Sponsor\s*[_.\u2026]+,\s*to manage the application[^<]+?\./gi,
+      values.sponsor_instruction_clause || "You instructed our firm to manage your application as an independent private client with no sponsor."
+    );
+    out = out.replace(
+      /Sponsor\/employer\s*[_.\u2026]+(?:\(sponsor licence number:\s*[_.\u2026]+\))?/gi,
+      "No sponsor (Private Client)"
+    );
+    out = out.replace(
+      /via your Sponsor\s*[_.\u2026]+/gi,
+      "as a private client (no sponsor)"
+    );
+  }
+
+  // 6. Fallback sanitization for unpopulated Appendix A underscores/dots
+  if (values.appendix_a && /Appendix\s*\(?A\)?/i.test(out) && (/BRP card/i.test(out) || /[_.\u2026]{3,}/.test(out))) {
+    out = out.replace(
+      /<p[^>]*><strong>\s*Appendix\s*\(?A\)?[\s\S]*?<\/table>/gi,
+      values.appendix_a
+    );
+  }
+
+  return out;
 }

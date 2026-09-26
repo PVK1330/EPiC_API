@@ -99,28 +99,46 @@ export function generateCredentialsTemplate(
 }
 
 export function generateAdminCredentialsTemplate(
-  email,
+  emailOrOptions,
   password,
   loginUrl,
   mainLoginUrl,
   branding = {},
+  extra = {},
 ) {
-  const name = brandName(branding);
+  const isObj = emailOrOptions && typeof emailOrOptions === "object";
+  const email = isObj ? emailOrOptions.email : emailOrOptions;
+  const pw = isObj ? emailOrOptions.password : password;
+  const lUrl = isObj ? emailOrOptions.loginUrl : loginUrl;
+  const mUrl = isObj ? emailOrOptions.mainLoginUrl : mainLoginUrl;
+  const br = isObj ? (emailOrOptions.branding || {}) : branding;
+  const ext = isObj
+    ? {
+        organisationId: emailOrOptions.organisationId ?? emailOrOptions.extra?.organisationId,
+        organisationCode: emailOrOptions.organisationCode ?? emailOrOptions.extra?.organisationCode,
+        selfRegistrationUrl: emailOrOptions.selfRegistrationUrl ?? emailOrOptions.extra?.selfRegistrationUrl,
+      }
+    : (extra || {});
+
+  const name = brandName(br);
   return wrapEpicEmail({
-    branding,
+    branding: br,
     pageTitle: `${name} — Admin Account`,
     badge: "Administrator",
     title: "Admin account created",
     messageHtml:
-      "Your administrator account has been set up. Use the credentials below to access your dashboard.",
+      "Your administrator account has been set up. Use the credentials and organisation details below to access your dashboard and share sign-up links with candidates.",
     bodyHtml: credentialsBlockHtml({
       email,
-      password,
-      loginUrl,
-      mainLoginUrl,
+      password: pw,
+      loginUrl: lUrl,
+      mainLoginUrl: mUrl,
       loginUrlLabel: "Admin Portal",
+      organisationId: ext.organisationId,
+      organisationCode: ext.organisationCode,
+      selfRegistrationUrl: ext.selfRegistrationUrl,
     }),
-    ctaUrl: loginUrl,
+    ctaUrl: lUrl,
     ctaLabel: "Access admin dashboard",
     securityHtml:
       "<strong>Important:</strong> Update your password immediately after your first sign-in.",
@@ -135,6 +153,9 @@ export function generateOrganisationWelcomeTemplate({
   password,
   loginUrl,
   mainLoginUrl,
+  organisationId,
+  organisationCode,
+  selfRegistrationUrl,
 }) {
   const alt =
     mainLoginUrl && mainLoginUrl !== loginUrl
@@ -146,12 +167,15 @@ export function generateOrganisationWelcomeTemplate({
     pageTitle: `${organisationName} — Workspace Ready`,
     badge: organisationName,
     title: `Welcome, ${adminName}`,
-    messageHtml: `Your organisation workspace on ${brandName(branding)} is ready. Sign in to set up <strong>${escapeHtml(organisationName)}</strong> and invite your team.${alt}`,
+    messageHtml: `Your organisation workspace on ${brandName(branding)} is ready. Use the credentials and organisation code below to sign in, set up <strong>${escapeHtml(organisationName)}</strong>, and invite candidates to self-register.${alt}`,
     bodyHtml: credentialsBlockHtml({
       email,
       password,
       loginUrl,
       loginUrlLabel: "Workspace Login",
+      organisationId,
+      organisationCode,
+      selfRegistrationUrl,
     }),
     ctaUrl: loginUrl,
     ctaLabel: `Sign in to ${organisationName}`,

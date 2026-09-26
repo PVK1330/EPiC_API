@@ -20,6 +20,7 @@ import { generateCaseId } from '../../../utils/case.utils.js';
 import { getWorkflowState } from '../../../services/caseWorkflowProcess.service.js';
 import { resolveCaseStage, DEFAULT_CASE_STAGE } from '../../../constants/immigrationCaseProcess.js';
 import { syncWorkflowTasksForStage } from '../../../services/workflowTaskAutomation.service.js';
+import { ensureCandidateEnquiryCase } from '../../../services/candidateOnboarding.service.js';
 
 /**
  * Every form field that a candidate can save / submit.
@@ -82,6 +83,8 @@ const DATE_FIELDS = new Set([
   'parentDob', 'parent2Dob',
   'entryDate', 'leaveDate',
   'visaEndDate',
+  'medicalTreatmentStartDate',
+  'medicalTreatmentEndDate',
 ]);
 
 /**
@@ -330,16 +333,53 @@ export const getMyApplication = async (req, res) => {
       return res.status(401).json({ status: 'error', message: 'Invalid session', data: null });
     }
 
-    const application = await req.tenantDb.CandidateApplication.findOne({
+    let application = await req.tenantDb.CandidateApplication.findOne({
       where: { userId },
       include: [
         {
           model: req.tenantDb.User,
           as: 'user',
-          attributes: ['id', 'first_name', 'last_name', 'email'],
+          attributes: ['id', 'first_name', 'last_name', 'email', 'country_code', 'mobile'],
         },
       ],
     });
+
+    if (!application) {
+      await ensureCandidateEnquiryCase(req.tenantDb, userId).catch(() => {});
+      application = await req.tenantDb.CandidateApplication.findOne({
+        where: { userId },
+        include: [
+          {
+            model: req.tenantDb.User,
+            as: 'user',
+            attributes: ['id', 'first_name', 'last_name', 'email', 'country_code', 'mobile'],
+          },
+        ],
+      });
+    }
+
+    if (application) {
+      let needsSave = false;
+      if (!application.firstName && application.user?.first_name) {
+        application.firstName = application.user.first_name;
+        needsSave = true;
+      }
+      if (!application.lastName && application.user?.last_name) {
+        application.lastName = application.user.last_name;
+        needsSave = true;
+      }
+      if (!application.email && application.user?.email) {
+        application.email = application.user.email;
+        needsSave = true;
+      }
+      if (!application.contactNumber && application.user?.mobile) {
+        application.contactNumber = application.user.mobile;
+        needsSave = true;
+      }
+      if (needsSave) {
+        await application.save().catch(() => {});
+      }
+    }
 
     const relatedData = {
       cases: [],

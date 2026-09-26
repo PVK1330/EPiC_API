@@ -160,10 +160,40 @@ export function wrapEpicEmail({
 </html>`;
 }
 
-export function credentialsBlockHtml({ email, password, loginUrl, mainLoginUrl, loginUrlLabel = "Portal Login", mainLoginUrlLabel = "Main Portal" }) {
+export function credentialsBlockHtml({
+  email,
+  password,
+  loginUrl,
+  mainLoginUrl,
+  loginUrlLabel = "Portal Login",
+  mainLoginUrlLabel = "Main Portal",
+  organisationId,
+  organisationCode,
+  selfRegistrationUrl,
+}) {
   // injection-xss-2: escape every interpolated credential value in BOTH the href
   // and the visible text. A crafted email/URL (e.g. from an admin-set profile)
   // could otherwise inject markup or break out of the href attribute.
+  const orgIdRow = organisationId
+    ? `<div style="padding:16px; border-bottom:1px solid ${C.border};">
+         <div style="font-size:12px; color:${C.muted}; margin-bottom:4px;">Organisation ID</div>
+         <div style="font-size:16px; color:${C.navy}; font-weight:800; font-family:'SFMono-Regular',Consolas,'Liberation Mono',monospace;">${esc(String(organisationId))}</div>
+       </div>`
+    : "";
+  const orgCodeRow = organisationCode
+    ? `<div style="padding:16px; border-bottom:1px solid ${C.border};">
+         <div style="font-size:12px; color:${C.muted}; margin-bottom:4px;">Organisation Code (for candidate self-registration)</div>
+         <div style="font-size:16px; color:${C.navy}; font-weight:800; font-family:'SFMono-Regular',Consolas,'Liberation Mono',monospace;">${esc(String(organisationCode))}</div>
+         <div style="font-size:11px; color:${C.muted}; margin-top:4px;">Candidates can enter this code during self-registration to join your organisation.</div>
+       </div>`
+    : "";
+  const selfRegRow = selfRegistrationUrl
+    ? `<div style="padding:16px; border-bottom:1px solid ${C.border};">
+         <div style="font-size:12px; color:${C.muted}; margin-bottom:4px;">Candidate Self-Registration Link</div>
+         <div style="font-size:13px; font-weight:600;"><a href="${esc(selfRegistrationUrl)}" style="color:${C.blue}; text-decoration:none;">${esc(selfRegistrationUrl)}</a></div>
+         <div style="font-size:11px; color:${C.muted}; margin-top:4px;">Share this sign-up link with candidates so your organisation code is automatically selected.</div>
+       </div>`
+    : "";
   const urlRow = loginUrl
     ? `<div style="padding:16px; border-bottom:1px solid ${C.border};">
          <div style="font-size:12px; color:${C.muted}; margin-bottom:4px;">${esc(loginUrlLabel)}</div>
@@ -177,7 +207,10 @@ export function credentialsBlockHtml({ email, password, loginUrl, mainLoginUrl, 
        </div>`
     : "";
   return `<div style="border:1px solid ${C.border}; border-radius:10px; overflow:hidden; margin-bottom:30px; background-color:${C.surface};">
-    <div style="background:${C.pageBg}; padding:12px 16px; font-size:11px; font-weight:700; color:${C.muted}; text-transform:uppercase; letter-spacing:0.5px; border-bottom:1px solid ${C.border};">Access Credentials</div>
+    <div style="background:${C.pageBg}; padding:12px 16px; font-size:11px; font-weight:700; color:${C.muted}; text-transform:uppercase; letter-spacing:0.5px; border-bottom:1px solid ${C.border};">Access & Registration Details</div>
+    ${orgIdRow}
+    ${orgCodeRow}
+    ${selfRegRow}
     <div style="padding:16px; border-bottom:1px solid ${C.border};">
       <div style="font-size:12px; color:${C.muted}; margin-bottom:4px;">Email Address</div>
       <div style="font-size:14px; color:${C.ink}; font-weight:600;">${esc(email)}</div>

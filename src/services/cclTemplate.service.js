@@ -4,6 +4,7 @@ import { fileURLToPath } from "url";
 import { getStepById, resolveCaseStage } from "../constants/immigrationCaseProcess.js";
 import { generateCclPdfForCase } from "./cclGenerator.service.js";
 import { seedCclTemplatesForDb } from "../seeders/cclTemplate.seeder.js";
+import { seedCclTemplatesFromDocxForDb } from "../seeders/cclTemplateDocx.seeder.js";
 import logger from "../utils/logger.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -41,7 +42,7 @@ const TEMPLATE_RULES = [
     id: "ilr",
     file: "Client Care Letter- ILR.docx",
     label: "Indefinite Leave to Remain (ILR)",
-    match: (t) => t.includes("ilr") || t.includes("indefinite leave"),
+    match: (t) => t.includes("ilr") || t.includes("indefinite leave") || t.includes("settlement"),
   },
   {
     id: "nationality",
@@ -157,6 +158,7 @@ export async function attachCclTemplateToCase({
     gen = await generateCclPdfForCase({ tenantDb, caseRecord, ccl });
     if (!gen?.buffer) {
       await seedCclTemplatesForDb(tenantDb);
+      await seedCclTemplatesFromDocxForDb(tenantDb);
       gen = await generateCclPdfForCase({ tenantDb, caseRecord, ccl });
     }
   } catch (err) {

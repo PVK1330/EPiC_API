@@ -40,6 +40,10 @@ export async function sendOrganisationAdminWelcomeEmail({ organisation, admin, p
   clearEmailBrandingCache(organisation.id);
   const branding = await getOrganisationEmailBranding(organisation.id);
 
+  const fallbackBase = process.env.FRONTEND_URL?.split(",")[0]?.trim() || "http://localhost:5173";
+  const orgCode = organisation.code || organisation.slug || String(organisation.id);
+  const selfRegistrationUrl = `${fallbackBase.replace(/\/$/, "")}/login?tab=register&org=${encodeURIComponent(orgCode)}`;
+
   const html = generateOrganisationWelcomeTemplate({
     organisationName: organisation.name,
     adminName,
@@ -48,6 +52,9 @@ export async function sendOrganisationAdminWelcomeEmail({ organisation, admin, p
     loginUrl,
     mainLoginUrl: tenantUrls.main,
     branding,
+    organisationId: organisation.id,
+    organisationCode: orgCode,
+    selfRegistrationUrl,
   });
 
   const result = await sendTransactionalEmail({

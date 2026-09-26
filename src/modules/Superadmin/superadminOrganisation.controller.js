@@ -406,7 +406,7 @@ export const getOrganisationById = async (req, res) => {
 
 export const createOrganisation = async (req, res) => {
   try {
-    const { name, slug, plan, plan_id, status, primaryEmail, country } = req.body;
+    const { name, slug, code, plan, plan_id, status, primaryEmail, country } = req.body;
     if (!name || !primaryEmail) {
       return res.status(400).json({
         status: "error",
@@ -436,6 +436,10 @@ export const createOrganisation = async (req, res) => {
     if (exists) {
       finalSlug = `${finalSlug}-${Date.now().toString(36)}`;
     }
+    const orgCode = code && String(code).trim()
+      ? String(code).trim().toUpperCase()
+      : finalSlug.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10);
+
     const physicalEnabled = isPhysicalTenantDatabaseEnabled();
     let databaseName = null;
     let provisionMeta = null;
@@ -460,6 +464,7 @@ export const createOrganisation = async (req, res) => {
       org = await Organisation.create({
         name: String(name).trim(),
         slug: finalSlug,
+        code: orgCode,
         plan: planName,
         plan_id: plan_id ? parseInt(plan_id, 10) : null,
         // Trial ON → trial (unless an explicit status was passed). Trial OFF →
@@ -563,6 +568,7 @@ export const createOrganisationWithAdmin = async (req, res) => {
     const {
       name,
       slug,
+      code,
       plan,
       plan_id,
       status,
@@ -615,6 +621,9 @@ export const createOrganisationWithAdmin = async (req, res) => {
     if (exists) {
       finalSlug = `${finalSlug}-${Date.now().toString(36)}`;
     }
+    const orgCode = code && String(code).trim()
+      ? String(code).trim().toUpperCase()
+      : finalSlug.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10);
 
     if (physicalEnabled) {
       provisionMeta = await provisionOrganisationTenantDatabase(finalSlug);
@@ -642,6 +651,7 @@ export const createOrganisationWithAdmin = async (req, res) => {
         {
           name: String(name).trim(),
           slug: finalSlug,
+          code: orgCode,
           plan: planName,
           plan_id: plan_id ? parseInt(plan_id, 10) : null,
           // Trial ON → trial. Trial OFF → active so the new org can sign in
@@ -726,6 +736,7 @@ export const createOrganisationWithAdmin = async (req, res) => {
           admin,
           plainPassword: plain,
           organisationId: org.id,
+          organisation: org,
         });
         if (mailResult.sent) {
           logger.info(
@@ -1186,10 +1197,12 @@ export const createOrganisationAdmin = async (req, res) => {
     let mailResult = { sent: false, reason: "not_attempted" };
 
     try {
+      const org = await Organisation.findByPk(orgId);
       mailResult = await sendOrganisationAdminWelcomeEmail({
         admin,
         plainPassword: plain,
         organisationId: orgId,
+        organisation: org,
         loginUrl,
       });
       if (mailResult.sent) {
