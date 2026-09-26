@@ -1,6 +1,7 @@
 import { Op } from "sequelize";
 import { DEFAULT_CASE_STAGE } from "../constants/immigrationCaseProcess.js";
 import { generateCaseId } from "../utils/case.utils.js";
+import { sanitizeApplicationPayload } from "../utils/applicationPayload.util.js";
 
 /**
  * Ensures a new candidate has an enquiry-stage case (Standard Immigration Case Process step 1).
@@ -39,6 +40,9 @@ export async function ensureCandidateEnquiryCase(tenantDb, userId, { visaTypeNam
     ...(profileData || {}),
   };
 
+  // Sanitize profile to ensure dates, strings, and enums conform to database schema
+  const cleanProfile = sanitizeApplicationPayload(mergedProfile);
+
   const app = await CandidateApplication.findOne({ where: { userId } });
   if (!app) {
     await CandidateApplication.create({
@@ -46,11 +50,14 @@ export async function ensureCandidateEnquiryCase(tenantDb, userId, { visaTypeNam
       status: "draft",
       visaType: visaTypeName || null,
       organisation_id: resolvedOrgId,
-      ...mergedProfile,
+      ...cleanProfile,
     });
-  } else if (Object.keys(mergedProfile).length > 0) {
+  } else if (Object.keys(cleanProfile).length > 0 || (app.organisation_id == null && resolvedOrgId)) {
     const updates = {};
-    for (const [k, v] of Object.entries(mergedProfile)) {
+    if (app.organisation_id == null && resolvedOrgId) {
+      updates.organisation_id = resolvedOrgId;
+    }
+    for (const [k, v] of Object.entries(cleanProfile)) {
       if (v !== undefined && v !== null && v !== "" && (app[k] === null || app[k] === undefined || app[k] === "")) {
         updates[k] = v;
       }

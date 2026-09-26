@@ -521,27 +521,33 @@ export const createMyCase = async (req, res) => {
     } = req.body;
 
     // Validate required fields
-    if (!candidateId || !sponsorId || !visaTypeId) {
+    // BUG-031: sponsorId is OPTIONAL — private clients have no sponsor.
+    const validationErrors = [];
+    if (!candidateId) validationErrors.push("Client (candidateId) is required");
+    if (!visaTypeId) validationErrors.push("Visa Type (visaTypeId) is required");
+    if (!targetSubmissionDate) validationErrors.push("Target submission date is required");
+    if (validationErrors.length > 0) {
       return res.status(400).json({
         status: "error",
-        message: "Candidate, Sponsor, and Visa Type are required",
-        data: null,
+        message: validationErrors.join("; "),
+        data: { errors: validationErrors },
       });
     }
 
-    // Fetch candidate and sponsor for notification
+    // Fetch candidate for notification (sponsor is optional — private clients have none)
     const candidate = await req.tenantDb.User.findByPk(candidateId);
-    const sponsor = await req.tenantDb.User.findByPk(sponsorId);
+    const sponsor = sponsorId ? await req.tenantDb.User.findByPk(sponsorId) : null;
 
     if (!candidate) {
       return res.status(404).json({
         status: "error",
-        message: "Candidate not found",
+        message: "Client not found",
         data: null,
       });
     }
 
-    if (!sponsor) {
+    // Only validate sponsor if one was actually provided
+    if (sponsorId && !sponsor) {
       return res.status(404).json({
         status: "error",
         message: "Sponsor not found",
@@ -561,38 +567,59 @@ export const createMyCase = async (req, res) => {
       });
     }
 
+    // Handle caseworker assignment - include the creating caseworker if not specified
+    const rawCwIds = Array.isArray(assignedcaseworkerId)
+      ? assignedcaseworkerId
+      : (assignedcaseworkerId ? [assignedcaseworkerId] : []);
+
+    const cwIds = [];
+    for (const id of rawCwIds) {
+      const numId = Number(id);
+      const validId = !isNaN(numId) && numId > 0 ? numId : id;
+      if (validId != null && validId !== "" && !cwIds.includes(validId)) {
+        cwIds.push(validId);
+      }
+    }
+    const creatorId = Number(userId) || userId;
+    if (creatorId && !cwIds.includes(creatorId)) {
+      cwIds.push(creatorId);
+    }
+
+    // STRICT BUSINESS RULE: Exactly 2 caseworkers per case.
+    if (cwIds.length !== 2) {
+      return res.status(400).json({
+        status: "error",
+        message: `Exactly 2 caseworkers are required per case. Current final count after creator inclusion: ${cwIds.length}.`,
+        data: { finalCount: cwIds.length },
+      });
+    }
+
     // Generate case ID
     const caseId = await generateCaseId(req.tenantDb, { organisationId, visaTypeId });
-
-    // Handle caseworker assignment - include the creating caseworker if not specified
-    const cwIds = Array.isArray(assignedcaseworkerId) ? assignedcaseworkerId : (assignedcaseworkerId ? [assignedcaseworkerId] : []);
-    if (!cwIds.includes(userId)) {
-      cwIds.push(userId);
-    }
 
     const newCase = await req.tenantDb.Case.create({
       caseId,
       organisation_id: organisationId,
       candidateId,
-      sponsorId,
-      businessId,
+      sponsorId: sponsorId || null,
+      businessId: businessId || sponsorId || null,
       visaTypeId,
-      petitionTypeId,
+      petitionTypeId: petitionTypeId || null,
       priority: priority || "medium",
       status: "Lead",
       caseStage: DEFAULT_CASE_STAGE,
       submitted: new Date(),
       targetSubmissionDate,
-      lcaNumber,
-      receiptNumber,
-      nationality,
-      jobTitle,
-      departmentId,
+      lcaNumber: lcaNumber || null,
+      receiptNumber: receiptNumber || null,
+      nationality: nationality || null,
+      jobTitle: jobTitle || null,
+      departmentId: departmentId || null,
       assignedcaseworkerId: cwIds,
       salaryOffered: salaryOffered || 0,
       totalAmount: totalAmount || 0,
       paidAmount: paidAmount || 0,
-      notes,
+      notes: notes || "",
     });
 
     res.status(201).json({

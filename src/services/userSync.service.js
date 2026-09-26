@@ -48,15 +48,24 @@ export async function createUserOnPlatformAndTenant(tenantDb, userData) {
     throw new Error("organisation_id is required to create a tenant-scoped user");
   }
 
-  // 1. Create on Platform Registry
-  const mainUser = await platformDb.User.create(userData);
+  // 1. Create or update on Platform Registry (idempotency guard)
+  let mainUser = await platformDb.User.findOne({
+    where: { email: userData.email, organisation_id }
+  });
+  if (mainUser) {
+    await mainUser.update(userData);
+  } else {
+    mainUser = await platformDb.User.create(userData);
+  }
 
   // 2. Mirror to Tenant DB
   try {
     await mirrorUserToTenant(tenantDb, mainUser);
   } catch (err) {
-    // Cleanup platform user if tenant mirroring fails to maintain consistency
-    await mainUser.destroy();
+    // Cleanup platform user if newly created and tenant mirroring fails to maintain consistency
+    if (!mainUser._previousDataValues) {
+      await mainUser.destroy().catch(() => {});
+    }
     throw err;
   }
 

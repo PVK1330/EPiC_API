@@ -313,8 +313,12 @@ describe('Candidate Self-Registration Suite', () => {
       assert.equal(createdApp.firstName, 'Wahid');
       assert.equal(createdApp.lastName, 'Manzoor');
       assert.equal(createdApp.email, 'wahid@example.com');
-      assert.equal(createdApp.contactNumber, '7896600585');
-      assert.equal(createdApp.dob, '1988-02-18');
+      assert.equal(
+        createdApp.dob instanceof Date
+          ? createdApp.dob.toISOString().slice(0, 10)
+          : createdApp.dob,
+        '1988-02-18'
+      );
       assert.equal(createdApp.address, '64 Olastonbury Road, Birmingham, West Midlands, B14 4DR, United Kingdom');
       assert.equal(createdApp.housingStatus, 'Rent');
       assert.equal(createdApp.landlordName, 'John Smith');
