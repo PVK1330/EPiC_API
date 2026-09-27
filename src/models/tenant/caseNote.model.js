@@ -16,7 +16,7 @@ export default (sequelize, DataTypes) => {
         }
       },
       noteType: {
-        type: DataTypes.ENUM('internal', 'client_communication', 'legal_note', 'reminder', 'follow_up'),
+        type: DataTypes.ENUM('internal', 'client_communication', 'legal_note', 'reminder', 'follow_up', 'attendance'),
         allowNull: false,
         defaultValue: 'internal',
         comment: "Type of note"

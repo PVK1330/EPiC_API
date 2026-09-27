@@ -245,15 +245,29 @@ async function sanitizeHtmlImagesForPdf(html) {
   return out;
 }
 
+function extractCellText(cell) {
+  if (!cell) return "";
+  if (typeof cell === "string") return cell;
+  if (typeof cell.text === "string") return cell.text;
+  if (Array.isArray(cell.text)) {
+    return cell.text.map(extractCellText).join(" ");
+  }
+  if (Array.isArray(cell.stack)) {
+    return cell.stack.map(extractCellText).join(" ");
+  }
+  return "";
+}
+
 /**
  * html-to-pdfmake frequently emits tables with no `widths` array and ragged rows
  * (different cell counts per row) — especially from .docx-imported letters with
  * merged cells. pdfmake then crashes with "Cannot read properties of undefined
  * (reading '_calcWidth')". Normalise every table node so it is renderable:
- *   - strip colSpan/rowSpan (html-to-pdfmake sets them without the placeholder
- *     cells pdfmake requires, which is the usual cause of the crash),
+ *   - detect 8-column bank tables and restructure them into 2 columns (50%/50%)
+ *     so the second sort code and account details are not cut off past page margins,
+ *   - strip colSpan/rowSpan layout constraints,
  *   - pad every row to the widest row's cell count,
- *   - guarantee a `widths` array of matching length (equal star columns).
+ *   - guarantee a `widths` array that stays strictly within the printable page.
  */
 function normalizeTablesForPdfmake(node) {
   if (Array.isArray(node)) {
@@ -264,10 +278,52 @@ function normalizeTablesForPdfmake(node) {
 
   if (node.table && Array.isArray(node.table.body)) {
     const body = node.table.body;
+
+    // CCL Issue #1 fix: Detect 8-column bank details table where two accounts with
+    // 4 fields each (Bank, Company Name, Account No, Sort Code) are laid out
+    // across a single row (8 columns), causing the 8th column (the second sort code)
+    // to overflow the page margin. Transform it into a clean 2-column layout (50%/50%)
+    // so all bank fields, including both sort codes, fit comfortably within margins.
+    const bankRowIdx = body.findIndex((row) => {
+      if (!Array.isArray(row) || row.length !== 8) return false;
+      const rowTxt = row.map(extractCellText).join(" ").toLowerCase();
+      return (
+        rowTxt.includes("sort code") ||
+        (rowTxt.includes("bank") && rowTxt.includes("account"))
+      );
+    });
+
+    if (bankRowIdx !== -1) {
+      const bankRow = body[bankRowIdx];
+      const headerRow = bankRowIdx > 0 ? body[0] : null;
+      const h1Text = headerRow ? extractCellText(headerRow[0]) || "Transfer UKVI visa fees" : "Transfer UKVI visa fees";
+      const h2Text = headerRow ? extractCellText(headerRow[1]) || "Transfer Management Fees" : "Transfer Management Fees";
+
+      const newBody = [
+        [
+          { text: h1Text, bold: true, style: ["html-strong", "html-th"] },
+          { text: h2Text, bold: true, style: ["html-strong", "html-th"] }
+        ],
+        [bankRow[0], bankRow[4]],
+        [bankRow[1], bankRow[5]],
+        [bankRow[2], bankRow[6]],
+        [bankRow[3], bankRow[7]]
+      ];
+      node.table.body = newBody;
+    }
+
+    const currentBody = node.table.body;
     let maxCols = 1;
+
+    // Capture explicit column widths if specified in HTML (e.g. style="width: 50%")
+    let explicitWidths = null;
+    const firstRow = currentBody[0];
+    if (Array.isArray(firstRow) && firstRow.length > 0 && firstRow.every((c) => c && typeof c.width === "string" && c.width.endsWith("%"))) {
+      explicitWidths = firstRow.map((c) => c.width);
+    }
     
     // First pass: find the maximum number of columns
-    for (const row of body) {
+    for (const row of currentBody) {
       if (!Array.isArray(row)) continue;
       // Recursive function to strip layout constraints that break pdfmake table sizing
       const stripLayout = (obj) => {
@@ -302,7 +358,7 @@ function normalizeTablesForPdfmake(node) {
     delete node.margin;
     
     // Second pass: pad ragged rows with empty cells so pdfmake doesn't crash
-    for (const row of body) {
+    for (const row of currentBody) {
       if (!Array.isArray(row)) continue;
       // Pad missing columns at the end of the row
       while (row.length < maxCols) {
@@ -310,9 +366,15 @@ function normalizeTablesForPdfmake(node) {
       }
     }
     
-    node.table.widths = new Array(maxCols).fill("*");
+    if (explicitWidths && explicitWidths.length === maxCols) {
+      node.table.widths = explicitWidths;
+    } else if (maxCols === 2) {
+      node.table.widths = ["50%", "50%"];
+    } else {
+      node.table.widths = new Array(maxCols).fill("*");
+    }
     
-    for (const row of body) {
+    for (const row of currentBody) {
       if (Array.isArray(row)) row.forEach(normalizeTablesForPdfmake);
     }
   }
@@ -328,8 +390,10 @@ function normalizeTablesForPdfmake(node) {
  */
 export async function renderCclPdfBuffer({ html, organisation = null }) {
   const safeHtml = await sanitizeHtmlImagesForPdf(html);
-  // Replace non-breaking spaces with normal spaces so pdfmake can wrap long table contents
-  const breakableHtml = (safeHtml || "<p></p>").replace(/&nbsp;/g, " ");
+  // Replace non-breaking spaces and tabs with normal spaces so pdfmake wraps correctly
+  const breakableHtml = (safeHtml || "<p></p>")
+    .replace(/&nbsp;/g, " ")
+    .replace(/\t+/g, "  ");
   const content = htmlToPdfmake(breakableHtml, {
     window: sharedWindow,
   });

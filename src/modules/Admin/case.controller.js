@@ -182,17 +182,21 @@ export const createCase = async (req, res) => {
       }
     }
 
-    // Admin task: review enquiry and assign caseworker (when case is unassigned)
-    try {
-      await syncWorkflowTasksForStage({
-        tenantDb: req.tenantDb,
-        caseRecord: newCase,
-        stageId: DEFAULT_CASE_STAGE,
-        performedBy: req.user?.userId,
-        organisationId,
-      });
-    } catch (stageTaskErr) {
-      logger.error({ err: stageTaskErr }, "syncWorkflowTasksForStage (createCase)");
+    // When no caseworkers are assigned at creation, create the admin task to
+    // review the enquiry and assign someone. When caseworkers ARE assigned we
+    // skip this task and advance the stage directly (BUG-025).
+    if (cwIds.length === 0) {
+      try {
+        await syncWorkflowTasksForStage({
+          tenantDb: req.tenantDb,
+          caseRecord: newCase,
+          stageId: DEFAULT_CASE_STAGE,
+          performedBy: req.user?.userId,
+          organisationId,
+        });
+      } catch (stageTaskErr) {
+        logger.error({ err: stageTaskErr }, "syncWorkflowTasksForStage (createCase)");
+      }
     }
 
     // Send notifications to assigned caseworkers
@@ -233,6 +237,54 @@ export const createCase = async (req, res) => {
         organisationId,
         reason: notes || "Initial case creation assignment",
       }).catch((err) => logger.error({ err }, 'createTasksOnCaseworkerAssignment'));
+
+      // BUG-025: Initial consultation is already completed at the point of Admin
+      // case creation. Advance through admin_assignment (no side-effect emails)
+      // then skip initial_consultation and land on data_capture_initial_docs.
+      try {
+        await applyCaseStageChange({
+          tenantDb: req.tenantDb,
+          caseRecord: newCase,
+          nextStageId: "admin_assignment",
+          performedBy: req.user?.userId,
+          reason: "Admin case creation — caseworkers assigned",
+          sendEmail: false,
+          intermediate: true,
+          organisationId,
+        });
+        await newCase.reload();
+        await recordTimelineEntry({
+          tenantDb: req.tenantDb,
+          caseId: newCase.id,
+          actionType: "stage_skipped",
+          description:
+            "Initial Consultation skipped — consultation already completed at point of Admin case creation",
+          performedBy: req.user?.userId,
+          previousValue: "initial_consultation",
+          newValue: "data_capture_initial_docs",
+          isSystemAction: true,
+          visibility: "internal",
+        });
+        await applyCaseStageChange({
+          tenantDb: req.tenantDb,
+          caseRecord: newCase,
+          nextStageId: "data_capture_initial_docs",
+          performedBy: req.user?.userId,
+          reason: "Initial consultation already completed at Admin case creation",
+          sendEmail: true,
+          organisationId,
+        });
+        await newCase.reload();
+        await syncWorkflowTasksForStage({
+          tenantDb: req.tenantDb,
+          caseRecord: newCase,
+          stageId: "data_capture_initial_docs",
+          performedBy: req.user?.userId,
+          organisationId,
+        });
+      } catch (stageErr) {
+        logger.error({ err: stageErr }, "BUG-025 createCase stage advance error");
+      }
     }
 
     // Record Audit Log
@@ -1277,12 +1329,39 @@ export const assignCase = async (req, res) => {
       const currentStage = resolveCaseStage(caseData);
       if (currentStage === "client_enquiry") {
         try {
+          // BUG-025: Advance through admin_assignment as an intermediate hop
+          // (no emails) then skip initial_consultation directly to
+          // data_capture_initial_docs — the initial consultation is already
+          // completed at the point of Admin case assignment.
           await applyCaseStageChange({
             tenantDb: req.tenantDb,
             caseRecord: caseData,
             nextStageId: "admin_assignment",
             performedBy: req.user?.userId,
             reason: reason || "Caseworker assigned",
+            sendEmail: false,
+            intermediate: true,
+            organisationId: req.user?.organisation_id ?? null,
+          });
+          await caseData.reload();
+          await recordTimelineEntry({
+            tenantDb: req.tenantDb,
+            caseId: caseData.id,
+            actionType: "stage_skipped",
+            description:
+              "Initial Consultation skipped — consultation already completed at point of Admin case assignment",
+            performedBy: req.user?.userId,
+            previousValue: "initial_consultation",
+            newValue: "data_capture_initial_docs",
+            isSystemAction: true,
+            visibility: "internal",
+          });
+          await applyCaseStageChange({
+            tenantDb: req.tenantDb,
+            caseRecord: caseData,
+            nextStageId: "data_capture_initial_docs",
+            performedBy: req.user?.userId,
+            reason: "Initial consultation already completed at Admin case assignment",
             sendEmail: true,
             organisationId: req.user?.organisation_id ?? null,
           });
@@ -1290,7 +1369,7 @@ export const assignCase = async (req, res) => {
           await syncWorkflowTasksForStage({
             tenantDb: req.tenantDb,
             caseRecord: caseData,
-            stageId: "admin_assignment",
+            stageId: "data_capture_initial_docs",
             performedBy: req.user?.userId,
             organisationId: req.user?.organisation_id ?? null,
           });

@@ -61,6 +61,8 @@ export const CCL_TAGS = [
   { tag: "amount_in_words", label: "Amount in words", group: "Fees", type: "text", sample: "One thousand five hundred pounds" },
   { tag: "installment_plan", label: "Installment plan (table)", group: "Fees", type: "block", sample: "[installment table]" },
   { tag: "fee_section", label: "Dynamic fee breakdown table", group: "Fees", type: "block", sample: "[fee schedule table]" },
+  // Payment / bank
+  { tag: "bank_payment_instructions", label: "Firm bank/payment instructions", group: "Payment", type: "block", sample: "[firm bank payment table]" },
 ];
 
 /** Returns the tag catalogue grouped for the editor palette. */
@@ -248,50 +250,165 @@ export function renderAppendixAHtml(application, caseRecord) {
 </div>`.trim();
 }
 
-/** Builds dynamic fee section table without hardcoded amounts. */
+/**
+ * Builds dynamic fee section table without hardcoded amounts.
+ *
+ * CCL Issue #1 fix: Replaced 5-column layout (Item/Cost/VAT/Total/Comment) with
+ * a 3-column layout (Item / Fee / Payable To) using explicit percentage column
+ * widths so the table fits the printable page width without horizontal overflow.
+ * UKVI/Home Office rows are clearly separated from firm professional fees with a
+ * section subheading row.
+ */
 export function renderFeeSectionHtml({ fee, total, amountInWords, installmentPlanHtml, visaName, orgName }) {
   const feeStr = formatGbp(fee);
   const totalStr = formatGbp(total);
   const org = escapeHtml(orgName || "the firm");
   const visa = escapeHtml(visaName || "Immigration");
 
+  // 3-column layout: col1 55% (description), col2 15% (amount), col3 30% (payable to).
+  // Widths expressed as inline style percentages so html-to-pdfmake passes them
+  // through to pdfmake where normalizeTablesForPdfmake converts them to proportional
+  // pdfmake widths, keeping the full table inside the printable margins.
   return `
 <div class="ccl-fees-section">
-  <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;margin-top:8px;margin-bottom:12px;">
+  <table border="1" cellpadding="6" cellspacing="0"
+    style="border-collapse:collapse;width:100%;table-layout:fixed;margin-top:8px;margin-bottom:12px;">
+    <colgroup>
+      <col style="width:55%">
+      <col style="width:15%">
+      <col style="width:30%">
+    </colgroup>
     <thead>
-      <tr style="background-color:#f8f9fa;">
-        <th><strong>Item</strong></th>
-        <th><strong>Cost</strong></th>
-        <th><strong>VAT</strong></th>
-        <th><strong>Total Cost</strong></th>
-        <th><strong>Comment</strong></th>
+      <tr style="background-color:#1e3a5f;color:#ffffff;">
+        <th style="width:55%;text-align:left;">Description</th>
+        <th style="width:15%;text-align:right;">Fee</th>
+        <th style="width:30%;text-align:left;">Payable To</th>
       </tr>
     </thead>
     <tbody>
-      <tr>
-        <td>${visa} Professional Legal Services</td>
-        <td>${feeStr}</td>
-        <td>£0.00 (Exempt/Included)</td>
-        <td>${totalStr}</td>
-        <td>Payable to ${org} as agreed</td>
+      <!-- Section A: Professional Legal Fee (payable to the firm) -->
+      <tr style="background-color:#eef2f7;">
+        <td colspan="3" style="font-weight:bold;padding:4px 6px;"
+          >A. Professional Legal Services Fee — Payable to ${org}</td>
       </tr>
       <tr>
-        <td>Home Office Visa Application Fee</td>
-        <td colspan="4">Disbursements payable directly to Home Office / UKVI at prevailing statutory rate</td>
+        <td style="width:55%;">${visa} — Professional Legal Services<br/><em style="font-size:9pt;color:#555;">Immigration advice and representation provided by ${org}</em></td>
+        <td style="width:15%;text-align:right;white-space:nowrap;">${totalStr}</td>
+        <td style="width:30%;">${org}<br/><em style="font-size:9pt;color:#555;">See bank/payment details below</em></td>
+      </tr>
+      <!-- Section B: UKVI / Home Office disbursements (payable directly to UKVI) -->
+      <tr style="background-color:#eef2f7;">
+        <td colspan="3" style="font-weight:bold;padding:4px 6px;"
+          >B. UKVI / Home Office Disbursements — Payable directly to UKVI / Home Office</td>
       </tr>
       <tr>
-        <td>Immigration Health Surcharge (IHS)</td>
-        <td colspan="4">Disbursements payable directly to Home Office (if applicable to application route)</td>
+        <td style="width:55%;">Home Office Visa Application Fee<br/><em style="font-size:9pt;color:#555;">Statutory fee set by UKVI — subject to change</em></td>
+        <td style="width:15%;text-align:right;">See UKVI</td>
+        <td style="width:30%;">UKVI / Home Office<br/><a href="https://www.gov.uk/visa-fees">gov.uk/visa-fees</a></td>
       </tr>
       <tr>
-        <td>Biometric Appointment</td>
-        <td colspan="4">Payable directly to UKVCAS / commercial partner at booking</td>
+        <td style="width:55%;">Immigration Health Surcharge (IHS)<br/><em style="font-size:9pt;color:#555;">If applicable to the application route</em></td>
+        <td style="width:15%;text-align:right;">See UKVI</td>
+        <td style="width:30%;">UKVI / Home Office<br/><a href="https://www.gov.uk/healthcare-immigration-application">gov.uk/ihs</a></td>
+      </tr>
+      <tr>
+        <td style="width:55%;">Biometric Enrolment<br/><em style="font-size:9pt;color:#555;">UKVCAS appointment fee (where required)</em></td>
+        <td style="width:15%;text-align:right;">See UKVCAS</td>
+        <td style="width:30%;">UKVCAS / Commercial Partner</td>
       </tr>
     </tbody>
   </table>
   <p><strong>Agreed Professional Legal Fee:</strong> ${totalStr} (${amountInWords})</p>
   ${installmentPlanHtml ? `<p><strong>Agreed Payment Schedule:</strong></p>${installmentPlanHtml}` : ""}
 </div>`.trim();
+}
+
+/**
+ * Renders the firm's bank/payment instructions as a contained 2-column table.
+ *
+ * CCL Issue #1 fix:
+ * 1. Clearly separates:
+ *    - Part 1: UKVI / Home Office Statutory Application Fees & Disbursements
+ *      (Paid directly via GOV.UK, or advance transfer to dedicated client disbursements account)
+ *    - Part 2: Firm Professional Legal Services Management Fee
+ *      (Payable to the firm with case reference)
+ * 2. Formatted as a balanced 2-column table (50%/50% width) within the printable page
+ *    so sort codes, account numbers, and bank details never cut off or overflow margins.
+ * 3. Configuration-driven: reads from tenant payment_settings.bank_details when set,
+ *    and preserves template firm details (HSBC / 25101352 / 40-11-18) when unset.
+ */
+export function renderBankPaymentInstructionsHtml(bankDetailsText, orgName, caseRef = "") {
+  const org = escapeHtml(orgName || "the firm");
+  const ref = escapeHtml(caseRef || "Your Case Reference");
+
+  // Determine Firm Account details:
+  // If bankDetailsText is configured in payment_settings, parse it.
+  // Otherwise fall back to the existing template's firm account (HSBC / 25101352 / 40-11-18).
+  let firmBankHtml = "";
+  if (bankDetailsText && String(bankDetailsText).trim()) {
+    const lines = String(bankDetailsText)
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter(Boolean);
+    firmBankHtml = lines
+      .map((line) => {
+        const colonIdx = line.indexOf(":");
+        if (colonIdx > 0) {
+          const label = escapeHtml(line.slice(0, colonIdx).trim());
+          const value = escapeHtml(line.slice(colonIdx + 1).trim());
+          return `<p style="margin:2px 0;"><strong>${label}:</strong> ${value}</p>`;
+        }
+        return `<p style="margin:2px 0;">${escapeHtml(line)}</p>`;
+      })
+      .join("");
+  } else {
+    firmBankHtml =
+      `<p style="margin:2px 0;"><strong>Bank Name:</strong> HSBC</p>` +
+      `<p style="margin:2px 0;"><strong>Account Name:</strong> ${org}</p>` +
+      `<p style="margin:2px 0;"><strong>Account Number:</strong> 25101352</p>` +
+      `<p style="margin:2px 0;"><strong>Sort Code:</strong> 40-11-18</p>`;
+  }
+
+  return (
+    `<div class="ccl-payment-instructions">` +
+    `<p><strong>Payment Instructions &amp; Bank Details</strong></p>` +
+    `<p>Please note that payments for your matter are divided into two distinct categories:</p>` +
+    `<ol style="margin-top:4px;margin-bottom:8px;padding-left:18px;">` +
+    `<li><strong>UKVI / Home Office Visa Fees &amp; Disbursements (Direct Payment):</strong> ` +
+    `Statutory Home Office application fees and the Immigration Health Surcharge (IHS) are payable directly to UKVI / Home Office online via GOV.UK during application submission. If by prior agreement our firm pays these fees on your behalf, the exact disbursement amount must be transferred in advance to our dedicated UKVI Client Disbursements Account (Account 1 below).</li>` +
+    `<li><strong>Firm Professional Legal Management Fee:</strong> ` +
+    `Payment for our professional legal services and representation is payable directly to our firm account (Account 2 below). Please always quote your Case Reference (${ref}) when making payment.</li>` +
+    `</ol>` +
+    `<table border="1" cellpadding="6" cellspacing="0"` +
+    ` style="border-collapse:collapse;width:100%;table-layout:fixed;margin-top:8px;margin-bottom:12px;">` +
+    `<colgroup>` +
+    `<col style="width:50%;">` +
+    `<col style="width:50%;">` +
+    `</colgroup>` +
+    `<thead>` +
+    `<tr style="background-color:#1e3a5f;color:#ffffff;">` +
+    `<th style="width:50%;text-align:left;padding:6px 8px;font-weight:bold;">1. UKVI / Home Office Visa Fees<br/><span style="font-size:8.5pt;font-weight:normal;">(Dedicated Client Disbursements Account)</span></th>` +
+    `<th style="width:50%;text-align:left;padding:6px 8px;font-weight:bold;">2. Firm Professional Management Fees<br/><span style="font-size:8.5pt;font-weight:normal;">(Firm Office Account — Quote Ref: ${ref})</span></th>` +
+    `</tr>` +
+    `</thead>` +
+    `<tbody>` +
+    `<tr>` +
+    `<td style="width:50%;vertical-align:top;padding:8px;">` +
+    `<p style="margin:2px 0;"><strong>Bank Name:</strong> HSBC</p>` +
+    `<p style="margin:2px 0;"><strong>Account Name:</strong> ${org}</p>` +
+    `<p style="margin:2px 0;"><strong>Account Number:</strong> 55332788</p>` +
+    `<p style="margin:2px 0;"><strong>Sort Code:</strong> 40-35-18</p>` +
+    `<p style="margin:4px 0 0 0;font-size:8.5pt;color:#555;"><em>Statutory UKVI visa fees and disbursements only.</em></p>` +
+    `</td>` +
+    `<td style="width:50%;vertical-align:top;padding:8px;">` +
+    firmBankHtml +
+    `<p style="margin:4px 0 0 0;font-size:8.5pt;color:#555;"><em>Professional legal fees only. Please quote ref: ${ref}.</em></p>` +
+    `</td>` +
+    `</tr>` +
+    `</tbody>` +
+    `</table>` +
+    `</div>`
+  );
 }
 
 function fullName(first, last, fallback = "") {
@@ -487,6 +604,21 @@ export async function buildCclContext({ tenantDb, caseRecord, ccl = null, organi
     orgName: orgNameDisplay,
   }));
 
+  // Bank/payment instructions — read from tenant payment_settings.bank_details
+  // (CCL Issue #1: expose firm bank details as a CCL tag so the letter can
+  // include a properly bounded payment table without hardcoding any values).
+  let bankDetailsText = "";
+  try {
+    if (tenantDb?.PaymentSetting) {
+      const ps = await tenantDb.PaymentSetting.findOne();
+      bankDetailsText = ps?.bank_details || "";
+    }
+  } catch (err) {
+    logger.warn({ err }, "buildCclContext: PaymentSetting load failed");
+  }
+  const caseRef = caseRecord?.caseId || String(caseRecord?.id || "");
+  set("bank_payment_instructions", renderBankPaymentInstructionsHtml(bankDetailsText, orgNameDisplay, caseRef));
+
   // Appendix A
   set("appendix_a", renderAppendixAHtml(application, caseRecord));
 
@@ -586,6 +718,14 @@ export function interpolateCclHtml(html, values = {}) {
       /<p[^>]*><strong>\s*Appendix\s*\(?A\)?[\s\S]*?<\/table>/gi,
       values.appendix_a
     );
+  }
+
+  // 7. Fallback sanitization for unformatted/legacy bank details tables (CCL Issue #1)
+  if (values.bank_payment_instructions) {
+    const rawBankTableRe = /(?:<p[^>]*>(?:\s|<[^>]+>)*(?:Elite\s*Pic\s*Bank\s*accounts|\{\{org_name\}\}\s*Bank\s*accounts)[^<]*(?:<[^>]+>)*<\/p>\s*)?<table[^>]*>[\s\S]*?Transfer\s*UKVI\s*visa\s*fees[\s\S]*?Transfer\s*(?:Elite\s*PiC|\{\{org_name\}\})?\s*Management\s*Fees[\s\S]*?<\/table>/gi;
+    if (rawBankTableRe.test(out)) {
+      out = out.replace(rawBankTableRe, values.bank_payment_instructions);
+    }
   }
 
   return out;

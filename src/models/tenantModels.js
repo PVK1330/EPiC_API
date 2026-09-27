@@ -27,6 +27,7 @@ import CasePaymentModel from "./tenant/casePayment.model.js";
 import CaseTimelineModel from "./tenant/caseTimeline.model.js";
 import CaseCommunicationModel from "./tenant/caseCommunication.model.js";
 import CaseNoteModel from "./tenant/caseNote.model.js";
+import CaseNoteParticipantModel from "./tenant/caseNoteParticipant.model.js";
 import TaskModel from "./tenant/task.model.js";
 import ApplicationFieldSettingModel from "./tenant/applicationFieldSetting.model.js";
 import ApplicationCustomFieldModel from "./tenant/applicationCustomField.model.js";
@@ -136,6 +137,7 @@ export function buildDb(sequelize) {
   db.CaseTimeline = CaseTimelineModel(sequelize, Sequelize.DataTypes);
   db.CaseCommunication = CaseCommunicationModel(sequelize, Sequelize.DataTypes);
   db.CaseNote = CaseNoteModel(sequelize, Sequelize.DataTypes);
+  db.CaseNoteParticipant = CaseNoteParticipantModel(sequelize, Sequelize.DataTypes);
   db.Task = TaskModel(sequelize, Sequelize.DataTypes);
   db.ApplicationFieldSetting = ApplicationFieldSettingModel(sequelize, Sequelize.DataTypes);
   db.ApplicationCustomField = ApplicationCustomFieldModel(sequelize, Sequelize.DataTypes);
@@ -247,6 +249,10 @@ export function buildDb(sequelize) {
   db.CaseNote.belongsTo(db.Case, { foreignKey: "caseId", as: "case" });
   db.CaseNote.belongsTo(db.User, { foreignKey: "authorId", as: "author" });
   db.CaseNote.belongsTo(db.CaseNote, { foreignKey: "parentNoteId", as: "parentNote" });
+  db.CaseNote.hasMany(db.CaseNoteParticipant, { foreignKey: "caseNoteId", as: "participants" });
+  db.CaseNoteParticipant.belongsTo(db.CaseNote, { foreignKey: "caseNoteId", as: "caseNote" });
+  db.CaseNoteParticipant.belongsTo(db.User, { foreignKey: "caseworkerId", as: "caseworker" });
+  db.User.hasMany(db.CaseNoteParticipant, { foreignKey: "caseworkerId", as: "attendedNotes" });
   db.Task.belongsTo(db.User, { foreignKey: "assigned_to", as: "assignee" });
   db.Task.belongsTo(db.User, { foreignKey: "created_by", as: "creator" });
   db.Task.belongsTo(db.Case, { foreignKey: "case_id", as: "case" });

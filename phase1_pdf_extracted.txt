@@ -1,0 +1,191 @@
+--- PAGE 1 ---
+ 
+Page 1 
+ImCamHub CRM - User Acceptance Testing Feedback 
+ 
+Testers Srishti, Simran, Rohit 
+Access used Rohit - combined Admin and Caseworker access; Srishti - Caseworker ID; Simran -
+Admin ID (Khalid login) 
+Purpose Feedback from initial round of platform testing 
+1. Testing Overview 
+As part of our review of the ImCamHub CRM, we carried out a round of random testing across the Admin and 
+Caseworker portals. Rohit tested using a combination of Admin and Caseworker access, Srishti tested using a 
+Caseworker ID, and Simran tested using the Admin ID (Khalid login). 
+Overall, the platform is strong and offers a wide range of features. However, with this many features, it may not 
+be easy for new users to navigate in the initial months, so we would recommend a short onboarding/training 
+period once the issues below have been addressed. 
+2. Priority Recommendations 
+The items below are the ones we believe should be prioritised, as they affect the core candidate journey rather 
+than individual fields or forms. 
+2.1 Candidate self-service portal cannot be created 
+We were not able to successfully create a candidate portal. Ideally, the candidate should be able to create their 
+own portal account and upload their documents directly, rather than this being done manually by the 
+caseworker/admin. When attempting self-registration, the system returned a “Passwords do not match” error, 
+which meant a new candidate account could not be created. 
+--- PAGE 2 ---
+ 
+Page 2 
+ 
+System error preventing candidate self-registration -“Passwords do not match”. 
+2.2 Deleted email addresses/phone numbers cannot be re-added 
+
+--- PAGE 3 ---
+ 
+Page 3 
+If an email address or telephone number is deleted from a record, it cannot be added back to the CRM -a new 
+one is required instead. This is a particular problem for staff members, as it is unlikely that an employee's email 
+address or phone number would ever change. We would ask for this to be reviewed and fixed. 
+2.3 Recommendation on scope of testing before go-live 
+Given the number of features in the CRM, and the fact that any error could directly affect an applicant's journey, 
+we believe the system should be tested more thoroughly before go-live -ideally with around 25-30 dummy cases 
+across different categories, tracked from start to end. 
+3. Admin Portal -Detailed Findings 
+3.1 Candidate registration and profile 
+• The “Client” tab in the Admin Portal should be renamed to “Candidate”, for consistency with the rest of 
+the system. 
+ 
+Client tab -recommended to be renamed “Candidate”. 
+• On the candidate registration page, the reference number shown appears to be an Organisation ID -should 
+this instead be a candidate Case ID? 
+
+--- PAGE 4 ---
+ 
+Page 4 
+ 
+• When manually adding a candidate, the country field does not list all countries. 
+• There is no option to capture landlord details, and the current address “move-in”/start date is not 
+requested. This should be a required field. 
+ 
+Manual candidate entry -country not listed; no landlord details or address start date captured. 
+• The system should allow applicants to record more than one nationality where applicable. 
+
+--- PAGE 5 ---
+ 
+Page 5 
+ 
+• There is no dedicated field for a driving licence number. 
+• Only one previous address can be entered. The system should allow multiple previous addresses to be 
+added where an applicant has lived at more than one. 
+• Where the applicant answers “Yes” to a question (e.g. previous medical treatment, or a previous visa 
+refusal), the system should then prompt for further details rather than leaving the entry incomplete. 
+• Medical treatment: if “Yes” is selected, there is no option to capture hospital/clinic name and address, 
+start and end dates of treatment, or any other relevant details. 
+
+--- PAGE 6 ---
+ 
+Page 6 
+ 
+• Refusal details: there is no option to record details of a previous visa/application refusal, such as the 
+reason, date, country/application type, and reference details. 
+ 
+• Travel history: applicants can currently only add a single trip. The system should allow multiple travel 
+records, each capturing country visited, purpose of travel, date, duration of stay, and other relevant 
+details. 
+
+--- PAGE 7 ---
+ 
+Page 7 
+ 
+ 
+
+--- PAGE 8 ---
+ 
+Page 8 
+Only one travel entry can currently be added, from both the Admin and Caseworker views. 
+3.2 Sponsors and case assignment 
+• When adding a sponsor, the mobile number should not be a mandatory field. 
+• The “Reason for assigning case” field is currently not mandatory when assigning a case to a caseworker -
+please confirm whether this should be required. 
+ 
+• Cases should only be able to be assigned to a single caseworker. 
+ 
+• The Import Form needs to be properly set up/configured. 
+3.3 Document upload and contact details 
+• When uploading required documents, the system asks for a “User ID”, but there is no visible field or option 
+to generate or locate this ID. Please could you clarify where this User ID should be generated and where it 
+should be entered before documents can be uploaded? 
+
+--- PAGE 9 ---
+ 
+Page 9 
+ 
+• Attempting to edit a contact's details in the Admin Portal produces an error, and the changes cannot be 
+saved (this links to the email/phone number issue raised in Section 2.2). 
+4. Caseworker Portal -Detailed Findings 
+4.1 Notifications and case identification 
+• The notification email received when a case is assigned is unclear and does not include a direct link 
+through to the CRM portal. 
+ 
+• The terminology is confusing, as it mixes “CAS” (as in the immigration term “Confirmation of Acceptance 
+for Studies”) with “Case ID”. We would suggest using “Case” consistently to avoid confusion. 
+• Case numbers are currently generated randomly. We would recommend a sequential numbering system 
+instead, for example Case-01, Case-02, Case-03, and so on. 
+• Notifications should clearly show the candidate's name rather than only the case number, so that we are 
+not repeatedly having to look up which case number relates to which candidate. 
+
+--- PAGE 10 ---
+ 
+Page 10 
+ 
+4.2 Case workflow 
+• Cases are only assigned to a caseworker after the initial consultation -if that is the case, why does the 
+process still route through a separate consultation stage afterwards? Please could this be clarified. 
+ 
+• The target submission date set for a candidate should also be visible in the caseworker's calendar. 
+• It is unclear whether other caseworkers can add notes to a case that is not theirs -for example, if a 
+colleague takes a call from a client and needs to log notes against that candidate's profile. At present it 
+appears that only the assigned caseworker can add notes. 
+
+--- PAGE 11 ---
+ 
+Page 11 
+ 
+• We would expect the case timeline to be generated automatically, rather than requiring entries to be 
+added manually. 
+ 
+• The COS Request tab is not needed within the Caseworker Portal, as this is handled separately by David 
+and Khalid. 
+4.3 Documents, sponsor details, and fees 
+
+--- PAGE 12 ---
+ 
+Page 12 
+• It is not currently possible to upload documents to a candidate's case file. 
+ 
+ 
+• Where no documents had been uploaded by the tester, it was unclear what had been “sent” and to whom. 
+The sponsor name shown was also incorrect (e.g. displaying “e2e Infosys” rather than the correct sponsor, 
+“Quirky Frog”). 
+
+--- PAGE 13 ---
+ 
+Page 13 
+ 
+• We do not generally offer an instalment option, but the case cannot be submitted for approval unless the 
+instalment section has been completed. 
+
+--- PAGE 14 ---
+ 
+Page 14 
+ 
+• Even where the instalment section is completed, the system does not show or confirm how many 
+instalments have been set up. 
+
+--- PAGE 15 ---
+ 
+Page 15 
+ 
+• The CCL details shown are incomplete. A separate PDF explaining how the CCL is generated has been 
+shared alongside this document. 
+
+--- PAGE 16 ---
+ 
+Page 16 
+ 
+5. Summary 
+The ImCamHub CRM offers a strong set of features for managing candidates end-to-end, but the issues above -
+particularly the candidate self-service portal, the email/phone number re-add issue, and the document upload 
+errors should be resolved asap. We would also recommend a structured testing phase of 25-30 dummy cases 
+across different categories, tracked from start to finish, to catch any remaining issues before they can affect a 
+live applicant's journey. 
+Please let us know if it would help to walk through any of the above on a call. Thank you. 
