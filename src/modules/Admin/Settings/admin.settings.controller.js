@@ -10,6 +10,13 @@ import { normalizeStorageRelativePath, toPublicImagePath } from '../../../utils/
 import { seedTenantOrganisation } from '../../../services/tenantSeed.service.js';
 import { clearEmailBrandingCache } from '../../../utils/emailBranding.js';
 import logger from '../../../utils/logger.js';
+import {
+  getVisaExpiryAlertDays,
+  setVisaExpiryAlertDays,
+  DEFAULT_VISA_EXPIRY_ALERT_DAYS,
+  MIN_VISA_EXPIRY_ALERT_DAYS,
+  MAX_VISA_EXPIRY_ALERT_DAYS,
+} from '../../../services/visaExpiry.service.js';
 import { sanitizePlainText } from '../../../utils/sanitizeText.js';
 
 
@@ -1541,3 +1548,41 @@ export const deleteSlaRule = async (req, res) => {
   }
 };
 
+
+// ── Phase 2 UAT 3.1: visa expiry alert window (per firm) ─────────────────────
+export const getVisaAlertSettings = async (req, res) => {
+  try {
+    if (!(await requireAdmin(req, res))) return;
+    const visaExpiryAlertDays = await getVisaExpiryAlertDays(req.tenantDb);
+    res.status(200).json({
+      status: "success",
+      data: {
+        visaExpiryAlertDays,
+        min: MIN_VISA_EXPIRY_ALERT_DAYS,
+        max: MAX_VISA_EXPIRY_ALERT_DAYS,
+        defaultDays: DEFAULT_VISA_EXPIRY_ALERT_DAYS,
+      },
+    });
+  } catch (error) {
+    logger.error({ err: error }, "getVisaAlertSettings error");
+    res.status(500).json({ status: "error", message: "Internal server error" });
+  }
+};
+
+export const updateVisaAlertSettings = async (req, res) => {
+  try {
+    if (!(await requireAdmin(req, res))) return;
+    const visaExpiryAlertDays = await setVisaExpiryAlertDays(req.tenantDb, req.body?.visaExpiryAlertDays);
+    res.status(200).json({
+      status: "success",
+      message: `Visa expiry alerts will be raised ${visaExpiryAlertDays} days before a visa expires.`,
+      data: { visaExpiryAlertDays },
+    });
+  } catch (error) {
+    if (error?.statusCode === 400) {
+      return res.status(400).json({ status: "error", message: error.message, data: { errors: [error.message] } });
+    }
+    logger.error({ err: error }, "updateVisaAlertSettings error");
+    res.status(500).json({ status: "error", message: "Internal server error" });
+  }
+};

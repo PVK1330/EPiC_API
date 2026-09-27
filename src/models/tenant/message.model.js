@@ -44,6 +44,19 @@ export default (sequelize, DataTypes) => {
         type: DataTypes.BOOLEAN,
         defaultValue: false,
       },
+      // Phase 2 UAT 3.4 — delivery status (see messagingRealtime.messageStatus).
+      deliveredAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
+      readAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
+      organisation_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+      },
     },
     {
       tableName: "messages",

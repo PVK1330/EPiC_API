@@ -6,6 +6,7 @@ export const EVENT_TYPES = Object.freeze({
   MESSAGE_NEW: 'message:new',
   CONVERSATION_UPDATED: 'conversation:updated',
   MESSAGES_READ: 'messages:read',
+  MESSAGES_DELIVERED: 'messages:delivered',
   LICENCE_STAGE_UPDATED: 'licence:stage_updated',
 });
 
@@ -25,8 +26,32 @@ export function userRoom(userId) {
   return `user:${Number(userId)}`;
 }
 
-export function threadRoom(conversationId) {
-  return `thread:${Number(conversationId)}`;
+export function threadRoom(conversationId, organisationId = null) {
+  return `thread:${Number(organisationId) || 0}:${Number(conversationId)}`;
+}
+
+/** Is at least one socket of this user connected (portal open anywhere)? */
+export function isUserOnline(io, userId) {
+  if (!io || !userId) return false;
+  const room = io.sockets?.adapter?.rooms?.get(userRoom(userId));
+  return Boolean(room && room.size > 0);
+}
+
+const toIso = (v) =>
+  v instanceof Date ? v.toISOString() : v ? new Date(v).toISOString() : null;
+
+/**
+ * Phase 2 UAT 3.4 — per-message status shown to the sender:
+ *   "read"      recipient opened the conversation
+ *   "delivered" recipient's portal was open, or they have opened it since
+ *   "sent"      saved, waiting for the recipient to open the portal
+ * ("failed" only exists client-side: the send request itself failed.)
+ */
+export function messageStatus(m) {
+  if (!m) return "sent";
+  if (m.readAt || m.isRead) return "read";
+  if (m.deliveredAt) return "delivered";
+  return "sent";
 }
 
 export function orgRoom(organisationId) {
@@ -48,9 +73,59 @@ export function buildMessageNewPayload(messageRow, caseId) {
     content: m.content,
     messageType: m.messageType ?? "text",
     isRead: Boolean(m.isRead),
+    deliveredAt: toIso(m.deliveredAt),
+    readAt: toIso(m.readAt),
+    status: messageStatus(m),
     createdAt,
     caseId: caseId ?? null,
   };
+}
+
+/** Tell a sender that some of their messages reached the recipient's portal. */
+export function emitMessagesDelivered(io, { senderId, receiverId, conversationId, messageIds, deliveredAt }) {
+  if (!io || !senderId || !messageIds?.length) return;
+  io.to(userRoom(senderId)).emit("messages:delivered", {
+    type: "messages:delivered",
+    conversationId,
+    receiverId,
+    messageIds,
+    deliveredAt: toIso(deliveredAt),
+  });
+}
+
+/**
+ * The user has just opened the portal (socket connected): every message waiting
+ * for them is now delivered. Senders are told so their ticks update.
+ */
+export async function markPendingMessagesDelivered(io, tenantDb, userId) {
+  if (!tenantDb?.Message || !userId) return 0;
+  const pending = await tenantDb.Message.findAll({
+    where: { receiverId: userId, deliveredAt: null },
+    attributes: ["id", "senderId", "conversationId"],
+    raw: true,
+  });
+  if (!pending.length) return 0;
+  const now = new Date();
+  await tenantDb.Message.update(
+    { deliveredAt: now },
+    { where: { id: pending.map((p) => p.id), deliveredAt: null } },
+  );
+  const groups = new Map();
+  for (const p of pending) {
+    const key = `${p.senderId}:${p.conversationId}`;
+    if (!groups.has(key)) groups.set(key, { senderId: p.senderId, conversationId: p.conversationId, ids: [] });
+    groups.get(key).ids.push(p.id);
+  }
+  for (const g of groups.values()) {
+    emitMessagesDelivered(io, {
+      senderId: g.senderId,
+      receiverId: userId,
+      conversationId: g.conversationId,
+      messageIds: g.ids,
+      deliveredAt: now,
+    });
+  }
+  return pending.length;
 }
 
 export async function getUnreadCountForUserInConversation(tenantDb, userId, conversationId) {
@@ -88,7 +163,6 @@ export async function emitMessageNewAndConversationUpdated(io, {
   io
     .to(userRoom(messagePayload.senderId))
     .to(userRoom(messagePayload.receiverId))
-    .to(threadRoom(conversationId))
     .emit("message:new", messageNew);
 
   const p1 = conversation.participantOneId;
@@ -117,7 +191,7 @@ export async function emitMessageNewAndConversationUpdated(io, {
 /**
  * @param {import('socket.io').Server} io
  */
-export async function emitAfterMarkRead(io, { tenantDb, senderId, readerUserId, conversationIds }) {
+export async function emitAfterMarkRead(io, { tenantDb, senderId, readerUserId, conversationIds, readAt = null }) {
   if (!io || !tenantDb || !conversationIds?.length) return;
 
   for (const conversationId of conversationIds) {
@@ -129,6 +203,7 @@ export async function emitAfterMarkRead(io, { tenantDb, senderId, readerUserId, 
       conversationId,
       readerUserId,
       senderId,
+      readAt: toIso(readAt || new Date()),
     };
     io.to(userRoom(senderId)).emit("messages:read", readEvent);
 

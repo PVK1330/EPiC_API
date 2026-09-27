@@ -26,6 +26,7 @@ import eventPublisher from '../../../core/events/eventPublisher.js';
 import { syncApplicationVisaRefusals, formatApplicationWithRefusals } from '../../../services/visaRefusal.service.js';
 import { EVENTS } from '../../../core/events/eventRegistry.js';
 import { generateCaseId } from '../../../utils/case.utils.js';
+import { getVisaExpiryAlertDays } from '../../../services/visaExpiry.service.js';
 
 /** 4xx validation error — without a status the global handler answers 500. */
 function badRequest(message) {
@@ -254,11 +255,11 @@ export class CandidateService {
           await this.repository.createApplication(appPayload, t);
         }
 
-        let visaTypeId = null;
-        if (application.visaType) {
-          const vt = await this.repository.findVisaTypeByName(application.visaType, t);
-          if (vt) visaTypeId = vt.id;
-        }
+        // Phase 2 UAT 3.1 / 3.3: application.visaType is the client's CURRENT
+        // visa ("Current Status → Type of Visa"), not the application being
+        // made. The auto-created lead case starts without an application type;
+        // staff set it on the case (its reference is then re-issued to match).
+        const visaTypeId = null;
 
         const caseworkerId = application.caseworkerId;
         const assignedcaseworkerId = caseworkerId ? [Number(caseworkerId)] : null;
@@ -497,12 +498,18 @@ export class CandidateService {
       const cJson = typeof c.toJSON === 'function' ? c.toJSON() : { ...c };
       const currentCase = resolveCurrentCase(cJson.cases || []);
       const currentVisaType = currentCase?.visaType?.name || null;
+      // Phase 2 UAT 3.1: two separate things the list must not mix up —
+      // the client's CURRENT visa (application "Type of Visa") and the
+      // application being made (the current case's visa type).
+      const currentVisa = cJson.application?.visaType || null;
+      const applicationType = currentVisaType;
       let currentVisaExpiry = null;
       if (currentCase && currentCase.visaEndDate !== undefined && currentCase.visaEndDate !== null) {
         currentVisaExpiry = currentCase.visaEndDate;
-      } else if (currentCase && currentCase.visaEndDate === null && Array.isArray(cJson.cases) && cJson.cases.filter(cs => !cs.deleted_at).length > 1) {
-        currentVisaExpiry = null;
       } else if (cJson.application?.visaEndDate) {
+        // Phase 2 UAT (3.1): the candidate's recorded current-visa expiry applies
+        // whenever the case has no case-specific date — including candidates with
+        // more than one case (previously they were silently skipped).
         currentVisaExpiry = cJson.application.visaEndDate;
       }
 
@@ -510,11 +517,17 @@ export class CandidateService {
         ...cJson,
         currentCase,
         currentVisaType,
+        currentVisa,
+        applicationType,
         currentVisaExpiry,
       };
     });
 
-    const visaExpiryAlertsCount = await this.countUpcomingVisaExpiryAlerts({ organisationId: orgId });
+    const visaExpiryAlertDays = await getVisaExpiryAlertDays(this.repository.tenantDb);
+    const visaExpiryAlertsCount = await this.countUpcomingVisaExpiryAlerts({
+      organisationId: orgId,
+      windowDays: visaExpiryAlertDays,
+    });
 
     return {
       candidates: candidatesWithCurrent,
@@ -528,6 +541,7 @@ export class CandidateService {
         count: visaExpiryAlertsCount,
       },
       visaExpiryAlertsCount,
+      visaExpiryAlertDays,
     };
   }
 
@@ -542,12 +556,18 @@ export class CandidateService {
     const cJson = typeof candidate.toJSON === 'function' ? candidate.toJSON() : { ...candidate };
     const currentCase = resolveCurrentCase(cJson.cases || []);
     const currentVisaType = currentCase?.visaType?.name || null;
+      // Phase 2 UAT 3.1: two separate things the list must not mix up —
+      // the client's CURRENT visa (application "Type of Visa") and the
+      // application being made (the current case's visa type).
+      const currentVisa = cJson.application?.visaType || null;
+      const applicationType = currentVisaType;
     let currentVisaExpiry = null;
     if (currentCase && currentCase.visaEndDate !== undefined && currentCase.visaEndDate !== null) {
       currentVisaExpiry = currentCase.visaEndDate;
-    } else if (currentCase && currentCase.visaEndDate === null && Array.isArray(cJson.cases) && cJson.cases.filter(cs => !cs.deleted_at).length > 1) {
-      currentVisaExpiry = null;
     } else if (cJson.application?.visaEndDate) {
+      // Phase 2 UAT (3.1): the candidate's recorded current-visa expiry applies
+      // whenever the case has no case-specific date — including candidates with
+      // more than one case (previously they were silently skipped).
       currentVisaExpiry = cJson.application.visaEndDate;
     }
 
@@ -555,6 +575,8 @@ export class CandidateService {
       ...cJson,
       currentCase,
       currentVisaType,
+      currentVisa,
+      applicationType,
       currentVisaExpiry,
     };
   }
@@ -1292,7 +1314,13 @@ export class CandidateService {
         }
 
         // 4. Create enquiry Case
-        const caseId = await generateCaseId(this.repository.tenantDb, { transaction: t });
+        // Phase 2 UAT 3.3: the reference needs the firm and the case's visa type,
+        // otherwise every enquiry case got the generic "ORG-OTH" prefix.
+        const caseId = await generateCaseId(this.repository.tenantDb, {
+          transaction: t,
+          organisationId: organisation_id,
+          visaTypeId,
+        });
         const createdCase = await this.repository.createCase(
           {
             caseId,
@@ -1381,11 +1409,13 @@ export class CandidateService {
    * - Uses current-case logic (resolveCurrentCase / highest priority active case).
    * - Scoped by organisation_id if provided.
    * - Excludes soft-deleted cases and inactive clients.
-   * - Window: upcoming within windowDays (default: 30 days) from today.
+   * - Window: upcoming within windowDays; when not given, the firm's setting
+   *   (sla_settings.visa_expiry_alert_days, default 90 — Phase 2 UAT 3.1).
    */
   async countUpcomingVisaExpiryAlerts(options = {}) {
     const organisationId = options?.organisationId ?? options?.organisation_id ?? null;
-    const windowDays = parseInt(options?.windowDays, 10) || 30;
+    const windowDays =
+      parseInt(options?.windowDays, 10) || (await getVisaExpiryAlertDays(this.repository.tenantDb));
     const sequelize = this.repository.tenantDb.sequelize;
 
     const now = new Date();
@@ -1417,17 +1447,14 @@ export class CandidateService {
         SELECT 
           u.id AS user_id,
           cc.case_id,
-          CASE 
-            WHEN cc.case_visa_end_date IS NOT NULL THEN cc.case_visa_end_date
-            WHEN (SELECT COUNT(*) FROM cases c_all WHERE c_all."candidateId" = u.id AND c_all.deleted_at IS NULL) <= 1 
-              THEN ca."visaEndDate"
-            ELSE NULL
-          END AS effective_visa_end_date
+          -- Case-specific expiry first, else the candidate's current-visa expiry
+          -- (applies to candidates with any number of cases).
+          COALESCE(cc.case_visa_end_date, ca."visaEndDate") AS effective_visa_end_date
         FROM users u
         LEFT JOIN current_cases cc ON cc.candidate_id = u.id
         LEFT JOIN candidate_applications ca ON ca."userId" = u.id
         WHERE u.role_id = :roleCandidate
-          AND u.status != 'inactive'
+          AND COALESCE(u.status, 'active') <> 'inactive'
           AND (:orgId::int IS NULL OR u.organisation_id = :orgId::int)
       )
       SELECT COUNT(*)::int AS count

@@ -2,6 +2,7 @@ import { CandidateService } from './candidate.service.js';
 import ApiResponse from '../../../utils/apiResponse.js';
 import catchAsync from '../../../utils/catchAsync.js';
 import logger from '../../../utils/logger.js';
+import { getVisaExpiryAlertDays } from '../../../services/visaExpiry.service.js';
 
 /**
  * Handles incoming HTTP requests for Candidate management.
@@ -69,14 +70,17 @@ export const getAllCandidates = catchAsync(async (req, res) => {
 // Get Visa Expiry Alerts Count
 export const getVisaExpiryAlertsCount = catchAsync(async (req, res) => {
   const service = new CandidateService(req.tenantDb);
+  // Phase 2 UAT 3.1: default to the firm's alert window (sla_settings), not 30.
+  const windowDays = parseInt(req.query?.windowDays, 10) || (await getVisaExpiryAlertDays(req.tenantDb));
   const count = await service.countUpcomingVisaExpiryAlerts({
     organisationId: req.user?.organisation_id,
-    windowDays: req.query?.windowDays,
+    windowDays,
   });
   
   return ApiResponse.success(res, "Visa expiry alerts count retrieved successfully", {
-    visaExpiryAlerts: { count },
+    visaExpiryAlerts: { count, windowDays },
     count,
+    windowDays,
   });
 });
 

@@ -598,14 +598,12 @@ export const submitApplication = async (req, res, next) => {
       }
 
       // ── Handle Case creation/update ─────────────────────────────────────
-      let visaTypeId = null;
-      if (payload.visaType) {
-        const vt = await req.tenantDb.VisaType.findOne({
-          where: { name: { [req.tenantDb.Sequelize.Op.iLike]: `%${payload.visaType}%` } },
-          transaction: t,
-        });
-        if (vt) visaTypeId = vt.id;
-      }
+      // Phase 2 UAT 3.1 / 3.3: the application's "Type of Visa" is the client's
+      // CURRENT visa (Current Status section), not the application being made.
+      // It must never set or overwrite a case's visa type — staff choose the
+      // application type on the case. (Previously saving the form turned an ILR
+      // case back into Skilled Worker, and new cases got the current visa's code.)
+      const visaTypeId = null;
 
       const caseworkerId = req.body.caseworkerId;
       const assignedcaseworkerId = caseworkerId ? [Number(caseworkerId)] : null;
@@ -620,7 +618,6 @@ export const submitApplication = async (req, res, next) => {
       if (existingCase) {
         await existingCase.update(
           {
-            visaTypeId: visaTypeId || existingCase.visaTypeId,
             nationality: app.nationality || existingCase.nationality,
             assignedcaseworkerId: assignedcaseworkerId || existingCase.assignedcaseworkerId,
             status: 'Lead',
@@ -925,21 +922,18 @@ export const adminUpdateCandidateApplication = async (req, res) => {
         transaction: t,
       });
 
-      let visaTypeId = null;
-      if (payload.visaType) {
-        const vt = await req.tenantDb.VisaType.findOne({
-          where: { name: { [req.tenantDb.Sequelize.Op.iLike]: `%${payload.visaType}%` } },
-          transaction: t,
-        });
-        if (vt) visaTypeId = vt.id;
-      }
+      // Phase 2 UAT 3.1 / 3.3: the application's "Type of Visa" is the client's
+      // CURRENT visa (Current Status section), not the application being made.
+      // It must never set or overwrite a case's visa type — staff choose the
+      // application type on the case. (Previously saving the form turned an ILR
+      // case back into Skilled Worker, and new cases got the current visa's code.)
+      const visaTypeId = null;
 
       const caseworkerId = req.body.caseworkerId;
       const assignedcaseworkerId = caseworkerId ? [Number(caseworkerId)] : null;
 
       if (existingCase) {
         await existingCase.update({
-          visaTypeId: visaTypeId || existingCase.visaTypeId,
           nationality: payload.nationality || existingCase.nationality,
           assignedcaseworkerId: assignedcaseworkerId ?? existingCase.assignedcaseworkerId,
         }, { transaction: t });

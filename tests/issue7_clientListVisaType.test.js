@@ -17,7 +17,7 @@ const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, '..', '..');
 
 describe('Issue #7: Client List Shows Wrong Visa Type', async () => {
-  const tenantDb = getTenantDb('epic_technoweb');
+  const tenantDb = getTenantDb(process.env.TEST_TENANT_DB || 'epic_technoweb');
   const { User, Organisation, CandidateApplication, Case, VisaType, CandidateVisaRefusal } = tenantDb;
   const candidateService = new CandidateService(tenantDb);
 

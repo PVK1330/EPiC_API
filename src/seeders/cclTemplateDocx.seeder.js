@@ -24,8 +24,11 @@ const CCL_DOCX_DIR = path.join(__dirname, "../../assets/ccl-templates");
 // primary (active) letter for that visa type. Order matters: most specific first.
 const DOCX_RULES = [
   { test: /switch to skilled/i, name: "Switch to Skilled Worker — CCL", visaMatchers: ["skilled"], primary: false },
-  { test: /change of employment.*(2026|mar)/i, name: "Change of Employment (Mar 2026) — CCL", visaMatchers: ["skilled"], primary: false },
-  { test: /change of employment/i, name: "Change of Employment — CCL", visaMatchers: ["skilled"], primary: false },
+  // The two Change of Employment .docx files are a real client's completed
+  // letter (name, address, passport, sponsor, salary, family) — genericInstructions
+  // replaces that case-specific section with tag-filled standard wording.
+  { test: /change of employment.*(2026|mar)/i, name: "Change of Employment (Mar 2026) — CCL", visaMatchers: ["skilled"], primary: false, genericInstructions: true },
+  { test: /change of employment/i, name: "Change of Employment — CCL", visaMatchers: ["skilled"], primary: false, genericInstructions: true },
   { test: /dependent|dependant/i, name: "Dependent Partner & Child — CCL", visaMatchers: ["dependent", "dependant", "spouse", "partner"], primary: true },
   { test: /\bilr\b|indefinite/i, name: "Indefinite Leave to Remain — CCL", visaMatchers: ["indefiniteleave", "ilr", "settlement"], primary: true },
   { test: /spouse.*british/i, name: "Spouse of a British National — CCL", visaMatchers: ["spouse", "partner"], primary: true },
@@ -35,9 +38,36 @@ const DOCX_RULES = [
   { test: /skilled worker/i, name: "Skilled Worker — CCL", visaMatchers: ["skilled"], primary: true },
 ];
 
+// Standard letter header: recipient, date, salutation — all auto-filled.
+const STANDARD_LETTER_HEADER =
+  "<p>{{candidate_name}}</p><p>{{candidate_address}}</p><p>Date: {{date_today}}</p><p>Dear {{candidate_first_name}},</p>";
+
+// Tag-filled replacement for a case-specific "Your Instructions" + "Our advice"
+// section (Change of Employment letters).
+const GENERIC_COE_INSTRUCTIONS =
+  "<p><strong>Your Instructions</strong></p>" +
+  "<p>{{sponsor_instruction_clause}}</p>" +
+  "<p>You have provided evidence that your current visa is {{current_visa_type}} (Passport No: {{passport_number}}) and that it expires on {{current_visa_expiry}}.</p>" +
+  "<p><strong>Our advice:</strong></p>" +
+  '<p>We have considered your application against the current relevant immigration rules - <a href="https://www.gov.uk/guidance/immigration-rules/immigration-rules-appendix-skilled-worker">https://www.gov.uk/guidance/immigration-rules/immigration-rules-appendix-skilled-worker</a> and can confirm that, providing the information above is accurate and complete, we can support your Skilled Worker (change of employment) application.</p>';
+
 /** Replace obvious .docx placeholders with auto-fill tags so letters self-fill. */
-function injectTags(html) {
+function injectTags(html, rule = {}) {
   let out = String(html || "");
+
+  // Letter header: everything above the "Re: Client Care Letter" heading is the
+  // recipient block — dotted/underscore placeholders in most templates, but a
+  // REAL client's name and address in the Change of Employment files. Replace
+  // it with the standard auto-filled header (Phase 2 UAT 4.2 #2 / #4).
+  out = out.replace(/^[\s\S]*?(?=<p>(?:\s|<[^>]+>)*Re:\s*Client Care Letter)/i, STANDARD_LETTER_HEADER);
+
+  // Case-specific instructions/advice (real client's history) → generic tagged text.
+  if (rule.genericInstructions) {
+    out = out.replace(
+      /<p>(?:\s|<[^>]+>)*Your Instructions(?:\s|<[^>]+>)*<\/p>[\s\S]*?(?=<p>(?:\s|<[^>]+>)*What w(?:ill we|e will) do for you\?)/i,
+      GENERIC_COE_INSTRUCTIONS
+    );
+  }
   // Hardcoded date (e.g. "Date: 24/06/2024" or "Date: 13/09/2024") → today's date tag.
   out = out.replace(/Date:\s*\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4}/gi, "Date: {{date_today}}");
 
@@ -50,11 +80,20 @@ function injectTags(html) {
   // "Dear ____" or "Dear ……" → "Dear {{candidate_first_name}}".
   out = out.replace(/Dear\s+(?:Mr\.?|Mrs\.?|Ms\.?|Miss)?\s*[_.\u2026]{2,}/gi, "Dear {{candidate_first_name}}");
 
+  // Caseworker contact details FIRST — the firm-name rewrite below also matches
+  // "elitepic" inside "david@elitepic.co.uk"; running it first produced
+  // "david@Elite_pic.co.uk" in issued letters (Phase 2 UAT 4.2 #3).
+  out = out.replace(/<a[^>]*href="mailto:[^"]*@elitepic\.co\.uk"[^>]*>[\s\S]*?<\/a>/gi, "{{caseworker_email}}");
+  out = out.replace(/[A-Za-z0-9._%+-]+@elitepic\.co\.uk/gi, "{{caseworker_email}}");
+  out = out.replace(/01217782400/g, "{{caseworker_phone}}");
+
   // Firm name → org name tag (so each org's own name is used).
   out = out.replace(/Elite\s*PIC\s*Ltd/gi, "{{org_name}}").replace(/Elite\s*PIC/gi, "{{org_name}}");
 
-  // Recipient block (first two standalone placeholder paragraphs) with underscores, dots, or ellipsis
-  let blanks = 0;
+  // Recipient block (first two standalone placeholder paragraphs) with underscores, dots, or ellipsis.
+  // Only for letters without a "Re: Client Care Letter" heading — the others
+  // already got the standard header above, and a later blank must not be filled.
+  let blanks = out.startsWith(STANDARD_LETTER_HEADER) ? 2 : 0;
   out = out.replace(
     /(<p[^>]*>)(?:\s*<strong>)?\s*[_.\u2026]{3,}\s*(?:<\/strong>\s*)?(<\/p>)/gi,
     (match, open, close) => {
@@ -67,15 +106,18 @@ function injectTags(html) {
 
   // Caseworker replacement: remove hardcoded "David Robertson" and contact details
   out = out.replace(
-    /I,\s*David Robertson\s*will be your caseworker[\s\S]*?as and when they arise\./gi,
+    /I,\s*(?:David Robertson|Khalid Mahmood),?\s*will be your caseworker[\s\S]*?as and when they arise\./gi,
     "I, {{caseworker_name}} will be your primary caseworker and responsible for the conduct of your case. I can be contacted on {{caseworker_phone}} and email {{caseworker_email}} Whenever possible, I shall be available to advise and assist you and keep you informed of the progress of your case."
   );
   out = out.replace(
     /Your caseworker will be Mr David Robertson under the supervision of Mr Khalid Mahmood\./gi,
     "Your assigned caseworkers for this matter will be {{caseworkers_all}}."
   );
-  out = out.replace(/david@elitepic\.co\.uk/gi, "{{caseworker_email}}");
-  out = out.replace(/01217782400/g, "{{caseworker_phone}}");
+  out = out.replace(
+    /Your caseworker will be Mr Khalid Mahmood\./gi,
+    "Your assigned caseworker for this matter will be {{caseworkers_all}}."
+  );
+  out = out.replace(/(<p>\s*Yours sincerely,?\s*<\/p>\s*<p>)\s*Khalid Mahmood\s*(<\/p>)/gi, "$1{{caseworker_name}}$2");
   out = out.replace(/Mr David Robertson/gi, "{{caseworker_name}}");
   out = out.replace(/David Robertson/gi, "{{caseworker_name}}");
 
@@ -100,6 +142,29 @@ function injectTags(html) {
   return out;
 }
 
+// Bump when injectTags() changes so stored templates are upgraded ONCE.
+export const CCL_SEED_VERSION = 4;
+const SEED_MARKER = `<!-- ccl-seed:v${CCL_SEED_VERSION} -->`;
+const SEED_MARKER_RE = /<!-- ccl-seed:v(\d+) -->/;
+// Text that only ever came from an old/buggy import (hard-coded adviser, the
+// firm-name-in-email bug). A stored row with none of these and no marker is
+// treated as admin-edited and left alone.
+const LEGACY_SEED_TEXT_RE =
+  /David Robertson|I,\s*Khalid Mahmood,?\s*will be your caseworker|@elitepic\.co\.uk|@\{\{org_name\}\}|Elite_pic\.co\.uk|Y9158089|1H9W3VKX8|Jomon/i;
+
+/** Should a stored template row be replaced by the freshly seeded HTML? */
+export function shouldRefreshSeededTemplate(bodyHtml) {
+  const body = String(bodyHtml || "");
+  const m = body.match(SEED_MARKER_RE);
+  if (m) return Number(m[1]) < CCL_SEED_VERSION;
+  if (LEGACY_SEED_TEXT_RE.test(body)) return true;
+  // Header still holding .docx placeholders (…… / ____) or the real client's
+  // details from the Change of Employment files → an unedited old import.
+  const parts = body.split(/Re:\s*Client Care Letter/i);
+  if (parts.length < 2) return false; // no heading \u2192 no separate header to inspect
+  return /[_\u2026]{4,}|\.{6,}|Jomon|Gillott Road|Mr XXX/i.test(parts[0]);
+}
+
 let cachedPromise = null;
 /** Convert every .docx once → [{ name, html, visaMatchers, primary }]. Cached. */
 function loadDocxTemplates() {
@@ -113,7 +178,7 @@ function loadDocxTemplates() {
       if (!rule) continue;
       try {
         const { value } = await mammoth.convertToHtml({ path: path.join(CCL_DOCX_DIR, file) });
-        const html = injectTags(value);
+        const html = `${SEED_MARKER}${injectTags(value, rule)}`;
         if (html && html.trim()) {
           out.push({ name: rule.name, html, visaMatchers: rule.visaMatchers, primary: rule.primary });
         }
@@ -187,14 +252,11 @@ export async function seedCclTemplatesFromDocxForDb(tenantDb) {
       });
       if (wasCreated) {
         created += 1;
-      } else if (
-        row &&
-        (!String(row.bodyHtml || "").includes("{{org_name}}") ||
-          !String(row.bodyHtml || "").includes("{{caseworker_name}}") ||
-          String(row.bodyHtml || "").includes("David Robertson"))
-      ) {
-        // Upgrade letters imported before the richer dynamic tag injection
-        // (e.g. still having hardcoded David Robertson or missing dynamic tags).
+      } else if (row && shouldRefreshSeededTemplate(row.bodyHtml)) {
+        // Upgrade letters imported by an older seed version (or with legacy
+        // hard-coded adviser / broken email text). Rows already at this seed
+        // version, or cleaned up by an admin, are left untouched — previously
+        // the check re-imported some templates on every server restart.
         await row.update({ bodyHtml: tpl.html, visaTypeId: visaTypeId ?? row.visaTypeId, isActive: row.isActive || isActive });
         refreshed += 1;
       }

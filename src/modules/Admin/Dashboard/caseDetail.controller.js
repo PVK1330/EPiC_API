@@ -29,6 +29,8 @@ import {
   isValidCaseStage,
 } from '../../../constants/immigrationCaseProcess.js';
 import logger from '../../../utils/logger.js';
+import { singleCaseworkerError } from '../../../utils/case.utils.js';
+import { targetDateVisaWarning, buildTargetDateWarnings } from '../../../services/visaExpiry.service.js';
 
 const MANUAL_PAYMENT_METHOD_MAP = {
   bank_transfer: 'bank_transfer',
@@ -351,6 +353,8 @@ export const getCaseDetails = async (req, res) => {
         // Overview Tab
         overview: {
           caseId: caseData.caseId,
+          // Phase 2 UAT 3.3: earlier references (e.g. CAS-######) this case had.
+          previousCaseIds: Array.isArray(caseData.previousCaseIds) ? caseData.previousCaseIds : [],
           status: caseData.status,
           priority: caseData.priority,
           caseStage: caseData.caseStage,
@@ -398,7 +402,15 @@ export const getCaseDetails = async (req, res) => {
           targetSubmissionDate: caseData.targetSubmissionDate,
           biometricsDate: caseData.biometricsDate,
           submissionDate: caseData.submissionDate,
-          decisionDate: caseData.decisionDate
+          decisionDate: caseData.decisionDate,
+          // Phase 2 UAT 3.2: the visa expiry that applies to this case (case's
+          // own date, else the client's current visa) + a warning when the
+          // target submission date falls after it.
+          visaExpiry: caseData.visaEndDate || caseData.candidate?.application?.visaEndDate || null,
+          targetDateWarning: targetDateVisaWarning(
+            caseData.targetSubmissionDate,
+            caseData.visaEndDate || caseData.candidate?.application?.visaEndDate || null,
+          ),
         },
         
         // Financial Information
@@ -523,6 +535,10 @@ export const updateCaseStatus = async (req, res) => {
     if (priority !== undefined) updateData.priority = priority;
     if (assignedcaseworkerId !== undefined) {
       const cwIds = Array.isArray(assignedcaseworkerId) ? assignedcaseworkerId : (assignedcaseworkerId ? [assignedcaseworkerId] : []);
+      const cwCountError = singleCaseworkerError(cwIds);
+      if (cwCountError) {
+        return res.status(400).json({ status: "error", message: cwCountError, data: { errors: [cwCountError] } });
+      }
       updateData.assignedcaseworkerId = cwIds;
     }
     if (biometricsDate !== undefined) updateData.biometricsDate = biometricsDate;

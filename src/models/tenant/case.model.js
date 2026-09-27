@@ -7,8 +7,17 @@ const CaseModel = (sequelize, DataTypes) => {
     },
 
     caseId: {
-      type: DataTypes.STRING, //CAS-000001 likewiseauto genrated 
+      type: DataTypes.STRING, // structured reference, e.g. EPIC-ILR26-001 (see utils/case.utils.js)
       allowNull: true,
+    },
+
+    // Phase 2 UAT 3.3: references this case had before it was re-issued (legacy
+    // CAS-###### / Case-NN, or a type code that no longer matched the case).
+    // Lookups by an old reference still resolve through this list.
+    previousCaseIds: {
+      type: DataTypes.JSONB,
+      allowNull: false,
+      defaultValue: [],
     },
 
     candidateId: {

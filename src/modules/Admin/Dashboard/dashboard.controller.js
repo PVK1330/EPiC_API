@@ -7,6 +7,7 @@ import logger from '../../../utils/logger.js';
 import { countUnassignedCases } from '../../../services/caseAssignment.service.js';
 import { buildCaseworkerAssignmentWhere } from '../../../utils/caseworkerScope.js';
 import { CandidateService } from '../Candidates/candidate.service.js';
+import { getVisaExpiryAlertDays } from '../../../services/visaExpiry.service.js';
 
 /** Run a dashboard query without failing the whole endpoint when a table/model is missing. */
 async function safeDashboardQuery(promise, fallback, label = 'query') {
@@ -152,10 +153,12 @@ export const getDashboardStats = async (req, res) => {
     thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
     
     const candidateService = new CandidateService(req.tenantDb);
+    // Phase 2 UAT 3.1: per-firm alert window (default 90 days), not a fixed 30.
+    const visaExpiryAlertDays = await getVisaExpiryAlertDays(req.tenantDb);
     const [visaExpiryAlerts, sponsorExpiryAlerts] = await Promise.all([
       candidateService.countUpcomingVisaExpiryAlerts({
         organisationId: req.user?.organisation_id,
-        windowDays: 30,
+        windowDays: visaExpiryAlertDays,
       }).catch(() => 0),
       req.tenantDb.SponsorProfile.count({
         where: {
@@ -237,6 +240,7 @@ export const getDashboardStats = async (req, res) => {
           newImmigrationCases: recentCases,
           unassignedCases,
           visaExpiryAlerts,
+          visaExpiryAlertDays,
           sponsorExpiryAlerts,
           completionRate: totalCases > 0 ? Math.round((completedCases / totalCases) * 100) : 0
         },

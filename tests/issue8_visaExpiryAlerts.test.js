@@ -16,7 +16,7 @@ const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, '..', '..');
 
 describe('Issue #8: Visa Expiry Alerts Widget Real Count', async () => {
-  const tenantDb = getTenantDb('epic_technoweb');
+  const tenantDb = getTenantDb(process.env.TEST_TENANT_DB || 'epic_technoweb');
   const { User, Organisation, CandidateApplication, Case, VisaType } = tenantDb;
   const candidateService = new CandidateService(tenantDb);
 
@@ -451,12 +451,13 @@ describe('Issue #8: Visa Expiry Alerts Widget Real Count', async () => {
   // =========================================================================
   // CONFIRMATION: Terminology "Client" preserved and Exactly 2 Caseworkers Rule
   // =========================================================================
-  test('CONFIRMATION: Terminology "Client" preserved and Exactly 2 Caseworkers rule untouched', () => {
+  test('CONFIRMATION: Terminology "Client" preserved and single-caseworker rule in place', () => {
     const cwControllerPath = path.join(rootDir, 'Server', 'src', 'modules', 'Caseworker', 'Cases', 'caseworkerCase.controller.js');
     const cwControllerSrc = fs.readFileSync(cwControllerPath, 'utf8');
+    // BUG-017 / Phase 2 UAT: one caseworker per case (the "exactly 2" rule was reverted).
     assert.ok(
-      cwControllerSrc.includes('cwIds.length !== 2'),
-      'Backend controller strictly enforces cwIds.length !== 2',
+      cwControllerSrc.includes('singleCaseworkerError') && !cwControllerSrc.includes('cwIds.length !== 2'),
+      'Backend controller enforces one caseworker per case',
     );
 
     const adminCandidatesPath = path.join(rootDir, 'EPiC_Frontend', 'src', 'pages', 'admin', 'AdminCandidates.jsx');
