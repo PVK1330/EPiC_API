@@ -61,9 +61,23 @@ export const sendCredentialsToClient = catchAsync(async (req, res) => {
 // Get All Candidates
 export const getAllCandidates = catchAsync(async (req, res) => {
   const service = new CandidateService(req.tenantDb);
-  const result = await service.getAllCandidates(req.query);
+  const result = await service.getAllCandidates(req.query, req.user?.organisation_id);
   
   return ApiResponse.success(res, "Candidates retrieved successfully", result);
+});
+
+// Get Visa Expiry Alerts Count
+export const getVisaExpiryAlertsCount = catchAsync(async (req, res) => {
+  const service = new CandidateService(req.tenantDb);
+  const count = await service.countUpcomingVisaExpiryAlerts({
+    organisationId: req.user?.organisation_id,
+    windowDays: req.query?.windowDays,
+  });
+  
+  return ApiResponse.success(res, "Visa expiry alerts count retrieved successfully", {
+    visaExpiryAlerts: { count },
+    count,
+  });
 });
 
 // Get Candidate by ID
@@ -150,4 +164,192 @@ export const toggleCandidateStatus = catchAsync(async (req, res) => {
   const newStatus = candidate.status === 'active' ? 'inactive' : 'active';
   await candidate.update({ status: newStatus });
   return ApiResponse.success(res, `Status updated to ${newStatus}`, { status: newStatus });
+});
+
+// ── Visa Refusal Handlers (Staff / Admin) ───────────────────────────────────
+
+export const getCandidateVisaRefusals = catchAsync(async (req, res) => {
+  const candidateId = Number(req.params.id);
+  const application = await req.tenantDb.CandidateApplication.findOne({ where: { userId: candidateId } });
+  if (!application) {
+    return ApiResponse.success(res, "Visa refusals retrieved successfully", { visaRefusals: [] });
+  }
+
+  let refusals = await req.tenantDb.CandidateVisaRefusal.findAll({
+    where: { applicationId: application.id },
+    order: [['refusalDate', 'ASC'], ['id', 'ASC']],
+  });
+
+  if (refusals.length === 0 && application.refusedVisa === 'Yes' && application.refusedVisaDate) {
+    refusals = [
+      {
+        id: null,
+        applicationId: application.id,
+        userId: candidateId,
+        refusalDate: application.refusedVisaDate,
+        country: application.refusedVisaCountry || 'Unknown',
+        visaType: application.refusedVisaType || 'Other',
+        reason: application.refusedVisaReason || application.refusedVisaDetails || 'Previous visa refusal',
+        referenceNumber: application.refusedVisaReference || null,
+        details: application.refusedVisaDetails || null,
+      },
+    ];
+  }
+
+  return ApiResponse.success(res, "Visa refusals retrieved successfully", { visaRefusals: refusals });
+});
+
+export const createCandidateVisaRefusal = catchAsync(async (req, res) => {
+  const candidateId = Number(req.params.id);
+  const candidate = await req.tenantDb.User.findOne({ where: { id: candidateId, role_id: 1 } });
+  if (!candidate) return ApiResponse.notFound(res, 'Candidate not found');
+
+  let application = await req.tenantDb.CandidateApplication.findOne({ where: { userId: candidateId } });
+  if (!application) {
+    application = await req.tenantDb.CandidateApplication.create({
+      userId: candidateId,
+      status: 'draft',
+      organisation_id: candidate.organisation_id || req.user.organisation_id,
+    });
+  }
+
+  const { validateVisaRefusal } = await import('../../../services/visaRefusal.service.js');
+  const validated = validateVisaRefusal(req.body);
+
+  const refusal = await req.tenantDb.sequelize.transaction(async (t) => {
+    const created = await req.tenantDb.CandidateVisaRefusal.create({
+      ...validated,
+      applicationId: application.id,
+      userId: candidateId,
+      organisationId: candidate.organisation_id || req.user.organisation_id || null,
+    }, { transaction: t });
+
+    await application.update({
+      refusedVisa: 'Yes',
+      refusedVisaDate: created.refusalDate,
+      refusedVisaCountry: created.country,
+      refusedVisaType: created.visaType,
+      refusedVisaReason: created.reason,
+      refusedVisaDetails: created.details || created.reason,
+      refusedVisaReference: created.referenceNumber || null,
+    }, { transaction: t, hooks: false });
+
+    return created;
+  });
+
+  const allRefusals = await req.tenantDb.CandidateVisaRefusal.findAll({
+    where: { applicationId: application.id },
+    order: [['refusalDate', 'ASC'], ['id', 'ASC']],
+  });
+
+  return ApiResponse.created(res, "Visa refusal created successfully", {
+    refusal,
+    visaRefusals: allRefusals,
+  });
+});
+
+export const updateCandidateVisaRefusal = catchAsync(async (req, res) => {
+  const candidateId = Number(req.params.id);
+  const refusalId = Number(req.params.refusalId);
+
+  // Client isolation: only find refusal belonging to this candidate
+  const refusal = await req.tenantDb.CandidateVisaRefusal.findOne({
+    where: { id: refusalId, userId: candidateId },
+  });
+  if (!refusal) return ApiResponse.notFound(res, 'Visa refusal not found');
+
+  const { validateVisaRefusal } = await import('../../../services/visaRefusal.service.js');
+  const validated = validateVisaRefusal(req.body);
+
+  await req.tenantDb.sequelize.transaction(async (t) => {
+    await refusal.update(validated, { transaction: t });
+
+    const all = await req.tenantDb.CandidateVisaRefusal.findAll({
+      where: { applicationId: refusal.applicationId },
+      order: [['refusalDate', 'ASC'], ['id', 'ASC']],
+      transaction: t,
+    });
+
+    const application = await req.tenantDb.CandidateApplication.findByPk(refusal.applicationId, { transaction: t });
+    if (application && all.length > 0) {
+      const first = all[0];
+      await application.update({
+        refusedVisa: 'Yes',
+        refusedVisaDate: first.refusalDate,
+        refusedVisaCountry: first.country,
+        refusedVisaType: first.visaType,
+        refusedVisaReason: first.reason,
+        refusedVisaDetails: first.details || first.reason,
+        refusedVisaReference: first.referenceNumber || null,
+      }, { transaction: t, hooks: false });
+    }
+  });
+
+  const allRefusals = await req.tenantDb.CandidateVisaRefusal.findAll({
+    where: { applicationId: refusal.applicationId },
+    order: [['refusalDate', 'ASC'], ['id', 'ASC']],
+  });
+
+  return ApiResponse.success(res, "Visa refusal updated successfully", {
+    refusal,
+    visaRefusals: allRefusals,
+  });
+});
+
+export const deleteCandidateVisaRefusal = catchAsync(async (req, res) => {
+  const candidateId = Number(req.params.id);
+  const refusalId = Number(req.params.refusalId);
+
+  // Client isolation: only find refusal belonging to this candidate
+  const refusal = await req.tenantDb.CandidateVisaRefusal.findOne({
+    where: { id: refusalId, userId: candidateId },
+  });
+  if (!refusal) return ApiResponse.notFound(res, 'Visa refusal not found');
+
+  const applicationId = refusal.applicationId;
+
+  await req.tenantDb.sequelize.transaction(async (t) => {
+    await refusal.destroy({ transaction: t });
+
+    const remaining = await req.tenantDb.CandidateVisaRefusal.findAll({
+      where: { applicationId },
+      order: [['refusalDate', 'ASC'], ['id', 'ASC']],
+      transaction: t,
+    });
+
+    const application = await req.tenantDb.CandidateApplication.findByPk(applicationId, { transaction: t });
+    if (application) {
+      if (remaining.length > 0) {
+        const first = remaining[0];
+        await application.update({
+          refusedVisa: 'Yes',
+          refusedVisaDate: first.refusalDate,
+          refusedVisaCountry: first.country,
+          refusedVisaType: first.visaType,
+          refusedVisaReason: first.reason,
+          refusedVisaDetails: first.details || first.reason,
+          refusedVisaReference: first.referenceNumber || null,
+        }, { transaction: t, hooks: false });
+      } else {
+        await application.update({
+          refusedVisa: 'No',
+          refusedVisaDate: null,
+          refusedVisaCountry: null,
+          refusedVisaType: null,
+          refusedVisaReason: null,
+          refusedVisaDetails: null,
+          refusedVisaReference: null,
+        }, { transaction: t, hooks: false });
+      }
+    }
+  });
+
+  const remainingRefusals = await req.tenantDb.CandidateVisaRefusal.findAll({
+    where: { applicationId },
+    order: [['refusalDate', 'ASC'], ['id', 'ASC']],
+  });
+
+  return ApiResponse.success(res, "Visa refusal deleted successfully", {
+    visaRefusals: remainingRefusals,
+  });
 });

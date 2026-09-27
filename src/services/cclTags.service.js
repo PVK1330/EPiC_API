@@ -38,7 +38,7 @@ export const CCL_TAGS = [
   // Case
   { tag: "case_ref", label: "Case reference", group: "Case", type: "text", sample: "EPIC-2026-0042" },
   { tag: "visa_type", label: "Visa type", group: "Case", type: "text", sample: "Skilled Worker" },
-  { tag: "petition_type", label: "Petition type", group: "Case", type: "text", sample: "Initial application" },
+  { tag: "petition_type", label: "Application type", group: "Case", type: "text", sample: "Initial application" },
   { tag: "caseworker_name", label: "Primary Caseworker name", group: "Case", type: "text", sample: "Alex Smith" },
   { tag: "caseworker_email", label: "Primary Caseworker email", group: "Case", type: "text", sample: "alex.smith@example.com" },
   { tag: "caseworker_phone", label: "Primary Caseworker phone", group: "Case", type: "text", sample: "+44 20 1234 5678" },

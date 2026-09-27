@@ -23,6 +23,7 @@ import { createWorkflowTask, getActiveAdminIds } from '../../../services/workflo
 import logger from '../../../utils/logger.js';
 import { recordTimelineEntry } from '../../../services/caseTimeline.service.js';
 import eventPublisher from '../../../core/events/eventPublisher.js';
+import { syncApplicationVisaRefusals, formatApplicationWithRefusals } from '../../../services/visaRefusal.service.js';
 import { EVENTS } from '../../../core/events/eventRegistry.js';
 import { generateCaseId } from '../../../utils/case.utils.js';
 
@@ -31,6 +32,28 @@ function badRequest(message) {
   const err = new Error(message);
   err.status = 400;
   return err;
+}
+
+export const TERMINAL_CASE_STATUSES = new Set(['Completed', 'Cancelled', 'Closed', 'Rejected']);
+
+/**
+ * Resolve the current active case for a candidate from their cases list.
+ * Prioritizes active cases over closed/terminal cases, and sorts by most recent update/creation.
+ */
+export function resolveCurrentCase(cases = []) {
+  if (!Array.isArray(cases) || cases.length === 0) return null;
+  const validCases = cases.filter((c) => c && !c.deleted_at);
+  if (validCases.length === 0) return null;
+
+  const activeCases = validCases.filter((c) => !TERMINAL_CASE_STATUSES.has(c.status));
+  const pool = activeCases.length > 0 ? activeCases : validCases;
+
+  return [...pool].sort((a, b) => {
+    const timeB = new Date(b.updated_at || b.updatedAt || b.created_at || b.createdAt || 0).getTime();
+    const timeA = new Date(a.updated_at || a.updatedAt || a.created_at || a.createdAt || 0).getTime();
+    if (timeB !== timeA) return timeB - timeA;
+    return (b.id || 0) - (a.id || 0);
+  })[0];
 }
 
 const APPLICATION_PAYLOAD_USER_KEYS = new Set([
@@ -321,14 +344,18 @@ export class CandidateService {
     };
   }
 
-  async getAllCandidates(query) {
+  async getAllCandidates(query = {}, organisationId = null) {
     const { page = 1, limit = 10, search, status, visaType, paymentStatus } = query;
+    const orgId = organisationId || query.organisation_id || query.organisationId || null;
     const pageNum = parseInt(page, 10) || 1;
     const limitNum = parseInt(limit, 10) || 10;
     const offset = (pageNum - 1) * limitNum;
     const sequelize = this.repository.tenantDb.sequelize;
 
     const whereClause = { role_id: ROLES.CANDIDATE };
+    if (orgId) {
+      whereClause.organisation_id = orgId;
+    }
     const andConditions = [];
     if (search) {
       whereClause[Op.or] = [
@@ -348,12 +375,7 @@ export class CandidateService {
       whereClause.status = { [Op.ne]: "inactive" };
     }
 
-    // Visa-type filter. The candidate's visa lives in two places: the
-    // application's free-text `visaType` ("Skilled Worker Visa") and the case's
-    // linked VisaType.name. The frontend sends a short label ("Skilled Worker"),
-    // so we match on a normalised (lowercased, alphanumerics-only) substring
-    // against *either* source via a correlated EXISTS subquery. This keeps
-    // findAndCountAll's pagination/count correct (no extra include rows).
+    // Visa-type filter: match candidate whose CURRENT case matches the selected visa type.
     if (visaType) {
       const normFilter = String(visaType).toLowerCase().replace(/[^a-z0-9]/g, "");
       if (normFilter) {
@@ -365,16 +387,20 @@ export class CandidateService {
           sequelize.literal(
             `(
               EXISTS (
-                SELECT 1 FROM candidate_applications ca
-                WHERE ca."userId" = "User".id
-                  AND ca."visaType" IS NOT NULL
-                  AND ${norm('ca."visaType"')} LIKE ${likePattern}
-              )
-              OR EXISTS (
                 SELECT 1 FROM cases c
                 JOIN visa_types vt ON vt.id = c."visaTypeId"
                 WHERE c."candidateId" = "User".id
                   AND c.deleted_at IS NULL
+                  AND c.id = (
+                    SELECT c2.id FROM cases c2
+                    WHERE c2."candidateId" = "User".id
+                      AND c2.deleted_at IS NULL
+                    ORDER BY
+                      CASE WHEN c2.status IN ('Completed', 'Cancelled', 'Closed', 'Rejected') THEN 1 ELSE 0 END ASC,
+                      c2.updated_at DESC,
+                      c2.id DESC
+                    LIMIT 1
+                  )
                   AND ${norm('vt.name')} LIKE ${likePattern}
               )
             )`,
@@ -431,7 +457,7 @@ export class CandidateService {
         model: this.repository.tenantDb.Case,
         as: "cases",
         required: false,
-        attributes: ["id", "caseId", "status", "nationality", "visaTypeId", "totalAmount", "paidAmount", "sponsorId"],
+        attributes: ["id", "caseId", "status", "nationality", "visaTypeId", "totalAmount", "paidAmount", "sponsorId", "visaEndDate", "created_at", "updated_at"],
         include: [
           {
             model: this.repository.tenantDb.VisaType,
@@ -467,14 +493,41 @@ export class CandidateService {
       distinct: true,
     });
 
+    const candidatesWithCurrent = candidates.map((c) => {
+      const cJson = typeof c.toJSON === 'function' ? c.toJSON() : { ...c };
+      const currentCase = resolveCurrentCase(cJson.cases || []);
+      const currentVisaType = currentCase?.visaType?.name || null;
+      let currentVisaExpiry = null;
+      if (currentCase && currentCase.visaEndDate !== undefined && currentCase.visaEndDate !== null) {
+        currentVisaExpiry = currentCase.visaEndDate;
+      } else if (currentCase && currentCase.visaEndDate === null && Array.isArray(cJson.cases) && cJson.cases.filter(cs => !cs.deleted_at).length > 1) {
+        currentVisaExpiry = null;
+      } else if (cJson.application?.visaEndDate) {
+        currentVisaExpiry = cJson.application.visaEndDate;
+      }
+
+      return {
+        ...cJson,
+        currentCase,
+        currentVisaType,
+        currentVisaExpiry,
+      };
+    });
+
+    const visaExpiryAlertsCount = await this.countUpcomingVisaExpiryAlerts({ organisationId: orgId });
+
     return {
-      candidates,
+      candidates: candidatesWithCurrent,
       pagination: {
         total: count,
         page: pageNum,
         limit: limitNum,
         pages: Math.ceil(count / limitNum),
-      }
+      },
+      visaExpiryAlerts: {
+        count: visaExpiryAlertsCount,
+      },
+      visaExpiryAlertsCount,
     };
   }
 
@@ -486,7 +539,24 @@ export class CandidateService {
       err.statusCode = 404;
       throw err;
     }
-    return candidate;
+    const cJson = typeof candidate.toJSON === 'function' ? candidate.toJSON() : { ...candidate };
+    const currentCase = resolveCurrentCase(cJson.cases || []);
+    const currentVisaType = currentCase?.visaType?.name || null;
+    let currentVisaExpiry = null;
+    if (currentCase && currentCase.visaEndDate !== undefined && currentCase.visaEndDate !== null) {
+      currentVisaExpiry = currentCase.visaEndDate;
+    } else if (currentCase && currentCase.visaEndDate === null && Array.isArray(cJson.cases) && cJson.cases.filter(cs => !cs.deleted_at).length > 1) {
+      currentVisaExpiry = null;
+    } else if (cJson.application?.visaEndDate) {
+      currentVisaExpiry = cJson.application.visaEndDate;
+    }
+
+    return {
+      ...cJson,
+      currentCase,
+      currentVisaType,
+      currentVisaExpiry,
+    };
   }
 
   async updateCandidate(id, data) {
@@ -550,16 +620,30 @@ export class CandidateService {
       await candidate.update(updateData, { transaction: t });
 
       if (application && typeof application === "object") {
+        const sanitizedApp = sanitizeApplicationPayload(application);
         const existingApp = await this.repository.findApplicationByUserId(id, t);
+        let targetApp;
         if (existingApp) {
           await this.repository.updateApplication(
             existingApp,
-            sanitizeApplicationPayload(application),
+            sanitizedApp,
             t,
           );
+          targetApp = existingApp;
         } else {
-          await this.repository.createApplication(
-            { userId: id, ...sanitizeApplicationPayload(application) },
+          targetApp = await this.repository.createApplication(
+            { userId: id, ...sanitizedApp },
+            t,
+          );
+        }
+
+        if (sanitizedApp.visaRefusals !== undefined && targetApp) {
+          await syncApplicationVisaRefusals(
+            this.repository.tenantDb,
+            targetApp.id,
+            id,
+            candidate.organisation_id,
+            sanitizedApp.visaRefusals,
             t,
           );
         }
@@ -649,7 +733,7 @@ export class CandidateService {
     if (!candidate) throw new Error("Candidate not found");
     
     const application = await this.repository.findApplicationByUserId(userId);
-    return application || null;
+    return formatApplicationWithRefusals(application);
   }
   async updateCandidateApplication(userId, applicationData, performedByUser = null, context = null) {
     const candidate = await this.repository.findById(userId);
@@ -880,6 +964,17 @@ export class CandidateService {
             ...sanitizedApplication,
             organisation_id: candidate.organisation_id,
           },
+          t,
+        );
+      }
+
+      if (sanitizedApplication.visaRefusals !== undefined && app) {
+        await syncApplicationVisaRefusals(
+          this.repository.tenantDb,
+          app.id,
+          userId,
+          candidate.organisation_id,
+          sanitizedApplication.visaRefusals,
           t,
         );
       }
@@ -1280,5 +1375,83 @@ export class CandidateService {
       emailSent: Boolean(emailResult.ok),
     };
   }
+
+  /**
+   * Count the number of active Clients whose current case / relevant visa is approaching expiry.
+   * - Uses current-case logic (resolveCurrentCase / highest priority active case).
+   * - Scoped by organisation_id if provided.
+   * - Excludes soft-deleted cases and inactive clients.
+   * - Window: upcoming within windowDays (default: 30 days) from today.
+   */
+  async countUpcomingVisaExpiryAlerts(options = {}) {
+    const organisationId = options?.organisationId ?? options?.organisation_id ?? null;
+    const windowDays = parseInt(options?.windowDays, 10) || 30;
+    const sequelize = this.repository.tenantDb.sequelize;
+
+    const now = new Date();
+    const windowStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const windowEnd = new Date(windowStart);
+    windowEnd.setDate(windowEnd.getDate() + windowDays);
+    windowEnd.setHours(23, 59, 59, 999);
+
+    const sql = `
+      WITH current_cases AS (
+        SELECT DISTINCT ON (c."candidateId")
+          c.id AS case_id,
+          c."candidateId" AS candidate_id,
+          c.status AS case_status,
+          c."visaEndDate" AS case_visa_end_date,
+          c.organisation_id,
+          c.deleted_at
+        FROM cases c
+        WHERE c.deleted_at IS NULL
+          AND (:orgId::int IS NULL OR c.organisation_id = :orgId::int)
+        ORDER BY 
+          c."candidateId",
+          CASE WHEN c.status IN ('Completed', 'Cancelled', 'Closed', 'Rejected') THEN 1 ELSE 0 END ASC,
+          c.updated_at DESC NULLS LAST,
+          c.created_at DESC NULLS LAST,
+          c.id DESC
+      ),
+      candidates_with_expiry AS (
+        SELECT 
+          u.id AS user_id,
+          cc.case_id,
+          CASE 
+            WHEN cc.case_visa_end_date IS NOT NULL THEN cc.case_visa_end_date
+            WHEN (SELECT COUNT(*) FROM cases c_all WHERE c_all."candidateId" = u.id AND c_all.deleted_at IS NULL) <= 1 
+              THEN ca."visaEndDate"
+            ELSE NULL
+          END AS effective_visa_end_date
+        FROM users u
+        LEFT JOIN current_cases cc ON cc.candidate_id = u.id
+        LEFT JOIN candidate_applications ca ON ca."userId" = u.id
+        WHERE u.role_id = :roleCandidate
+          AND u.status != 'inactive'
+          AND (:orgId::int IS NULL OR u.organisation_id = :orgId::int)
+      )
+      SELECT COUNT(*)::int AS count
+      FROM candidates_with_expiry
+      WHERE effective_visa_end_date IS NOT NULL
+        AND effective_visa_end_date >= :windowStart
+        AND effective_visa_end_date <= :windowEnd;
+    `;
+
+    try {
+      const [rows] = await sequelize.query(sql, {
+        replacements: {
+          orgId: organisationId,
+          roleCandidate: ROLES.CANDIDATE,
+          windowStart,
+          windowEnd,
+        },
+      });
+      return parseInt(rows?.[0]?.count, 10) || 0;
+    } catch (err) {
+      logger.error({ err }, "countUpcomingVisaExpiryAlerts: query error");
+      return 0;
+    }
+  }
 }
+
 

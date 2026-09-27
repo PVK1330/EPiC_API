@@ -41,6 +41,7 @@ import CandidateAccountSettingsModel from "./tenant/candidateAccountSettings.mod
 import CandidateFeedbackModel from "./tenant/candidateFeedback.model.js";
 import CandidateIssueReportModel from "./tenant/candidateIssueReport.model.js";
 import CandidateApplicationModel from "./tenant/candidateApplication.model.js";
+import CandidateVisaRefusalModel from "./tenant/candidateVisaRefusal.model.js";
 import SponsorProfileModel from "./tenant/sponsorProfile.model.js";
 import AppointmentModel from "./tenant/appointment.model.js";
 import CalendarMeetingModel from "./tenant/calendarMeeting.model.js";
@@ -149,6 +150,7 @@ export function buildDb(sequelize) {
   db.CandidateFeedback = CandidateFeedbackModel(sequelize, Sequelize.DataTypes);
   db.CandidateIssueReport = CandidateIssueReportModel(sequelize, Sequelize.DataTypes);
   db.CandidateApplication = CandidateApplicationModel(sequelize, Sequelize.DataTypes);
+  db.CandidateVisaRefusal = CandidateVisaRefusalModel(sequelize, Sequelize.DataTypes);
   db.SponsorProfile = SponsorProfileModel(sequelize, Sequelize.DataTypes);
   db.Appointment = AppointmentModel(sequelize, Sequelize.DataTypes);
   db.LicenceApplication = LicenceApplicationModel(sequelize, Sequelize.DataTypes);
@@ -281,6 +283,12 @@ export function buildDb(sequelize) {
   db.Case.hasMany(db.CandidateIssueReport, { foreignKey: "case_id", as: "issueReports" });
   db.User.hasOne(db.CandidateApplication, { foreignKey: "userId", as: "application" });
   db.CandidateApplication.belongsTo(db.User, { foreignKey: "userId", as: "user" });
+  db.CandidateApplication.hasMany(db.CandidateVisaRefusal, { foreignKey: "applicationId", as: "visaRefusals", onDelete: "CASCADE" });
+  db.CandidateVisaRefusal.belongsTo(db.CandidateApplication, { foreignKey: "applicationId", as: "application" });
+  db.User.hasMany(db.CandidateVisaRefusal, { foreignKey: "userId", as: "visaRefusals", onDelete: "CASCADE" });
+  db.CandidateVisaRefusal.belongsTo(db.User, { foreignKey: "userId", as: "user" });
+  db.Organisation.hasMany(db.CandidateVisaRefusal, { foreignKey: "organisationId", as: "visaRefusals", onDelete: "SET NULL" });
+  db.CandidateVisaRefusal.belongsTo(db.Organisation, { foreignKey: "organisationId", as: "organisation" });
   db.User.hasOne(db.SponsorProfile, { foreignKey: "userId", as: "sponsorProfile" });
   db.SponsorProfile.belongsTo(db.User, { foreignKey: "userId", as: "user" });
   db.User.hasOne(db.SponsorUserPreference, { foreignKey: "userId", as: "sponsorPreferences" });

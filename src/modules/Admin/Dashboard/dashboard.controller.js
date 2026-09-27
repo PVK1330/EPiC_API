@@ -6,6 +6,7 @@ import ApiResponse from '../../../utils/apiResponse.js';
 import logger from '../../../utils/logger.js';
 import { countUnassignedCases } from '../../../services/caseAssignment.service.js';
 import { buildCaseworkerAssignmentWhere } from '../../../utils/caseworkerScope.js';
+import { CandidateService } from '../Candidates/candidate.service.js';
 
 /** Run a dashboard query without failing the whole endpoint when a table/model is missing. */
 async function safeDashboardQuery(promise, fallback, label = 'query') {
@@ -150,16 +151,11 @@ export const getDashboardStats = async (req, res) => {
     const thirtyDaysFromNow = new Date();
     thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
     
+    const candidateService = new CandidateService(req.tenantDb);
     const [visaExpiryAlerts, sponsorExpiryAlerts] = await Promise.all([
-      req.tenantDb.CandidateApplication.count({
-        where: {
-          visaEndDate: {
-            [Op.and]: [
-              { [Op.gte]: new Date() },
-              { [Op.lte]: thirtyDaysFromNow }
-            ]
-          }
-        }
+      candidateService.countUpcomingVisaExpiryAlerts({
+        organisationId: req.user?.organisation_id,
+        windowDays: 30,
       }).catch(() => 0),
       req.tenantDb.SponsorProfile.count({
         where: {

@@ -178,6 +178,12 @@ const CaseModel = (sequelize, DataTypes) => {
       allowNull: true,
       comment: "Date when decision was made"
     },
+    visaEndDate: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      field: "visaEndDate",
+      comment: "Visa expiry date for this specific case",
+    },
     applicationType: {
       type: DataTypes.STRING(100),
       allowNull: true,
