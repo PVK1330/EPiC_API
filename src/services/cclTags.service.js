@@ -38,7 +38,7 @@ export const CCL_TAGS = [
   // Case
   { tag: "case_ref", label: "Case reference", group: "Case", type: "text", sample: "EPIC-2026-0042" },
   { tag: "visa_type", label: "Visa type", group: "Case", type: "text", sample: "Skilled Worker" },
-  { tag: "petition_type", label: "Petition type", group: "Case", type: "text", sample: "Initial application" },
+  { tag: "petition_type", label: "Application type", group: "Case", type: "text", sample: "Initial application" },
   { tag: "caseworker_name", label: "Primary Caseworker name", group: "Case", type: "text", sample: "Alex Smith" },
   { tag: "caseworker_email", label: "Primary Caseworker email", group: "Case", type: "text", sample: "alex.smith@example.com" },
   { tag: "caseworker_phone", label: "Primary Caseworker phone", group: "Case", type: "text", sample: "+44 20 1234 5678" },
@@ -533,14 +533,25 @@ export function interpolateCclHtml(html, values = {}) {
   const allCw = values.caseworkers_all || cwName;
 
   out = out.replace(
-    /I,\s*David Robertson\s*will be your caseworker[\s\S]*?as and when they arise\./gi,
+    /I,\s*(?:David Robertson|Khalid Mahmood),?\s*will be your caseworker[\s\S]*?as and when they arise\./gi,
     `I, ${cwName} will be your caseworker and responsible for the conduct of your case. I can be contacted on ${cwPhone} and email ${cwEmail} Whenever possible, I shall be available to advise and assist you and keep you informed of the progress of your case.`
   );
   out = out.replace(
     /Your caseworker will be Mr David Robertson under the supervision of Mr Khalid Mahmood\./gi,
     `Your assigned caseworkers for this matter will be ${allCw}.`
   );
-  out = out.replace(/david@elitepic\.co\.uk/gi, cwEmail);
+  out = out.replace(
+    /Your caseworker will be Mr Khalid Mahmood\./gi,
+    `Your assigned caseworker for this matter will be ${allCw}.`
+  );
+  // Hard-coded adviser e-mail in drafts saved from older templates. By this
+  // point {{org_name}} has been substituted, so an older draft reads e.g.
+  // "david@Elite_pic.co.uk" (Phase 2 UAT 4.2 #3) — match any domain.
+  out = out.replace(
+    /<a[^>]*href="mailto:(?:david|khalid)@[^"]*"[^>]*>[\s\S]*?<\/a>/gi,
+    cwEmail
+  );
+  out = out.replace(/\b(?:david|khalid)@[A-Za-z0-9_.-]+\.co\.uk\b/gi, cwEmail);
   out = out.replace(/01217782400/g, cwPhone);
   out = out.replace(/Mr David Robertson/gi, cwName);
   out = out.replace(/David Robertson/gi, cwName);

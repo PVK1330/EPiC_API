@@ -18,7 +18,7 @@ import { DEFAULT_CASE_STAGE } from '../src/constants/immigrationCaseProcess.js';
  */
 
 describe('Issue #3: Private Client Case Creation', async () => {
-  const tenantDb = getTenantDb('epic_technoweb');
+  const tenantDb = getTenantDb(process.env.TEST_TENANT_DB || 'epic_technoweb');
   const { User, Organisation, Case, VisaType } = tenantDb;
 
   const org = await Organisation.findOne({ order: [['id', 'ASC']] });
@@ -128,7 +128,7 @@ describe('Issue #3: Private Client Case Creation', async () => {
     });
     assert.ok(newCase && newCase.id, 'Case should be created');
     assert.equal(newCase.sponsorId, null, 'sponsorId should be null');
-    await newCase.destroy().catch(() => {});
+    await newCase.destroy({ force: true }).catch(() => {});
   });
 
   test('TEST 10: DB — Case with sponsorId set saves correctly (sponsored client)', async () => {
@@ -143,7 +143,7 @@ describe('Issue #3: Private Client Case Creation', async () => {
     });
     assert.ok(newCase && newCase.id, 'Case should be created');
     assert.equal(newCase.sponsorId, sponsorUser.id, 'sponsorId should match');
-    await newCase.destroy().catch(() => {});
+    await newCase.destroy({ force: true }).catch(() => {});
   });
 
   // =========================================================================
@@ -169,9 +169,10 @@ describe('Issue #3: Private Client Case Creation', async () => {
   const creatorUserId = 999901;
   const cw1 = 999902;
   const cw2 = 999903;
-  const cw3 = 999904;
 
-  test('TEST 11: 0 additional selected → final count 1 → REJECTED', async () => {
+  // BUG-017 / Phase 2 UAT: a case has exactly ONE caseworker (the old
+  // "exactly 2 caseworkers" rule from issue #3 was a regression and is removed).
+  test('TEST 11: no caseworker selected → assigned to the creating caseworker only', async () => {
     if (!candidateUser || !visaTypeId) { console.log('[SKIP] missing data'); return; }
     const req = {
       user: { userId: creatorUserId, role_id: ROLES.CASEWORKER, organisation_id: orgId },
@@ -180,47 +181,18 @@ describe('Issue #3: Private Client Case Creation', async () => {
         candidateId: candidateUser.id,
         visaTypeId,
         targetSubmissionDate: futureDate,
-        assignedcaseworkerId: [], // 0 additional selected
+        assignedcaseworkerId: [],
       },
     };
     const res = createMockRes();
     await createMyCase(req, res);
-
-    assert.equal(res.statusCode, 400, `Expected 400 Bad Request, got ${res.statusCode}`);
-    assert.equal(res.body?.status, 'error');
-    assert.equal(res.body?.data?.finalCount, 1, 'Final count should be 1 after creator auto-inclusion');
-    assert.ok(res.body?.message?.includes('Exactly 2 caseworkers are required'), `Message should mention requirement: ${res.body?.message}`);
-  });
-
-  test('TEST 12: 1 additional selected → final count 2 → ACCEPTED', async () => {
-    if (!candidateUser || !visaTypeId) { console.log('[SKIP] missing data'); return; }
-    const req = {
-      user: { userId: creatorUserId, role_id: ROLES.CASEWORKER, organisation_id: orgId },
-      tenantDb,
-      body: {
-        candidateId: candidateUser.id,
-        visaTypeId,
-        targetSubmissionDate: futureDate,
-        assignedcaseworkerId: [cw1], // 1 additional selected
-      },
-    };
-    const res = createMockRes();
-    await createMyCase(req, res);
-
     assert.equal(res.statusCode, 201, `Expected 201 Created, got ${res.statusCode}: ${JSON.stringify(res.body)}`);
-    assert.equal(res.body?.status, 'success');
     const createdCase = res.body?.data?.case;
-    assert.ok(createdCase && createdCase.id, 'Case should be created in DB');
-    assert.equal(Array.isArray(createdCase.assignedcaseworkerId), true);
-    assert.equal(createdCase.assignedcaseworkerId.length, 2, 'Final persisted caseworker count must be exactly 2');
-    assert.ok(createdCase.assignedcaseworkerId.includes(cw1), 'Must contain selected caseworker');
-    assert.ok(createdCase.assignedcaseworkerId.includes(creatorUserId), 'Must contain creating caseworker');
-
-    // Clean up
-    await Case.destroy({ where: { id: createdCase.id } }).catch(() => {});
+    assert.deepEqual(createdCase.assignedcaseworkerId.map(Number), [creatorUserId]);
+    await Case.destroy({ where: { id: createdCase.id }, force: true }).catch(() => {});
   });
 
-  test('TEST 13: 2 additional selected → final count 3 → REJECTED', async () => {
+  test('TEST 12: assignedcaseworkerId omitted → assigned to the creating caseworker only', async () => {
     if (!candidateUser || !visaTypeId) { console.log('[SKIP] missing data'); return; }
     const req = {
       user: { userId: creatorUserId, role_id: ROLES.CASEWORKER, organisation_id: orgId },
@@ -229,97 +201,92 @@ describe('Issue #3: Private Client Case Creation', async () => {
         candidateId: candidateUser.id,
         visaTypeId,
         targetSubmissionDate: futureDate,
-        assignedcaseworkerId: [cw1, cw2], // 2 additional selected
       },
     };
     const res = createMockRes();
     await createMyCase(req, res);
-
-    assert.equal(res.statusCode, 400, `Expected 400 Bad Request, got ${res.statusCode}`);
-    assert.equal(res.body?.status, 'error');
-    assert.equal(res.body?.data?.finalCount, 3, 'Final count should be 3 after creator auto-inclusion');
-    assert.ok(res.body?.message?.includes('Exactly 2 caseworkers are required'));
+    assert.equal(res.statusCode, 201, `Expected 201 Created, got ${res.statusCode}: ${JSON.stringify(res.body)}`);
+    const createdCase = res.body?.data?.case;
+    assert.deepEqual(createdCase.assignedcaseworkerId.map(Number), [creatorUserId]);
+    await Case.destroy({ where: { id: createdCase.id }, force: true }).catch(() => {});
   });
 
-  test('TEST 14: Direct API request with final count other than 2 → REJECTED', async () => {
+  test('TEST 13: one other caseworker selected → that caseworker only (creator NOT added)', async () => {
     if (!candidateUser || !visaTypeId) { console.log('[SKIP] missing data'); return; }
-
-    // Sub-case 14a: 3 additional selected -> final 4 -> rejected
-    {
-      const req = {
-        user: { userId: creatorUserId, role_id: ROLES.CASEWORKER, organisation_id: orgId },
-        tenantDb,
-        body: {
-          candidateId: candidateUser.id,
-          visaTypeId,
-          targetSubmissionDate: futureDate,
-          assignedcaseworkerId: [cw1, cw2, cw3], // 3 caseworkers + creator = 4
-        },
-      };
-      const res = createMockRes();
-      await createMyCase(req, res);
-      assert.equal(res.statusCode, 400);
-      assert.equal(res.body?.status, 'error');
-      assert.equal(res.body?.data?.finalCount, 4);
-    }
-
-    // Sub-case 14b: Selecting only creator themselves -> final count 1 -> rejected
-    {
-      const req = {
-        user: { userId: creatorUserId, role_id: ROLES.CASEWORKER, organisation_id: orgId },
-        tenantDb,
-        body: {
-          candidateId: candidateUser.id,
-          visaTypeId,
-          targetSubmissionDate: futureDate,
-          assignedcaseworkerId: [creatorUserId], // Only creator -> set deduplicates to 1
-        },
-      };
-      const res = createMockRes();
-      await createMyCase(req, res);
-      assert.equal(res.statusCode, 400);
-      assert.equal(res.body?.status, 'error');
-      assert.equal(res.body?.data?.finalCount, 1);
-    }
-
-    // Sub-case 14c: Direct API request with explicit 2 caseworkers (including creator) -> accepted
-    {
-      const req = {
-        user: { userId: creatorUserId, role_id: ROLES.CASEWORKER, organisation_id: orgId },
-        tenantDb,
-        body: {
-          candidateId: candidateUser.id,
-          visaTypeId,
-          targetSubmissionDate: futureDate,
-          assignedcaseworkerId: [cw1, creatorUserId], // explicit 2 containing creator
-        },
-      };
-      const res = createMockRes();
-      await createMyCase(req, res);
-      assert.equal(res.statusCode, 201);
-      assert.equal(res.body?.status, 'success');
-      const createdCase = res.body?.data?.case;
-      assert.equal(createdCase.assignedcaseworkerId.length, 2);
-      await Case.destroy({ where: { id: createdCase.id } }).catch(() => {});
-    }
-
-    // Sub-case 14d: assignedcaseworkerId completely omitted (undefined) -> final count 1 -> rejected
-    {
-      const req = {
-        user: { userId: creatorUserId, role_id: ROLES.CASEWORKER, organisation_id: orgId },
-        tenantDb,
-        body: {
-          candidateId: candidateUser.id,
-          visaTypeId,
-          targetSubmissionDate: futureDate,
-          // assignedcaseworkerId omitted
-        },
-      };
-      const res = createMockRes();
-      await createMyCase(req, res);
-      assert.equal(res.statusCode, 400);
-      assert.equal(res.body?.status, 'error');
-      assert.equal(res.body?.data?.finalCount, 1);
-    }
+    const req = {
+      user: { userId: creatorUserId, role_id: ROLES.CASEWORKER, organisation_id: orgId },
+      tenantDb,
+      body: {
+        candidateId: candidateUser.id,
+        visaTypeId,
+        targetSubmissionDate: futureDate,
+        assignedcaseworkerId: [cw1],
+      },
+    };
+    const res = createMockRes();
+    await createMyCase(req, res);
+    assert.equal(res.statusCode, 201, `Expected 201 Created, got ${res.statusCode}: ${JSON.stringify(res.body)}`);
+    const createdCase = res.body?.data?.case;
+    assert.deepEqual(createdCase.assignedcaseworkerId.map(Number), [cw1]);
+    await Case.destroy({ where: { id: createdCase.id }, force: true }).catch(() => {});
   });
+
+  test('TEST 14: the same caseworker sent twice → de-duplicated to one', async () => {
+    if (!candidateUser || !visaTypeId) { console.log('[SKIP] missing data'); return; }
+    const req = {
+      user: { userId: creatorUserId, role_id: ROLES.CASEWORKER, organisation_id: orgId },
+      tenantDb,
+      body: {
+        candidateId: candidateUser.id,
+        visaTypeId,
+        targetSubmissionDate: futureDate,
+        assignedcaseworkerId: [cw1, cw1],
+      },
+    };
+    const res = createMockRes();
+    await createMyCase(req, res);
+    assert.equal(res.statusCode, 201, `Expected 201 Created, got ${res.statusCode}: ${JSON.stringify(res.body)}`);
+    const createdCase = res.body?.data?.case;
+    assert.deepEqual(createdCase.assignedcaseworkerId.map(Number), [cw1]);
+    await Case.destroy({ where: { id: createdCase.id }, force: true }).catch(() => {});
+  });
+
+  test('TEST 15: two different caseworkers → REJECTED', async () => {
+    if (!candidateUser || !visaTypeId) { console.log('[SKIP] missing data'); return; }
+    const req = {
+      user: { userId: creatorUserId, role_id: ROLES.CASEWORKER, organisation_id: orgId },
+      tenantDb,
+      body: {
+        candidateId: candidateUser.id,
+        visaTypeId,
+        targetSubmissionDate: futureDate,
+        assignedcaseworkerId: [cw1, cw2],
+      },
+    };
+    const res = createMockRes();
+    await createMyCase(req, res);
+    assert.equal(res.statusCode, 400, `Expected 400, got ${res.statusCode}`);
+    assert.equal(res.body?.status, 'error');
+    assert.equal(res.body?.message, 'A case can only be assigned to one caseworker.');
+  });
+
+  test('TEST 16: three caseworkers (incl. creator) → REJECTED', async () => {
+    if (!candidateUser || !visaTypeId) { console.log('[SKIP] missing data'); return; }
+    const req = {
+      user: { userId: creatorUserId, role_id: ROLES.CASEWORKER, organisation_id: orgId },
+      tenantDb,
+      body: {
+        candidateId: candidateUser.id,
+        visaTypeId,
+        targetSubmissionDate: futureDate,
+        assignedcaseworkerId: [cw1, cw2, creatorUserId],
+      },
+    };
+    const res = createMockRes();
+    await createMyCase(req, res);
+    assert.equal(res.statusCode, 400, `Expected 400, got ${res.statusCode}`);
+    assert.equal(res.body?.status, 'error');
+    assert.equal(res.body?.message, 'A case can only be assigned to one caseworker.');
+  });
+
 });

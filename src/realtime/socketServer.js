@@ -2,7 +2,8 @@ import { Server } from "socket.io";
 import { verifyTokenAsync } from "../config/jwt.config.js";
 import platformDb from "../models/index.js";
 import { getTenantDb } from "../services/tenantDb.service.js";
-import { userRoom, threadRoom, orgRoom } from "./messagingRealtime.js";
+import { userRoom, threadRoom, orgRoom, markPendingMessagesDelivered } from "./messagingRealtime.js";
+import logger from "../utils/logger.js";
 import { registerIO } from "./ioRegistry.js";
 import registerNotificationHandlers from "./notificationRealtime.js";
 import { corsOriginDelegate } from "../config/frontendOrigins.js";
@@ -102,6 +103,11 @@ export function initSocketIO(httpServer, app) {
         });
         if (org?.database_name) {
           socket.tenantDb = getTenantDb(org.database_name);
+          // Phase 2 UAT 3.4: the user now has the portal open, so messages
+          // waiting for them are delivered — senders' ticks update live.
+          markPendingMessagesDelivered(io, socket.tenantDb, uid).catch((err) =>
+            logger.warn({ err, userId: uid }, "markPendingMessagesDelivered failed"),
+          );
         }
       } catch {
         // Non-fatal: messaging still works; notification socket actions will no-op.
@@ -140,7 +146,7 @@ export function initSocketIO(httpServer, app) {
         ) {
           return reply({ ok: false, error: "Forbidden" });
         }
-        socket.join(threadRoom(conversationId));
+        socket.join(threadRoom(conversationId, orgId));
         return reply({ ok: true });
       } catch (e) {
         return reply({ ok: false, error: e.message });
@@ -150,7 +156,7 @@ export function initSocketIO(httpServer, app) {
     socket.on("thread:unsubscribe", (payload) => {
       const conversationId = Number(payload?.conversationId);
       if (Number.isFinite(conversationId) && conversationId > 0) {
-        socket.leave(threadRoom(conversationId));
+        socket.leave(threadRoom(conversationId, orgId));
       }
     });
   });

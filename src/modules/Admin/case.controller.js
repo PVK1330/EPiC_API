@@ -13,7 +13,8 @@ import {
   syncWorkflowTasksForStage,
   completePendingWorkflowTasks,
 } from '../../services/workflowTaskAutomation.service.js';
-import { generateCaseId } from '../../utils/case.utils.js';
+import { generateCaseId, singleCaseworkerError, previousCaseRefSearch } from '../../utils/case.utils.js';
+import { buildTargetDateWarnings } from '../../services/visaExpiry.service.js';
 import { mergeCaseWhere, assertUsersInOrganisation } from '../../utils/tenantScope.js';
 import { recordAuditLog } from '../../services/audit.service.js';
 import { recordCaseCreated, recordStatusChange, recordAssignmentChange, recordTimelineEntry } from '../../services/caseTimeline.service.js';
@@ -73,24 +74,28 @@ export const createCase = async (req, res) => {
     } = req.body;
 
     const cwIds = Array.isArray(assignedcaseworkerId) ? assignedcaseworkerId : (assignedcaseworkerId ? [assignedcaseworkerId] : []);
+    const cwCountError = singleCaseworkerError(cwIds);
+    if (cwCountError) {
+      return res.status(400).json({ status: "error", message: cwCountError, data: { errors: [cwCountError] } });
+    }
     const parsedProposedOnCreate = parseFloat(proposedAmount);
 
     // Field-wise validation
     const errors = [];
     
-    if (candidateId === undefined || candidateId === null || candidateId === '') errors.push("candidateId is required");
+    if (candidateId === undefined || candidateId === null || candidateId === '') errors.push("Client is required");
     // BUG-031: sponsorId is OPTIONAL — private clients have no sponsor. Requiring
     // one forced staff to pick an unrelated sponsor just to pass validation, which
     // then showed a wrong sponsor name on the case.
-    if (visaTypeId === undefined || visaTypeId === null || visaTypeId === '') errors.push("visaTypeId is required");
+    if (visaTypeId === undefined || visaTypeId === null || visaTypeId === '') errors.push("Visa type is required");
     // Caseworker optional at creation — admin task prompts assignment
-    if (targetSubmissionDate === undefined || targetSubmissionDate === null || targetSubmissionDate === '') errors.push("targetSubmissionDate is required");
-    if (totalAmount === undefined || totalAmount === null) errors.push("totalAmount is required");
+    if (targetSubmissionDate === undefined || targetSubmissionDate === null || targetSubmissionDate === '') errors.push("Target submission date is required");
+    if (totalAmount === undefined || totalAmount === null) errors.push("Total amount is required");
 
     if (errors.length > 0) {
       return res.status(400).json({
         status: "error",
-        message: "Validation failed",
+        message: errors.join(", "),
         data: { errors },
       });
     }
@@ -257,7 +262,15 @@ export const createCase = async (req, res) => {
     res.status(201).json({
       status: "success",
       message: "Case created successfully",
-      data: { case: newCase },
+      // Phase 2 UAT 3.2: non-blocking warnings (target date after visa expiry).
+      data: {
+        case: newCase,
+        warnings: await buildTargetDateWarnings(req.tenantDb, {
+          candidateId: newCase.candidateId,
+          caseVisaEndDate: newCase.visaEndDate,
+          targetSubmissionDate: newCase.targetSubmissionDate,
+        }).catch(() => []),
+      },
     });
   } catch (error) {
     logger.error({ err: error }, "Create Case Error");
@@ -291,6 +304,7 @@ export const getCasesWithFilters = async (req, res) => {
     if (search) {
       whereClause[Op.or] = [
         { caseId: { [Op.iLike]: `%${search}%` } },
+        previousCaseRefSearch(search),
         { '$candidate.first_name$': { [Op.iLike]: `%${search}%` } },
         { '$candidate.last_name$': { [Op.iLike]: `%${search}%` } }
       ];
@@ -369,6 +383,7 @@ export const getAllCases = async (req, res) => {
     if (search) {
       whereClause[Op.or] = [
         { caseId: { [Op.iLike]: `%${search}%` } },
+        previousCaseRefSearch(search),
         { '$candidate.first_name$': { [Op.iLike]: `%${search}%` } },
         { '$candidate.last_name$': { [Op.iLike]: `%${search}%` } }
       ];
@@ -584,6 +599,10 @@ export const updateCase = async (req, res) => {
     } = req.body;
 
     const cwIds = Array.isArray(assignedcaseworkerId) ? assignedcaseworkerId : (assignedcaseworkerId ? [assignedcaseworkerId] : []);
+    const cwCountError = singleCaseworkerError(cwIds);
+    if (cwCountError) {
+      return res.status(400).json({ status: "error", message: cwCountError, data: { errors: [cwCountError] } });
+    }
     const oldCwIds = caseData.assignedcaseworkerId || [];
 
     const oldStatus = caseData.status;
@@ -765,7 +784,14 @@ export const updateCase = async (req, res) => {
     res.status(200).json({
         status: "success",
         message: "Case updated successfully",
-        data: { case: caseData },
+        data: {
+          case: caseData,
+          warnings: await buildTargetDateWarnings(req.tenantDb, {
+            candidateId: caseData.candidateId,
+            caseVisaEndDate: caseData.visaEndDate,
+            targetSubmissionDate: caseData.targetSubmissionDate,
+          }).catch(() => []),
+        },
     });
   } catch (error) {
     logger.error({ err: error }, "Update Case Error");
@@ -989,6 +1015,7 @@ export const exportCases = catchAsync(async (req, res) => {
     if (search) {
       whereClause[Op.or] = [
         { caseId: { [Op.iLike]: `%${search}%` } },
+        previousCaseRefSearch(search),
       ];
     }
 
@@ -1056,22 +1083,22 @@ export const exportCases = catchAsync(async (req, res) => {
 
     const columns = [
       { key: 'caseId', header: 'Case ID' },
-      { key: 'candidate', header: 'Candidate' },
-      { key: 'candidateEmail', header: 'Candidate Email' },
+      { key: 'candidate', header: 'Client' },
+      { key: 'candidateEmail', header: 'Client Email' },
       { key: 'sponsor', header: 'Sponsor' },
       { key: 'sponsorEmail', header: 'Sponsor Email' },
       { key: 'visaType', header: 'Visa Type' },
-      { key: 'petitionType', header: 'Petition Type' },
+      { key: 'petitionType', header: 'Application Type' },
       { key: 'priority', header: 'Priority' },
       { key: 'status', header: 'Status' },
       { key: 'assignedCaseworkers', header: 'Assigned Caseworkers' },
       { key: 'submissionDate', header: 'Submission Date' },
       { key: 'targetDate', header: 'Target Date' },
-      { key: 'lcaNumber', header: 'LCA Number' },
-      { key: 'receiptNumber', header: 'Receipt Number' },
-      { key: 'salaryOffered', header: 'Salary Offered' },
-      { key: 'totalAmount', header: 'Total Amount' },
-      { key: 'paidAmount', header: 'Paid Amount' },
+      { key: 'lcaNumber', header: 'CoS Reference Number' },
+      { key: 'receiptNumber', header: 'UKVI Reference Number' },
+      { key: 'salaryOffered', header: 'Salary Offered (£)' },
+      { key: 'totalAmount', header: 'Total Amount (£)' },
+      { key: 'paidAmount', header: 'Paid Amount (£)' },
       { key: 'createdAt', header: 'Created At' },
     ];
 
@@ -1183,6 +1210,11 @@ export const assignCase = async (req, res) => {
                      (!isNaN(parseInt(id)) ? await req.tenantDb.Case.findOne({ where: { id: parseInt(id, 10) } }) : null);
 
     if (!caseData) return res.status(404).json({ status: "error", message: "Case not found" });
+
+    const cwCountError = singleCaseworkerError(assignTo ?? caseworkerId);
+    if (cwCountError) {
+      return res.status(400).json({ status: "error", message: cwCountError, data: { errors: [cwCountError] } });
+    }
 
     // Hoist parsedProposed here — it's derived from req.body so it's already in scope,
     // and it's referenced both inside the transaction (updates) and outside it (notifications).

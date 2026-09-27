@@ -32,6 +32,13 @@ export default (sequelize, DataTypes) => {
         allowNull: false,
         defaultValue: 7,
       },
+      // Phase 2 UAT 3.1: how many days before a client's visa expires the
+      // dashboard / client list raise a visa expiry alert.
+      visa_expiry_alert_days: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 90,
+      },
     },
     {
       tableName: "sla_settings",

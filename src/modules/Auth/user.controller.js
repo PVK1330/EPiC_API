@@ -200,6 +200,14 @@ export const getAllUsers = async (req, res) => {
           as: 'sponsorProfile',
           required: false,
           attributes: ['id','companyName', 'tradingName']
+        },
+        // Phase 2 UAT 3.2: the new-case forms warn when the target submission
+        // date is after the client's current visa expiry — they need these.
+        {
+          model: req.tenantDb.CandidateApplication,
+          as: 'application',
+          required: false,
+          attributes: ['visaType', 'visaEndDate']
         }
       ],
       order: [['createdAt', 'DESC']]

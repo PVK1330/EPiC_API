@@ -29,6 +29,12 @@ router.post('/', verifyTokenAndTenant, requireCandidate, candidateApplicationCon
 // PUT  /api/candidate-application       — save progress as a draft
 router.put('/', verifyTokenAndTenant, requireCandidate, candidateApplicationController.saveDraft);
 
+// Visa Refusals CRUD
+router.get('/visa-refusals', verifyTokenAndTenant, requireCandidate, candidateApplicationController.getMyVisaRefusals);
+router.post('/visa-refusals', verifyTokenAndTenant, requireCandidate, candidateApplicationController.createMyVisaRefusal);
+router.put('/visa-refusals/:refusalId', verifyTokenAndTenant, requireCandidate, candidateApplicationController.updateMyVisaRefusal);
+router.delete('/visa-refusals/:refusalId', verifyTokenAndTenant, requireCandidate, candidateApplicationController.deleteMyVisaRefusal);
+
 router.get(
   '/filled-application-pdf',
   verifyTokenAndTenant,

@@ -23,7 +23,7 @@ export const APPLICATION_FIELDS = [
   'parentName', 'parentRelation', 'parentDob', 'parentNationality', 'sameNationality',
   'parent2Name', 'parent2Relation', 'parent2Dob', 'parent2Nationality', 'parent2SameNationality',
   'illegalEntry', 'illegalEntryDetails', 'overstayed', 'overstayedDetails', 'breach', 'breachDetails', 'falseInfo', 'falseInfoDetails', 'otherBreach', 'otherBreachDetails',
-  'refusedVisa', 'refusedVisaReason', 'refusedVisaDate', 'refusedVisaCountry', 'refusedVisaType', 'refusedVisaReference', 'refusedVisaDetails', 'refusedEntry', 'refusedEntryDetails', 'refusedPermission', 'refusedPermissionDetails', 'refusedAsylum', 'refusedAsylumDetails',
+  'refusedVisa', 'refusedVisaReason', 'refusedVisaDate', 'refusedVisaCountry', 'refusedVisaType', 'refusedVisaReference', 'refusedVisaDetails', 'visaRefusals', 'refusedEntry', 'refusedEntryDetails', 'refusedPermission', 'refusedPermissionDetails', 'refusedAsylum', 'refusedAsylumDetails',
   'deported', 'deportedDetails', 'removed', 'removedDetails', 'requiredToLeave', 'requiredToLeaveDetails', 'banned', 'bannedDetails',
   'visitedOther', 'travelHistory', 'countryVisited', 'visitReason', 'entryDate', 'leaveDate',
   'visaType', 'brpNumber', 'visaEndDate', 'niNumber', 'sponsored', 'sponsoredDetails', 'englishProof',
@@ -103,6 +103,7 @@ export const APPLICATION_FIELD_LABELS = {
   refusedVisaType: 'Visa / application type',
   refusedVisaReference: 'Refusal reference details',
   refusedVisaDetails: 'Visa refusal details',
+  visaRefusals: 'Previous visa refusals',
   refusedEntry: 'Refused entry',
   refusedEntryDetails: 'Refused entry details',
   refusedPermission: 'Refused permission to stay',
@@ -451,6 +452,61 @@ export function sanitizeApplicationPayload(body) {
         }
       }
       payload[key] = trips;
+    } else if (key === 'visaRefusals') {
+      let rawList = [];
+      if (Array.isArray(v)) {
+        rawList = v;
+      } else if (typeof v === 'string' && v.trim()) {
+        try {
+          const parsed = JSON.parse(v);
+          if (Array.isArray(parsed)) rawList = parsed;
+        } catch {
+          rawList = [];
+        }
+      }
+      const refusals = [];
+      for (let i = 0; i < rawList.length; i++) {
+        const item = rawList[i];
+        if (!item || typeof item !== 'object') continue;
+        const id = item.id ? Number(item.id) : undefined;
+        const refusalDate = item.refusalDate ? normaliseDateValue('refusedVisaDate', item.refusalDate) : null;
+        const country = typeof (item.country || item.refusedVisaCountry) === 'string'
+          ? (item.country || item.refusedVisaCountry).trim()
+          : '';
+        const visaType = typeof (item.visaType || item.refusedVisaType) === 'string'
+          ? (item.visaType || item.refusedVisaType).trim()
+          : '';
+        const reason = typeof (item.reason || item.refusedVisaReason || item.refusedVisaDetails) === 'string'
+          ? (item.reason || item.refusedVisaReason || item.refusedVisaDetails).trim()
+          : '';
+        const referenceNumber = typeof (item.referenceNumber || item.refusedVisaReference) === 'string'
+          ? (item.referenceNumber || item.refusedVisaReference).trim()
+          : '';
+        const details = typeof item.details === 'string' ? item.details.trim() : null;
+
+        if (country.length > 100) {
+          throw applicationValidationError(`Country of visa refusal #${i + 1} must be 100 characters or fewer.`);
+        }
+        if (visaType.length > 100) {
+          throw applicationValidationError(`Visa / application type for refusal #${i + 1} must be 100 characters or fewer.`);
+        }
+        if (referenceNumber.length > 100) {
+          throw applicationValidationError(`Reference number for refusal #${i + 1} must be 100 characters or fewer.`);
+        }
+
+        if (refusalDate || country || visaType || reason || referenceNumber || details || id) {
+          refusals.push({
+            ...(id ? { id } : {}),
+            refusalDate,
+            country: country || null,
+            visaType: visaType || null,
+            reason: reason || null,
+            referenceNumber: referenceNumber || null,
+            details: details || null,
+          });
+        }
+      }
+      payload[key] = refusals;
     } else {
       if (typeof v === 'string') v = v.trim();
       const limit = APPLICATION_FIELD_LIMITS[key];
@@ -498,6 +554,44 @@ export function sanitizeApplicationPayload(body) {
     payload.refusedVisaDetails = payload.refusedVisaReason;
   } else if (payload.refusedVisaDetails !== undefined && payload.refusedVisaReason === undefined) {
     payload.refusedVisaReason = payload.refusedVisaDetails;
+  }
+
+  // Bidirectional synchronization between visaRefusals array and legacy single refusal columns
+  if (Array.isArray(payload.visaRefusals) && payload.visaRefusals.length > 0) {
+    payload.refusedVisa = 'Yes';
+    const first = payload.visaRefusals[0];
+    if (payload.refusedVisaDate === undefined && first.refusalDate) {
+      payload.refusedVisaDate = first.refusalDate;
+    }
+    if (payload.refusedVisaCountry === undefined && first.country) {
+      payload.refusedVisaCountry = first.country;
+    }
+    if (payload.refusedVisaType === undefined && first.visaType) {
+      payload.refusedVisaType = first.visaType;
+    }
+    if (payload.refusedVisaReason === undefined && (first.reason || first.details)) {
+      payload.refusedVisaReason = first.reason || first.details;
+      payload.refusedVisaDetails = first.details || first.reason;
+    }
+    if (payload.refusedVisaReference === undefined && first.referenceNumber) {
+      payload.refusedVisaReference = first.referenceNumber;
+    }
+  } else if (payload.refusedVisa === 'Yes' && (!payload.visaRefusals || payload.visaRefusals.length === 0)) {
+    const legacyReason = payload.refusedVisaReason || payload.refusedVisaDetails;
+    if (payload.refusedVisaDate || payload.refusedVisaCountry || payload.refusedVisaType || legacyReason || payload.refusedVisaReference) {
+      payload.visaRefusals = [
+        {
+          refusalDate: payload.refusedVisaDate || null,
+          country: payload.refusedVisaCountry || null,
+          visaType: payload.refusedVisaType || null,
+          reason: legacyReason || null,
+          referenceNumber: payload.refusedVisaReference || null,
+          details: payload.refusedVisaDetails || legacyReason || null,
+        },
+      ];
+    }
+  } else if (payload.refusedVisa === 'No') {
+    payload.visaRefusals = [];
   }
 
   // BUG-014: keep the legacy single-trip columns in step with the travelHistory array.
@@ -598,21 +692,42 @@ export function validateFinalApplicationSubmission(payload) {
     }
   }
 
-  // Visa Refusal structured details validation (BUG-013)
+  // Visa Refusal structured details validation (BUG-013 & Issue #6)
   if (payload.refusedVisa === 'Yes') {
-    const reason = payload.refusedVisaReason || payload.refusedVisaDetails;
-    if (!reason || !String(reason).trim()) {
-      throw applicationValidationError('Reason for visa refusal is required when you have had a visa refused.');
-    }
-    if (!payload.refusedVisaDate) {
-      throw applicationValidationError('Refusal date is required when you have had a visa refused.');
-    }
-    if (!payload.refusedVisaCountry || !String(payload.refusedVisaCountry).trim()) {
-      throw applicationValidationError('Country of visa refusal is required when you have had a visa refused.');
-    }
-    const visaType = payload.refusedVisaType;
-    if (!visaType || !String(visaType).trim()) {
-      throw applicationValidationError('Visa or application type is required when you have had a visa refused.');
+    if (Array.isArray(payload.visaRefusals) && payload.visaRefusals.length > 0) {
+      for (let i = 0; i < payload.visaRefusals.length; i++) {
+        const item = payload.visaRefusals[i];
+        const reason = item.reason || item.refusedVisaReason || item.details;
+        if (!reason || !String(reason).trim()) {
+          throw applicationValidationError('Reason for visa refusal is required when you have had a visa refused.');
+        }
+        if (!item.refusalDate && !item.refusedVisaDate) {
+          throw applicationValidationError('Refusal date is required when you have had a visa refused.');
+        }
+        const country = item.country || item.refusedVisaCountry;
+        if (!country || !String(country).trim()) {
+          throw applicationValidationError('Country of visa refusal is required when you have had a visa refused.');
+        }
+        const visaType = item.visaType || item.refusedVisaType;
+        if (!visaType || !String(visaType).trim()) {
+          throw applicationValidationError('Visa or application type is required when you have had a visa refused.');
+        }
+      }
+    } else {
+      const reason = payload.refusedVisaReason || payload.refusedVisaDetails;
+      if (!reason || !String(reason).trim()) {
+        throw applicationValidationError('Reason for visa refusal is required when you have had a visa refused.');
+      }
+      if (!payload.refusedVisaDate) {
+        throw applicationValidationError('Refusal date is required when you have had a visa refused.');
+      }
+      if (!payload.refusedVisaCountry || !String(payload.refusedVisaCountry).trim()) {
+        throw applicationValidationError('Country of visa refusal is required when you have had a visa refused.');
+      }
+      const visaType = payload.refusedVisaType;
+      if (!visaType || !String(visaType).trim()) {
+        throw applicationValidationError('Visa or application type is required when you have had a visa refused.');
+      }
     }
   }
 

@@ -21,6 +21,7 @@ import { getWorkflowState } from '../../../services/caseWorkflowProcess.service.
 import { resolveCaseStage, DEFAULT_CASE_STAGE } from '../../../constants/immigrationCaseProcess.js';
 import { syncWorkflowTasksForStage } from '../../../services/workflowTaskAutomation.service.js';
 import { ensureCandidateEnquiryCase } from '../../../services/candidateOnboarding.service.js';
+import { syncApplicationVisaRefusals, formatApplicationWithRefusals, validateVisaRefusal } from '../../../services/visaRefusal.service.js';
 
 /**
  * Every form field that a candidate can save / submit.
@@ -54,7 +55,7 @@ const APPLICATION_FIELDS = [
 
   // Immigration history
   'illegalEntry', 'illegalEntryDetails', 'overstayed', 'overstayedDetails', 'breach', 'breachDetails', 'falseInfo', 'falseInfoDetails', 'otherBreach', 'otherBreachDetails',
-  'refusedVisa', 'refusedVisaDetails', 'refusedEntry', 'refusedEntryDetails', 'refusedPermission', 'refusedPermissionDetails', 'refusedAsylum', 'refusedAsylumDetails',
+  'refusedVisa', 'refusedVisaReason', 'refusedVisaDate', 'refusedVisaCountry', 'refusedVisaType', 'refusedVisaReference', 'refusedVisaDetails', 'visaRefusals', 'refusedEntry', 'refusedEntryDetails', 'refusedPermission', 'refusedPermissionDetails', 'refusedAsylum', 'refusedAsylumDetails',
   'deported', 'deportedDetails', 'removed', 'removedDetails', 'requiredToLeave', 'requiredToLeaveDetails', 'banned', 'bannedDetails',
 
   // Travel history
@@ -341,6 +342,15 @@ export const getMyApplication = async (req, res) => {
           as: 'user',
           attributes: ['id', 'first_name', 'last_name', 'email', 'country_code', 'mobile'],
         },
+        ...(req.tenantDb.CandidateVisaRefusal
+          ? [
+              {
+                model: req.tenantDb.CandidateVisaRefusal,
+                as: 'visaRefusals',
+                required: false,
+              },
+            ]
+          : []),
       ],
     });
 
@@ -354,6 +364,15 @@ export const getMyApplication = async (req, res) => {
             as: 'user',
             attributes: ['id', 'first_name', 'last_name', 'email', 'country_code', 'mobile'],
           },
+          ...(req.tenantDb.CandidateVisaRefusal
+            ? [
+                {
+                  model: req.tenantDb.CandidateVisaRefusal,
+                  as: 'visaRefusals',
+                  required: false,
+                },
+              ]
+            : []),
         ],
       });
     }
@@ -453,12 +472,13 @@ export const getMyApplication = async (req, res) => {
       relatedData.completionScore = completionScore;
     }
 
+    const appFormatted = formatApplicationWithRefusals(application);
     res.status(200).json({
       status: 'success',
       message: 'Application loaded',
       data: {
-        application: application
-          ? { ...application.toJSON(), _relatedData: relatedData }
+        application: appFormatted
+          ? { ...appFormatted, _relatedData: relatedData }
           : null,
       },
     });
@@ -566,15 +586,24 @@ export const submitApplication = async (req, res, next) => {
         }, { transaction: t });
       }
 
-      // ── Handle Case creation/update ─────────────────────────────────────
-      let visaTypeId = null;
-      if (payload.visaType) {
-        const vt = await req.tenantDb.VisaType.findOne({
-          where: { name: { [req.tenantDb.Sequelize.Op.iLike]: `%${payload.visaType}%` } },
-          transaction: t,
-        });
-        if (vt) visaTypeId = vt.id;
+      if (payload.visaRefusals !== undefined && app) {
+        await syncApplicationVisaRefusals(
+          req.tenantDb,
+          app.id,
+          userId,
+          app.organisation_id || req.user?.organisation_id || null,
+          payload.visaRefusals,
+          t
+        );
       }
+
+      // ── Handle Case creation/update ─────────────────────────────────────
+      // Phase 2 UAT 3.1 / 3.3: the application's "Type of Visa" is the client's
+      // CURRENT visa (Current Status section), not the application being made.
+      // It must never set or overwrite a case's visa type — staff choose the
+      // application type on the case. (Previously saving the form turned an ILR
+      // case back into Skilled Worker, and new cases got the current visa's code.)
+      const visaTypeId = null;
 
       const caseworkerId = req.body.caseworkerId;
       const assignedcaseworkerId = caseworkerId ? [Number(caseworkerId)] : null;
@@ -589,7 +618,6 @@ export const submitApplication = async (req, res, next) => {
       if (existingCase) {
         await existingCase.update(
           {
-            visaTypeId: visaTypeId || existingCase.visaTypeId,
             nationality: app.nationality || existingCase.nationality,
             assignedcaseworkerId: assignedcaseworkerId || existingCase.assignedcaseworkerId,
             status: 'Lead',
@@ -743,22 +771,36 @@ export const saveDraft = async (req, res, next) => {
     }
 
     let application;
-    if (existing) {
-      await existing.update(payload);
-      await existing.reload();
-      application = existing;
-    } else {
-      application = await req.tenantDb.CandidateApplication.create({
-        userId,
-        ...payload,
-        status: 'draft',
-      });
-    }
+    await req.tenantDb.sequelize.transaction(async (t) => {
+      if (existing) {
+        await existing.update(payload, { transaction: t });
+        await existing.reload({ transaction: t });
+        application = existing;
+      } else {
+        application = await req.tenantDb.CandidateApplication.create({
+          userId,
+          ...payload,
+          status: 'draft',
+        }, { transaction: t });
+      }
 
+      if (payload.visaRefusals !== undefined && application) {
+        await syncApplicationVisaRefusals(
+          req.tenantDb,
+          application.id,
+          userId,
+          application.organisation_id || req.user?.organisation_id || null,
+          payload.visaRefusals,
+          t
+        );
+      }
+    });
+
+    const appFormatted = formatApplicationWithRefusals(application);
     res.status(200).json({
       success: true,
       message: 'Draft saved.',
-      data: { application },
+      data: { application: appFormatted },
     });
   } catch (err) {
     return failRequest(err, res, next, 'saveDraft');
@@ -853,14 +895,26 @@ export const adminUpdateCandidateApplication = async (req, res) => {
         transaction: t,
       });
 
+      let appRecord = existingApplication;
       if (existingApplication) {
         await existingApplication.update(payload, { transaction: t });
       } else {
-        await req.tenantDb.CandidateApplication.create({
+        appRecord = await req.tenantDb.CandidateApplication.create({
           userId: candidateId,
           ...payload,
           status: 'draft',
         }, { transaction: t });
+      }
+
+      if (payload.visaRefusals !== undefined && appRecord) {
+        await syncApplicationVisaRefusals(
+          req.tenantDb,
+          appRecord.id,
+          candidateId,
+          candidate.organisation_id || null,
+          payload.visaRefusals,
+          t
+        );
       }
 
       const existingCase = await req.tenantDb.Case.findOne({
@@ -868,21 +922,18 @@ export const adminUpdateCandidateApplication = async (req, res) => {
         transaction: t,
       });
 
-      let visaTypeId = null;
-      if (payload.visaType) {
-        const vt = await req.tenantDb.VisaType.findOne({
-          where: { name: { [req.tenantDb.Sequelize.Op.iLike]: `%${payload.visaType}%` } },
-          transaction: t,
-        });
-        if (vt) visaTypeId = vt.id;
-      }
+      // Phase 2 UAT 3.1 / 3.3: the application's "Type of Visa" is the client's
+      // CURRENT visa (Current Status section), not the application being made.
+      // It must never set or overwrite a case's visa type — staff choose the
+      // application type on the case. (Previously saving the form turned an ILR
+      // case back into Skilled Worker, and new cases got the current visa's code.)
+      const visaTypeId = null;
 
       const caseworkerId = req.body.caseworkerId;
       const assignedcaseworkerId = caseworkerId ? [Number(caseworkerId)] : null;
 
       if (existingCase) {
         await existingCase.update({
-          visaTypeId: visaTypeId || existingCase.visaTypeId,
           nationality: payload.nationality || existingCase.nationality,
           assignedcaseworkerId: assignedcaseworkerId ?? existingCase.assignedcaseworkerId,
         }, { transaction: t });
@@ -1676,7 +1727,7 @@ export const downloadCaseSummaryPdf = catchAsync(async (req, res) => {
       { label: 'Pipeline stage', value: caseRecord?.caseStage || '—' },
       { label: 'Visa type', value: caseRecord?.visaType?.name || '—' },
       { label: 'Application category', value: caseRecord?.applicationType || '—' },
-      { label: 'Petition type', value: caseRecord?.petitionType?.name || '—' },
+      { label: 'Application type', value: caseRecord?.petitionType?.name || '—' },
       { label: 'Department', value: caseRecord?.department?.name || '—' },
       { label: 'Nationality (case record)', value: caseRecord?.nationality || '—' },
       { label: 'Priority', value: caseRecord?.priority || '—' },
@@ -1697,11 +1748,11 @@ export const downloadCaseSummaryPdf = catchAsync(async (req, res) => {
         value: formatCaseDate(caseRecord?.biometricsDate),
       },
       {
-        label: 'Receipt number',
+        label: 'UKVI reference number',
         value: caseRecord?.receiptNumber || '—',
       },
       {
-        label: 'LCA number',
+        label: 'CoS reference number',
         value: caseRecord?.lcaNumber || '—',
       },
       { label: 'Assigned caseworker(s)', value: assignedLines },
@@ -1873,3 +1924,231 @@ export const downloadCandidateApplicationPdf = catchAsync(async (req, res) => {
   );
   res.status(200).send(buffer);
 });
+
+// ── Visa Refusal Individual CRUD Handlers ────────────────────────────────────
+
+export const getMyVisaRefusals = async (req, res) => {
+  try {
+    const userId = resolveUserId(req);
+    if (!userId) return res.status(401).json({ status: 'error', message: 'Invalid session', data: null });
+
+    const application = await req.tenantDb.CandidateApplication.findOne({ where: { userId } });
+    if (!application) return res.status(200).json({ status: 'success', data: { visaRefusals: [] } });
+
+    let refusals = await req.tenantDb.CandidateVisaRefusal.findAll({
+      where: { applicationId: application.id },
+      order: [['refusalDate', 'ASC'], ['id', 'ASC']],
+    });
+
+    if (refusals.length === 0 && application.refusedVisa === 'Yes' && application.refusedVisaDate) {
+      refusals = [
+        {
+          id: null,
+          applicationId: application.id,
+          userId,
+          refusalDate: application.refusedVisaDate,
+          country: application.refusedVisaCountry || 'Unknown',
+          visaType: application.refusedVisaType || 'Other',
+          reason: application.refusedVisaReason || application.refusedVisaDetails || 'Previous visa refusal',
+          referenceNumber: application.refusedVisaReference || null,
+          details: application.refusedVisaDetails || null,
+        },
+      ];
+    }
+
+    res.status(200).json({ status: 'success', data: { visaRefusals: refusals } });
+  } catch (err) {
+    logger.error({ err }, 'getMyVisaRefusals error');
+    res.status(500).json({ status: 'error', message: 'Internal server error' });
+  }
+};
+
+export const createMyVisaRefusal = async (req, res) => {
+  try {
+    const userId = resolveUserId(req);
+    if (!userId) return res.status(401).json({ status: 'error', message: 'Invalid session', data: null });
+
+    let application = await req.tenantDb.CandidateApplication.findOne({ where: { userId } });
+    if (!application) {
+      application = await req.tenantDb.CandidateApplication.create({
+        userId,
+        status: 'draft',
+      });
+    }
+
+    const validated = validateVisaRefusal(req.body);
+
+    const refusal = await req.tenantDb.sequelize.transaction(async (t) => {
+      const created = await req.tenantDb.CandidateVisaRefusal.create({
+        ...validated,
+        applicationId: application.id,
+        userId,
+        organisationId: application.organisation_id || req.user?.organisation_id || null,
+      }, { transaction: t });
+
+      await application.update({
+        refusedVisa: 'Yes',
+        refusedVisaDate: created.refusalDate,
+        refusedVisaCountry: created.country,
+        refusedVisaType: created.visaType,
+        refusedVisaReason: created.reason,
+        refusedVisaDetails: created.details || created.reason,
+        refusedVisaReference: created.referenceNumber || null,
+      }, { transaction: t, hooks: false });
+
+      return created;
+    });
+
+    const allRefusals = await req.tenantDb.CandidateVisaRefusal.findAll({
+      where: { applicationId: application.id },
+      order: [['refusalDate', 'ASC'], ['id', 'ASC']],
+    });
+
+    res.status(201).json({
+      status: 'success',
+      message: 'Visa refusal record created',
+      data: { refusal, visaRefusals: allRefusals },
+    });
+  } catch (err) {
+    const status = Number(err?.status || err?.statusCode);
+    if (status >= 400 && status < 500) {
+      return res.status(status).json({ status: 'error', message: err.message });
+    }
+    logger.error({ err }, 'createMyVisaRefusal error');
+    res.status(500).json({ status: 'error', message: 'Internal server error' });
+  }
+};
+
+export const updateMyVisaRefusal = async (req, res) => {
+  try {
+    const userId = resolveUserId(req);
+    if (!userId) return res.status(401).json({ status: 'error', message: 'Invalid session', data: null });
+
+    const refusalId = Number(req.params.refusalId);
+    if (!refusalId) return res.status(400).json({ status: 'error', message: 'Invalid refusal ID' });
+
+    const refusal = await req.tenantDb.CandidateVisaRefusal.findOne({
+      where: { id: refusalId, userId },
+    });
+    if (!refusal) {
+      return res.status(404).json({ status: 'error', message: 'Visa refusal not found' });
+    }
+
+    const validated = validateVisaRefusal(req.body);
+
+    await req.tenantDb.sequelize.transaction(async (t) => {
+      await refusal.update(validated, { transaction: t });
+
+      const all = await req.tenantDb.CandidateVisaRefusal.findAll({
+        where: { applicationId: refusal.applicationId },
+        order: [['refusalDate', 'ASC'], ['id', 'ASC']],
+        transaction: t,
+      });
+
+      const application = await req.tenantDb.CandidateApplication.findByPk(refusal.applicationId, { transaction: t });
+      if (application && all.length > 0) {
+        const first = all[0];
+        await application.update({
+          refusedVisa: 'Yes',
+          refusedVisaDate: first.refusalDate,
+          refusedVisaCountry: first.country,
+          refusedVisaType: first.visaType,
+          refusedVisaReason: first.reason,
+          refusedVisaDetails: first.details || first.reason,
+          refusedVisaReference: first.referenceNumber || null,
+        }, { transaction: t, hooks: false });
+      }
+    });
+
+    const allRefusals = await req.tenantDb.CandidateVisaRefusal.findAll({
+      where: { applicationId: refusal.applicationId },
+      order: [['refusalDate', 'ASC'], ['id', 'ASC']],
+    });
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Visa refusal record updated',
+      data: { refusal, visaRefusals: allRefusals },
+    });
+  } catch (err) {
+    const status = Number(err?.status || err?.statusCode);
+    if (status >= 400 && status < 500) {
+      return res.status(status).json({ status: 'error', message: err.message });
+    }
+    logger.error({ err }, 'updateMyVisaRefusal error');
+    res.status(500).json({ status: 'error', message: 'Internal server error' });
+  }
+};
+
+export const deleteMyVisaRefusal = async (req, res) => {
+  try {
+    const userId = resolveUserId(req);
+    if (!userId) return res.status(401).json({ status: 'error', message: 'Invalid session', data: null });
+
+    const refusalId = Number(req.params.refusalId);
+    if (!refusalId) return res.status(400).json({ status: 'error', message: 'Invalid refusal ID' });
+
+    const refusal = await req.tenantDb.CandidateVisaRefusal.findOne({
+      where: { id: refusalId, userId },
+    });
+    if (!refusal) {
+      return res.status(404).json({ status: 'error', message: 'Visa refusal not found' });
+    }
+
+    const applicationId = refusal.applicationId;
+
+    await req.tenantDb.sequelize.transaction(async (t) => {
+      await refusal.destroy({ transaction: t });
+
+      const remaining = await req.tenantDb.CandidateVisaRefusal.findAll({
+        where: { applicationId },
+        order: [['refusalDate', 'ASC'], ['id', 'ASC']],
+        transaction: t,
+      });
+
+      const application = await req.tenantDb.CandidateApplication.findByPk(applicationId, { transaction: t });
+      if (application) {
+        if (remaining.length > 0) {
+          const first = remaining[0];
+          await application.update({
+            refusedVisa: 'Yes',
+            refusedVisaDate: first.refusalDate,
+            refusedVisaCountry: first.country,
+            refusedVisaType: first.visaType,
+            refusedVisaReason: first.reason,
+            refusedVisaDetails: first.details || first.reason,
+            refusedVisaReference: first.referenceNumber || null,
+          }, { transaction: t, hooks: false });
+        } else {
+          await application.update({
+            refusedVisa: 'No',
+            refusedVisaDate: null,
+            refusedVisaCountry: null,
+            refusedVisaType: null,
+            refusedVisaReason: null,
+            refusedVisaDetails: null,
+            refusedVisaReference: null,
+          }, { transaction: t, hooks: false });
+        }
+      }
+    });
+
+    const remainingRefusals = await req.tenantDb.CandidateVisaRefusal.findAll({
+      where: { applicationId },
+      order: [['refusalDate', 'ASC'], ['id', 'ASC']],
+    });
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Visa refusal record deleted',
+      data: { visaRefusals: remainingRefusals },
+    });
+  } catch (err) {
+    const status = Number(err?.status || err?.statusCode);
+    if (status >= 400 && status < 500) {
+      return res.status(status).json({ status: 'error', message: err.message });
+    }
+    logger.error({ err }, 'deleteMyVisaRefusal error');
+    res.status(500).json({ status: 'error', message: 'Internal server error' });
+  }
+};

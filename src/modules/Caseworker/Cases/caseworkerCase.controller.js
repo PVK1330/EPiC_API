@@ -1,7 +1,8 @@
 import { Op } from 'sequelize';
 import logger from '../../../utils/logger.js';
 import { ROLES } from '../../../middlewares/role.middleware.js';
-import { generateCaseId } from '../../../utils/case.utils.js';
+import { generateCaseId, singleCaseworkerError, previousCaseRefSearch } from '../../../utils/case.utils.js';
+import { targetDateVisaWarning, buildTargetDateWarnings } from '../../../services/visaExpiry.service.js';
 import { assertUsersInOrganisation } from '../../../utils/tenantScope.js';
 import { localDateStr } from '../../../utils/dateHelpers.js';
 import catchAsync from '../../../utils/catchAsync.js';
@@ -61,6 +62,7 @@ export const getMyCases = async (req, res) => {
         {
           [Op.or]: [
             { caseId: { [Op.iLike]: `%${search}%` } },
+            previousCaseRefSearch(search),
             { '$candidate.first_name$': { [Op.iLike]: `%${search}%` } },
             { '$candidate.last_name$': { [Op.iLike]: `%${search}%` } },
             { '$sponsor.first_name$': { [Op.iLike]: `%${search}%` } },
@@ -123,7 +125,18 @@ export const getMyCases = async (req, res) => {
         {
           model: req.tenantDb.User,
           as: 'candidate',
-          attributes: ['id', 'first_name', 'last_name', 'email']
+          attributes: ['id', 'first_name', 'last_name', 'email'],
+          // Phase 2 UAT 3.1/3.2: the client's CURRENT visa + its expiry, shown
+          // separately from the case's application type and used for the
+          // target-date warning.
+          include: [
+            {
+              model: req.tenantDb.CandidateApplication,
+              as: 'application',
+              attributes: ['visaType', 'visaEndDate'],
+              required: false
+            }
+          ]
         },
         {
           model: req.tenantDb.User,
@@ -567,7 +580,7 @@ export const createMyCase = async (req, res) => {
       });
     }
 
-    // Handle caseworker assignment - include the creating caseworker if not specified
+    // Handle caseworker assignment (normalise + de-duplicate the submitted ids)
     const rawCwIds = Array.isArray(assignedcaseworkerId)
       ? assignedcaseworkerId
       : (assignedcaseworkerId ? [assignedcaseworkerId] : []);
@@ -580,18 +593,20 @@ export const createMyCase = async (req, res) => {
         cwIds.push(validId);
       }
     }
-    const creatorId = Number(userId) || userId;
-    if (creatorId && !cwIds.includes(creatorId)) {
-      cwIds.push(creatorId);
-    }
-
-    // STRICT BUSINESS RULE: Exactly 2 caseworkers per case.
-    if (cwIds.length !== 2) {
+    // BUG-017 / Phase 2 UAT: a case has exactly ONE caseworker.
+    //   - none selected  -> the caseworker creating the case owns it
+    //   - one selected   -> that caseworker only (the creator is NOT added)
+    //   - more than one  -> rejected
+    if (cwIds.length > 1) {
       return res.status(400).json({
         status: "error",
-        message: `Exactly 2 caseworkers are required per case. Current final count after creator inclusion: ${cwIds.length}.`,
-        data: { finalCount: cwIds.length },
+        message: "A case can only be assigned to one caseworker.",
+        data: { errors: ["A case can only be assigned to one caseworker."] },
       });
+    }
+    if (cwIds.length === 0) {
+      const creatorId = Number(userId) || userId;
+      if (creatorId) cwIds.push(creatorId);
     }
 
     // Generate case ID
@@ -625,7 +640,15 @@ export const createMyCase = async (req, res) => {
     res.status(201).json({
       status: "success",
       message: "Case created successfully",
-      data: { case: newCase },
+      // Phase 2 UAT 3.2: non-blocking warnings (target date after visa expiry).
+      data: {
+        case: newCase,
+        warnings: await buildTargetDateWarnings(req.tenantDb, {
+          candidateId: newCase.candidateId,
+          caseVisaEndDate: newCase.visaEndDate,
+          targetSubmissionDate: newCase.targetSubmissionDate,
+        }).catch(() => []),
+      },
     });
   } catch (error) {
     logger.error({ err: error }, "Create My Case Error");
@@ -696,6 +719,10 @@ export const updateMyCase = async (req, res) => {
     } = req.body;
 
     const cwIds = Array.isArray(assignedcaseworkerId) ? assignedcaseworkerId : (assignedcaseworkerId ? [assignedcaseworkerId] : []);
+    const cwCountError = singleCaseworkerError(cwIds);
+    if (cwCountError) {
+      return res.status(400).json({ status: "error", message: cwCountError, data: { errors: [cwCountError] } });
+    }
 
     const updateData = {
       candidateId: candidateId !== undefined ? candidateId : caseData.candidateId,
@@ -739,7 +766,14 @@ export const updateMyCase = async (req, res) => {
     res.status(200).json({
       status: "success",
       message: "Case updated successfully",
-      data: { case: caseData },
+      data: {
+        case: caseData,
+        warnings: await buildTargetDateWarnings(req.tenantDb, {
+          candidateId: caseData.candidateId,
+          caseVisaEndDate: caseData.visaEndDate,
+          targetSubmissionDate: caseData.targetSubmissionDate,
+        }).catch(() => []),
+      },
     });
   } catch (error) {
     logger.error({ err: error }, "Update My Case Error");
@@ -839,7 +873,16 @@ export const getCaseDetails = async (req, res) => {
           model: req.tenantDb.User,
           as: 'candidate',
           attributes: ['id', 'first_name', 'last_name', 'email', 'mobile'],
-          required: false
+          required: false,
+          // Phase 2 UAT 3.2: current visa + expiry for the target-date warning.
+          include: [
+            {
+              model: req.tenantDb.CandidateApplication,
+              as: 'application',
+              attributes: ['visaType', 'visaEndDate'],
+              required: false
+            }
+          ]
         },
         {
           model: req.tenantDb.User,
@@ -1004,6 +1047,14 @@ export const getCaseDetails = async (req, res) => {
           caseStage: caseData.caseStage,
           applicationType: caseData.applicationType,
           targetSubmissionDate: caseData.targetSubmissionDate,
+          // Phase 2 UAT 3.1/3.2: client's current visa, the expiry that applies
+          // to this case, and a warning if the target date is after it.
+          currentVisa: caseData.candidate?.application?.visaType || null,
+          visaExpiry: caseData.visaEndDate || caseData.candidate?.application?.visaEndDate || null,
+          targetDateWarning: targetDateVisaWarning(
+            caseData.targetSubmissionDate,
+            caseData.visaEndDate || caseData.candidate?.application?.visaEndDate || null,
+          ),
           proposedAmount: caseData.proposedAmount ?? null,
           biometricsDate: caseData.biometricsDate,
           biometricLocation: caseData.biometricLocation ?? null,
@@ -1118,6 +1169,7 @@ export const exportMyCases = catchAsync(async (req, res) => {
         {
           [Op.or]: [
             { caseId: { [Op.iLike]: `%${search}%` } },
+            previousCaseRefSearch(search),
             { '$candidate.first_name$': { [Op.iLike]: `%${search}%` } },
             { '$candidate.last_name$': { [Op.iLike]: `%${search}%` } },
             { '$sponsor.first_name$': { [Op.iLike]: `%${search}%` } },
@@ -1162,7 +1214,18 @@ export const exportMyCases = catchAsync(async (req, res) => {
         {
           model: req.tenantDb.User,
           as: 'candidate',
-          attributes: ['id', 'first_name', 'last_name', 'email']
+          attributes: ['id', 'first_name', 'last_name', 'email'],
+          // Phase 2 UAT 3.1/3.2: the client's CURRENT visa + its expiry, shown
+          // separately from the case's application type and used for the
+          // target-date warning.
+          include: [
+            {
+              model: req.tenantDb.CandidateApplication,
+              as: 'application',
+              attributes: ['visaType', 'visaEndDate'],
+              required: false
+            }
+          ]
         },
         {
           model: req.tenantDb.User,
@@ -1216,21 +1279,21 @@ export const exportMyCases = catchAsync(async (req, res) => {
     const columns = [
       { key: "caseId", header: "Case ID" },
       { key: "candidate", header: "Client" },
-      { key: "candidateEmail", header: "Candidate Email" },
+      { key: "candidateEmail", header: "Client Email" },
       { key: "sponsor", header: "Sponsor" },
       { key: "sponsorEmail", header: "Sponsor Email" },
       { key: "visaType", header: "Visa Type" },
-      { key: "petitionType", header: "Petition Type" },
+      { key: "petitionType", header: "Application Type" },
       { key: "priority", header: "Priority" },
       { key: "status", header: "Status" },
       { key: "assignedCaseworkers", header: "Assigned Caseworkers" },
       { key: "submissionDate", header: "Submission Date" },
       { key: "targetDate", header: "Target Date" },
-      { key: "lcaNumber", header: "LCA Number" },
-      { key: "receiptNumber", header: "Receipt Number" },
-      { key: "salaryOffered", header: "Salary Offered" },
-      { key: "totalAmount", header: "Total Amount" },
-      { key: "paidAmount", header: "Paid Amount" },
+      { key: "lcaNumber", header: "CoS Reference Number" },
+      { key: "receiptNumber", header: "UKVI Reference Number" },
+      { key: "salaryOffered", header: "Salary Offered (£)" },
+      { key: "totalAmount", header: "Total Amount (£)" },
+      { key: "paidAmount", header: "Paid Amount (£)" },
       { key: "createdAt", header: "Created At" },
     ];
 

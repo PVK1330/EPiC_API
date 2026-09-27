@@ -4,6 +4,7 @@ import { seedWorkflowEmailTemplatesForDb } from "../seeders/workflowEmailTemplat
 import { seedDocumentChecklistsForDb } from "../seeders/documentChecklist.seeder.js";
 import { seedCclTemplatesForDb } from "../seeders/cclTemplate.seeder.js";
 import { seedCclTemplatesFromDocxForDb } from "../seeders/cclTemplateDocx.seeder.js";
+import { normaliseCaseReferencesForDb } from "./caseReferenceBackfill.service.js";
 import logger from "../utils/logger.js";
 
 const TENANT_ROLES = [
@@ -96,6 +97,10 @@ export async function seedTenantDefaults(tenantDb) {
   );
   await seedCclTemplatesFromDocxForDb(tenantDb).catch((err) =>
     logger.warn({ err }, "seedCclTemplatesFromDocxForDb"),
+  );
+  // Phase 2 UAT 3.3: bring every case reference to the standard format.
+  await normaliseCaseReferencesForDb(tenantDb).catch((err) =>
+    logger.warn({ err }, "normaliseCaseReferencesForDb"),
   );
 }
 

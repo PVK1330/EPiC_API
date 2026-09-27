@@ -1,4 +1,5 @@
 import { Sequelize } from "sequelize";
+import { caseRefNeedsReissue, generateCaseId } from "../utils/case.utils.js";
 
 // Platform Level Models (Shared)
 import UserModel from "./platform/user.model.js";
@@ -41,6 +42,7 @@ import CandidateAccountSettingsModel from "./tenant/candidateAccountSettings.mod
 import CandidateFeedbackModel from "./tenant/candidateFeedback.model.js";
 import CandidateIssueReportModel from "./tenant/candidateIssueReport.model.js";
 import CandidateApplicationModel from "./tenant/candidateApplication.model.js";
+import CandidateVisaRefusalModel from "./tenant/candidateVisaRefusal.model.js";
 import SponsorProfileModel from "./tenant/sponsorProfile.model.js";
 import AppointmentModel from "./tenant/appointment.model.js";
 import CalendarMeetingModel from "./tenant/calendarMeeting.model.js";
@@ -149,6 +151,7 @@ export function buildDb(sequelize) {
   db.CandidateFeedback = CandidateFeedbackModel(sequelize, Sequelize.DataTypes);
   db.CandidateIssueReport = CandidateIssueReportModel(sequelize, Sequelize.DataTypes);
   db.CandidateApplication = CandidateApplicationModel(sequelize, Sequelize.DataTypes);
+  db.CandidateVisaRefusal = CandidateVisaRefusalModel(sequelize, Sequelize.DataTypes);
   db.SponsorProfile = SponsorProfileModel(sequelize, Sequelize.DataTypes);
   db.Appointment = AppointmentModel(sequelize, Sequelize.DataTypes);
   db.LicenceApplication = LicenceApplicationModel(sequelize, Sequelize.DataTypes);
@@ -281,6 +284,12 @@ export function buildDb(sequelize) {
   db.Case.hasMany(db.CandidateIssueReport, { foreignKey: "case_id", as: "issueReports" });
   db.User.hasOne(db.CandidateApplication, { foreignKey: "userId", as: "application" });
   db.CandidateApplication.belongsTo(db.User, { foreignKey: "userId", as: "user" });
+  db.CandidateApplication.hasMany(db.CandidateVisaRefusal, { foreignKey: "applicationId", as: "visaRefusals", onDelete: "CASCADE" });
+  db.CandidateVisaRefusal.belongsTo(db.CandidateApplication, { foreignKey: "applicationId", as: "application" });
+  db.User.hasMany(db.CandidateVisaRefusal, { foreignKey: "userId", as: "visaRefusals", onDelete: "CASCADE" });
+  db.CandidateVisaRefusal.belongsTo(db.User, { foreignKey: "userId", as: "user" });
+  db.Organisation.hasMany(db.CandidateVisaRefusal, { foreignKey: "organisationId", as: "visaRefusals", onDelete: "SET NULL" });
+  db.CandidateVisaRefusal.belongsTo(db.Organisation, { foreignKey: "organisationId", as: "organisation" });
   db.User.hasOne(db.SponsorProfile, { foreignKey: "userId", as: "sponsorProfile" });
   db.SponsorProfile.belongsTo(db.User, { foreignKey: "userId", as: "user" });
   db.User.hasOne(db.SponsorUserPreference, { foreignKey: "userId", as: "sponsorPreferences" });
@@ -493,6 +502,56 @@ export function buildDb(sequelize) {
   db.MonthlyComplianceReview.belongsTo(db.User, { foreignKey: "sponsorId", as: "sponsor" });
   db.Organisation.hasMany(db.MonthlyComplianceReview, { foreignKey: "organisationId", as: "monthlyComplianceReviews" });
   db.User.hasMany(db.MonthlyComplianceReview, { foreignKey: "sponsorId", as: "monthlyComplianceReviews" });
+
+  // ── Phase 2 UAT 3.3: case references ─────────────────────────────────────
+  // (1) A lookup by reference also finds a case by a reference it had before
+  //     (old CAS-###### links in notifications/e-mails keep working).
+  db.Case.addHook("beforeFind", "resolvePreviousCaseRefs", (options) => {
+    const where = options?.where;
+    if (!where || typeof where !== "object") return;
+    const ref = where.caseId;
+    if (typeof ref !== "string" || !ref.trim()) return;
+    const { caseId: _ignored, ...rest } = where;
+    options.where = {
+      [Sequelize.Op.and]: [
+        rest,
+        { [Sequelize.Op.or]: [{ caseId: ref }, { previousCaseIds: { [Sequelize.Op.contains]: [ref] } }] },
+      ],
+    };
+  });
+
+  // (2) Changing a case's visa type re-issues its reference so the type code
+  //     always matches the case (e.g. SW → ILR). The old reference is kept.
+  db.Case.addHook("beforeUpdate", "reissueRefOnVisaTypeChange", async (instance, options) => {
+    if (!instance.changed("visaTypeId")) return;
+    const needs = await caseRefNeedsReissue(db, instance, { transaction: options?.transaction });
+    if (!needs) return;
+    const oldRef = instance.caseId || null;
+    const newRef = await generateCaseId(db, {
+      organisationId: instance.organisation_id ?? null,
+      visaTypeId: instance.visaTypeId ?? null,
+      referenceDate: instance.created_at || null,
+      transaction: options?.transaction,
+    });
+    const previous = Array.isArray(instance.previousCaseIds) ? instance.previousCaseIds : [];
+    instance.caseId = newRef;
+    instance.previousCaseIds = oldRef && !previous.includes(oldRef) ? [...previous, oldRef] : previous;
+    instance._reissuedFromRef = oldRef;
+    if (Array.isArray(options?.fields)) {
+      for (const field of ["caseId", "previousCaseIds"]) {
+        if (!options.fields.includes(field)) options.fields.push(field);
+      }
+    }
+  });
+  db.Case.addHook("afterUpdate", "syncEscalationRefs", async (instance, options) => {
+    const oldRef = instance._reissuedFromRef;
+    if (!oldRef) return;
+    instance._reissuedFromRef = null;
+    await db.Escalation.update(
+      { caseId: instance.caseId },
+      { where: { caseId: oldRef }, hooks: false, transaction: options?.transaction },
+    ).catch(() => {});
+  });
 
   return db;
 }

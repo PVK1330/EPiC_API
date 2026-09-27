@@ -1,4 +1,5 @@
 import logger from "../../../utils/logger.js";
+import { buildTargetDateWarnings } from "../../../services/visaExpiry.service.js";
 import { sendRescheduleEmail } from "../../../services/email.service.js";
 import { generateNotificationEmailTemplate } from "../../../utils/emailTemplates.js";
 import { getOrganisationEmailBranding } from "../../../utils/emailBranding.js";
@@ -230,6 +231,11 @@ export const rescheduleCase = async (req, res) => {
       message: "Case rescheduled successfully. Notification emails sent.",
       data: {
         case: caseData,
+        warnings: await buildTargetDateWarnings(req.tenantDb, {
+          candidateId: caseData.candidateId,
+          caseVisaEndDate: caseData.visaEndDate,
+          targetSubmissionDate: caseData.targetSubmissionDate,
+        }).catch(() => []),
         changes,
         emailsSent: [
           ...(candidate?.email ? [candidate.email] : []),

@@ -58,6 +58,10 @@ router.post("/sla-rules", validate(createSlaRuleSchema), adminSettingsController
 router.patch("/sla-rules/:id", validate(updateSlaRuleSchema), adminSettingsController.updateSlaRule);
 router.delete("/sla-rules/:id", adminSettingsController.deleteSlaRule);
 
+// Phase 2 UAT 3.1: visa expiry alert window (days before expiry).
+router.get("/visa-alert-settings", adminSettingsController.getVisaAlertSettings);
+router.put("/visa-alert-settings", adminSettingsController.updateVisaAlertSettings);
+
 router.get("/payment-settings", adminSettingsController.getPaymentSetting);
 router.put("/payment-settings", adminSettingsController.updatePaymentSetting);
 

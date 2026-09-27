@@ -58,6 +58,7 @@ router.post(
 router.post("/", checkRole(STAFF), logCreateCandidateRequest, validate(schema.createCandidateSchema, 'createCandidateSchema'), controller.createCandidate);
 
 router.get("/", checkRole(STAFF), controller.getAllCandidates);
+router.get("/visa-expiry-alerts", checkRole(STAFF), controller.getVisaExpiryAlertsCount);
 router.get("/:id", checkRole(STAFF), validate(schema.getCandidateSchema), controller.getCandidateById);
 router.patch("/:id", checkRole(STAFF), validate(schema.updateCandidateSchema, 'updateCandidateSchema'), controller.updateCandidate);
 router.patch("/:id/toggle-status", checkRole(STAFF), validate(schema.getCandidateSchema), controller.toggleCandidateStatus);
@@ -76,5 +77,11 @@ router.get(
   checkRole([ROLES.ADMIN, ROLES.CASEWORKER]),
   candidateApplicationController.downloadCandidateApplicationPdf,
 );
+
+// Visa Refusals (Staff)
+router.get("/:id/visa-refusals", checkRole(STAFF), controller.getCandidateVisaRefusals);
+router.post("/:id/visa-refusals", checkRole(STAFF), controller.createCandidateVisaRefusal);
+router.put("/:id/visa-refusals/:refusalId", checkRole(STAFF), controller.updateCandidateVisaRefusal);
+router.delete("/:id/visa-refusals/:refusalId", checkRole(STAFF), controller.deleteCandidateVisaRefusal);
 
 export default router;

@@ -36,12 +36,29 @@ export class CandidateRepository {
           model: this.tenantDb.CandidateApplication,
           as: "application",
           required: false,
+          include: this.tenantDb.CandidateVisaRefusal
+            ? [
+                {
+                  model: this.tenantDb.CandidateVisaRefusal,
+                  as: "visaRefusals",
+                  required: false,
+                },
+              ]
+            : [],
         },
         {
           model: this.tenantDb.Case,
           as: "cases",
           required: false,
-          attributes: ["id", "caseId", "status", "caseStage", "nationality", "visaTypeId"],
+          attributes: ["id", "caseId", "status", "caseStage", "nationality", "visaTypeId", "visaEndDate", "created_at", "updated_at"],
+          include: [
+            {
+              model: this.tenantDb.VisaType,
+              as: "visaType",
+              required: false,
+              attributes: ["id", "name"],
+            },
+          ],
         },
       ],
     });
@@ -60,6 +77,15 @@ export class CandidateRepository {
     if (!this.tenantDb?.CandidateApplication?.findOne) return null;
     return await this.tenantDb.CandidateApplication.findOne({
       where: { userId },
+      include: this.tenantDb.CandidateVisaRefusal
+        ? [
+            {
+              model: this.tenantDb.CandidateVisaRefusal,
+              as: "visaRefusals",
+              required: false,
+            },
+          ]
+        : [],
       transaction
     });
   }
