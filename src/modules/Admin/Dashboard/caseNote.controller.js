@@ -1,11 +1,12 @@
 import { ROLES } from '../../../middlewares/role.middleware.js';
 import logger from '../../../utils/logger.js';
 import { sanitizePlainText } from '../../../utils/sanitizeText.js';
+import { recordTimelineEntry } from '../../../services/caseTimeline.service.js';
 
-// Create a new case note
+// Create a new case note (supports multi-caseworker attendance notes)
 export const createCaseNote = async (req, res) => {
   try {
-    const { caseId, parentNoteId } = req.body;
+    const { caseId, parentNoteId, noteType, title } = req.body;
     // SECURITY (stored XSS): case notes are plain text — strip any HTML markup.
     const content = sanitizePlainText(req.body?.content, { maxLength: 10000 });
     const userId = req.user?.userId;
@@ -47,18 +48,96 @@ export const createCaseNote = async (req, res) => {
       });
     }
 
-    // BUG-027 fix / IDOR guard (mirrors getCaseNoteByNoteId's S-07 fix): only the
-    // case's assigned caseworker (or an admin) may add notes to it.
-    // Admins (3) and Superadmins (5) may add notes to any case.
-    // Caseworkers may only add notes to cases assigned to them.
-    // Candidates/Sponsors may only add notes to their own cases.
-    if (roleId !== ROLES.ADMIN && roleId !== 5) {
-      const assignedIds = caseRecord.assignedcaseworkerId ?? [];
-      const isCaseworkerAssigned = roleId === ROLES.CASEWORKER && assignedIds.includes(userId);
-      const isCandidate = caseRecord.candidateId && Number(caseRecord.candidateId) === Number(userId);
-      const isSponsor = caseRecord.sponsorId && Number(caseRecord.sponsorId) === Number(userId);
-      if (!isCaseworkerAssigned && !isCandidate && !isSponsor) {
-        return res.status(403).json({ status: "error", message: "Access denied" });
+    // BUG-027 / Business Decision Confirmed:
+    // Only Admin and assigned Caseworkers may add a Case Note.
+    // Everyone else (unassigned caseworkers, candidates/clients, sponsors, other roles) is denied.
+    const isAdmin = roleId === ROLES.ADMIN || roleId === ROLES.SUPERADMIN;
+    if (!isAdmin) {
+      const rawAssigned = caseRecord.assignedcaseworkerId;
+      const assignedIds = (
+        Array.isArray(rawAssigned)
+          ? rawAssigned
+          : (rawAssigned != null ? [rawAssigned] : [])
+      )
+        .map((id) => Number(id))
+        .filter((id) => Number.isInteger(id) && id > 0);
+
+      const isCaseworkerAssigned =
+        roleId === ROLES.CASEWORKER && assignedIds.includes(Number(userId));
+
+      if (!isCaseworkerAssigned) {
+        return res.status(403).json({
+          status: "error",
+          message: "You are not authorized to add notes to this case.",
+          data: null,
+        });
+      }
+    }
+
+    // Phase 5: Participant Validation for Attendance Notes
+    const rawParticipantIds = req.body?.participantIds ?? req.body?.attendedWith;
+    let participantCaseworkerIds = [];
+
+    if (rawParticipantIds !== undefined && rawParticipantIds !== null) {
+      if (!Array.isArray(rawParticipantIds)) {
+        return res.status(400).json({
+          status: "error",
+          message: "Participant IDs must be an array of caseworker IDs.",
+          data: null,
+        });
+      }
+
+      // De-duplicate participant IDs
+      const uniqueIds = Array.from(
+        new Set(
+          rawParticipantIds
+            .map((id) => Number(id))
+            .filter((id) => Number.isInteger(id) && id > 0)
+        )
+      );
+
+      if (uniqueIds.length > 0) {
+        // Query users table for all submitted participant IDs in tenant DB
+        const foundUsers = await req.tenantDb.User.findAll({
+          where: { id: uniqueIds },
+          attributes: ['id', 'first_name', 'last_name', 'email', 'role_id', 'organisation_id'],
+        });
+
+        // Check if all requested IDs exist in database
+        if (foundUsers.length !== uniqueIds.length) {
+          return res.status(400).json({
+            status: "error",
+            message: "Invalid caseworker participant ID: one or more attendance participants do not exist.",
+            data: null,
+          });
+        }
+
+        // Check that EVERY participant is a Caseworker (not Candidate, Sponsor, etc.)
+        const nonCaseworker = foundUsers.find((u) => Number(u.role_id) !== ROLES.CASEWORKER);
+        if (nonCaseworker) {
+          return res.status(400).json({
+            status: "error",
+            message: `Participant ID ${nonCaseworker.id} is not a caseworker. Only caseworkers can be tagged as attendance participants.`,
+            data: null,
+          });
+        }
+
+        // Cross-organisation validation: caseworkers must belong to the same organisation as the case
+        const caseOrgId = caseRecord.organisation_id || req.user?.organisation_id;
+        if (caseOrgId) {
+          const crossOrgCaseworker = foundUsers.find(
+            (u) => u.organisation_id && Number(u.organisation_id) !== Number(caseOrgId)
+          );
+          if (crossOrgCaseworker) {
+            return res.status(403).json({
+              status: "error",
+              message: `Caseworker ID ${crossOrgCaseworker.id} does not belong to the same organisation as this case. Cross-organisation participants are not allowed.`,
+              data: null,
+            });
+          }
+        }
+
+        participantCaseworkerIds = uniqueIds;
       }
     }
 
@@ -74,18 +153,81 @@ export const createCaseNote = async (req, res) => {
       }
     }
 
+    const resolvedNoteType = noteType || (participantCaseworkerIds.length > 0 ? "attendance" : "internal");
+    const noteTitle = title ? sanitizePlainText(title, { maxLength: 255 }) : null;
+
     const newNote = await req.tenantDb.CaseNote.create({
       caseId: numericCaseId,
       content,
+      title: noteTitle,
+      noteType: resolvedNoteType,
       parentNoteId: parentNoteId || null,
       authorId: userId,
       updatedAt: new Date(),
     });
 
+    // Persist participants if CaseNoteParticipant model exists and IDs are provided
+    if (participantCaseworkerIds.length > 0 && req.tenantDb.CaseNoteParticipant) {
+      const participantRows = participantCaseworkerIds.map((cwId) => ({
+        caseNoteId: newNote.id,
+        case_note_id: newNote.id,
+        caseworkerId: cwId,
+        caseworker_id: cwId,
+      }));
+      await req.tenantDb.CaseNoteParticipant.bulkCreate(participantRows);
+    }
+
+    // Phase 5: Timeline / Activity logging for Attendance Notes
+    if (resolvedNoteType === "attendance") {
+      try {
+        await recordTimelineEntry({
+          tenantDb: req.tenantDb,
+          caseId: numericCaseId,
+          actionType: "attendance_note_created",
+          description: `Attendance note recorded (${noteTitle || "Client consultation"})`,
+          performedBy: userId,
+          metadata: {
+            noteId: newNote.id,
+            noteType: "attendance",
+            participantIds: participantCaseworkerIds,
+          },
+          visibility: "team",
+        });
+      } catch (timelineErr) {
+        logger.error({ err: timelineErr }, "Failed to record attendance note timeline entry");
+      }
+    }
+
+    // Fetch newly created note with author and participants for complete response
+    let noteToReturn = newNote;
+    if (req.tenantDb.CaseNoteParticipant) {
+      const reloadedNote = await req.tenantDb.CaseNote.findByPk(newNote.id, {
+        include: [
+          {
+            model: req.tenantDb.User,
+            as: "author",
+            attributes: ["id", "first_name", "last_name"],
+          },
+          {
+            model: req.tenantDb.CaseNoteParticipant,
+            as: "participants",
+            include: [
+              {
+                model: req.tenantDb.User,
+                as: "caseworker",
+                attributes: ["id", "first_name", "last_name", "email"],
+              },
+            ],
+          },
+        ],
+      });
+      if (reloadedNote) noteToReturn = reloadedNote;
+    }
+
     res.status(201).json({
       status: "success",
       message: "Case note created successfully",
-      data: { note: newNote },
+      data: { note: noteToReturn },
     });
 
   } catch (error) {
@@ -102,7 +244,8 @@ export const createCaseNote = async (req, res) => {
 // Get all notes for a case
 export const getCaseNotes = async (req, res) => {
   try {
-    const { caseId, page = 1, limit = 10 } = req.query;
+    const caseId = req.query?.caseId || req.params?.caseId;
+    const { page = 1, limit = 10 } = req.query || {};
     const offset = (page - 1) * limit;
     const userId = req.user?.userId;
     const roleId = req.user?.role_id;
@@ -151,6 +294,22 @@ export const getCaseNotes = async (req, res) => {
           as: 'author',
           attributes: ['id', 'first_name', 'last_name'],
         },
+        ...(req.tenantDb.CaseNoteParticipant
+          ? [
+              {
+                model: req.tenantDb.CaseNoteParticipant,
+                as: 'participants',
+                required: false,
+                include: [
+                  {
+                    model: req.tenantDb.User,
+                    as: 'caseworker',
+                    attributes: ['id', 'first_name', 'last_name', 'email'],
+                  },
+                ],
+              },
+            ]
+          : []),
         {
           model: req.tenantDb.CaseNote,
           as: 'parentNote',
@@ -299,7 +458,7 @@ export const deleteCaseNote = async (req, res) => {
 // Get case by note ID
 export const getCaseNoteByNoteId = async (req, res) => {
   try {
-    const { id } = req.params;
+    const id = req.params?.id || req.params?.noteId;
     const roleId = Number(req.user?.role_id);
     const userId = req.user?.userId;
 
@@ -310,7 +469,23 @@ export const getCaseNoteByNoteId = async (req, res) => {
           model: req.tenantDb.Case,
           as: 'case',
           attributes: ['id', 'status', 'created_at', 'updated_at', 'assignedcaseworkerId', 'candidateId', 'sponsorId']
-        }
+        },
+        ...(req.tenantDb.CaseNoteParticipant
+          ? [
+              {
+                model: req.tenantDb.CaseNoteParticipant,
+                as: 'participants',
+                required: false,
+                include: [
+                  {
+                    model: req.tenantDb.User,
+                    as: 'caseworker',
+                    attributes: ['id', 'first_name', 'last_name', 'email'],
+                  },
+                ],
+              },
+            ]
+          : []),
       ]
     });
 
@@ -357,7 +532,11 @@ export const getCaseNoteByNoteId = async (req, res) => {
           parentNoteId: note.parentNoteId,
           createdAt: note.createdAt,
           updatedAt: note.updatedAt,
-          case: note.case
+          case: note.case,
+          participants: note.participants || [],
+          attendees: (note.participants || [])
+            .map((p) => p.caseworker ? `${p.caseworker.first_name} ${p.caseworker.last_name}`.trim() : null)
+            .filter(Boolean),
         }
       },
     });

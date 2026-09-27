@@ -1,13 +1,13 @@
 import { Router } from 'express';
 import * as caseNoteController from '../../Admin/Dashboard/caseNote.controller.js';
 import { verifyTokenAndTenant } from '../../../middlewares/authStack.middleware.js';
-import { checkRole, ROLES } from '../../../middlewares/role.middleware.js';
+import { checkRole, STAFF_ROLES } from '../../../middlewares/role.middleware.js';
 
 const router = Router();
 
 // Apply authentication and role-based access
 router.use(verifyTokenAndTenant);
-router.use(checkRole([ROLES.ADMIN, ROLES.CASEWORKER]));
+router.use(checkRole(STAFF_ROLES));
 
 // Case note routes
 router.post("/", caseNoteController.createCaseNote);

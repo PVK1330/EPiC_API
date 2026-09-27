@@ -12,6 +12,7 @@ import {
   CCL_TAGS,
   interpolateCclHtml,
   renderInstallmentPlanHtml,
+  renderBankPaymentInstructionsHtml,
 } from "../../../services/cclTags.service.js";
 import {
   generateCclHtmlForCase,
@@ -111,6 +112,8 @@ function sampleValues() {
         { label: "Deposit", amount: 500, dueDate: null },
         { label: "Balance", amount: 1000, dueDate: "2026-07-01" },
       ]);
+    } else if (t.tag === "bank_payment_instructions") {
+      values[t.tag] = renderBankPaymentInstructionsHtml("", "Elite Immigration Ltd", "EPIC-2026-0042");
     } else if (t.tag === "org_logo") {
       values[t.tag] = "";
     } else {

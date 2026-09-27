@@ -1,6 +1,6 @@
 import express from 'express';
 import { verifyTokenAndTenant } from '../../../middlewares/authStack.middleware.js';
-import { checkRole, ROLES } from '../../../middlewares/role.middleware.js';
+import { checkRole, STAFF_ROLES } from '../../../middlewares/role.middleware.js';
 import {
   createCaseNote,
   getCaseNotes,
@@ -13,7 +13,7 @@ const router = express.Router();
 
 // Apply authentication and role-based access
 router.use(verifyTokenAndTenant);
-router.use(checkRole([ROLES.ADMIN, ROLES.CASEWORKER]));
+router.use(checkRole(STAFF_ROLES));
 
 // Routes
 router.post('/', 

@@ -139,18 +139,24 @@ function injectTags(html, rule = {}) {
     "{{appendix_a}}"
   );
 
+  // Bank details & payment clarity replacement: replace static bank table with dynamic {{bank_payment_instructions}}
+  out = out.replace(
+    /(?:<p[^>]*>(?:\s|<[^>]+>)*(?:Elite\s*Pic\s*Bank\s*accounts|\{\{org_name\}\}\s*Bank\s*accounts)[^<]*(?:<[^>]+>)*<\/p>\s*)?<table[^>]*>[\s\S]*?Transfer\s*UKVI\s*visa\s*fees[\s\S]*?Transfer\s*(?:Elite\s*PiC|\{\{org_name\}\})?\s*Management\s*Fees[\s\S]*?<\/table>/gi,
+    "{{bank_payment_instructions}}"
+  );
+
   return out;
 }
 
 // Bump when injectTags() changes so stored templates are upgraded ONCE.
-export const CCL_SEED_VERSION = 4;
+export const CCL_SEED_VERSION = 5;
 const SEED_MARKER = `<!-- ccl-seed:v${CCL_SEED_VERSION} -->`;
 const SEED_MARKER_RE = /<!-- ccl-seed:v(\d+) -->/;
 // Text that only ever came from an old/buggy import (hard-coded adviser, the
-// firm-name-in-email bug). A stored row with none of these and no marker is
+// firm-name-in-email bug, legacy unformatted bank table). A stored row with none of these and no marker is
 // treated as admin-edited and left alone.
 const LEGACY_SEED_TEXT_RE =
-  /David Robertson|I,\s*Khalid Mahmood,?\s*will be your caseworker|@elitepic\.co\.uk|@\{\{org_name\}\}|Elite_pic\.co\.uk|Y9158089|1H9W3VKX8|Jomon/i;
+  /David Robertson|I,\s*Khalid Mahmood,?\s*will be your caseworker|@elitepic\.co\.uk|@\{\{org_name\}\}|Elite_pic\.co\.uk|Y9158089|1H9W3VKX8|Jomon|Transfer\s*UKVI\s*visa\s*fees/i;
 
 /** Should a stored template row be replaced by the freshly seeded HTML? */
 export function shouldRefreshSeededTemplate(bodyHtml) {
