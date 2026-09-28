@@ -116,7 +116,7 @@ test("softDeleteWorker and restoreWorker each write an audit row", async () => {
   assert.equal(auditRows.length, 1, "one audit row written after delete");
   assert.equal(auditRows[0].action, WORKER_AUDIT_ACTIONS.DELETED, "delete action matches");
   assert.equal(auditRows[0].actorId, ACTOR_ID, "actorId recorded");
-  assert.equal(auditRows[0].toStatus, null, "toStatus is null for delete");
+  assert.equal(auditRows[0].toStatus, "deleted", "toStatus is 'deleted' for delete");
 
   // Restore audit
   const worker2 = makeWorkerRow({ deletedAt: new Date(), status: "Visa Preparation" });

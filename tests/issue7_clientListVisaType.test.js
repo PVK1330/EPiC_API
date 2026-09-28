@@ -411,16 +411,12 @@ describe('Issue #7: Client List Shows Wrong Visa Type', async () => {
   // =========================================================================
   // CONFIRMATION: Terminology and 2 Caseworkers Rule preserved
   // =========================================================================
-  test('CONFIRMATION: Terminology "Client" preserved and Exactly 2 Caseworkers rule untouched', () => {
+  test('CONFIRMATION: Terminology "Client" preserved and Single-Caseworker rule untouched', () => {
     const cwControllerPath = path.join(rootDir, 'Server', 'src', 'modules', 'Caseworker', 'Cases', 'caseworkerCase.controller.js');
     const cwControllerSrc = fs.readFileSync(cwControllerPath, 'utf8');
     assert.ok(
-      cwControllerSrc.includes('cwIds.length !== 2'),
-      'Backend controller strictly enforces cwIds.length !== 2',
-    );
-    assert.ok(
-      cwControllerSrc.includes('Exactly 2 caseworkers are required per case'),
-      'Backend controller message requires exactly 2 caseworkers',
+      cwControllerSrc.includes('singleCaseworkerError') && !cwControllerSrc.includes('cwIds.length !== 2'),
+      'Backend controller enforces one caseworker per case',
     );
 
     const adminCandidatesPath = path.join(rootDir, 'EPiC_Frontend', 'src', 'pages', 'admin', 'AdminCandidates.jsx');

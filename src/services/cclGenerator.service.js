@@ -277,6 +277,7 @@ function normalizeTablesForPdfmake(node) {
   if (!node || typeof node !== "object") return;
 
   if (node.table && Array.isArray(node.table.body)) {
+    node.table.dontBreakRows = true;
     const body = node.table.body;
 
     // CCL Issue #1 fix: Detect 8-column bank details table where two accounts with
@@ -398,6 +399,16 @@ export async function renderCclPdfBuffer({ html, organisation = null }) {
     window: sharedWindow,
   });
   normalizeTablesForPdfmake(content);
+
+  // CCL-2: Mark sign-off and signature blocks as unbreakable so they stay together on one page
+  if (Array.isArray(content)) {
+    for (const item of content) {
+      const text = extractCellText(item);
+      if (/(?:Yours sincerely|Client Signature|Signed:|Signature:)/i.test(text)) {
+        item.unbreakable = true;
+      }
+    }
+  }
 
   const images = {};
   const logo = await resolveLogoDataUri(

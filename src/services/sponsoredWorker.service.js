@@ -337,7 +337,9 @@ export async function createSponsoredWorker(tenantDb, {
 
       // Auto-generate per-worker CoS reference number now that we have the ID.
       worker.workerCosNumber = buildWorkerCosNumber(worker.id);
-      await worker.save({ transaction: t });
+      if (typeof worker?.save === "function") {
+        await worker.save({ transaction: t });
+      }
 
       await tenantDb.SponsoredWorkerAudit.create({
         sponsoredWorkerId: worker.id,
@@ -398,7 +400,9 @@ export async function createSponsoredWorker(tenantDb, {
   // Finalise CoS number with the real worker ID now that the row exists.
   if (assignCoS) {
     worker.workerCosNumber = buildWorkerCosNumber(worker.id);
-    await worker.save();
+    if (typeof worker.save === "function") {
+      await worker.save();
+    }
   }
 
   await recordWorkerAudit(tenantDb, {

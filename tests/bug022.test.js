@@ -13,7 +13,7 @@ async function runBug022Tests() {
   // TEST 1: Check AdminCases.jsx table header uses "Case"
   console.log('TEST 1: Check AdminCases.jsx table header');
   const adminCasesPath = path.resolve(__dirname, '../../EPiC_Frontend/src/pages/admin/AdminCases.jsx');
-  const adminCasesContent = fs.readFileSync(adminCasesPath, 'utf8');
+  const adminCasesContent = fs.readFileSync(adminCasesPath, 'utf8').replace(/\r\n/g, '\n');
   if (adminCasesContent.includes('"Case ID",\n  "Client"')) {
     throw new Error('TEST 1 Failed: "Case ID" still in AdminCases.jsx table header');
   }
@@ -25,7 +25,7 @@ async function runBug022Tests() {
   // TEST 2: Check AdminDashboard.jsx table header uses "Case"
   console.log('TEST 2: Check AdminDashboard.jsx table header');
   const adminDashPath = path.resolve(__dirname, '../../EPiC_Frontend/src/pages/admin/AdminDashboard.jsx');
-  const adminDashContent = fs.readFileSync(adminDashPath, 'utf8');
+  const adminDashContent = fs.readFileSync(adminDashPath, 'utf8').replace(/\r\n/g, '\n');
   if (adminDashContent.includes('["Case ID", "Client", "Visa Type", "Status"]')) {
     throw new Error('TEST 2 Failed: "Case ID" still in AdminDashboard.jsx table header');
   }
@@ -37,7 +37,7 @@ async function runBug022Tests() {
   // TEST 3: Check CasesOverviewTab.jsx uses "Case Number" & "Client name"
   console.log('TEST 3: Check CasesOverviewTab.jsx labels');
   const overviewPath = path.resolve(__dirname, '../../EPiC_Frontend/src/pages/caseworker/tabs/CasesOverviewTab.jsx');
-  const overviewContent = fs.readFileSync(overviewPath, 'utf8');
+  const overviewContent = fs.readFileSync(overviewPath, 'utf8').replace(/\r\n/g, '\n');
   if (overviewContent.includes('<Field label="Case ID">')) {
     throw new Error('TEST 3 Failed: <Field label="Case ID"> still in CasesOverviewTab.jsx');
   }
@@ -49,7 +49,7 @@ async function runBug022Tests() {
   // TEST 4: Check AdminFinance.jsx uses "Case"
   console.log('TEST 4: Check AdminFinance.jsx labels');
   const finPath = path.resolve(__dirname, '../../EPiC_Frontend/src/pages/admin/AdminFinance.jsx');
-  const finContent = fs.readFileSync(finPath, 'utf8');
+  const finContent = fs.readFileSync(finPath, 'utf8').replace(/\r\n/g, '\n');
   if (finContent.includes('["Transaction ID", "Client", "Case ID",')) {
     throw new Error('TEST 4 Failed: "Case ID" still in AdminFinance table columns');
   }
@@ -61,7 +61,7 @@ async function runBug022Tests() {
   // TEST 5: Legitimate CAS terminology (UKVCAS, CoS & CAS Requirements) preserved
   console.log('TEST 5: Check legitimate immigration CAS references preserved');
   const stagesPath = path.resolve(__dirname, '../../EPiC_Frontend/src/constants/licenceStages.js');
-  const stagesContent = fs.readFileSync(stagesPath, 'utf8');
+  const stagesContent = fs.readFileSync(stagesPath, 'utf8').replace(/\r\n/g, '\n');
   if (!stagesContent.includes('CoS & CAS Requirements')) {
     throw new Error('TEST 5 Failed: Legitimate CoS & CAS Requirements term was lost');
   }
