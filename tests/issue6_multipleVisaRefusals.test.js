@@ -670,28 +670,20 @@ describe('Issue #6: Support Multiple Visa Refusals', async () => {
   // =========================================================================
   // TEST 12: Existing application regression
   // =========================================================================
-  test('TEST 12 — Regression: Existing Client/Application functionality, CCL tags, and 2-Caseworker rule remain intact', async () => {
-    // 1. Exactly 2 Caseworkers Rule: Verified in caseworkerCase.controller.js and Frontend Cases.jsx
+  test('TEST 12 — Regression: Existing Client/Application functionality, CCL tags, and Single-Caseworker rule remain intact', async () => {
+    // 1. Single Caseworker Rule (BUG-017): Verified in caseworkerCase.controller.js and Frontend Cases.jsx
     const cwControllerPath = path.join(rootDir, 'Server', 'src', 'modules', 'Caseworker', 'Cases', 'caseworkerCase.controller.js');
     const cwControllerSrc = fs.readFileSync(cwControllerPath, 'utf8');
     assert.ok(
-      cwControllerSrc.includes('cwIds.length !== 2'),
-      'Backend controller strictly enforces cwIds.length !== 2',
-    );
-    assert.ok(
-      cwControllerSrc.includes('Exactly 2 caseworkers are required per case'),
-      'Backend controller message requires exactly 2 caseworkers',
+      cwControllerSrc.includes('singleCaseworkerError') && !cwControllerSrc.includes('cwIds.length !== 2'),
+      'Backend controller enforces one caseworker per case',
     );
 
     const cwCasesPath = path.join(rootDir, 'EPiC_Frontend', 'src', 'pages', 'caseworker', 'Cases.jsx');
     const cwCasesSrc = fs.readFileSync(cwCasesPath, 'utf8');
     assert.ok(
-      cwCasesSrc.includes('finalCount !== 2'),
-      'Frontend strictly enforces finalCount !== 2',
-    );
-    assert.ok(
-      cwCasesSrc.includes('Exactly 2 caseworkers are required'),
-      'Frontend message requires exactly 2 caseworkers',
+      cwCasesSrc.includes('selectedCwCount > 1') || cwCasesSrc.includes('A case can only be assigned to one caseworker'),
+      'Frontend strictly enforces single caseworker rule per BUG-017',
     );
 
     // 2. Client terminology verification

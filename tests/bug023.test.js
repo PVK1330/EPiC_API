@@ -128,8 +128,9 @@ async function runBug023Tests() {
   // TEST 6: Existing legacy random case numbers remain accessible
   console.log('TEST 6: Legacy random case numbers remain accessible');
   const uLegacy = await nextTestUser();
+  const legacyCaseId = `CAS-${Date.now().toString().slice(-6)}`;
   const legacyCase = await Case.create({
-    caseId: 'CAS-999888',
+    caseId: legacyCaseId,
     candidateId: uLegacy.id,
     status: 'In Progress',
     caseStage: 'lead_enquiry',
@@ -137,7 +138,7 @@ async function runBug023Tests() {
     targetSubmissionDate: new Date(),
     organisation_id: orgId,
   });
-  const foundLegacy = await Case.findOne({ where: { caseId: 'CAS-999888' } });
+  const foundLegacy = await Case.findOne({ where: { caseId: legacyCaseId } });
   if (!foundLegacy || foundLegacy.id !== legacyCase.id) {
     throw new Error('TEST 6 Failed: Legacy case could not be retrieved');
   }
@@ -146,7 +147,7 @@ async function runBug023Tests() {
   // TEST 7 & 8: API/Persistence test
   console.log('TEST 7 & 8: Case Number persists after reload and is returned');
   const reloadedLegacy = await Case.findByPk(legacyCase.id);
-  if (reloadedLegacy.caseId !== 'CAS-999888') {
+  if (reloadedLegacy.caseId !== legacyCaseId) {
     throw new Error('TEST 7/8 Failed: Persistence check failed');
   }
   console.log(`  [PASS] Case number persists accurately: ${reloadedLegacy.caseId}\n`);

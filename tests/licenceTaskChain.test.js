@@ -113,6 +113,19 @@ function makeChainDb(preloadedRows = []) {
         feeTotal: null,
         createdAt: new Date(),
       }),
+      findOne: async ({ where } = {}) => ({
+        id: where?.id || 42,
+        status: "Pending",
+        submittedAt: null,
+        organisationId: 1,
+        userId: 1,
+        assignedcaseworkerId: null,
+        licenceType: null,
+        cosAllocation: null,
+        contactName: null,
+        feeTotal: null,
+        createdAt: new Date(),
+      }),
     },
   };
 }

@@ -30,7 +30,7 @@ function makeMockDb({ cosRequest = null, allocation = null, licenceApplication =
       findAll: async () => (licenceApplication ? [licenceApplication] : []),
     },
     SponsoredWorker: {
-      create: async (data) => ({ id: 101, ...data }),
+      create: async (data) => ({ id: 101, ...data, save: async () => {} }),
     },
     SponsoredWorkerAudit: {
       create: async () => {},

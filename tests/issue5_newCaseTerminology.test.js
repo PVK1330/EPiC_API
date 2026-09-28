@@ -297,11 +297,13 @@ describe('Issue #5: New Case Form Currency and US Immigration Terminology', asyn
     assert.ok(pipelineAdminSrc.includes('<label className="text-xs font-bold text-gray-500 uppercase tracking-wide">Client</label>'), 'Admin Pipeline displays Client');
   });
 
-  test('CONFIRMATION: Exactly 2 Caseworkers Rule strictly enforced', () => {
+  test('CONFIRMATION: Single Caseworker Rule strictly enforced per BUG-017', () => {
     const cwCasesPath = path.join(rootDir, 'EPiC_Frontend', 'src', 'pages', 'caseworker', 'Cases.jsx');
     const cwCasesSrc = fs.readFileSync(cwCasesPath, 'utf8');
 
-    assert.ok(cwCasesSrc.includes('finalCount !== 2'), 'Validation checks finalCount !== 2');
-    assert.ok(cwCasesSrc.includes('Exactly 2 caseworkers are required'), 'Validation error requires exactly 2 caseworkers');
+    assert.ok(
+      cwCasesSrc.includes('selectedCwCount > 1') || cwCasesSrc.includes('A case can only be assigned to one caseworker'),
+      'Frontend validation enforces at most one caseworker'
+    );
   });
 });

@@ -45,6 +45,7 @@ export const CCL_TAGS = [
   { tag: "second_caseworker_name", label: "Second Caseworker name", group: "Case", type: "text", sample: "Sarah Connor" },
   { tag: "second_caseworker_email", label: "Second Caseworker email", group: "Case", type: "text", sample: "sarah.connor@example.com" },
   { tag: "caseworkers_all", label: "All caseworkers", group: "Case", type: "text", sample: "Alex Smith and Sarah Connor" },
+  { tag: "supervisor_name", label: "Supervisor name", group: "Case", type: "text", sample: "Senior Partner" },
   { tag: "sponsor_name", label: "Sponsor name", group: "Case", type: "text", sample: "Acme Corp Ltd" },
   { tag: "sponsor_licence", label: "Sponsor licence number", group: "Case", type: "text", sample: "123456789" },
   { tag: "sponsor_statement", label: "Sponsor relationship statement", group: "Case", type: "text", sample: "under the sponsorship of Acme Corp Ltd" },
@@ -212,9 +213,26 @@ export function renderAppendixAHtml(application, caseRecord) {
     travelSummary = dates ? `${application.countryVisited} (${dates})` : application.countryVisited;
   }
 
-  const refusalStatus = application?.refusedVisa === "Yes"
-    ? `Visa refusal recorded (${escapeHtml(application.refusedVisaCountry || "UK")}${application.refusedVisaDate ? " on " + formatDate(application.refusedVisaDate) : ""})`
-    : "No adverse immigration history or visa refusals recorded";
+  let refusalStatus = "No adverse immigration history or visa refusals recorded";
+  const rawRefusals = Array.isArray(application?.visaRefusals) && application.visaRefusals.length > 0
+    ? application.visaRefusals
+    : Array.isArray(application?.refusalHistory) && application.refusalHistory.length > 0
+      ? application.refusalHistory
+      : null;
+
+  if (rawRefusals && rawRefusals.length > 0) {
+    refusalStatus = rawRefusals
+      .map((r, i) => {
+        const country = r.country || "UK";
+        const dateStr = r.refusalDate ? ` (${formatDate(r.refusalDate)})` : "";
+        const typeStr = r.visaType ? ` for ${r.visaType}` : "";
+        const reasonStr = r.reason ? `: ${r.reason}` : "";
+        return `Refusal ${i + 1}: ${escapeHtml(country)}${escapeHtml(typeStr)}${dateStr}${escapeHtml(reasonStr)}`;
+      })
+      .join("<br/>");
+  } else if (application?.refusedVisa === "Yes") {
+    refusalStatus = `Visa refusal recorded (${escapeHtml(application.refusedVisaCountry || "UK")}${application.refusedVisaDate ? " on " + formatDate(application.refusedVisaDate) : ""})`;
+  }
 
   return `
 <div class="ccl-appendix-a">
@@ -444,6 +462,19 @@ export async function buildCclContext({ tenantDb, caseRecord, ccl = null, organi
           where: { userId: caseRecord.candidateId },
           order: [["id", "DESC"]],
         });
+        if (application?.id && tenantDb?.CandidateVisaRefusal) {
+          try {
+            const refusals = await tenantDb.CandidateVisaRefusal.findAll({
+              where: { applicationId: application.id },
+              order: [["refusalDate", "ASC"], ["id", "ASC"]],
+            });
+            if (refusals?.length) {
+              application.visaRefusals = refusals.map((r) => (r?.toJSON ? r.toJSON() : r));
+            }
+          } catch (err) {
+            logger.warn({ err }, "buildCclContext: CandidateVisaRefusal load failed");
+          }
+        }
       }
       if (tenantDb?.User) {
         candidateUser = await tenantDb.User.findByPk(caseRecord.candidateId, {
@@ -622,6 +653,10 @@ export async function buildCclContext({ tenantDb, caseRecord, ccl = null, organi
   // Appendix A
   set("appendix_a", renderAppendixAHtml(application, caseRecord));
 
+  // Supervisor
+  const supervisorName = organisation?.supervisor_name || organisation?.supervisor || "";
+  set("supervisor_name", supervisorName);
+
   // Organisation — the tenant Organisation row exposes name / primaryEmail /
   // country / logoUrl (not address/email/phone), so map those correctly.
   set("org_name", organisation?.name || "");
@@ -728,5 +763,61 @@ export function interpolateCclHtml(html, values = {}) {
     }
   }
 
+  // 8. CCL-4: In ILR letters, remove inappropriate Skilled Worker guidance link
+  const visaLower = String(values.visa_type || "").toLowerCase();
+  if (visaLower.includes("indefinite") || visaLower.includes("ilr") || visaLower.includes("settlement")) {
+    out = out.replace(
+      /\s*&amp;\s*<a[^>]*href="[^"]*appendix-skilled-worker"[^>]*>[\s\S]*?<\/a>/gi,
+      ""
+    );
+  }
+
+  // 9. CCL-3: Fix known proofreading defects from original firm templates
+  out = out.replace(/\b05 years\b/g, "5 years");
+  out = out.replace(/\bpreferable in writing\b/gi, "preferably in writing");
+  out = out.replace(/\bpro rota\b/gi, "pro rata");
+  out = out.replace(/\brespond you within 3 days\b/gi, "respond to you within 3 days");
+
   return out;
 }
+
+/**
+ * Detects unresolved placeholder markers in generated/draft CCL HTML (CCL-5).
+ * Checks for:
+ *   - un-interpolated {{tags}}
+ *   - blank fill lines: ____ (4 or more underscores not preceded by "Signed:")
+ *   - blank ellipses: …… (2 or more)
+ * Returns { valid: boolean, missing: string[] }
+ */
+export function findUnresolvedPlaceholders(html) {
+  if (!html) return { valid: false, missing: ["No content in document"] };
+  const missing = [];
+
+  // 1. Unresolved {{tags}}
+  const tagMatches = html.match(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g);
+  if (tagMatches) {
+    for (const tm of tagMatches) {
+      const clean = tm.replace(/[{}]/g, "").trim();
+      if (!missing.includes(clean)) missing.push(`tag {{${clean}}}`);
+    }
+  }
+
+  // 2. Dotted or underscore fill lines (e.g. "Dear ____", "Sponsor: ____")
+  // Allow physical sign-off lines: "Signed: ______", "Signature: ______", "Date: ______"
+  const cleanHtml = html.replace(/(?:Signed|Signature|Date):\s*[_.\u2026]{3,}/gi, "");
+  const blankUnderscores = cleanHtml.match(/(?:Dear|Sponsor|Employer|Ref|Passport|Name|Address|Salary)?\s*[_]{4,}/gi);
+  if (blankUnderscores && blankUnderscores.length > 0) {
+    missing.push("unfilled underscore blanks (____)");
+  }
+
+  const blankEllipses = cleanHtml.match(/[\u2026]{2,}|\.{5,}/g);
+  if (blankEllipses && blankEllipses.length > 0) {
+    missing.push("unfilled ellipses (……)");
+  }
+
+  return {
+    valid: missing.length === 0,
+    missing,
+  };
+}
+

@@ -145,11 +145,25 @@ function injectTags(html, rule = {}) {
     "{{bank_payment_instructions}}"
   );
 
+  // Fix CCL-4: In ILR templates, remove the inappropriate Skilled Worker guidance link
+  if (rule.name?.includes("Indefinite") || /ilr/i.test(rule.name)) {
+    out = out.replace(
+      /\s*&amp;\s*<a[^>]*href="[^"]*appendix-skilled-worker"[^>]*>[\s\S]*?<\/a>/gi,
+      ""
+    );
+  }
+
+  // Fix CCL-3 Proofreading typos from source documents
+  out = out.replace(/\b05 years\b/g, "5 years");
+  out = out.replace(/\bpreferable in writing\b/gi, "preferably in writing");
+  out = out.replace(/\bpro rota\b/gi, "pro rata");
+  out = out.replace(/\brespond you within 3 days\b/gi, "respond to you within 3 days");
+
   return out;
 }
 
 // Bump when injectTags() changes so stored templates are upgraded ONCE.
-export const CCL_SEED_VERSION = 5;
+export const CCL_SEED_VERSION = 6;
 const SEED_MARKER = `<!-- ccl-seed:v${CCL_SEED_VERSION} -->`;
 const SEED_MARKER_RE = /<!-- ccl-seed:v(\d+) -->/;
 // Text that only ever came from an old/buggy import (hard-coded adviser, the

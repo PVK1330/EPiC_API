@@ -13,6 +13,7 @@ import {
   interpolateCclHtml,
   renderInstallmentPlanHtml,
   renderBankPaymentInstructionsHtml,
+  findUnresolvedPlaceholders,
 } from "../../../services/cclTags.service.js";
 import {
   generateCclHtmlForCase,
@@ -375,6 +376,21 @@ export const issueCaseCcl = async (req, res) => {
       where: { caseId: caseRecord.id },
       defaults: { caseId: caseRecord.id, status: "issued" },
     });
+
+    // CCL-5: Ensure no unresolved placeholders remain before issuing
+    const { html } = await generateCclHtmlForCase({
+      tenantDb: req.tenantDb,
+      caseRecord,
+      ccl,
+    });
+    const placeholderCheck = findUnresolvedPlaceholders(html);
+    if (!placeholderCheck.valid) {
+      return bad(
+        res,
+        `Cannot issue Client Care Letter with unresolved placeholders: ${placeholderCheck.missing.join(", ")}`,
+        422
+      );
+    }
 
     // Force regeneration from the latest draft/template. Remember the previous
     // document so it can be removed once the new one is generated.
