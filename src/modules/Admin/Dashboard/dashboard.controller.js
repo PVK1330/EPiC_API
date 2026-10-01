@@ -155,11 +155,11 @@ export const getDashboardStats = async (req, res) => {
     const candidateService = new CandidateService(req.tenantDb);
     // Phase 2 UAT 3.1: per-firm alert window (default 90 days), not a fixed 30.
     const visaExpiryAlertDays = await getVisaExpiryAlertDays(req.tenantDb);
-    const [visaExpiryAlerts, sponsorExpiryAlerts] = await Promise.all([
-      candidateService.countUpcomingVisaExpiryAlerts({
+    const [visaStats, sponsorExpiryAlerts] = await Promise.all([
+      candidateService.getVisaExpiryAlertStats({
         organisationId: req.user?.organisation_id,
         windowDays: visaExpiryAlertDays,
-      }).catch(() => 0),
+      }).catch(() => ({ upcoming: 0, expired: 0, total: 0 })),
       req.tenantDb.SponsorProfile.count({
         where: {
           licenceExpiryDate: {
@@ -171,6 +171,8 @@ export const getDashboardStats = async (req, res) => {
         }
       }).catch(() => 0)
     ]);
+    const visaExpiryAlerts = visaStats?.upcoming || 0;
+    const visaExpiredAlerts = visaStats?.expired || 0;
 
     // Get financial statistics
     const { CasePayment, VisaType } = req.tenantDb;
@@ -240,6 +242,7 @@ export const getDashboardStats = async (req, res) => {
           newImmigrationCases: recentCases,
           unassignedCases,
           visaExpiryAlerts,
+          visaExpiredAlerts,
           visaExpiryAlertDays,
           sponsorExpiryAlerts,
           completionRate: totalCases > 0 ? Math.round((completedCases / totalCases) * 100) : 0
