@@ -524,10 +524,12 @@ export class CandidateService {
     });
 
     const visaExpiryAlertDays = await getVisaExpiryAlertDays(this.repository.tenantDb);
-    const visaExpiryAlertsCount = await this.countUpcomingVisaExpiryAlerts({
+    const visaStats = await this.getVisaExpiryAlertStats({
       organisationId: orgId,
       windowDays: visaExpiryAlertDays,
     });
+    const visaExpiryAlertsCount = visaStats.upcoming;
+    const visaExpiredAlertsCount = visaStats.expired;
 
     return {
       candidates: candidatesWithCurrent,
@@ -539,8 +541,11 @@ export class CandidateService {
       },
       visaExpiryAlerts: {
         count: visaExpiryAlertsCount,
+        expiredCount: visaExpiredAlertsCount,
+        total: visaStats.total,
       },
       visaExpiryAlertsCount,
+      visaExpiredAlertsCount,
       visaExpiryAlertDays,
     };
   }
@@ -1412,7 +1417,13 @@ export class CandidateService {
    * - Window: upcoming within windowDays; when not given, the firm's setting
    *   (sla_settings.visa_expiry_alert_days, default 90 — Phase 2 UAT 3.1).
    */
-  async countUpcomingVisaExpiryAlerts(options = {}) {
+  /**
+   * Retrieves visa expiry alert statistics:
+   * - expired: visas already expired before today (effective_visa_end_date < windowStart).
+   * - upcoming: visas expiring within windowDays (effective_visa_end_date between windowStart and windowEnd).
+   * - total: expired + upcoming.
+   */
+  async getVisaExpiryAlertStats(options = {}) {
     const organisationId = options?.organisationId ?? options?.organisation_id ?? null;
     const windowDays =
       parseInt(options?.windowDays, 10) || (await getVisaExpiryAlertDays(this.repository.tenantDb));
@@ -1457,11 +1468,11 @@ export class CandidateService {
           AND COALESCE(u.status, 'active') <> 'inactive'
           AND (:orgId::int IS NULL OR u.organisation_id = :orgId::int)
       )
-      SELECT COUNT(*)::int AS count
+      SELECT 
+        COUNT(CASE WHEN effective_visa_end_date < :windowStart THEN 1 END)::int AS expired_count,
+        COUNT(CASE WHEN effective_visa_end_date >= :windowStart AND effective_visa_end_date <= :windowEnd THEN 1 END)::int AS upcoming_count
       FROM candidates_with_expiry
-      WHERE effective_visa_end_date IS NOT NULL
-        AND effective_visa_end_date >= :windowStart
-        AND effective_visa_end_date <= :windowEnd;
+      WHERE effective_visa_end_date IS NOT NULL;
     `;
 
     try {
@@ -1473,11 +1484,28 @@ export class CandidateService {
           windowEnd,
         },
       });
-      return parseInt(rows?.[0]?.count, 10) || 0;
+      const expired = parseInt(rows?.[0]?.expired_count, 10) || 0;
+      const upcoming = parseInt(rows?.[0]?.upcoming_count, 10) || 0;
+      return {
+        expired,
+        upcoming,
+        total: expired + upcoming,
+        windowDays,
+      };
     } catch (err) {
-      logger.error({ err }, "countUpcomingVisaExpiryAlerts: query error");
-      return 0;
+      logger.error({ err }, "getVisaExpiryAlertStats: query error");
+      return { expired: 0, upcoming: 0, total: 0, windowDays };
     }
+  }
+
+  async countUpcomingVisaExpiryAlerts(options = {}) {
+    const stats = await this.getVisaExpiryAlertStats(options);
+    return stats.upcoming;
+  }
+
+  async countExpiredVisaAlerts(options = {}) {
+    const stats = await this.getVisaExpiryAlertStats(options);
+    return stats.expired;
   }
 }
 

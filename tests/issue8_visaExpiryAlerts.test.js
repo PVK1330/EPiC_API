@@ -170,7 +170,7 @@ describe('Issue #8: Visa Expiry Alerts Widget Real Count', async () => {
       organisation_id: org.id,
     });
 
-    const count = await candidateService.countUpcomingVisaExpiryAlerts({ organisationId: org.id });
+    const count = await candidateService.countUpcomingVisaExpiryAlerts({ organisationId: org.id, windowDays: 30 });
     assert.equal(count, 0, 'Past expiries and expiries > 30 days must not be counted');
   });
 
