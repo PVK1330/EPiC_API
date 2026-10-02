@@ -33,6 +33,7 @@ import { permissionNamesToModuleIds } from '../../constants/platformModules.js';
 import { signToken, signShortToken, signImpersonationToken, verifyToken, getCookieConfig } from '../../config/jwt.config.js';
 import { redeemImpersonationTicket } from '../../services/impersonationTicket.service.js';
 import { toPublicImagePath } from '../../utils/storagePath.util.js';
+import { ROLES } from '../../middlewares/role.middleware.js';
 import logger from '../../utils/logger.js';
 
 const RESET_TOKEN_EXPIRY = '10m';
@@ -1025,10 +1026,36 @@ export const login = catchAsync(async (req, res) => {
     }
   }
 
+  let can_add_clients = false;
+  const userPermissions = [];
+  if (user.role_id === ROLES.ADMIN || user.role_id === ROLES.SUPERADMIN) {
+    can_add_clients = true;
+    userPermissions.push("admin.candidates.create");
+  } else if (user.role_id === ROLES.CASEWORKER && user.organisation_id) {
+    try {
+      const dbName =
+        req.organisationContext?.organisation?.database_name ||
+        (await platformDb.Organisation.findByPk(user.organisation_id, { attributes: ['database_name'] }))?.database_name;
+      if (dbName) {
+        const tenantDb = getTenantDb(dbName);
+        const profile = await tenantDb.CaseworkerProfile.findOne({
+          where: { user_id: user.id },
+          attributes: ['can_add_clients'],
+        });
+        can_add_clients = Boolean(profile?.can_add_clients);
+        if (can_add_clients) {
+          userPermissions.push("caseworker.candidates.create");
+        }
+      }
+    } catch (_) {}
+  }
+
   return ApiResponse.success(res, 'Login successful.', {
     user: {
       ...buildLoginUserResponse(user, roleMeta),
       organisation,
+      can_add_clients,
+      permissions: userPermissions,
     },
     token,
     allowedModules,
@@ -1160,8 +1187,20 @@ export const getMe = catchAsync(async (req, res) => {
     }
   }
 
+  const permissions = req.user.permissions || [];
+  const can_add_clients = Boolean(
+    req.user.can_add_clients ||
+    permissions.includes("caseworker.candidates.create") ||
+    permissions.includes("admin.candidates.create")
+  );
+
   return ApiResponse.success(res, 'User profile', {
-    user: { ...buildLoginUserResponse(user, roleMeta), organisation },
+    user: {
+      ...buildLoginUserResponse(user, roleMeta),
+      organisation,
+      permissions,
+      can_add_clients,
+    },
     allowedModules
   });
 });

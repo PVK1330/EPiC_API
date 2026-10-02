@@ -261,7 +261,7 @@ export class CandidateService {
         // staff set it on the case (its reference is then re-issued to match).
         const visaTypeId = null;
 
-        const caseworkerId = application.caseworkerId;
+        const caseworkerId = application.caseworkerId || (performedByUser?.role_id === ROLES.CASEWORKER ? performedByUser.id : null);
         const assignedcaseworkerId = caseworkerId ? [Number(caseworkerId)] : null;
         const caseId = await generateCaseId(this.repository.tenantDb, { transaction: t, organisationId: organisation_id, visaTypeId });
 

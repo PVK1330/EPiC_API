@@ -208,10 +208,14 @@ export const dropdownVisaType = async (req, res) => {
     const rows = await req.tenantDb.VisaType.findAll({
       order: [["sort_order", "ASC"], ["id", "ASC"]],
     });
+    const mapped = rows.map(mapVisaType);
     res.status(200).json({
       status: "success",
       message: "Visa types retrieved.",
-      data: { visa_types: rows.map(mapVisaType) },
+      data: {
+        visa_types: mapped,
+        visaTypes: mapped,
+      },
     });
   } catch (error) {
     logger.error({ err: error }, "dropdownVisaType error");

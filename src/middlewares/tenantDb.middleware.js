@@ -135,7 +135,20 @@ export async function attachTenantDb(req, res, next) {
         req.user.permissions = perms;
       } else {
         const permCacheKey = `user:${orgId}:${req.user.id}`;
-        let perms = getCachedPermissions(permCacheKey);
+        let cached = getCachedPermissions(permCacheKey);
+        let perms = null;
+        let canAddClients = false;
+
+        if (cached) {
+          if (Array.isArray(cached)) {
+            perms = cached;
+            canAddClients = cached.includes("caseworker.candidates.create");
+          } else if (typeof cached === "object") {
+            perms = cached.perms;
+            canAddClients = Boolean(cached.canAddClients);
+          }
+        }
+
         if (!perms) {
           const userWithPermissions = await req.tenantDb.User.findByPk(
             req.user.id,
@@ -155,6 +168,12 @@ export async function attachTenantDb(req, res, next) {
                     },
                   ],
                 },
+                {
+                  model: req.tenantDb.CaseworkerProfile,
+                  as: "caseworkerProfile",
+                  attributes: ["can_add_clients"],
+                  required: false,
+                },
               ],
             },
           );
@@ -162,9 +181,17 @@ export async function attachTenantDb(req, res, next) {
           perms = userWithPermissions?.role?.permissions
             ? userWithPermissions.role.permissions.map((p) => p.name)
             : [];
-          setCachedPermissions(permCacheKey, perms);
+
+          canAddClients = Boolean(userWithPermissions?.caseworkerProfile?.can_add_clients);
+          if (canAddClients) {
+            perms = Array.from(new Set([...perms, "caseworker.candidates.create"]));
+          }
+
+          setCachedPermissions(permCacheKey, { perms, canAddClients });
         }
+
         req.user.permissions = perms;
+        req.user.can_add_clients = canAddClients;
       }
     } catch (permErr) {
       logger.error({ err: permErr }, "Error loading tenant permissions");

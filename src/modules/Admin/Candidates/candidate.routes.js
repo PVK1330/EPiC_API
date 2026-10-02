@@ -3,7 +3,7 @@ import * as controller from './candidate.controller.js';
 import { validate } from '../../../middlewares/validate.middleware.js';
 import * as schema from '../../../validations/candidate.validation.js';
 import { verifyTokenAndTenant } from '../../../middlewares/authStack.middleware.js';
-import { checkRole, ensureSelfOrRole, ROLES, ADMIN_ROLES } from '../../../middlewares/role.middleware.js';
+import { checkRole, checkAnyPermission, ensureSelfOrRole, ROLES, ADMIN_ROLES } from '../../../middlewares/role.middleware.js';
 import * as candidateApplicationController from '../../Candidate/Application/candidateApplication.controller.js';
 import { handleBulkImportUpload } from '../../../middlewares/upload.middleware.js';
 import logger from '../../../utils/logger.js';
@@ -50,12 +50,20 @@ const logCreateCandidateRequest = (req, res, next) => {
 
 router.post(
   "/send-credentials",
-  checkRole(ADMIN_ROLES),
+  checkRole(STAFF),
+  checkAnyPermission(["admin.candidates.create", "caseworker.candidates.create"]),
   validate(schema.sendCredentialsToClientSchema, 'sendCredentialsToClientSchema'),
   controller.sendCredentialsToClient
 );
 
-router.post("/", checkRole(STAFF), logCreateCandidateRequest, validate(schema.createCandidateSchema, 'createCandidateSchema'), controller.createCandidate);
+router.post(
+  "/",
+  checkRole(STAFF),
+  checkAnyPermission(["admin.candidates.create", "caseworker.candidates.create"]),
+  logCreateCandidateRequest,
+  validate(schema.createCandidateSchema, 'createCandidateSchema'),
+  controller.createCandidate
+);
 
 router.get("/", checkRole(STAFF), controller.getAllCandidates);
 router.get("/visa-expiry-alerts", checkRole(STAFF), controller.getVisaExpiryAlertsCount);
