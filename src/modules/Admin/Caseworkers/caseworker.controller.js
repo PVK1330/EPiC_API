@@ -25,6 +25,7 @@ import {
 } from '../../../utils/tenantScope.js';
 import logger from '../../../utils/logger.js';
 import { excludeSensitiveUserAttrs, SENSITIVE_USER_FIELDS } from '../../../utils/userAttributes.js';
+import { invalidatePermCache } from '../../../services/orgCache.service.js';
 
 const CASEWORKER_ROLE = ROLES.CASEWORKER;
 
@@ -266,12 +267,17 @@ const PROFILE_KEYS = [
   "emergency_contact_name",
   "emergency_contact_phone",
   "notes",
+  "can_add_clients",
 ];
 
 function pickProfileFields(body) {
   const out = {};
   for (const key of PROFILE_KEYS) {
-    if (body[key] !== undefined && body[key] !== null && String(body[key]).trim() !== "") {
+    if (key === "can_add_clients") {
+      if (body[key] !== undefined && body[key] !== null) {
+        out[key] = Boolean(body[key]);
+      }
+    } else if (body[key] !== undefined && body[key] !== null && String(body[key]).trim() !== "") {
       out[key] = body[key];
     }
   }
@@ -1020,6 +1026,10 @@ export const updateCaseworker = async (req, res) => {
         user_id: caseworker.id,
         ...profileInput,
       });
+    }
+
+    if (organisationId) {
+      invalidatePermCache(`user:${organisationId}:${caseworker.id}`);
     }
 
     const updatedCaseworker = await req.tenantDb.User.findOne({

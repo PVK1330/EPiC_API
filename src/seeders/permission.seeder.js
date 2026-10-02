@@ -151,6 +151,7 @@ const PERMISSIONS_DATA = [
   // People Module
   { name: 'caseworker.sponsors.view', description: 'View sponsor profiles', module: 'people', action: 'view_sponsors', resource: 'people' },
   { name: 'caseworker.candidates.view', description: 'View candidate profiles', module: 'people', action: 'view_candidates', resource: 'people' },
+  { name: 'caseworker.candidates.create', description: 'Create and add candidate/client profiles', module: 'people', action: 'create_candidates', resource: 'people' },
   
   // Other Module
   { name: 'caseworker.messages.view', description: 'View messages', module: 'other', action: 'view_messages', resource: 'other' },
@@ -213,13 +214,14 @@ const ROLE_PERMISSIONS = {
 const getCaseworkerPermissions = () => {
   return PERMISSIONS_DATA
     .filter(p => 
-      p.module === 'dashboard' ||
+      (p.module === 'dashboard' ||
       p.module === 'cases' ||
       p.module === 'workflow' ||
       p.module === 'documents' ||
       p.module === 'people' ||
       p.module === 'other' ||
-      p.module === 'account'
+      p.module === 'account') &&
+      p.name !== 'caseworker.candidates.create'
     )
     .map(p => p.name);
 };
