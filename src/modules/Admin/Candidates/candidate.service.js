@@ -243,10 +243,20 @@ export class CandidateService {
       // newUser is the Platform User instance, but it's already mirrored to Tenant
 
       if (application && typeof application === "object") {
+        const rawApp = { ...application };
+        if (
+          rawApp.applicationType &&
+          !['single', 'family'].includes(String(rawApp.applicationType).trim().toLowerCase())
+        ) {
+          if (!rawApp.visaType) {
+            rawApp.visaType = rawApp.applicationType;
+          }
+          rawApp.applicationType = 'Single';
+        }
         const existingApp = await this.repository.findApplicationByUserId(newUser.id, t);
         const appPayload = {
           userId: newUser.id,
-          ...sanitizeApplicationPayload(application),
+          ...sanitizeApplicationPayload(rawApp),
           organisation_id,
         };
         if (existingApp) {
@@ -647,7 +657,17 @@ export class CandidateService {
       await candidate.update(updateData, { transaction: t });
 
       if (application && typeof application === "object") {
-        const sanitizedApp = sanitizeApplicationPayload(application);
+        const rawApp = { ...application };
+        if (
+          rawApp.applicationType &&
+          !['single', 'family'].includes(String(rawApp.applicationType).trim().toLowerCase())
+        ) {
+          if (!rawApp.visaType) {
+            rawApp.visaType = rawApp.applicationType;
+          }
+          rawApp.applicationType = 'Single';
+        }
+        const sanitizedApp = sanitizeApplicationPayload(rawApp);
         const existingApp = await this.repository.findApplicationByUserId(id, t);
         let targetApp;
         if (existingApp) {
@@ -770,7 +790,17 @@ export class CandidateService {
 
     const { userPatch, applicationPatch, caseworkerId } =
       splitApplicationUpdatePayload(applicationData);
-    const sanitizedApplication = sanitizeApplicationPayload(applicationPatch);
+    const rawApp = { ...applicationPatch };
+    if (
+      rawApp.applicationType &&
+      !['single', 'family'].includes(String(rawApp.applicationType).trim().toLowerCase())
+    ) {
+      if (!rawApp.visaType) {
+        rawApp.visaType = rawApp.applicationType;
+      }
+      rawApp.applicationType = 'Single';
+    }
+    const sanitizedApplication = sanitizeApplicationPayload(rawApp);
 
     // BUG-002: release an email/mobile held only by a deactivated account so
     // the Edit Client form can move it onto this client.
