@@ -28,6 +28,7 @@ import fs from "fs";
 import path from "path";
 import { promisify } from "util";
 import { fileURLToPath } from "url";
+import pg from "pg";
 
 const execFileAsync = promisify(execFile);
 
@@ -52,6 +53,12 @@ const S3_PREFIX = process.env.AWS_S3_BACKUP_PREFIX || "backups/platform";
 
 // ── Retention ──────────────────────────────────────────────────────────────────
 const KEEP_LAST_N = 30;
+
+// ── Tenant databases ───────────────────────────────────────────────────────────
+// Set DAILY_BACKUP_TENANTS=false to back up only the platform DB (old behaviour).
+const BACKUP_TENANTS = String(process.env.DAILY_BACKUP_TENANTS ?? "true").toLowerCase() !== "false";
+const PG_DUMP_BIN = process.env.PG_DUMP_PATH || "pg_dump";
+const DB_NAME_RE = /^[A-Za-z0-9_]{1,63}$/;
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -78,12 +85,12 @@ function todayStamp() {
  * Run pg_dump | gzip > outFile using child_process.spawn so the compressed
  * stream never has to fully materialise in memory.
  */
-function runPgDump(outFile) {
+function runPgDump(dbName, outFile) {
   return new Promise((resolve, reject) => {
     const env = { ...process.env, PGPASSWORD: DB_PASS };
 
     const dump = spawn(
-      "pg_dump",
+      PG_DUMP_BIN,
       [
         `--host=${DB_HOST}`,
         `--port=${DB_PORT}`,
@@ -92,7 +99,7 @@ function runPgDump(outFile) {
         "--format=plain",
         "--no-owner",
         "--no-acl",
-        DB_NAME,
+        dbName,
       ],
       { env, stdio: ["ignore", "pipe", "pipe"] }
     );
@@ -144,14 +151,15 @@ async function uploadToS3(localFile, s3Key) {
 }
 
 /**
- * Keep only the most recent KEEP_LAST_N platform backup files; delete older ones.
+ * Keep only the most recent KEEP_LAST_N backup files in `dir` whose names match
+ * `<prefix>-YYYY-MM-DD.sql.gz`; delete older ones.
  */
-function pruneOldBackups() {
+function pruneOldBackups(dir = BACKUP_DIR, prefix = "platform") {
   let files;
   try {
     files = fs
-      .readdirSync(BACKUP_DIR)
-      .filter((f) => /^platform-\d{4}-\d{2}-\d{2}\.sql\.gz$/.test(f))
+      .readdirSync(dir)
+      .filter((f) => f.startsWith(`${prefix}-`) && /-\d{4}-\d{2}-\d{2}\.sql\.gz$/.test(f))
       .sort() // ISO dates sort lexicographically
       .reverse(); // newest first
   } catch {
@@ -161,12 +169,61 @@ function pruneOldBackups() {
   const toDelete = files.slice(KEEP_LAST_N);
   for (const f of toDelete) {
     try {
-      fs.unlinkSync(path.join(BACKUP_DIR, f));
+      fs.unlinkSync(path.join(dir, f));
       log(`Pruned old backup: ${f}`);
     } catch (err) {
       logErr(`Could not delete old backup ${f}`, err);
     }
   }
+}
+
+/** Physical database names of every organisation, read from the platform DB. */
+async function listTenantDatabases() {
+  const client = new pg.Client({
+    host: DB_HOST,
+    port: Number(DB_PORT),
+    user: DB_USER,
+    password: DB_PASS,
+    database: DB_NAME,
+  });
+  await client.connect();
+  try {
+    const { rows } = await client.query(
+      "SELECT DISTINCT database_name FROM organisations WHERE database_name IS NOT NULL AND database_name <> '' ORDER BY database_name",
+    );
+    const { rows: existing } = await client.query("SELECT datname FROM pg_database");
+    const present = new Set(existing.map((r) => r.datname));
+    const names = rows.map((r) => r.database_name).filter((n) => DB_NAME_RE.test(n) && n !== DB_NAME);
+    for (const n of names.filter((n) => !present.has(n))) {
+      log(`WARN: skipping ${n} — listed on an organisation but the database does not exist`);
+    }
+    return names.filter((n) => present.has(n));
+  } finally {
+    await client.end().catch(() => {});
+  }
+}
+
+/** Back up every tenant DB into backups/tenants/<db>/<db>-YYYY-MM-DD.sql.gz. A failure on one DB does not stop the rest. */
+async function backupTenants(stamp) {
+  const names = await listTenantDatabases();
+  const ok = [];
+  const failed = [];
+  for (const db of names) {
+    const dir = path.join(BACKUP_DIR, "tenants", db);
+    const file = path.join(dir, `${db}-${stamp}.sql.gz`);
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+      await runPgDump(db, file);
+      ok.push(db);
+      log(`Tenant backup written: ${db} (${(fs.statSync(file).size / 1024 / 1024).toFixed(2)} MB)`);
+      pruneOldBackups(dir, db);
+    } catch (err) {
+      try { fs.unlinkSync(file); } catch { /* nothing partial to remove */ }
+      failed.push(`${db}: ${String(err.message).split(/\r?\n/)[0]}`);
+      logErr(`Tenant backup failed: ${db}`, err);
+    }
+  }
+  return { ok, failed };
 }
 
 // ── Main ───────────────────────────────────────────────────────────────────────
@@ -183,7 +240,7 @@ async function main() {
 
   // 1. Dump
   log(`Running pg_dump → ${outFile}`);
-  await runPgDump(outFile);
+  await runPgDump(DB_NAME, outFile);
 
   const stat = fs.statSync(outFile);
   const sizeMb = (stat.size / 1024 / 1024).toFixed(2);
@@ -206,8 +263,19 @@ async function main() {
   pruneOldBackups();
   log(`Local retention: keeping last ${KEEP_LAST_N} backups`);
 
+  // 4. Tenant databases (one file per organisation)
+  let tenants = { ok: [], failed: [] };
+  if (BACKUP_TENANTS) {
+    tenants = await backupTenants(stamp);
+    log(`Tenant backups: ${tenants.ok.length} ok, ${tenants.failed.length} failed`);
+  }
+
   log(`=== EPiC Platform DB Backup COMPLETE ===`);
-  return { filename, sizeMb: parseFloat(sizeMb) };
+  if (tenants.failed.length) {
+    // Non-zero exit so the daily job sends its failure alert; platform + other tenants are already saved.
+    throw new Error(`${tenants.failed.length} tenant backup(s) failed: ${tenants.failed.join(" | ")}`);
+  }
+  return { filename, sizeMb: parseFloat(sizeMb), tenantsBackedUp: tenants.ok.length };
 }
 
 // Allow import as a module (called from the cron job) or direct invocation
