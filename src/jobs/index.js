@@ -65,6 +65,8 @@
  * â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
  */
 
+// Also registered below: backup-reminder (09:00 daily, env BACKUP_REMINDER_CRON) and
+// backup-maintenance (hourly at :30).
 import cron from "node-cron";
 import { processScheduledNotifications } from "../services/licenceScheduled.service.js";
 import { runComplianceAlerts } from "../services/complianceAlerts.service.js";
@@ -76,6 +78,7 @@ import { resetSandboxEnvironments } from "../services/sandbox.service.js";
 import { runDailyBackup } from "./dailyBackup.job.js";
 import { runInformationRequestedReminders } from "./reminder.job.js";
 import { runMonthlyComplianceReviewJob } from "./monthlyComplianceReview.job.js";
+import { runBackupReminder, runBackupMaintenance } from "./backupReminder.job.js";
 import logger from "../utils/logger.js";
 
 const TZ = "Asia/Kolkata";
@@ -142,6 +145,18 @@ const JOBS = [
     schedule:    "0 8 1 * *",   // 08:00 IST on the 1st of every month (Section N)
     description: "Generate monthly compliance review: 5-section frozen report (Summary, Expiring, History, Missing Docs, Risk Movement) + email to Sponsor / Caseworkers / Admins",
     fn:          runMonthlyComplianceReviewJob,
+  },
+  {
+    name:        "backup-reminder",
+    schedule:    process.env.BACKUP_REMINDER_CRON || "0 9 * * *", // 09:00 IST daily (env: BACKUP_REMINDER_CRON)
+    description: "Remind org admins / superadmin to take a backup when the last one is older than the configured window (deduped per window)",
+    fn:          runBackupReminder,
+  },
+  {
+    name:        "backup-maintenance",
+    schedule:    "30 * * * *",  // hourly at :30
+    description: "Delete expired backup files and drop old pre-restore safety databases",
+    fn:          runBackupMaintenance,
   },
 ];
 

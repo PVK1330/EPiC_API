@@ -21,6 +21,8 @@ import webhookRoutes from './Webhooks/webhook.routes.js';
 import usageRoutes from './Usage/usage.routes.js';
 import gdprRoutes from './GDPR/gdpr.routes.js';
 import sandboxRoutes from './Sandbox/sandbox.routes.js';
+import backupSettingsRoutes from './Backup/backupSettings.routes.js';
+import backupRoutes from './Backup/backup.routes.js';
 
 const router = express.Router();
 
@@ -43,6 +45,9 @@ router.use('/usage', requirePlatformPermission('platform.usage.view', 'platform.
 router.use('/gdpr', requirePlatformPermission('platform.gdpr.view', 'platform.gdpr.manage'), gdprRoutes);
 // Week 8 — Demo/sandbox environments
 router.use('/sandbox', requirePlatformPermission('platform.sandbox.view', 'platform.sandbox.manage'), sandboxRoutes);
+// Database backup/restore. /settings must be mounted BEFORE /backups so it isn't captured by /:id.
+router.use('/backups/settings', requirePlatformPermission('platform.backups.view', 'platform.backups.manage'), backupSettingsRoutes);
+router.use('/backups', requirePlatformPermission('platform.backups.view', 'platform.backups.manage'), backupRoutes);
 
 router.get('/team/modules', requirePlatformPermission('platform.team.view', 'platform.team.manage'), teamController.listPlatformModules);
 router.get('/team/export/excel', requirePlatformPermission('platform.team.view', 'platform.team.manage'), teamController.exportTeamMembersExcel);
