@@ -3,6 +3,7 @@ import { getTenantDb } from "../services/tenantDb.service.js";
 import { isPlatformStaffUser, isSuperAdminRole } from "../utils/tenantScope.js";
 import { hasFullAccessRole } from "./role.middleware.js";
 import logger from "../utils/logger.js";
+import { isOrgRestoring } from "../services/restoreGate.service.js";
 import {
   getCachedOrg,
   setCachedOrg,
@@ -84,6 +85,15 @@ export async function attachTenantDb(req, res, next) {
 
       orgData = { status: org.status, database_name: org.database_name };
       setCachedOrg(orgId, orgData);
+    }
+
+    // Maintenance gate: org database is being swapped by a backup restore.
+    if (isOrgRestoring(orgId)) {
+      return res.status(503).json({
+        status: "error",
+        message: "Organisation is being restored, try again shortly",
+        data: null,
+      });
     }
 
     // A suspended org normally can't reach tenant-scoped routes. The exception is
