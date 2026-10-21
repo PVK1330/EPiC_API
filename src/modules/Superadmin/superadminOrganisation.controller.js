@@ -404,6 +404,27 @@ export const getOrganisationById = async (req, res) => {
   }
 };
 
+/**
+ * Organisation code used for candidate self-registration and as the Case ID prefix.
+ * Generated automatically at onboarding when not supplied (from the slug, else the
+ * name), and always unique. Returns null only when a supplied code is already taken.
+ */
+async function resolveUniqueOrgCode(requested, slug, name) {
+  const clean = (v) => String(v || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const taken = async (c) => !!(await Organisation.findOne({ where: { code: c }, attributes: ["id"] }));
+
+  const manual = clean(requested).slice(0, 20);
+  if (manual) return (await taken(manual)) ? null : manual;
+
+  const base = clean(slug).slice(0, 10) || clean(name).slice(0, 10) || "ORG";
+  if (!(await taken(base))) return base;
+  for (let i = 2; i < 1000; i += 1) {
+    const candidate = `${base.slice(0, 20 - String(i).length)}${i}`;
+    if (!(await taken(candidate))) return candidate;
+  }
+  return `${base.slice(0, 12)}${Date.now().toString(36).toUpperCase()}`.slice(0, 20);
+}
+
 export const createOrganisation = async (req, res) => {
   try {
     const { name, slug, code, plan, plan_id, status, primaryEmail, country } = req.body;
@@ -436,9 +457,14 @@ export const createOrganisation = async (req, res) => {
     if (exists) {
       finalSlug = `${finalSlug}-${Date.now().toString(36)}`;
     }
-    const orgCode = code && String(code).trim()
-      ? String(code).trim().toUpperCase()
-      : finalSlug.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10);
+    const orgCode = await resolveUniqueOrgCode(code, finalSlug, name);
+    if (!orgCode) {
+      return res.status(400).json({
+        status: "error",
+        message: "This organisation code is already in use. Choose a different code or leave it blank to auto-generate.",
+        data: null,
+      });
+    }
 
     const physicalEnabled = isPhysicalTenantDatabaseEnabled();
     let databaseName = null;
@@ -621,9 +647,14 @@ export const createOrganisationWithAdmin = async (req, res) => {
     if (exists) {
       finalSlug = `${finalSlug}-${Date.now().toString(36)}`;
     }
-    const orgCode = code && String(code).trim()
-      ? String(code).trim().toUpperCase()
-      : finalSlug.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10);
+    const orgCode = await resolveUniqueOrgCode(code, finalSlug, name);
+    if (!orgCode) {
+      return res.status(400).json({
+        status: "error",
+        message: "This organisation code is already in use. Choose a different code or leave it blank to auto-generate.",
+        data: null,
+      });
+    }
 
     if (physicalEnabled) {
       provisionMeta = await provisionOrganisationTenantDatabase(finalSlug);
@@ -1189,10 +1220,11 @@ export const createOrganisationAdmin = async (req, res) => {
       status: "active",
     });
 
-    const loginUrl =
-      process.env.FRONTEND_URL ||
+    const loginUrl = `${(
+      process.env.FRONTEND_URL?.split(",")[0]?.trim() ||
       process.env.CLIENT_URL ||
-      "http://localhost:5173";
+      "http://localhost:5173"
+    ).replace(/\/+$/, "")}/login`;
 
     let mailResult = { sent: false, reason: "not_attempted" };
 

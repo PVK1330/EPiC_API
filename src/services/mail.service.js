@@ -1,4 +1,7 @@
 import dns from "dns/promises";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 import nodemailer from "nodemailer";
 import platformDb from "../models/index.js";
 import { getSettingsByNamespace } from "./settings.service.js";
@@ -336,13 +339,49 @@ function normalizeMailAttachments(attachments) {
     }));
 }
 
+const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const LOGO_DIRS = [
+  "assets",
+  "storage/private/platform",
+  "storage/private/superadmin",
+  "storage/private/organisations",
+  "storage/private/avatars",
+];
+const LOCAL_IMG_RE = /(<img\b[^>]*?\bsrc=")https?:\/\/[^"\/]+\/(?:api\/public\/images|assets)\/([^"?#]+)(?:[?#][^"]*)?(")/gi;
+
+/**
+ * Logos are served from our own API (BASE_URL), which mail clients can't reach
+ * on localhost / private hosts. Embed any logo whose file exists on this server
+ * as an inline CID attachment so it always renders; external URLs are untouched.
+ */
+export function inlineLocalImages(html) {
+  if (typeof html !== "string" || !html.includes("<img")) return { html, cidAttachments: [] };
+  const cidAttachments = [];
+  const seen = new Map();
+  const out = html.replace(LOCAL_IMG_RE, (match, pre, rawName, post) => {
+    let name;
+    try { name = decodeURIComponent(rawName); } catch { return match; }
+    name = path.basename(name);
+    if (seen.has(name)) return `${pre}cid:${seen.get(name)}${post}`;
+    const dir = LOGO_DIRS.find((d) => fs.existsSync(path.join(SERVER_ROOT, d, name)));
+    if (!dir) return match;
+    const cid = `logo${cidAttachments.length}@epic`;
+    cidAttachments.push({ filename: name, path: path.join(SERVER_ROOT, dir, name), cid });
+    seen.set(name, cid);
+    return `${pre}cid:${cid}${post}`;
+  });
+  return { html: out, cidAttachments };
+}
+
 /** Low-level send — no failure notification (avoids loops). */
 async function sendMailWithConfig(config, { to, subject, html, text, replyTo, attachments, fromName }) {
   const transport = getTransporterForConfig(config);
   const from = formatFromAddress(config, fromName);
   const sender = String(config.user || "").trim();
   const reply = replyTo ?? (config.replyTo ? String(config.replyTo).trim() : undefined);
-  const mailAttachments = normalizeMailAttachments(attachments);
+  const inlined = inlineLocalImages(html);
+  html = inlined.html;
+  const mailAttachments = [...(normalizeMailAttachments(attachments) || []), ...inlined.cidAttachments];
 
   return transport.sendMail({
     from,

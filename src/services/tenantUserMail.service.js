@@ -85,7 +85,7 @@ export async function sendTenantAdminWelcomeEmail({ user, plainPassword, organis
     login_url: loginUrl, org_name: branding.orgName,
     _branding: branding, _badge: "Administrator",
   };
-  const credBlock = credentialsBlockHtml({ email: user.email, password: plainPassword, loginUrl, mainLoginUrl, loginUrlLabel: "Admin Portal" });
+  const credBlock = credentialsBlockHtml({ branding, email: user.email, password: plainPassword, loginUrl, mainLoginUrl, loginUrlLabel: "Admin Portal" });
   const fromDb = await buildFromDbTemplate(tenantDb, "welcome_org_admin", vars, credBlock);
   const subject = fromDb?.subject ?? `${branding.orgName} — Your admin account is ready`;
   const html = fromDb?.html ?? generateAdminCredentialsTemplate(user.email, plainPassword, loginUrl, mainLoginUrl, branding);
@@ -104,7 +104,7 @@ export async function sendTenantCaseworkerWelcomeEmail({
     login_url: loginUrl, org_name: branding.orgName,
     _branding: branding, _badge: "Team Access",
   };
-  const credBlock = credentialsBlockHtml({ email: user.email, password: plainPassword, loginUrl, mainLoginUrl });
+  const credBlock = credentialsBlockHtml({ branding, email: user.email, password: plainPassword, loginUrl, mainLoginUrl });
   const fromDb = await buildFromDbTemplate(tenantDb, "welcome_caseworker", vars, credBlock);
   const subject = fromDb?.subject ?? `${branding.orgName} — Your caseworker account is ready`;
   const html = fromDb?.html ?? generateCaseworkerWelcomeTemplate({ name, email: user.email, password: plainPassword, loginUrl, mainLoginUrl, branding });
@@ -123,7 +123,7 @@ export async function sendTenantSponsorWelcomeEmail({
     login_url: loginUrl, org_name: branding.orgName,
     _branding: branding, _badge: "Sponsor Access",
   };
-  const credBlock = credentialsBlockHtml({ email: user.email, password: plainPassword, loginUrl, mainLoginUrl, loginUrlLabel: "Sponsor Portal" });
+  const credBlock = credentialsBlockHtml({ branding, email: user.email, password: plainPassword, loginUrl, mainLoginUrl, loginUrlLabel: "Sponsor Portal" });
   const fromDb = await buildFromDbTemplate(tenantDb, "welcome_sponsor", vars, credBlock);
   const subject = fromDb?.subject ?? `${branding.orgName} — Your sponsor account is ready`;
   const html = fromDb?.html ?? generateSponsorWelcomeTemplate({ name, email: user.email, password: plainPassword, loginUrl, mainLoginUrl, branding });

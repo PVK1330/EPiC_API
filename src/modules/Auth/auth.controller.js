@@ -11,7 +11,6 @@ import { getOrganisationEmailBranding } from '../../utils/emailBranding.js';
 import { sendPasswordResetOtpEmail } from '../../services/tenantUserMail.service.js';
 import { sendTransactionalEmail } from '../../services/mail.service.js';
 import { ensureCandidateEnquiryCase } from '../../services/candidateOnboarding.service.js';
-import { buildTenantFrontendUrls } from '../../utils/organisationHost.js';
 import { buildJwtPayload, resolveDefaultOrganisationId, isSuperAdminRole, isPlatformStaffUser } from '../../utils/tenantScope.js';
 import {
   findPlatformUserByEmail,
@@ -588,10 +587,8 @@ export const verifyOTP = catchAsync(async (req, res) => {
     return ApiResponse.error(res, "Registration unavailable: no default organisation configured.", 503);
   }
 
-  const orgRow = await platformDb.Organisation.findByPk(orgId, { attributes: ["slug"] });
-  const loginUrl = orgRow?.slug
-    ? `${buildTenantFrontendUrls(orgRow.slug).subdomain}/login`
-    : `${process.env.FRONTEND_URL?.split(",")[0]?.trim() || "http://localhost:5173"}/login`;
+  // Emails always carry the main portal URL (never a slug/subdomain URL).
+  const loginUrl = `${process.env.FRONTEND_URL?.split(",")[0]?.trim() || "http://localhost:5173"}/login`;
 
   const verifiedUser = await createUserOnPlatformAndTenant(tenantDb, {
     first_name: unverifiedUser.first_name,
@@ -1383,10 +1380,7 @@ export const setPassword = catchAsync(async (req, res) => {
     await mirrorPlatformUserById(user.id);
   }
 
-  const orgSlug = req.organisationContext?.organisation?.slug;
-  const loginUrl = orgSlug
-    ? `${buildTenantFrontendUrls(orgSlug).subdomain}/login`
-    : `${process.env.FRONTEND_URL?.split(",")[0]?.trim() || "http://localhost:5173"}/login`;
+  const loginUrl = `${process.env.FRONTEND_URL?.split(",")[0]?.trim() || "http://localhost:5173"}/login`;
 
   const setPasswordOrgId = user.organisation_id ?? req.organisationContext?.organisation?.id ?? null;
   const setPasswordBranding = await getOrganisationEmailBranding(setPasswordOrgId);

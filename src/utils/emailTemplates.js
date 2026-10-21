@@ -90,7 +90,7 @@ export function generateCredentialsTemplate(
     title: `Welcome to ${name}`,
     messageHtml:
       "Your account is active. Use the credentials below to sign in and continue your immigration case.",
-    bodyHtml: credentialsBlockHtml({ email, password, loginUrl, mainLoginUrl }),
+    bodyHtml: credentialsBlockHtml({ email, password, loginUrl, mainLoginUrl, branding }),
     ctaUrl: loginUrl,
     ctaLabel: "Sign in to your dashboard",
     securityHtml:
@@ -134,6 +134,7 @@ export function generateAdminCredentialsTemplate(
       loginUrl: lUrl,
       mainLoginUrl: mUrl,
       loginUrlLabel: "Admin Portal",
+      branding: br,
       organisationId: ext.organisationId,
       organisationCode: ext.organisationCode,
       selfRegistrationUrl: ext.selfRegistrationUrl,
@@ -173,6 +174,7 @@ export function generateOrganisationWelcomeTemplate({
       password,
       loginUrl,
       loginUrlLabel: "Workspace Login",
+      branding,
       organisationId,
       organisationCode,
       selfRegistrationUrl,
@@ -199,7 +201,7 @@ export function generateCaseworkerWelcomeTemplate({
     title: `Welcome, ${name}`,
     messageHtml:
       "Your caseworker account is ready. Log in to start managing cases and collaborating with your team.",
-    bodyHtml: credentialsBlockHtml({ email, password, loginUrl, mainLoginUrl }),
+    bodyHtml: credentialsBlockHtml({ email, password, loginUrl, mainLoginUrl, branding }),
     ctaUrl: loginUrl,
     ctaLabel: "Sign in to your dashboard",
   });
@@ -226,6 +228,7 @@ export function generateSponsorWelcomeTemplate({
       loginUrl,
       mainLoginUrl,
       loginUrlLabel: "Sponsor Portal",
+      branding,
     }),
     ctaUrl: loginUrl,
     ctaLabel: "Sign in to sponsor portal",
@@ -247,7 +250,7 @@ export function generateCandidateWelcomeTemplate({
     title: `Welcome, ${candidateName}`,
     messageHtml:
       `Your ${brandName(branding)} account is ready. Sign in to submit your visa enquiry, upload documents, and track your case.`,
-    bodyHtml: credentialsBlockHtml({ email, password, loginUrl, mainLoginUrl }),
+    bodyHtml: credentialsBlockHtml({ email, password, loginUrl, mainLoginUrl, branding }),
     ctaUrl: loginUrl,
     ctaLabel: "Sign in & start visa enquiry",
   });
