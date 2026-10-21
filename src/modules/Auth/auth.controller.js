@@ -151,6 +151,12 @@ async function findOrganisationByPublicId(rawValue) {
   }
   const norm = value.toLowerCase().replace(/[\s._-]+/g, "");
   const orgs = await platformDb.Organisation.findAll({ attributes });
+  const squash = (s) => String(s || "").toLowerCase().replace(/[\s._-]+/g, "");
+  // Prefer an exact slug/name/code match over the looser prefix match below.
+  const exact = orgs.filter(
+    (org) => norm && [squash(org.slug), squash(org.name), squash(org.code)].includes(norm),
+  );
+  if (exact.length === 1) return exact[0];
   const matches = orgs.filter((org) => {
     const slug = String(org.slug || "").toLowerCase().replace(/[\s._-]+/g, "");
     const name = String(org.name || "").toLowerCase().replace(/[\s._-]+/g, "");
@@ -389,6 +395,11 @@ export const register = catchAsync(async (req, res) => {
     bodyOrgId !== undefined && bodyOrgId !== null && String(bodyOrgId).trim() !== ""
       ? String(bodyOrgId).trim()
       : (req.query?.organisation_id || req.query?.org || req.query?.code || req.headers?.['x-organisation-id'] || null);
+
+  // Organisation is mandatory: either an explicit ID/code or a valid org subdomain.
+  if (!explicitOrgId && !req.organisationContext?.organisation) {
+    return ApiResponse.badRequest(res, "Organisation ID or code is required. Please enter the one given by your adviser.");
+  }
 
   if (explicitOrgId && !req.organisationContext?.organisation) {
     const org = await findOrganisationByPublicId(explicitOrgId);
