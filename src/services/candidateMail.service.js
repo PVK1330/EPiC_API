@@ -36,7 +36,7 @@ export async function sendCandidateWelcomeEmail({ user, plainPassword, organisat
       };
       subject = interpolate(row.subject, vars) || subject;
       const messageHtml = interpolate(row.body, vars, true).replace(/\n/g, "<br>");
-      const credBlock = credentialsBlockHtml({ email: user.email, password: plainPassword, loginUrl, mainLoginUrl });
+      const credBlock = credentialsBlockHtml({ branding, email: user.email, password: plainPassword, loginUrl, mainLoginUrl });
       html = wrapEpicEmail({
         branding,
         pageTitle: subject,
@@ -84,6 +84,7 @@ export async function sendCandidateCredentialsEmail({
   `;
 
   const credBlock = credentialsBlockHtml({
+    branding,
     email: user.email,
     password: plainPassword,
     loginUrl,

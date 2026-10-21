@@ -14,7 +14,6 @@
  */
 import platformDb from "../models/index.js";
 import { getSettingsByNamespace } from "../services/settings.service.js";
-import { buildTenantFrontendUrls } from "./organisationHost.js";
 import logger from "./logger.js";
 
 import { toPublicImagePath } from "./storagePath.util.js";
@@ -109,30 +108,24 @@ async function resolvePlatformBranding() {
 
 async function resolveOrgBranding(organisationId) {
   const org = await platformDb.Organisation.findByPk(organisationId, {
-    attributes: ["id", "name", "slug", "logoUrl", "primaryEmail"],
+    attributes: ["id", "name", "slug", "code", "logoUrl", "primaryEmail"],
   });
   if (!org) return resolvePlatformBranding();
 
   const platform = await resolvePlatformBranding();
 
-  let portalUrl = platform.portalUrl;
-  try {
-    if (org.slug) {
-      const { subdomain } = buildTenantFrontendUrls(org.slug);
-      portalUrl = `${subdomain.replace(/\/+$/, "")}/login`;
-    }
-  } catch {
-    /* keep platform portal fallback */
-  }
+  // Emails always link to the main portal, never a slug/subdomain URL.
+  const portalUrl = platform.portalUrl;
 
   const support = String(org.primaryEmail || "").trim() || platform.supportEmail;
 
   return {
     isPlatform: false,
+    organisationId: org.id,
+    organisationCode: String(org.code || "").trim() || null,
     orgName: String(org.name || "").trim() || platform.orgName,
-    // null when the org has no logo → template falls back to the org-name wordmark
-    // (we deliberately do NOT show the EPiC platform logo on a tenant's mail).
-    logoUrl: absoluteImageUrl(org.logoUrl),
+    // Org's own logo, else the logo set by the superadmin (platform branding).
+    logoUrl: absoluteImageUrl(org.logoUrl) || platform.logoUrl,
     // For PDF generation: org logo first, then platform/superadmin logo, then null.
     // PDF callers use this to resolve the file from local storage; they fall back to
     // the hardcoded assets file only when this is also null.
