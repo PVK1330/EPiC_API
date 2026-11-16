@@ -5,6 +5,6 @@
 -- model attributes, so the missing columns caused every GET /api/superadmin/audit-log
 -- to fail with a 500 (column "user_id" does not exist).
 ALTER TABLE "platform_audit_logs"
-  ADD COLUMN IF NOT EXISTS "user_id" INTEGER NULL REFERENCES "users" ("id"),
+  ADD COLUMN IF NOT EXISTS "user_id" INTEGER NULL REFERENCES "users" ("id") ON DELETE SET NULL,
   ADD COLUMN IF NOT EXISTS "details" TEXT NULL,
   ADD COLUMN IF NOT EXISTS "ip_address" VARCHAR(100) NULL;
