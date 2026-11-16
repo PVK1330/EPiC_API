@@ -26,6 +26,23 @@ export default async function seedAdmin() {
     };
 
     const existing = await platformDb.User.findOne({ where: { email } });
+
+    // The seeded superadmin's email may have been changed after first boot. In that case the
+    // default mobile is already taken by that account, and creating a new row would violate
+    // idx_users_mobile_unique and abort startup. Leave the existing account untouched.
+    if (!existing) {
+      const mobileOwner = await platformDb.User.findOne({
+        where: { country_code: userData.country_code, mobile: userData.mobile },
+      });
+      if (mobileOwner) {
+        logger.warn(
+          { userId: mobileOwner.id, email: mobileOwner.email },
+          `Superadmin seed skipped: ${userData.country_code} ${userData.mobile} already belongs to another account`,
+        );
+        return;
+      }
+    }
+
     if (existing) {
       await existing.update(userData);
       logger.info(`✔ Superadmin ready: ${email}`);
