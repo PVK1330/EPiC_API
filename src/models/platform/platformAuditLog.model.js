@@ -11,6 +11,7 @@ export default (sequelize, DataTypes) => {
         type: DataTypes.INTEGER,
         allowNull: true,
         references: { model: 'users', key: 'id' },
+        onDelete: 'SET NULL',
       },
       action: {
         type: DataTypes.STRING(100),
