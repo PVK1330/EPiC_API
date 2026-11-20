@@ -137,13 +137,13 @@ const JOBS = [
   {
     name:        "information-requested-reminders",
     schedule:    "30 10 * * *", // 10:30 IST daily (after compliance-alerts at 09:00)
-    description: "Chaser email + audit log for compliance items with no sponsor response in 3+ working days",
+    description: "Chaser email + audit log for compliance items with no organisation response in 3+ working days",
     fn:          runInformationRequestedReminders,
   },
   {
     name:        "monthly-compliance-review",
     schedule:    "0 8 1 * *",   // 08:00 IST on the 1st of every month (Section N)
-    description: "Generate monthly compliance review: 5-section frozen report (Summary, Expiring, History, Missing Docs, Risk Movement) + email to Sponsor / Caseworkers / Admins",
+    description: "Generate monthly compliance review: 5-section frozen report (Summary, Expiring, History, Missing Docs, Risk Movement) + email to Organisation / Caseworkers / Admins",
     fn:          runMonthlyComplianceReviewJob,
   },
   {

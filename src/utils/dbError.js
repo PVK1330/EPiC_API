@@ -19,7 +19,7 @@ export function formatDbError(err) {
       return "Mobile number is already registered.";
     }
     if (rawPath.includes("sponsor") || message.includes("sponsor")) {
-      return "A sponsor profile already exists for this user.";
+      return "An organisation profile already exists for this user.";
     }
     if (rawPath.includes("caseworker") || message.includes("caseworker")) {
       return "A caseworker profile already exists for this user.";

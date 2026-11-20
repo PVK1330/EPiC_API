@@ -145,7 +145,7 @@ export async function resolveDataCaptureTemplate(tenantDb, visaTypeId) {
   });
 }
 
-function clientDisplayName(candidate, fallback = "Client") {
+function clientDisplayName(candidate, fallback = "Individual") {
   if (!candidate) return fallback;
   const name = `${candidate.first_name || ""} ${candidate.last_name || ""}`.trim();
   return name || fallback;
@@ -191,7 +191,7 @@ export function buildDataCaptureSheetAttachment({
   const aoa = [
     [sheetName],
     ["Case reference", caseRef],
-    ["Client name", clientName],
+    ["Individual name", clientName],
     ["Visa type", visaTypeName || "—"],
     ["Date issued", issuedDate],
     [],
@@ -259,7 +259,7 @@ export async function buildDataCaptureSheetPdfAttachment({
     ],
     rows: [
       { label: "Case reference", value: caseRef || "—" },
-      { label: "Client name", value: clientName },
+      { label: "Individual name", value: clientName },
       { label: "Visa type", value: visaTypeName || "—" },
       { label: "Date issued", value: issuedDate },
     ],

@@ -239,7 +239,7 @@ export async function deleteSponsorIntakeDocument(req, res) {
       action: "INTAKE_DOCUMENT_REMOVED",
       resource: `LicenceApplication:${id}`,
       status: "Success",
-      details: `Sponsor removed uploaded file for document "${doc.documentName}" (key: ${documentKey})`,
+      details: `Organisation removed uploaded file for document "${doc.documentName}" (key: ${documentKey})`,
       req,
       organisationId,
     });

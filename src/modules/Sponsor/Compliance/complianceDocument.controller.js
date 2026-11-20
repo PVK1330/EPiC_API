@@ -210,7 +210,7 @@ export const updateDocumentMetadata = async (req, res) => {
           type: NotificationTypes.INFO,
           priority: NotificationPriority.MEDIUM,
           title: 'Compliance document re-submitted',
-          message: `A sponsor re-submitted "${document.documentType}" after an information request.`,
+          message: `An organisation re-submitted "${document.documentType}" after an information request.`,
           actionType: 'compliance_resubmit',
           entityType: 'compliance_document',
           entityId: document.id,

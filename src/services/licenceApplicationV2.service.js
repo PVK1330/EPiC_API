@@ -530,7 +530,7 @@ export async function submitApplication({ tenantDb, application }) {
   const contactName =
     [contact.firstName, contact.lastName].filter(Boolean).join(" ").trim() ||
     profile?.companyName ||
-    "Sponsor";
+    "Organisation";
 
   const fee = computeFee({
     routes: routeCodes,
@@ -547,7 +547,7 @@ export async function submitApplication({ tenantDb, application }) {
       profile?.companyName ||
       full.organisationInfo?.organisationType ||
       application.companyName ||
-      "Sponsor",
+      "Organisation",
     registrationNumber:
       full.organisationInfo?.companiesHouseNumber ||
       application.registrationNumber ||

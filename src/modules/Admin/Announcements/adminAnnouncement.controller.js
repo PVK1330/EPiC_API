@@ -10,8 +10,8 @@ const ALLOWED_TARGET_ROLES = new Set(['caseworker', 'sponsor', 'candidate', 'bus
 
 const ROLE_EXPORT_LABEL = {
   caseworker: 'Caseworkers',
-  sponsor: 'Sponsors',
-  business: 'Sponsors',
+  sponsor: 'Organisations',
+  business: 'Organisations',
   candidate: 'Candidates',
 };
 
@@ -81,7 +81,7 @@ export const createTenantAnnouncement = async (req, res) => {
     if (!roles.length) {
       return res.status(400).json({
         status: 'error',
-        message: 'Select at least one audience: caseworker, sponsor, or candidate',
+        message: 'Select at least one audience: caseworker, organisation, or candidate',
         data: null,
       });
     }
@@ -239,7 +239,7 @@ export const updateTenantAnnouncement = async (req, res) => {
     if (!roles.length) {
       return res.status(400).json({
         status: 'error',
-        message: 'Select at least one audience: caseworker, sponsor, or candidate',
+        message: 'Select at least one audience: caseworker, organisation, or candidate',
         data: null,
       });
     }

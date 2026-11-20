@@ -62,7 +62,7 @@ export function targetDateVisaWarning(targetSubmissionDate, visaExpiryDate) {
   if (!target || !expiry || target <= expiry) return null;
   const fmt = (iso) =>
     new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
-  return `The target submission date (${fmt(target)}) is after the client's visa expiry (${fmt(expiry)}). In-country applications usually have to be made before current leave expires.`;
+  return `The target submission date (${fmt(target)}) is after the individual's visa expiry (${fmt(expiry)}). In-country applications usually have to be made before current leave expires.`;
 }
 
 /**

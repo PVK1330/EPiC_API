@@ -252,7 +252,7 @@ export async function createSponsoredWorker(tenantDb, {
     }
     if (Number(cosReq.sponsorId) !== Number(sponsorId)) {
       throw ownershipError(
-        "CoS request does not belong to this sponsor.",
+        "CoS request does not belong to this organisation.",
         "REQUEST_OWNERSHIP_VIOLATION"
       );
     }
@@ -282,7 +282,7 @@ export async function createSponsoredWorker(tenantDb, {
       }
       if (Number(allocation.sponsorId) !== Number(sponsorId)) {
         throw ownershipError(
-          "CoS allocation record does not belong to this sponsor.",
+          "CoS allocation record does not belong to this organisation.",
           "ALLOCATION_OWNERSHIP_VIOLATION"
         );
       }
@@ -477,7 +477,7 @@ export async function assignCosToWorker(tenantDb, { workerId, sponsorId, cosAllo
     throw err;
   }
   if (Number(worker.sponsorId) !== Number(sponsorId)) {
-    throw ownershipError("Worker does not belong to this sponsor.", "WORKER_OWNERSHIP_VIOLATION");
+    throw ownershipError("Worker does not belong to this organisation.", "WORKER_OWNERSHIP_VIOLATION");
   }
   if (worker.workerCosNumber) {
     const err = new Error("Worker already has a CoS assigned.");
@@ -498,7 +498,7 @@ export async function assignCosToWorker(tenantDb, { workerId, sponsorId, cosAllo
       throw err;
     }
     if (Number(allocation.sponsorId) !== Number(sponsorId)) {
-      throw ownershipError("CoS allocation does not belong to this sponsor.", "ALLOCATION_OWNERSHIP_VIOLATION");
+      throw ownershipError("CoS allocation does not belong to this organisation.", "ALLOCATION_OWNERSHIP_VIOLATION");
     }
 
     const usedCount = await tenantDb.SponsoredWorker.count({

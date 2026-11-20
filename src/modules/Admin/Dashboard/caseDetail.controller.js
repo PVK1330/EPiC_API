@@ -727,7 +727,7 @@ export const updateCaseFinance = async (req, res) => {
           status: "success",
           message:
             amountStatus === "Approved"
-              ? "Fees approved and CCL sent to client"
+              ? "Fees approved and CCL sent to individual"
               : "Fee proposal returned to caseworker",
           data: {
             totalAmount: result.caseRecord.totalAmount,
@@ -749,7 +749,7 @@ export const updateCaseFinance = async (req, res) => {
           await caseData.reload();
           return res.status(200).json({
             status: "success",
-            message: "Fees approved and CCL sent to client",
+            message: "Fees approved and CCL sent to individual",
             data: {
               totalAmount: caseData.totalAmount,
               amountStatus: caseData.amountStatus,
@@ -1207,7 +1207,7 @@ export const exportCasePDF = catchAsync(async (req, res) => {
           table: {
             widths: ["30%", "70%"],
             body: [
-              ["Sponsor Entity", caseData.sponsor?.first_name || "N/A"],
+              ["Organisation Entity", caseData.sponsor?.first_name || "N/A"],
               ["Department", caseData.department?.name || "N/A"],
               ["Job Title", caseData.jobTitle || "N/A"],
               ["Salary Offered", caseData.salaryOffered || "N/A"],
@@ -1368,7 +1368,7 @@ export const exportCaseInvoicePDF = catchAsync(async (req, res) => {
 
     const candidateName = `${caseData.candidate?.first_name || ""} ${
       caseData.candidate?.last_name || ""
-    }`.trim() || "Client";
+    }`.trim() || "Individual";
     const candidateEmail = caseData.candidate?.email || "";
 
     // Prefer an existing invoice number; otherwise mint a stable-looking one.

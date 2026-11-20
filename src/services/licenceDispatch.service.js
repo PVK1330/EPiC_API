@@ -97,7 +97,7 @@ export async function dispatchDocument(tenantDb, { application, file, documentTy
     await record.update({ emailSent: true }).catch(() => {});
   }
 
-  // In-app notification to sponsor.
+  // In-app notification to organisation.
   notifyUser(tenantDb, application.userId, {
     type: NotificationTypes.INFO,
     priority: NotificationPriority.NORMAL,
@@ -118,7 +118,7 @@ export async function dispatchDocument(tenantDb, { application, file, documentTy
     action: "DOCUMENT_DISPATCHED",
     previousStatus: application.status,
     newStatus: application.status,
-    notes: `Document dispatched to sponsor: "${documentName || file.originalname}" (${DOCUMENT_TYPE_LABELS[documentType] || "other"})`,
+    notes: `Document dispatched to organisation: "${documentName || file.originalname}" (${DOCUMENT_TYPE_LABELS[documentType] || "other"})`,
     req,
   }).catch((err) => logger.warn({ err }, "dispatchDocument: audit failed"));
 

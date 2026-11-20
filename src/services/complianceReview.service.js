@@ -209,7 +209,7 @@ async function notifySponsorOfReview({ tenantDb, cfg, record, action, newStatus,
       sendEmail: action === "approve" || action === "reject" || action === "request_info",
     });
   } catch (err) {
-    logger.error({ err }, "Failed to notify sponsor of compliance review");
+    logger.error({ err }, "Failed to notify organisation of compliance review");
   }
 }
 
@@ -262,7 +262,7 @@ export async function sponsorRespond({ tenantDb, cfg, record, sponsorId, notes =
       type: NotificationTypes.INFO,
       priority: NotificationPriority.MEDIUM,
       title: `${cfg.label} re-submitted`,
-      message: `A sponsor responded to an information request on a ${cfg.label.toLowerCase()} (#${record.id}) — ready for re-review.`,
+      message: `An organisation responded to an information request on a ${cfg.label.toLowerCase()} (#${record.id}) — ready for re-review.`,
       actionType: "compliance_respond",
       entityType: cfg.entityType,
       entityId: record.id,

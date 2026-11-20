@@ -350,7 +350,7 @@ export const exportTransactionsCsv = catchAsync(async (req, res) => {
   const columns = [
     { key: 'date', header: 'Date' },
     { key: 'invoiceNumber', header: 'Invoice Number' },
-    { key: 'client', header: 'Client' },
+    { key: 'client', header: 'Individual' },
     { key: 'caseId', header: 'Case ID' },
     { key: 'amount', header: 'Amount' },
     { key: 'paymentMethod', header: 'Payment Method' },

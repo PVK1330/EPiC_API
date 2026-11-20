@@ -117,15 +117,15 @@ export async function sendTenantSponsorWelcomeEmail({
 }) {
   const { loginUrl, mainLoginUrl } = await resolveOrganisationLoginUrls(organisationId);
   const branding = await getOrganisationEmailBranding(organisationId);
-  const name = firstName || user.first_name || "Sponsor";
+  const name = firstName || user.first_name || "Organisation";
   const vars = {
     recipient_name: name, email: user.email, password: plainPassword,
     login_url: loginUrl, org_name: branding.orgName,
-    _branding: branding, _badge: "Sponsor Access",
+    _branding: branding, _badge: "Organisation Access",
   };
-  const credBlock = credentialsBlockHtml({ branding, email: user.email, password: plainPassword, loginUrl, mainLoginUrl, loginUrlLabel: "Sponsor Portal" });
+  const credBlock = credentialsBlockHtml({ branding, email: user.email, password: plainPassword, loginUrl, mainLoginUrl, loginUrlLabel: "Organisation Portal" });
   const fromDb = await buildFromDbTemplate(tenantDb, "welcome_sponsor", vars, credBlock);
-  const subject = fromDb?.subject ?? `${branding.orgName} — Your sponsor account is ready`;
+  const subject = fromDb?.subject ?? `${branding.orgName} — Your organisation account is ready`;
   const html = fromDb?.html ?? generateSponsorWelcomeTemplate({ name, email: user.email, password: plainPassword, loginUrl, mainLoginUrl, branding });
   const result = await sendCredentialsMail({ to: user.email, subject, html, organisationId });
   return { ...result, loginUrl };

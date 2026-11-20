@@ -279,7 +279,7 @@ export async function submitUkviCredentials(tenantDb, application, actorUser, bo
     action: LICENCE_AUDIT_ACTIONS.CREDENTIALS_RECEIVED,
     previousStatus: application.status,
     newStatus: application.status,
-    notes: `Sponsor submitted UKVI portal credentials (user ID: ${ukviPortalUserId})`,
+    notes: `Organisation submitted UKVI portal credentials (user ID: ${ukviPortalUserId})`,
     req,
   });
 
@@ -344,7 +344,7 @@ export async function requestCredentialResubmission(tenantDb, application, actor
     action: LICENCE_AUDIT_ACTIONS.CREDENTIALS_REQUESTED,
     previousStatus: application.status,
     newStatus: application.status,
-    notes: "Staff requested sponsor to resubmit UKVI portal credentials",
+    notes: "Staff requested organisation to resubmit UKVI portal credentials",
     req,
   });
 
@@ -394,7 +394,7 @@ export async function verifySubmittedCredentials(tenantDb, application, role, ac
   // Notify the sponsor that their credentials were verified (best-effort).
   notify
     .credentialsVerified({ tenantDb, application, role, req })
-    .catch((err) => logger.error({ err }, "verifySubmittedCredentials: sponsor notification failed"));
+    .catch((err) => logger.error({ err }, "verifySubmittedCredentials: organisation notification failed"));
 
   return { verified: true };
 }
@@ -484,8 +484,8 @@ export async function confirmUkviPayment(tenantDb, application, actorUser, req, 
     previousStatus: application.status,
     newStatus: application.status,
     notes: file?.path
-      ? "Sponsor confirmed payment made on UKVI portal (proof of payment attached)"
-      : "Sponsor confirmed payment made on UKVI portal",
+      ? "Organisation confirmed payment made on UKVI portal (proof of payment attached)"
+      : "Organisation confirmed payment made on UKVI portal",
     req,
   });
 
@@ -514,7 +514,7 @@ export async function confirmUkviPayment(tenantDb, application, actorUser, req, 
       }
 
       // Staff notification
-      const staffMsg = `${company} — the sponsor has confirmed payment of the UKVI licence fee on the UKVI portal. Please verify and confirm on your end.`;
+      const staffMsg = `${company} — the organisation has confirmed payment of the UKVI licence fee on the UKVI portal. Please verify and confirm on your end.`;
       const staffTargets = [
         ...(recipients.admin ? [{ ...recipients.admin, url: "/admin/licence-applications" }] : []),
         ...recipients.caseworkers.map((cw) => ({ ...cw, url: "/caseworker/licence-reviews" })),
@@ -526,7 +526,7 @@ export async function confirmUkviPayment(tenantDb, application, actorUser, req, 
           type: "INFO",
           priority: "HIGH",
           category: "sponsorship",
-          title: "UKVI Licence Fee — Payment Confirmed by Sponsor",
+          title: "UKVI Licence Fee — Payment Confirmed by Organisation",
           message: staffMsg,
           entityType: "licence_application",
           entityId: application.id,
@@ -576,8 +576,8 @@ export async function confirmUkviDecision(tenantDb, application, actorUser, req,
     previousStatus: application.status,
     newStatus: application.status,
     notes: file?.path
-      ? "Sponsor confirmed UKVI decision received (decision letter attached)"
-      : "Sponsor confirmed UKVI decision received",
+      ? "Organisation confirmed UKVI decision received (decision letter attached)"
+      : "Organisation confirmed UKVI decision received",
     req,
   });
 
@@ -604,7 +604,7 @@ export async function confirmUkviDecision(tenantDb, application, actorUser, req,
         });
       }
 
-      const staffMsg = `${company} — the sponsor has confirmed they received the UKVI decision. You can now record the outcome and close the case.`;
+      const staffMsg = `${company} — the organisation has confirmed they received the UKVI decision. You can now record the outcome and close the case.`;
       const staffTargets = [
         ...(recipients.admin ? [{ ...recipients.admin, url: "/admin/licence-applications" }] : []),
         ...recipients.caseworkers.map((cw) => ({ ...cw, url: "/caseworker/licence-reviews" })),
@@ -616,7 +616,7 @@ export async function confirmUkviDecision(tenantDb, application, actorUser, req,
           type: "INFO",
           priority: "HIGH",
           category: "sponsorship",
-          title: "UKVI Decision Confirmed by Sponsor — Action Required",
+          title: "UKVI Decision Confirmed by Organisation — Action Required",
           message: staffMsg,
           entityType: "licence_application",
           entityId: application.id,

@@ -266,8 +266,8 @@ const checkSponsorChangeRequestDeadlines = async (tenantDb, organisationId, toda
       await notifyAdmins(tenantDb, {
         type: NotificationTypes.WARNING,
         priority: NotificationPriority.HIGH,
-        title: "Sponsor Change Request Deadline Approaching",
-        message: `A sponsor change request (${request.changeType}) must be reported by ${deadlineLabel}.`,
+        title: "Organisation Change Request Deadline Approaching",
+        message: `An organisation change request (${request.changeType}) must be reported by ${deadlineLabel}.`,
         actionType: "sponsor_change_deadline_approaching",
         entityId: request.id,
         entityType: "sponsor_change_request",
@@ -280,7 +280,7 @@ const checkSponsorChangeRequestDeadlines = async (tenantDb, organisationId, toda
         sendEmail: true,
       });
     } catch (err) {
-      logger.error({ err }, "Failed to notify admins for sponsor change request alert");
+      logger.error({ err }, "Failed to notify admins for organisation change request alert");
     }
 
     if (request.sponsorId) {
@@ -288,8 +288,8 @@ const checkSponsorChangeRequestDeadlines = async (tenantDb, organisationId, toda
         await notifyUser(tenantDb, request.sponsorId, {
           type: NotificationTypes.WARNING,
           priority: NotificationPriority.HIGH,
-          title: "Sponsor Change Request Deadline Approaching",
-          message: `Your sponsor change request (${request.changeType}) must be reported by ${deadlineLabel}.`,
+          title: "Organisation Change Request Deadline Approaching",
+          message: `Your organisation change request (${request.changeType}) must be reported by ${deadlineLabel}.`,
           actionType: "sponsor_change_deadline_approaching",
           entityId: request.id,
           entityType: "sponsor_change_request",
@@ -301,7 +301,7 @@ const checkSponsorChangeRequestDeadlines = async (tenantDb, organisationId, toda
           organisationId,
         });
       } catch (err) {
-        logger.error({ err, sponsorId: request.sponsorId }, "Failed to notify sponsor for change request alert");
+        logger.error({ err, sponsorId: request.sponsorId }, "Failed to notify organisation for change request alert");
       }
     }
   }

@@ -90,7 +90,7 @@ export const getLinkedEntities = async (req, res) => {
 
     const profileId = await resolveOwnProfileId(req.tenantDb, userId);
     if (!profileId) {
-      return res.status(404).json({ status: 'error', message: 'Sponsor profile not found' });
+      return res.status(404).json({ status: 'error', message: 'Organisation profile not found' });
     }
 
     const groupProfiles = await resolveGroupProfiles(req.tenantDb, profileId);
@@ -140,7 +140,7 @@ export const linkSubsidiary = async (req, res) => {
 
     const profileId = await resolveOwnProfileId(req.tenantDb, userId);
     if (!profileId) {
-      return res.status(404).json({ status: 'error', message: 'Sponsor profile not found' });
+      return res.status(404).json({ status: 'error', message: 'Organisation profile not found' });
     }
 
     // Prevent a child acting as a parent.
@@ -164,7 +164,7 @@ export const linkSubsidiary = async (req, res) => {
       return res.status(400).json({ status: 'error', message: 'childSponsorProfileId must be a positive integer' });
     }
     if (childId === profileId) {
-      return res.status(400).json({ status: 'error', message: 'A sponsor cannot link to itself' });
+      return res.status(400).json({ status: 'error', message: 'An organisation cannot link to itself' });
     }
 
     // Validate the target exists.
@@ -172,7 +172,7 @@ export const linkSubsidiary = async (req, res) => {
       attributes: ['id', 'companyName'],
     });
     if (!childProfile) {
-      return res.status(404).json({ status: 'error', message: 'Target sponsor profile not found' });
+      return res.status(404).json({ status: 'error', message: 'Target organisation profile not found' });
     }
 
     // Prevent double-linking.
@@ -182,7 +182,7 @@ export const linkSubsidiary = async (req, res) => {
     if (existing) {
       return res.status(409).json({
         status: 'error',
-        message: 'This sponsor is already linked to a parent company',
+        message: 'This organisation is already linked to a parent company',
       });
     }
 
@@ -221,7 +221,7 @@ export const unlinkSubsidiary = async (req, res) => {
 
     const profileId = await resolveOwnProfileId(req.tenantDb, userId);
     if (!profileId) {
-      return res.status(404).json({ status: 'error', message: 'Sponsor profile not found' });
+      return res.status(404).json({ status: 'error', message: 'Organisation profile not found' });
     }
 
     const linkId = Number(req.params.id);
@@ -264,7 +264,7 @@ export const getConsolidatedDashboard = async (req, res) => {
 
     const profileId = await resolveOwnProfileId(req.tenantDb, userId);
     if (!profileId) {
-      return res.status(404).json({ status: 'error', message: 'Sponsor profile not found' });
+      return res.status(404).json({ status: 'error', message: 'Organisation profile not found' });
     }
 
     const groupProfiles = await resolveGroupProfiles(req.tenantDb, profileId);

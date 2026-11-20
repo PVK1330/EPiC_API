@@ -1691,7 +1691,7 @@ export const exportInvoiceReceiptPdf = catchAsync(async (req, res) => {
     amount,
     date,
     description = "Visa Application Fees",
-    candidateName = "Client",
+    candidateName = "Individual",
     isReceipt = true,
     platformName = "EPiC Immigration Services",
   } = req.validated.body || {};
@@ -1715,7 +1715,7 @@ export const exportInvoiceReceiptPdf = catchAsync(async (req, res) => {
         { label: "Qty", value: "1" },
         { label: "Unit Price", value: totalAmountStr },
         { label: "Total", value: totalAmountStr },
-        { label: "Billed To", value: candidateName || "Client" },
+        { label: "Billed To", value: candidateName || "Individual" },
         { label: "Case Reference", value: String(caseId) },
         { label: "Receipt/Invoice No", value: invoiceNo },
         { label: "Date", value: String(date) },
@@ -1730,7 +1730,7 @@ export const exportInvoiceReceiptPdf = catchAsync(async (req, res) => {
     metadata: {
       subtitle: platformName || "EPiC Immigration Services",
       reference: `Receipt/Invoice No: ${invoiceNo}`,
-      candidateName: candidateName || "Client",
+      candidateName: candidateName || "Individual",
     },
   });
 

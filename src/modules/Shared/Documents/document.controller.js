@@ -254,7 +254,7 @@ export const uploadDocuments = async (req, res) => {
     if (!userId) {
       return fail(
         400,
-        "We couldn't identify the client this document belongs to. Please open the client's case and upload it from there.",
+        "We couldn't identify the individual this document belongs to. Please open the individual's case and upload it from there.",
       );
     }
 

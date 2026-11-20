@@ -293,7 +293,7 @@ export const dropdownSponsors = async (req, res) => {
 
     res.status(200).json({
       status: "success",
-      message: "Sponsors retrieved successfully",
+      message: "Organisations retrieved successfully",
       data: { sponsors: formattedSponsors }
     });
   } catch (err) {

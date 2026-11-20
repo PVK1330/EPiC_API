@@ -81,7 +81,7 @@ export const getSponsorTimeline = async (req, res) => {
     
     res.status(200).json({ status: 'success', data: timeline });
   } catch (error) {
-    logger.error({ err: error }, 'Failed to fetch sponsor timeline');
+    logger.error({ err: error }, 'Failed to fetch organisation timeline');
     res.status(500).json({ status: 'error', message: 'Internal server error', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
   }
 };

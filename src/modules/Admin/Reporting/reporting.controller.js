@@ -664,7 +664,7 @@ export async function computePerformanceReportData(req) {
           
           return {
             id: c.caseId || `CS-${c.id}`,
-            client: c.candidate ? `${c.candidate.first_name} ${c.candidate.last_name}` : 'Unknown Client',
+            client: c.candidate ? `${c.candidate.first_name} ${c.candidate.last_name}` : 'Unknown Individual',
             type: c.visaType?.name || 'Unknown',
             status: c.status,
             date: c.created_at ? new Date(c.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Unknown',
@@ -911,7 +911,7 @@ export const exportReportingExcel = async (req, res) => {
       sheets.push({
         name: 'Finance_BySponsor',
         columns: [
-          { key: 'name', header: 'Sponsor' },
+          { key: 'name', header: 'Organisation' },
           { key: 'total', header: 'Revenue' },
         ],
         rows: financial.bySponsor || [],
@@ -946,7 +946,7 @@ export const exportReportingExcel = async (req, res) => {
           { key: 'completedCases',    header: 'Completed Cases' },
           { key: 'slaMetPct',         header: 'SLA Met %' },
           { key: 'avgCompletionDays', header: 'Avg Completion Days' },
-          { key: 'clientSatisfaction',header: 'Client Satisfaction' },
+          { key: 'clientSatisfaction',header: 'Individual Satisfaction' },
           { key: 'escalations',       header: 'Escalations' },
         ],
         rows: performance.map((p) => ({
@@ -1012,7 +1012,7 @@ export const exportReportingExcel = async (req, res) => {
             { key: 'caseworkerId',   header: 'CW ID' },
             { key: 'caseworkerName', header: 'Caseworker' },
             { key: 'caseId',         header: 'Case ID' },
-            { key: 'client',         header: 'Client' },
+            { key: 'client',         header: 'Individual' },
             { key: 'visaType',       header: 'Visa' },
             { key: 'status',         header: 'Status' },
             { key: 'date',           header: 'Date' },

@@ -532,7 +532,21 @@ export const submitApplication = async (req, res, next) => {
     const payload = pickFields(req.body || {});
 
     // BUG-007: Validate required fields on final submission (move-in date + landlord details if renting)
-    validateFinalApplicationSubmission(payload);
+    // The short "Start visa enquiry" form posts to this same endpoint with isEnquiry: true.
+    // It has no address fields, so the full-application checks must not apply to it.
+    const isEnquiry = req.body?.isEnquiry === true;
+    if (!isEnquiry) {
+      validateFinalApplicationSubmission(payload);
+    }
+    // An enquiry only registers interest: it opens a Lead case but must NOT submit or
+    // lock the application, so the client can still fill in the full form afterwards.
+    const enquiryNotes =
+      isEnquiry && typeof req.body?.enquiryNotes === 'string'
+        ? req.body.enquiryNotes.trim().slice(0, 2000)
+        : '';
+    const submitFields = isEnquiry
+      ? {}
+      : { status: 'submitted', isLocked: true, submittedAt: new Date() };
 
     // ── Uniqueness: BRP, National Insurance and passport numbers must each be
     // unique across applicants (a duplicate usually means a typo or reused doc).
@@ -570,9 +584,7 @@ export const submitApplication = async (req, res, next) => {
       if (existing) {
         await existing.update({
           ...payload,
-          status: 'submitted',
-          isLocked: true,
-          submittedAt: new Date(),
+          ...submitFields,
         }, { transaction: t });
         await existing.reload({ transaction: t });
         app = existing;
@@ -580,9 +592,9 @@ export const submitApplication = async (req, res, next) => {
         app = await req.tenantDb.CandidateApplication.create({
           userId,
           ...payload,
-          status: 'submitted',
-          isLocked: true,
-          submittedAt: new Date(),
+          status: 'draft',
+          isLocked: false,
+          ...submitFields,
         }, { transaction: t });
       }
 
@@ -614,13 +626,16 @@ export const submitApplication = async (req, res, next) => {
       });
 
       const organisationId = req.user?.organisation_id != null ? Number(req.user.organisation_id) : null;
+      const displayName = `${app.firstName || ''} ${app.lastName || ''}`.trim() || 'Individual';
 
       if (existingCase) {
         await existingCase.update(
           {
             nationality: app.nationality || existingCase.nationality,
             assignedcaseworkerId: assignedcaseworkerId || existingCase.assignedcaseworkerId,
-            status: 'Lead',
+            // An enquiry must never push an already-progressed case back to Lead.
+            ...(isEnquiry ? {} : { status: 'Lead' }),
+            ...(enquiryNotes ? { notes: enquiryNotes } : {}),
           },
           { transaction: t }
         );
@@ -635,6 +650,7 @@ export const submitApplication = async (req, res, next) => {
             priority: 'medium',
             targetSubmissionDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
             nationality: app.nationality || null,
+            notes: enquiryNotes || null,
             jobTitle: 'Candidate',
             totalAmount: 0,
             paidAmount: 0,
@@ -647,14 +663,14 @@ export const submitApplication = async (req, res, next) => {
         await notifyCaseCreated(req.tenantDb, {
           id: caseRecord.id,
           caseId: caseRecord.caseId,
-          candidateName: `${app.firstName} ${app.lastName}`,
+          candidateName: displayName,
         });
 
         await addTimelineEntry({
           tenantDb: req.tenantDb,
           caseId: caseRecord.id,
           actionType: 'case_created',
-          description: `Case ${caseRecord.caseId} created for ${app.firstName} ${app.lastName}`,
+          description: `Case ${caseRecord.caseId} created for ${displayName}`,
           performedBy: userId,
           visibility: 'public',
         });
@@ -678,7 +694,9 @@ export const submitApplication = async (req, res, next) => {
           tenantDb: req.tenantDb,
           caseId: targetCase.id,
           actionType: 'status_changed',
-          description: `Application submitted by ${app.firstName} ${app.lastName}`,
+          description: isEnquiry
+            ? `Visa enquiry submitted by ${displayName}${app.visaType ? ` (${app.visaType})` : ''}`
+            : `Application submitted by ${displayName}`,
           performedBy: userId,
           visibility: 'public',
           newValue: 'Lead',
@@ -690,7 +708,7 @@ export const submitApplication = async (req, res, next) => {
 
     res.status(201).json({
       success: true,
-      message: 'Application submitted successfully.',
+      message: isEnquiry ? 'Visa enquiry submitted successfully.' : 'Application submitted successfully.',
       data: { application },
     });
 
@@ -1899,15 +1917,15 @@ export const downloadCandidateApplicationPdf = catchAsync(async (req, res) => {
 
   const logoDataUri = await resolveOrgPdfLogoDataUri(req.user?.organisation_id);
   const candidateName =
-    `${appJson.firstName || ""} ${appJson.lastName || ""}`.trim() || "Client";
+    `${appJson.firstName || ""} ${appJson.lastName || ""}`.trim() || "Individual";
 
   const buffer = await generateBrandedPdfBuffer({
     logoDataUri,
-    title: "Client Application",
+    title: "Individual Application",
     sections,
     metadata: {
       subtitle: "Immigration application export (admin)",
-      reference: `Client application for ${candidateName}`,
+      reference: `Individual application for ${candidateName}`,
       candidateName,
     },
   });

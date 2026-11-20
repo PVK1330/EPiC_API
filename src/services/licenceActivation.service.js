@@ -288,7 +288,7 @@ async function notifySponsorLicenceActivated({
         }),
       });
     } else {
-      logger.warn({ userId }, "Licence notification: no email address found for sponsor");
+      logger.warn({ userId }, "Licence notification: no email address found for organisation");
     }
   } catch (err) {
     logger.error({ err }, "Failed to send licence granted email");

@@ -169,7 +169,7 @@ export async function sendWorkflowStageEmail({
     const portalRoot = portalBase.replace(/\/$/, "");
 
     const vars = {
-      client_name: fullName(candidate, "Client"),
+      client_name: fullName(candidate, "Individual"),
       case_ref: caseRecord.caseId || String(caseRecord.id),
       visa_type: visaType?.name || "your application",
       firm_name: branding.orgName || process.env.FIRM_NAME || "your case team",

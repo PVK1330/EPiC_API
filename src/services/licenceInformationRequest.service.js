@@ -127,7 +127,7 @@ export async function createInfoRequest(
       req,
     });
   } catch (err) {
-    logger.error({ err, requestId: infoRequest.id }, "licenceInformationRequest: sponsor notify failed");
+    logger.error({ err, requestId: infoRequest.id }, "licenceInformationRequest: organisation notify failed");
   }
 
   return infoRequest;
@@ -241,7 +241,7 @@ export async function sponsorRespond(
     action: LICENCE_AUDIT_ACTIONS.INFO_RESPONDED,
     previousStatus: application.status,
     newStatus: application.status,
-    notes: `[Request #${requestId}] Sponsor responded`,
+    notes: `[Request #${requestId}] Organisation responded`,
     req,
   });
 
@@ -390,7 +390,7 @@ export async function closeInfoRequest(
         req,
       });
     } catch (err) {
-      logger.error({ err }, "licenceInformationRequest: sponsor review-restart notify failed");
+      logger.error({ err }, "licenceInformationRequest: organisation review-restart notify failed");
     }
   }
 

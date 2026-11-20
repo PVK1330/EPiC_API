@@ -14,7 +14,7 @@ const loadApplication = async (tenantDb, id) => {
 export const getAdminSubmittedCredentials = async (req, res) => {
   try {
     const data = await getSubmittedCredentials(req.tenantDb, req.params.id);
-    if (!data) return ApiResponse.notFound(res, "No credentials submitted by sponsor yet");
+    if (!data) return ApiResponse.notFound(res, "No credentials submitted by organisation yet");
     return ApiResponse.success(res, "Submitted credentials retrieved", data);
   } catch (err) {
     logger.error({ err }, "getAdminSubmittedCredentials failed");
@@ -40,7 +40,7 @@ export const requestAdminCredentialResubmission = async (req, res) => {
     const application = await loadApplication(req.tenantDb, req.params.id);
     if (!application) return ApiResponse.notFound(res, "Licence application not found");
     const data = await requestCredentialResubmission(req.tenantDb, application, req.user, req);
-    return ApiResponse.success(res, "Resubmission request sent to sponsor", data);
+    return ApiResponse.success(res, "Resubmission request sent to organisation", data);
   } catch (err) {
     logger.error({ err }, "requestAdminCredentialResubmission failed");
     return ApiResponse.error(res, "Failed to request credential resubmission", 500, err);

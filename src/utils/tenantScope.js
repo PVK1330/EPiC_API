@@ -113,7 +113,7 @@ export async function assertUsersInOrganisation(tenantDb, candidateId, sponsorId
   }
   // A sponsor is optional (BUG-031) — only validate one that was actually given.
   if (sponsorId != null && !sponsor) {
-    const err = new Error("Sponsor not found");
+    const err = new Error("Organisation not found");
     err.status = 404;
     throw err;
   }

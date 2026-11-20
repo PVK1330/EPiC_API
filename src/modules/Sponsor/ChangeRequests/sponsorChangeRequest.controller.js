@@ -50,7 +50,7 @@ export const createChangeRequest = async (req, res) => {
 
     return res.status(201).json({ status: "success", data: newRequest });
   } catch (error) {
-    logger.error({ err: error }, "Error creating sponsor change request");
+    logger.error({ err: error }, "Error creating organisation change request");
     return res.status(500).json({ status: "error", message: "Internal server error" });
   }
 };
@@ -88,7 +88,7 @@ export const getChangeRequestsBySponsor = async (req, res) => {
       pagination: buildPaginationMeta(count, page, limit),
     });
   } catch (error) {
-    logger.error({ err: error }, "Error fetching sponsor change requests");
+    logger.error({ err: error }, "Error fetching organisation change requests");
     return res.status(500).json({ status: "error", message: "Internal server error" });
   }
 };
@@ -135,7 +135,7 @@ export const updateChangeRequestStatus = async (req, res) => {
 
     return res.status(200).json({ status: "success", data: request });
   } catch (error) {
-    logger.error({ err: error }, "Error updating sponsor change request");
+    logger.error({ err: error }, "Error updating organisation change request");
     return res.status(500).json({ status: "error", message: "Internal server error" });
   }
 };

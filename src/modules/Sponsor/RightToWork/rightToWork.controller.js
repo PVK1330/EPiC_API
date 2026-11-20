@@ -65,7 +65,7 @@ export const getAllRtwRecordsForSponsor = async (req, res) => {
       pagination: buildPaginationMeta(count, page, limit),
     });
   } catch (error) {
-    logger.error({ err: error }, "Error fetching all right to work records for sponsor");
+    logger.error({ err: error }, "Error fetching all right to work records for organisation");
     return res.status(500).json({ status: "error", message: "Internal server error" });
   }
 };

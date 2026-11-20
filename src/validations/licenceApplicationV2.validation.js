@@ -201,7 +201,7 @@ export function validateForSubmission(app) {
 
   const dec = app.declaration || {};
   if (dec.accuracyConfirmed !== true) add("declaration.accuracyConfirmed", "You must confirm the information is accurate.");
-  if (dec.dutiesUnderstood !== true) add("declaration.dutiesUnderstood", "You must confirm you understand sponsor duties.");
+  if (dec.dutiesUnderstood !== true) add("declaration.dutiesUnderstood", "You must confirm you understand organisation duties.");
   if (dec.dataConsent !== true) add("declaration.dataConsent", "You must consent to data processing.");
   if (!present(dec.signatoryName)) add("declaration.signatoryName", "Signatory name is required.");
   if (!present(dec.signedDate)) add("declaration.signedDate", "Signed date is required.");

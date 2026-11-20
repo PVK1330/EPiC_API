@@ -19,7 +19,7 @@ export async function sendCandidateWelcomeEmail({ user, plainPassword, organisat
   const branding = await getOrganisationEmailBranding(organisationId);
 
   const candidateName =
-    [user.first_name, user.last_name].filter(Boolean).join(" ").trim() || "Client";
+    [user.first_name, user.last_name].filter(Boolean).join(" ").trim() || "Individual";
 
   let subject = `${branding.orgName} — Your account & visa enquiry access`;
   let html;
@@ -40,7 +40,7 @@ export async function sendCandidateWelcomeEmail({ user, plainPassword, organisat
       html = wrapEpicEmail({
         branding,
         pageTitle: subject,
-        badge: "Client Enquiry",
+        badge: "Individual Enquiry",
         title: subject,
         messageHtml,
         bodyHtml: credBlock,
@@ -71,15 +71,15 @@ export async function sendCandidateCredentialsEmail({
   const name =
     clientName ||
     [user.first_name, user.last_name].filter(Boolean).join(" ").trim() ||
-    "Client";
+    "Individual";
 
-  const subject = "Your Client Portal Login Credentials";
+  const subject = "Your Individual Portal Login Credentials";
   const safeName = escapeHtml(name);
   const safeOrgName = escapeHtml(branding.orgName);
 
   const messageHtml = `
     <p style="margin:0 0 12px 0;">Hello <strong>${safeName}</strong>,</p>
-    <p style="margin:0 0 12px 0;">Your Client Portal account has been created by our team.</p>
+    <p style="margin:0 0 12px 0;">Your Individual Portal account has been created by our team.</p>
     <p style="margin:0 0 12px 0;">You can use the credentials below to access your application:</p>
   `;
 
@@ -89,7 +89,7 @@ export async function sendCandidateCredentialsEmail({
     password: plainPassword,
     loginUrl,
     mainLoginUrl,
-    loginUrlLabel: "Client Portal Login",
+    loginUrlLabel: "Individual Portal Login",
   });
 
   const securityHtml = `
@@ -101,12 +101,12 @@ export async function sendCandidateCredentialsEmail({
   const html = wrapEpicEmail({
     branding,
     pageTitle: subject,
-    badge: "Client Portal",
+    badge: "Individual Portal",
     title: subject,
     messageHtml,
     bodyHtml: credBlock,
     ctaUrl: loginUrl,
-    ctaLabel: "Sign in to Client Portal",
+    ctaLabel: "Sign in to Individual Portal",
     securityHtml,
   });
 

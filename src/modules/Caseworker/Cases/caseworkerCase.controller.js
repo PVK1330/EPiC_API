@@ -536,7 +536,7 @@ export const createMyCase = async (req, res) => {
     // Validate required fields
     // BUG-031: sponsorId is OPTIONAL — private clients have no sponsor.
     const validationErrors = [];
-    if (!candidateId) validationErrors.push("Client (candidateId) is required");
+    if (!candidateId) validationErrors.push("Individual (candidateId) is required");
     if (!visaTypeId) validationErrors.push("Visa Type (visaTypeId) is required");
     if (!targetSubmissionDate) validationErrors.push("Target submission date is required");
     if (validationErrors.length > 0) {
@@ -554,7 +554,7 @@ export const createMyCase = async (req, res) => {
     if (!candidate) {
       return res.status(404).json({
         status: "error",
-        message: "Client not found",
+        message: "Individual not found",
         data: null,
       });
     }
@@ -563,7 +563,7 @@ export const createMyCase = async (req, res) => {
     if (sponsorId && !sponsor) {
       return res.status(404).json({
         status: "error",
-        message: "Sponsor not found",
+        message: "Organisation not found",
         data: null,
       });
     }
@@ -1278,10 +1278,10 @@ export const exportMyCases = catchAsync(async (req, res) => {
 
     const columns = [
       { key: "caseId", header: "Case ID" },
-      { key: "candidate", header: "Client" },
-      { key: "candidateEmail", header: "Client Email" },
-      { key: "sponsor", header: "Sponsor" },
-      { key: "sponsorEmail", header: "Sponsor Email" },
+      { key: "candidate", header: "Individual" },
+      { key: "candidateEmail", header: "Individual Email" },
+      { key: "sponsor", header: "Organisation" },
+      { key: "sponsorEmail", header: "Organisation Email" },
       { key: "visaType", header: "Visa Type" },
       { key: "petitionType", header: "Application Type" },
       { key: "priority", header: "Priority" },

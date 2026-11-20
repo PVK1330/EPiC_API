@@ -73,7 +73,7 @@ export const getAllSponsors = async (req, res) => {
 
     res.status(200).json({
       status: "success",
-      message: "Sponsors retrieved successfully",
+      message: "Organisations retrieved successfully",
       data: {
         sponsors: sponsorsWithCaseCount,
         pagination: {
@@ -86,7 +86,7 @@ export const getAllSponsors = async (req, res) => {
     });
 
   } catch (error) {
-    logger.error({ err: error }, "Get All Sponsors Error");
+    logger.error({ err: error }, "Get All Organisations Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -121,7 +121,7 @@ export const getSponsorById = async (req, res) => {
     if (!sponsor) {
       return res.status(404).json({
         status: "error",
-        message: "Sponsor not found",
+        message: "Organisation not found",
         data: null
       });
     }
@@ -163,7 +163,7 @@ export const getSponsorById = async (req, res) => {
 
     res.status(200).json({
       status: "success",
-      message: "Sponsor retrieved successfully",
+      message: "Organisation retrieved successfully",
       data: {
         sponsor: sponsor.toJSON(),
         activeCases,
@@ -175,7 +175,7 @@ export const getSponsorById = async (req, res) => {
     });
 
   } catch (error) {
-    logger.error({ err: error }, "Get Sponsor by ID Error");
+    logger.error({ err: error }, "Get Organisation by ID Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",

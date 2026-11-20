@@ -245,7 +245,7 @@ export async function generateCaseClosureLetter({
     : null;
   const clientName =
     [candidate?.first_name, candidate?.last_name].filter(Boolean).join(" ").trim() ||
-    "Client";
+    "Individual";
 
   const visaType = caseRecord.visaTypeId
     ? await tenantDb.VisaType.findByPk(caseRecord.visaTypeId, {
@@ -273,7 +273,7 @@ export async function generateCaseClosureLetter({
       ],
       rows: [
         { label: "Case reference", value: caseLabel },
-        { label: "Client", value: clientName },
+        { label: "Individual", value: clientName },
         ...(visaType?.name ? [{ label: "Visa type", value: visaType.name }] : []),
         { label: "Date closed", value: closureDate },
       ],
@@ -415,7 +415,7 @@ export async function requestFinalDocuments({
       tenantDb,
       caseRecord,
       assigneeId: staffId,
-      title: `Send final documents to client — ${caseLabel}`,
+      title: `Send final documents to individual — ${caseLabel}`,
       createdBy: requestedBy || staffId,
       priority: "high",
       dueInDays: 2,

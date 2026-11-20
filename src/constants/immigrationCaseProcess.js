@@ -16,8 +16,8 @@ export const IMMIGRATION_CASE_STEPS = [
   {
     id: "client_enquiry",
     order: 1,
-    title: "Client Enquiry",
-    description: "Client contacts the firm with an immigration query.",
+    title: "Individual Enquiry",
+    description: "Individual contacts the firm with an immigration query.",
   },
   {
     id: "admin_assignment",
@@ -54,13 +54,13 @@ export const IMMIGRATION_CASE_STEPS = [
     id: "further_information_request",
     order: 7,
     title: "Further Information",
-    description: "Further information or documents requested from the client (optional).",
+    description: "Further information or documents requested from the individual (optional).",
   },
   {
     id: "draft_application_review",
     order: 8,
     title: "Draft Application Review",
-    description: "Draft application sent to the client for review and confirmation.",
+    description: "Draft application sent to the individual for review and confirmation.",
   },
   {
     id: "client_care_letter",
@@ -85,7 +85,7 @@ export const IMMIGRATION_CASE_STEPS = [
     id: "biometrics_confirmation_sent",
     order: 12,
     title: "Confirmation Sent",
-    description: "Biometrics confirmation and instructions sent to the client.",
+    description: "Biometrics confirmation and instructions sent to the individual.",
   },
   {
     id: "documents_uploaded",
@@ -103,7 +103,7 @@ export const IMMIGRATION_CASE_STEPS = [
     id: "decision_communicated",
     order: 15,
     title: "Decision Communicated",
-    description: "Decision communicated to the client.",
+    description: "Decision communicated to the individual.",
   },
   {
     id: "case_closure",
@@ -290,11 +290,11 @@ export const STAGE_GUIDANCE = {
     docs: ["All mandatory documents"],
   },
   further_information_request: {
-    actions: ["Email client for missing items", "Set follow-up date"],
+    actions: ["Email individual for missing items", "Set follow-up date"],
     docs: ["As identified in review"],
   },
   draft_application_review: {
-    actions: ["Send draft to client", "Collect written approval", "Propose CCL fees"],
+    actions: ["Send draft to individual", "Collect written approval", "Propose CCL fees"],
     docs: ["Draft application PDF"],
   },
   client_care_letter: {
@@ -314,7 +314,7 @@ export const STAGE_GUIDANCE = {
     docs: ["Appointment letter"],
   },
   biometrics_confirmation_sent: {
-    actions: ["Email client instructions", "Confirm attendance"],
+    actions: ["Email individual instructions", "Confirm attendance"],
     docs: ["Biometrics confirmation email"],
   },
   documents_uploaded: {

@@ -217,21 +217,21 @@ export function generateSponsorWelcomeTemplate({
 }) {
   return wrapEpicEmail({
     branding,
-    pageTitle: `${brandName(branding)} — Sponsor Account`,
-    badge: "Sponsor Access",
+    pageTitle: `${brandName(branding)} — Organisation Account`,
+    badge: "Organisation Access",
     title: `Welcome, ${name}`,
     messageHtml:
-      "Your sponsor account has been created. Log in to manage your licences, compliance, and sponsored workers.",
+      "Your organisation account has been created. Log in to manage your licences, compliance, and sponsored workers.",
     bodyHtml: credentialsBlockHtml({
       email,
       password,
       loginUrl,
       mainLoginUrl,
-      loginUrlLabel: "Sponsor Portal",
+      loginUrlLabel: "Organisation Portal",
       branding,
     }),
     ctaUrl: loginUrl,
-    ctaLabel: "Sign in to sponsor portal",
+    ctaLabel: "Sign in to organisation portal",
   });
 }
 
@@ -246,7 +246,7 @@ export function generateCandidateWelcomeTemplate({
   return wrapEpicEmail({
     branding,
     pageTitle: `${brandName(branding)} — Candidate Account`,
-    badge: "Client Enquiry",
+    badge: "Individual Enquiry",
     title: `Welcome, ${candidateName}`,
     messageHtml:
       `Your ${brandName(branding)} account is ready. Sign in to submit your visa enquiry, upload documents, and track your case.`,
@@ -347,7 +347,7 @@ export function generateCaseAssignmentEmailTemplate({
   branding = {},
   recipientName = "",
   caseworkerName = "",
-  candidateName = "Client",
+  candidateName = "Individual",
   caseNumber = "",
   visaType = "",
   assignedDate = "",
@@ -373,7 +373,7 @@ export function generateCaseAssignmentEmailTemplate({
   const safeActionUrl = escapeHtml(actionUrl);
 
   const detailRows = [
-    { label: "Candidate / Client", value: safeCandidateName },
+    { label: "Candidate / Individual", value: safeCandidateName },
     { label: "Case Number", value: safeCaseNumber },
     ...(safeVisaType ? [{ label: "Visa / Application Type", value: safeVisaType }] : []),
     { label: "Assigned Date", value: safeAssignedDate },
@@ -659,10 +659,10 @@ export function generateDocumentDispatchTemplate({
     title: `A document has been sent to you`,
     messageHtml: `Hi ${escapeHtml(recipientName)},<br/><br/>Your caseworker <strong>${escapeHtml(senderName)}</strong> has sent you a <strong>${typeLabel}</strong> for <strong>${escapeHtml(companyName)}</strong>.<br/><br/>Document: <strong>${escapeHtml(documentName)}</strong>${message ? `<br/><br/>Message from ${escapeHtml(senderName)}: <em>${escapeHtml(message)}</em>` : ""}`,
     bodyHtml: infoBlockHtml(
-      `The document is attached to this email. You can also view and download all documents sent to you from your sponsor portal.`,
+      `The document is attached to this email. You can also view and download all documents sent to you from your organisation portal.`,
     ),
     ctaUrl: portalUrl || null,
-    ctaLabel: portalUrl ? "Open Sponsor Portal" : "",
+    ctaLabel: portalUrl ? "Open Organisation Portal" : "",
     securityHtml:
       "This document was sent by your assigned caseworker or administrator. If you were not expecting this, please contact your caseworker directly.",
   });

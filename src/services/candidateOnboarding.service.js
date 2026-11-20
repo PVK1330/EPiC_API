@@ -81,7 +81,7 @@ export async function ensureCandidateEnquiryCase(tenantDb, userId, { visaTypeNam
     priority: "medium",
     targetSubmissionDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
     nationality: mergedProfile.nationality || null,
-    jobTitle: "Client enquiry",
+    jobTitle: "Individual enquiry",
     assignedcaseworkerId: null,
     organisation_id: resolvedOrgId,
   });

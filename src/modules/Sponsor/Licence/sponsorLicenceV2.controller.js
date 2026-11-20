@@ -163,7 +163,7 @@ export const submitApplication = async (req, res) => {
         created_by: userId,
       });
     } catch (err) {
-      logger.error({ err }, "Failed to create post-submission sponsor task");
+      logger.error({ err }, "Failed to create post-submission organisation task");
     }
 
     return res.status(200).json({ status: "success", message: "Application submitted", data: serializeApplication(submitted) });

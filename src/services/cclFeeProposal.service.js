@@ -150,7 +150,7 @@ export async function submitCclFeeProposal({
   });
 
   if (ccl.status === "issued" || ccl.status === "signed") {
-    return { ok: false, status: 400, message: "CCL already issued to client" };
+    return { ok: false, status: 400, message: "CCL already issued to individual" };
   }
 
   await ccl.update({
@@ -312,7 +312,7 @@ export async function reviewCclFeeProposal({
       tenantDb,
       caseRecord,
       performedBy: reviewedBy,
-      reason: "CCL fees approved — Client Care Letter released to client",
+      reason: "CCL fees approved — Client Care Letter released to individual",
       emailOnArrival: true,
       organisationId,
     });
@@ -330,7 +330,7 @@ export async function reviewCclFeeProposal({
     tenantDb,
     caseId: caseRecord.id,
     actionType: "communication_sent",
-    description: "Client Care Letter and fee schedule sent to client",
+    description: "Client Care Letter and fee schedule sent to individual",
     performedBy: reviewedBy,
     metadata: {
       feeAmount: ccl.feeAmount,
@@ -500,7 +500,7 @@ export async function sendCclPaymentRequest({
     tenantDb,
     caseId: caseRecord.id,
     actionType: "communication_sent",
-    description: `Client Care Letter and payment request (£${requestStr}) re-sent to client`,
+    description: `Client Care Letter and payment request (£${requestStr}) re-sent to individual`,
     performedBy,
     metadata: {
       emailSent: !!emailResult?.sent,
