@@ -74,7 +74,7 @@ export const recordLicenceGovernmentSubmission = async (req, res) => {
 export const getSubmittedLicenceCredentials = async (req, res) => {
   try {
     const data = await getSubmittedCredentials(req.tenantDb, req.licenceApplication.id);
-    if (!data) return ApiResponse.notFound(res, "No credentials submitted by sponsor yet");
+    if (!data) return ApiResponse.notFound(res, "No credentials submitted by organisation yet");
     return ApiResponse.success(res, "Submitted credentials retrieved", data);
   } catch (err) {
     logger.error({ err }, "getSubmittedLicenceCredentials failed");
@@ -100,7 +100,7 @@ export const verifyLicenceCredentials = async (req, res) => {
 export const requestCredentialsResubmission = async (req, res) => {
   try {
     const data = await requestCredentialResubmission(req.tenantDb, req.licenceApplication, req.user, req);
-    return ApiResponse.success(res, "Resubmission request sent to sponsor", data);
+    return ApiResponse.success(res, "Resubmission request sent to organisation", data);
   } catch (err) {
     logger.error({ err }, "requestCredentialsResubmission failed");
     return ApiResponse.error(res, "Failed to request credential resubmission", 500, err);

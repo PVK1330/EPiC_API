@@ -24,12 +24,12 @@ export const CCL_TAGS = [
   { tag: "org_phone", label: "Organisation phone", group: "Organisation", type: "text", sample: "+44 20 1234 5678" },
 
   // Candidate
-  { tag: "candidate_name", label: "Client full name", group: "Client", type: "text", sample: "Jane Doe" },
-  { tag: "candidate_first_name", label: "Client first name", group: "Client", type: "text", sample: "Jane" },
-  { tag: "candidate_email", label: "Client email", group: "Client", type: "text", sample: "jane.doe@example.com" },
-  { tag: "candidate_address", label: "Client address", group: "Client", type: "text", sample: "22 Park Lane, Manchester, M1 2AB" },
-  { tag: "candidate_phone", label: "Client phone", group: "Client", type: "text", sample: "+44 7700 900123" },
-  { tag: "candidate_dob", label: "Client date of birth", group: "Client", type: "text", sample: "14 March 1992" },
+  { tag: "candidate_name", label: "Individual full name", group: "Client", type: "text", sample: "Jane Doe" },
+  { tag: "candidate_first_name", label: "Individual first name", group: "Client", type: "text", sample: "Jane" },
+  { tag: "candidate_email", label: "Individual email", group: "Client", type: "text", sample: "jane.doe@example.com" },
+  { tag: "candidate_address", label: "Individual address", group: "Client", type: "text", sample: "22 Park Lane, Manchester, M1 2AB" },
+  { tag: "candidate_phone", label: "Individual phone", group: "Client", type: "text", sample: "+44 7700 900123" },
+  { tag: "candidate_dob", label: "Individual date of birth", group: "Client", type: "text", sample: "14 March 1992" },
   { tag: "passport_number", label: "Passport number", group: "Client", type: "text", sample: "123456789" },
   { tag: "nationality", label: "Nationality", group: "Client", type: "text", sample: "Indian" },
   { tag: "current_visa_type", label: "Current visa type", group: "Client", type: "text", sample: "Skilled Worker" },
@@ -46,11 +46,11 @@ export const CCL_TAGS = [
   { tag: "second_caseworker_email", label: "Second Caseworker email", group: "Case", type: "text", sample: "sarah.connor@example.com" },
   { tag: "caseworkers_all", label: "All caseworkers", group: "Case", type: "text", sample: "Alex Smith and Sarah Connor" },
   { tag: "supervisor_name", label: "Supervisor name", group: "Case", type: "text", sample: "Senior Partner" },
-  { tag: "sponsor_name", label: "Sponsor name", group: "Case", type: "text", sample: "Acme Corp Ltd" },
+  { tag: "sponsor_name", label: "Sponsoring organisation name", group: "Case", type: "text", sample: "Acme Corp Ltd" },
   { tag: "sponsor_licence", label: "Sponsor licence number", group: "Case", type: "text", sample: "123456789" },
-  { tag: "sponsor_statement", label: "Sponsor relationship statement", group: "Case", type: "text", sample: "under the sponsorship of Acme Corp Ltd" },
-  { tag: "sponsor_instruction_clause", label: "Sponsor / private client clause", group: "Case", type: "text", sample: "You instructed Elite PIC to manage your application..." },
-  { tag: "is_private_client", label: "Private client (Yes/No)", group: "Case", type: "text", sample: "Yes" },
+  { tag: "sponsor_statement", label: "Organisation relationship statement", group: "Case", type: "text", sample: "under the sponsorship of Acme Corp Ltd" },
+  { tag: "sponsor_instruction_clause", label: "Organisation / private individual clause", group: "Case", type: "text", sample: "You instructed Elite PIC to manage your application..." },
+  { tag: "is_private_client", label: "Private individual (Yes/No)", group: "Case", type: "text", sample: "Yes" },
   { tag: "date_today", label: "Today's date", group: "Case", type: "text", sample: "5 June 2026" },
   { tag: "date_issued", label: "CCL issue date", group: "Case", type: "text", sample: "5 June 2026" },
   { tag: "appendix_a", label: "Appendix A (Immigration history)", group: "Case", type: "block", sample: "[appendix A table]" },
@@ -488,8 +488,8 @@ export async function buildCclContext({ tenantDb, caseRecord, ccl = null, organi
 
   const firstName = application?.firstName || candidateUser?.first_name || "";
   const lastName = application?.lastName || candidateUser?.last_name || "";
-  set("candidate_name", fullName(firstName, lastName, "the Client"));
-  set("candidate_first_name", firstName || "Client");
+  set("candidate_name", fullName(firstName, lastName, "the Individual"));
+  set("candidate_first_name", firstName || "Individual");
   set("candidate_email", application?.email || candidateUser?.email || "");
   set("candidate_address", application?.address || "");
   set("candidate_phone", application?.contactNumber || candidateUser?.mobile || "");
@@ -553,7 +553,7 @@ export async function buildCclContext({ tenantDb, caseRecord, ccl = null, organi
   const isPrivate = Boolean(caseRecord?.isPrivateClient || !caseRecord?.sponsorId);
   let sponsorName = "";
   let sponsorLicence = "";
-  let sponsorStatement = "as an independent private client with no sponsor";
+  let sponsorStatement = "as an independent private individual with no organisation";
   const orgNameDisplay = organisation?.name || "the firm";
 
   if (!isPrivate && caseRecord?.sponsorId) {
@@ -576,7 +576,7 @@ export async function buildCclContext({ tenantDb, caseRecord, ccl = null, organi
         }
       }
     } catch (err) {
-      logger.warn({ err }, "buildCclContext: sponsor load failed");
+      logger.warn({ err }, "buildCclContext: organisation load failed");
     }
 
     if (sponsorName) {
@@ -586,9 +586,9 @@ export async function buildCclContext({ tenantDb, caseRecord, ccl = null, organi
 
   let sponsorInstructionClause = "";
   if (isPrivate) {
-    sponsorInstructionClause = `You instructed ${orgNameDisplay} to manage the application for ${visaName || "Settlement (ILR)"} as an independent private client with no sponsor.`;
+    sponsorInstructionClause = `You instructed ${orgNameDisplay} to manage the application for ${visaName || "Settlement (ILR)"} as an independent private individual with no organisation.`;
   } else {
-    sponsorInstructionClause = `You instructed ${orgNameDisplay} via your Sponsor ${sponsorName || "your sponsor"}, to manage the application of ${visaName || "your visa"} with the Sponsor/employer ${sponsorName || "your sponsor"}${sponsorLicence ? ` (sponsor licence number: ${sponsorLicence})` : ""}.`;
+    sponsorInstructionClause = `You instructed ${orgNameDisplay} via your Organisation ${sponsorName || "your organisation"}, to manage the application of ${visaName || "your visa"} with the Organisation/employer ${sponsorName || "your organisation"}${sponsorLicence ? ` (sponsor licence number: ${sponsorLicence})` : ""}.`;
   }
 
   set("sponsor_name", isPrivate ? "" : sponsorName);
@@ -735,15 +735,15 @@ export function interpolateCclHtml(html, values = {}) {
   if (values.is_private_client === "Yes") {
     out = out.replace(
       /You instructed\s+[^<]+?\s+via your Sponsor\s*[_.\u2026]+,\s*to manage the application[^<]+?\./gi,
-      values.sponsor_instruction_clause || "You instructed our firm to manage your application as an independent private client with no sponsor."
+      values.sponsor_instruction_clause || "You instructed our firm to manage your application as an independent private individual with no organisation."
     );
     out = out.replace(
       /Sponsor\/employer\s*[_.\u2026]+(?:\(sponsor licence number:\s*[_.\u2026]+\))?/gi,
-      "No sponsor (Private Client)"
+      "No organisation (Private Individual)"
     );
     out = out.replace(
       /via your Sponsor\s*[_.\u2026]+/gi,
-      "as a private client (no sponsor)"
+      "as a private individual (no organisation)"
     );
   }
 

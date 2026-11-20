@@ -72,7 +72,7 @@ export async function grantLicence(
     // (UKVI emails it to them directly). Only then may the case team grant/close.
     if (!application.ukviDecisionConfirmedAt) {
       const err = new Error(
-        "The sponsor has not yet confirmed they received the UKVI decision. The licence can only be granted once the sponsor confirms the outcome on their portal.",
+        "The organisation has not yet confirmed they received the UKVI decision. The licence can only be granted once the organisation confirms the outcome on their portal.",
       );
       err.statusCode = 409;
       throw err;
@@ -188,7 +188,7 @@ export async function grantLicence(
     licenceNumber,
     expiryDate: resolvedExpiry,
     req,
-  }).catch((err) => logger.warn({ err, applicationId }, "grantLicence: sponsor notification failed"));
+  }).catch((err) => logger.warn({ err, applicationId }, "grantLicence: organisation notification failed"));
 
   const cwIds = extractCaseworkerIds(application.assignedcaseworkerId);
   if (cwIds.length > 0) {
@@ -222,7 +222,7 @@ export async function grantLicence(
     priority: "high",
     status: "pending",
     created_by: actorId,
-  }).catch((err) => logger.warn({ err, applicationId }, "grantLicence: sponsor task creation failed"));
+  }).catch((err) => logger.warn({ err, applicationId }, "grantLicence: organisation task creation failed"));
 
   // Push live update so all open pages re-fetch without a manual refresh.
   const livePayload = { applicationId, stageKey: "decision_activation", status: "Licence Granted" };
@@ -359,7 +359,7 @@ export async function rejectLicence(
     priority: "high",
     status: "pending",
     created_by: actorId,
-  }).catch((err) => logger.warn({ err, applicationId }, "rejectLicence: sponsor task creation failed"));
+  }).catch((err) => logger.warn({ err, applicationId }, "rejectLicence: organisation task creation failed"));
 
   // Push live update so all open pages re-fetch without a manual refresh.
   const rejectPayload = { applicationId, stageKey: "decision_activation", status: "Licence Rejected" };

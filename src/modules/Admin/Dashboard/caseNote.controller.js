@@ -184,7 +184,7 @@ export const createCaseNote = async (req, res) => {
           tenantDb: req.tenantDb,
           caseId: numericCaseId,
           actionType: "attendance_note_created",
-          description: `Attendance note recorded (${noteTitle || "Client consultation"})`,
+          description: `Attendance note recorded (${noteTitle || "Individual consultation"})`,
           performedBy: userId,
           metadata: {
             noteId: newNote.id,

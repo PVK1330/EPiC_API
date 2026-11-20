@@ -83,7 +83,7 @@ const WORKING_DAY_THRESHOLD  = 3;
 const COMPLIANCE_ENTITIES = [
   { model: "RightToWorkRecord",  label: "Right-to-Work check",    entityType: "right_to_work"    },
   { model: "WorkerEvent",        label: "Worker event",            entityType: "worker_event"     },
-  { model: "SponsorChangeRequest", label: "Sponsor change request", entityType: "change_request"  },
+  { model: "SponsorChangeRequest", label: "Organisation change request", entityType: "change_request"  },
 ];
 
 // ─── Per-record reminder logic ────────────────────────────────────────────────
@@ -102,7 +102,7 @@ async function sendReminderForRecord(tenantDb, record, entityCfg, organisationId
 
   // ── Resolve sponsor details ──────────────────────────────────────────────
   let sponsorEmail = null;
-  let sponsorName  = "Sponsor";
+  let sponsorName  = "Organisation";
   let sponsorPhone = null;
 
   if (record.sponsorId) {
@@ -112,11 +112,11 @@ async function sendReminderForRecord(tenantDb, record, entityCfg, organisationId
       });
       if (sponsor) {
         sponsorEmail = sponsor.email || null;
-        sponsorName  = [sponsor.first_name, sponsor.last_name].filter(Boolean).join(" ") || "Sponsor";
+        sponsorName  = [sponsor.first_name, sponsor.last_name].filter(Boolean).join(" ") || "Organisation";
         sponsorPhone = sponsor.phone || null;
       }
     } catch (err) {
-      logger.warn({ err, sponsorId: record.sponsorId }, "[reminder] Could not resolve sponsor user");
+      logger.warn({ err, sponsorId: record.sponsorId }, "[reminder] Could not resolve organisation user");
     }
   }
 
@@ -155,15 +155,15 @@ async function sendReminderForRecord(tenantDb, record, entityCfg, organisationId
       });
       logger.info(
         { entityType, entityId: record.id, sponsorEmail },
-        "[reminder] Chaser email sent to sponsor",
+        "[reminder] Chaser email sent to organisation",
       );
     } catch (err) {
-      logger.error({ err, entityType, entityId: record.id }, "[reminder] Failed to email sponsor");
+      logger.error({ err, entityType, entityId: record.id }, "[reminder] Failed to email organisation");
     }
   } else {
     logger.warn(
       { entityType, entityId: record.id, sponsorId: record.sponsorId },
-      "[reminder] Sponsor has no email address — skipping email chaser",
+      "[reminder] Organisation has no email address — skipping email chaser",
     );
   }
 
@@ -186,7 +186,7 @@ async function sendReminderForRecord(tenantDb, record, entityCfg, organisationId
     }
   }
 
-  // ── 3. In-app notification to sponsor ───────────────────────────────────
+  // ── 3. In-app notification to organisation ───────────────────────────────────
   if (record.sponsorId) {
     try {
       await notifyUser(tenantDb, record.sponsorId, {
@@ -205,7 +205,7 @@ async function sendReminderForRecord(tenantDb, record, entityCfg, organisationId
         organisationId,
       });
     } catch (err) {
-      logger.error({ err, entityType, entityId: record.id }, "[reminder] Failed in-app notify to sponsor");
+      logger.error({ err, entityType, entityId: record.id }, "[reminder] Failed in-app notify to organisation");
     }
   }
 
@@ -214,10 +214,10 @@ async function sendReminderForRecord(tenantDb, record, entityCfg, organisationId
     await notifyAdmins(tenantDb, {
       type: NotificationTypes.WARNING,
       priority: NotificationPriority.HIGH,
-      title: `Sponsor not responding: ${label}`,
+      title: `Organisation not responding: ${label}`,
       message:
         `${label} (#${record.id}) has been in "Information Requested" status for more ` +
-        `than ${WORKING_DAY_THRESHOLD} working days with no sponsor response. ` +
+        `than ${WORKING_DAY_THRESHOLD} working days with no organisation response. ` +
         `An email chaser has been sent to ${sponsorName}${sponsorEmail ? ` (${sponsorEmail})` : ""}.`,
       actionType: "information_requested_chaser",
       entityId: record.id,

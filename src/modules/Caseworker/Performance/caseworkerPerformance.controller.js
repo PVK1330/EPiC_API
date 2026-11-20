@@ -434,7 +434,7 @@ export const exportCaseworkerPerformance = async (req, res) => {
     const caseColumns = [
       { key: 'caseId',     header: 'Case ID' },
       { key: 'candidate',  header: 'Candidate' },
-      { key: 'sponsor',    header: 'Sponsor' },
+      { key: 'sponsor',    header: 'Organisation' },
       { key: 'visaType',   header: 'Visa Type' },
       { key: 'status',     header: 'Status' },
       { key: 'priority',   header: 'Priority' },

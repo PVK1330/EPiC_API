@@ -158,9 +158,9 @@ export async function sponsorCreated({
     recipientName: sponsor.first_name || "there",
     type: NotificationTypes.SUCCESS,
     priority: NotificationPriority.HIGH,
-    title: "Welcome to the Sponsor Portal",
+    title: "Welcome to the Organisation Portal",
     message:
-      "Your sponsor account has been created. You can now log in, complete your profile and apply for your sponsorship licence.",
+      "Your organisation account has been created. You can now log in, complete your profile and apply for your sponsorship licence.",
     entityType: "sponsor",
     entityId: sponsor.id,
     actionType: "sponsor_created",
@@ -372,7 +372,7 @@ export async function licenceRejected({
       type: NotificationTypes.ERROR,
       priority: NotificationPriority.HIGH,
       title: `Licence Rejected by UKVI — ${company}`,
-      message: `UKVI has rejected the sponsor licence application for ${company}.${reason} Please log in to review the outcome and advise the sponsor on next steps.`,
+      message: `UKVI has rejected the sponsor licence application for ${company}.${reason} Please log in to review the outcome and advise the organisation on next steps.`,
       entityType: "licence_application",
       entityId: application.id,
       actionType: "licence_rejected",
@@ -695,7 +695,7 @@ export async function credentialsGenerated({
       type: NotificationTypes.INFO,
       priority: NotificationPriority.HIGH,
       title: `Portal Credentials Ready: #LIC-${application.id}`,
-      message: `UKVI portal credentials have been generated for ${company}. Please send them securely to the sponsor.`,
+      message: `UKVI portal credentials have been generated for ${company}. Please send them securely to the organisation.`,
       entityType: "licence_application",
       entityId: application.id,
       actionType: "credentials_generated",
@@ -827,7 +827,7 @@ export async function governmentCredentialsReceived({
       recipientUserId: id,
       type: NotificationTypes.SUCCESS,
       priority: NotificationPriority.MEDIUM,
-      title: `Credentials Confirmed by Sponsor: #LIC-${application.id}`,
+      title: `Credentials Confirmed by Organisation: #LIC-${application.id}`,
       message: `${company} has confirmed receipt of UKVI portal credentials. Proceed to completing the government application forms.`,
       entityType: "licence_application",
       entityId: application.id,
@@ -886,7 +886,7 @@ export async function credentialsVerified({
       organisationId: org,
     });
   } catch (err) {
-    logger.error({ err }, "credentialsVerified: sponsor notify failed");
+    logger.error({ err }, "credentialsVerified: organisation notify failed");
   }
 }
 

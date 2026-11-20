@@ -69,10 +69,10 @@ The {{org_name}} Team`,
   },
   {
     template_key: "welcome_sponsor",
-    subject: "{{org_name}} — Your sponsor account is ready",
+    subject: "{{org_name}} — Your organisation account is ready",
     body: `Dear {{recipient_name}},
 
-Your sponsor account for {{org_name}} has been created. Please find your login credentials below.
+Your organisation account for {{org_name}} has been created. Please find your login credentials below.
 
 Log in to manage your licences, compliance requirements, and sponsored workers.
 

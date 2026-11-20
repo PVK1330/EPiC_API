@@ -77,7 +77,7 @@ export const resetCandidatePasswordSchema = z.object({
 
 export const sendCredentialsToClientSchema = z.object({
   body: z.object({
-    name: z.string().trim().min(1, 'Client name is required').max(150, 'Client name must not exceed 150 characters'),
+    name: z.string().trim().min(1, 'Individual name is required').max(150, 'Individual name must not exceed 150 characters'),
     email: emailSchema,
     contact_number: z.string().trim().min(5, 'Contact number is required (min 5 digits)').max(30, 'Contact number must not exceed 30 characters'),
     country_code: z.string().trim().max(10).optional(),

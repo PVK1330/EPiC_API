@@ -444,7 +444,7 @@ export async function notifyCaseAssigned(arg1, arg2, arg3 = {}) {
   }
 
   const caseRef = data.caseId || (data.id != null ? String(data.id) : '');
-  const candidateName = data.candidateName || 'Client';
+  const candidateName = data.candidateName || 'Individual';
   const directCaseUrl = buildCaseworkerDirectCaseUrl(caseRef);
 
   // 1. In-app notification

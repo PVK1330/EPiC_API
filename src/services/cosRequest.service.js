@@ -118,7 +118,7 @@ export async function createCosRequest({ tenantDb, sponsorId, organisationId, vi
 
   await auditCos({ tenantDb, request, actorId: sponsorId, action: "created", details: { requestedAmount: amount, visaType }, req });
 
-  const company = profile?.companyName || `Sponsor #${sponsorId}`;
+  const company = profile?.companyName || `Organisation #${sponsorId}`;
   try {
     await notifyAdmins(tenantDb, {
       type: NotificationTypes.INFO,
@@ -144,7 +144,7 @@ export async function createCosRequest({ tenantDb, sponsorId, organisationId, vi
       sendEmail: true,
     });
   } catch (err) {
-    logger.error({ err }, "Failed to notify sponsor of CoS request");
+    logger.error({ err }, "Failed to notify organisation of CoS request");
   }
 
   return request;
@@ -409,7 +409,7 @@ export async function reviewCosRequest({ tenantDb, id, action, approvedAmount, r
       });
       if (!profile) {
         throw httpError(
-          "Sponsor profile not found — cannot approve CoS request without an active sponsor profile.",
+          "Organisation profile not found — cannot approve CoS request without an active organisation profile.",
           422
         );
       }
@@ -503,7 +503,7 @@ export async function reviewCosRequest({ tenantDb, id, action, approvedAmount, r
       sendEmail: true,
     });
   } catch (err) {
-    logger.error({ err }, "Failed to notify sponsor of CoS decision");
+    logger.error({ err }, "Failed to notify organisation of CoS decision");
   }
 
   return request;
@@ -554,7 +554,7 @@ export async function requestInfoCosRequest({ tenantDb, id, reviewNotes, reviewe
       sendEmail: true,
     });
   } catch (err) {
-    logger.error({ err }, "Failed to notify sponsor of CoS information request");
+    logger.error({ err }, "Failed to notify organisation of CoS information request");
   }
 
   return request;

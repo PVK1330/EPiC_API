@@ -261,7 +261,7 @@ export const saveDataCaptureSubmission = async (req, res) => {
         tenantDb: req.tenantDb,
         caseId: caseRecord.id,
         actionType: "case_updated",
-        description: "Upload Documents submitted by client",
+        description: "Upload Documents submitted by individual",
         performedBy: userId,
         visibility: "public",
       });
@@ -277,7 +277,7 @@ export const saveDataCaptureSubmission = async (req, res) => {
             performedBy: userId,
             organisationId: organisationIdFromReq(req),
             reason:
-              "Upload Documents submitted by client — application preparation started",
+              "Upload Documents submitted by individual — application preparation started",
             sendEmail: false,
           });
           await caseRecord.reload();
@@ -405,7 +405,7 @@ export const sendDataCaptureRequest = async (req, res) => {
       tenantDb: req.tenantDb,
       caseId: caseRecord.id,
       actionType: "communication_sent",
-      description: "Upload Documents request sent to client",
+      description: "Upload Documents request sent to individual",
       performedBy: req.user?.userId,
       metadata: {
         emailSent: emailResult.sent,
@@ -457,7 +457,7 @@ export const sendFurtherInformationRequest = async (req, res) => {
       caseRecord,
       nextStageId: "further_information_request",
       performedBy: req.user?.userId,
-      reason: "Further information requested from client",
+      reason: "Further information requested from individual",
       sendEmail: false, // a richer email with the requested items is sent below
       organisationId: organisationIdFromReq(req),
     }).catch((err) => logger.error({ err }, "applyCaseStageChange (further info)"));
@@ -474,7 +474,7 @@ export const sendFurtherInformationRequest = async (req, res) => {
       tenantDb: req.tenantDb,
       caseId: caseRecord.id,
       actionType: "communication_sent",
-      description: "Further information requested from client",
+      description: "Further information requested from individual",
       performedBy: req.user?.userId,
       metadata: { items, message, emailSent: emailResult.sent },
       visibility: "public",
@@ -546,7 +546,7 @@ export const sendDraftApplicationForReview = async (req, res) => {
           nextStageId: path[i],
           performedBy: req.user?.userId,
           reason: isFinal
-            ? "Draft application sent to client for review"
+            ? "Draft application sent to individual for review"
             : "Advanced automatically on the way to draft application review",
           sendEmail: isFinal,
           intermediate: !isFinal,
@@ -560,8 +560,8 @@ export const sendDraftApplicationForReview = async (req, res) => {
       caseId: caseRecord.id,
       actionType: "communication_sent",
       description: resent
-        ? "Draft application review reminder sent to client"
-        : "Draft application sent to client for review",
+        ? "Draft application review reminder sent to individual"
+        : "Draft application sent to individual for review",
       performedBy: req.user?.userId,
       visibility: "public",
     });
@@ -569,8 +569,8 @@ export const sendDraftApplicationForReview = async (req, res) => {
     res.status(200).json({
       status: "success",
       message: resent
-        ? "Draft application review reminder sent to the client"
-        : "Draft application sent to the client for review",
+        ? "Draft application review reminder sent to the individual"
+        : "Draft application sent to the individual for review",
       data: null,
     });
   } catch (err) {
@@ -759,7 +759,7 @@ export const reviewCclFees = async (req, res) => {
       message:
         action === "reject"
           ? "Fee proposal returned to caseworker"
-          : "Fees approved and CCL sent to client",
+          : "Fees approved and CCL sent to individual",
       data: { ccl: result.ccl, case: result.caseRecord },
     });
   } catch (err) {
@@ -797,7 +797,7 @@ export const sendCclPaymentRequestAction = async (req, res) => {
 
     res.status(200).json({
       status: "success",
-      message: "Client Care Letter and payment request sent to client",
+      message: "Client Care Letter and payment request sent to individual",
       data: { ccl: result.ccl, emailSent: result.emailSent },
     });
   } catch (err) {

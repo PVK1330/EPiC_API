@@ -103,7 +103,7 @@ export const LICENCE_STAGE_DEFINITIONS = [
     key: "sponsor_information_provision", order: 10, title: "Sponsor Information Provision", govSection: "Government Prep",
     tasks: {
       sponsor: "Confirm all organisational details, personnel, and documents are accurate and up-to-date before portal submission.",
-      caseworker: "Validate completeness of the sponsor's information pack and confirm readiness for government portal entry.",
+      caseworker: "Validate completeness of the organisation's information pack and confirm readiness for government portal entry.",
       admin: "Authorise the information pack for government portal submission.",
     },
   },
@@ -119,8 +119,8 @@ export const LICENCE_STAGE_DEFINITIONS = [
     key: "sponsor_portal_onboarding", order: 12, title: "Sponsor Portal Onboarding", govSection: "Government Prep",
     tasks: {
       sponsor: "Log in to the UKVI Sponsor Management System using the credentials provided and confirm access.",
-      caseworker: "Guide the sponsor through the SMS portal login and confirm the sponsor can access their account.",
-      admin: "Record that the sponsor has been successfully onboarded to the SMS portal.",
+      caseworker: "Guide the organisation through the SMS portal login and confirm the organisation can access their account.",
+      admin: "Record that the organisation has been successfully onboarded to the SMS portal.",
     },
   },
   {
@@ -128,15 +128,15 @@ export const LICENCE_STAGE_DEFINITIONS = [
     key: "government_portal_credentials", order: 13, title: "Government Portal Credentials", govSection: "Government Application",
     tasks: {
       sponsor: "UKVI will send your portal credentials directly to your registered email. Once received, log in to this portal and submit your username and password to share them securely with your case team.",
-      caseworker: "Review the UKVI portal credentials submitted by the sponsor. Confirm they are correct and record them for completing the UKVI application forms.",
-      admin: "Confirm that the UKVI portal credentials have been received from the sponsor and are securely recorded in the system.",
+      caseworker: "Review the UKVI portal credentials submitted by the organisation. Confirm they are correct and record them for completing the UKVI application forms.",
+      admin: "Confirm that the UKVI portal credentials have been received from the organisation and are securely recorded in the system.",
     },
   },
   {
     key: "government_application_forms", order: 14, title: "Government Application Forms", govSection: "Government Application",
     tasks: {
       sponsor: "Log in to the UKVI portal and complete the online sponsor licence application forms.",
-      caseworker: "Review and verify all form entries with the sponsor; ensure declarations and supporting data are correctly entered.",
+      caseworker: "Review and verify all form entries with the organisation; ensure declarations and supporting data are correctly entered.",
       admin: "Carry out a final QA check of the completed government application forms before submission.",
     },
   },
@@ -162,7 +162,7 @@ export const LICENCE_STAGE_DEFINITIONS = [
     key: "payment_confirmation", order: 17, title: "UKVI Licence Fee Payment", govSection: "Post-Submission",
     tasks: {
       sponsor: "Pay the sponsor licence fee directly on the UKVI portal. Once payment is confirmed, mark this task as complete below.",
-      caseworker: "Confirm that the sponsor has paid the licence fee on the UKVI portal. Check the UKVI portal or obtain written confirmation from the sponsor.",
+      caseworker: "Confirm that the organisation has paid the licence fee on the UKVI portal. Check the UKVI portal or obtain written confirmation from the organisation.",
       admin: "Record the UKVI payment confirmation and update the application accordingly.",
     },
   },
@@ -1054,7 +1054,7 @@ export async function ensureStageTasks(tenantDb, applicationOrId, { req = null, 
         { status: "pending", completedAt: null, completedByUserId: null },
         { where: { id: sponsorPayment.id } },
       ).catch((err) =>
-        logger.warn({ err, applicationId: application.id }, "ensureStageTasks: reopen sponsor payment task failed"),
+        logger.warn({ err, applicationId: application.id }, "ensureStageTasks: reopen organisation payment task failed"),
       );
     }
   }
@@ -1486,7 +1486,7 @@ function stageCompletionContent({ stageDef, role, company, audience }) {
     if (role === "sponsor") {
       return {
         title: `Action required — ${stageDef.title}: ${company}`,
-        message: `The sponsor has completed the "${stageDef.title}" stage for ${company}. Please review and complete your assigned action.${nextHint}`,
+        message: `The organisation has completed the "${stageDef.title}" stage for ${company}. Please review and complete your assigned action.${nextHint}`,
       };
     }
     const actor = role.charAt(0).toUpperCase() + role.slice(1);

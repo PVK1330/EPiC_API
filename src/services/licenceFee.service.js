@@ -78,7 +78,7 @@ export function computeFee({ routes = [], sponsorSize = null, charityStatus = fa
   if (category) {
     lineItems.push({
       key: "licence_fee",
-      label: `Sponsor licence fee (${category}, ${band === "small" ? "small/charity" : "medium/large"} sponsor)`,
+      label: `Sponsor licence fee (${category}, ${band === "small" ? "small/charity" : "medium/large"} organisation)`,
       amount: applicationFeeTotal,
     });
   }

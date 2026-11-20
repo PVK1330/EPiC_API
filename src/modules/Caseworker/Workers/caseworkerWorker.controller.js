@@ -77,7 +77,7 @@ export const createWorkerHandler = async (req, res) => {
       if (!isAllowed) {
         return res.status(403).json({
           status: "error",
-          message: "You are not authorized to register workers for this sponsor/application.",
+          message: "You are not authorized to register workers for this organisation/application.",
         });
       }
     }

@@ -124,7 +124,7 @@ async function sendExpiryReminder(tenantDb, orgId, app, daysLeft) {
       organisationId: orgId,
     });
   } catch (err) {
-    logger.warn({ err, applicationId: app.id, daysLeft }, "licenceExpiry: sponsor notify failed");
+    logger.warn({ err, applicationId: app.id, daysLeft }, "licenceExpiry: organisation notify failed");
   }
 
   // ── Caseworkers ──────────────────────────────────────────────────────────────

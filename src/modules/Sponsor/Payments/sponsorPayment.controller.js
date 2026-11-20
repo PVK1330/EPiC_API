@@ -426,7 +426,7 @@ async function recordSponsorCaseFeePayment({ tenantDb, caseRecord, paymentIntent
           paymentStatus,
           transactionId: txnId,
           invoiceNumber: txnId,
-          description: 'Sponsor online payment (case fee)',
+          description: 'Organisation online payment (case fee)',
           receivedBy: sponsorUserId || null,
         },
         { transaction: t },
@@ -635,7 +635,7 @@ export const verifySponsorCheckoutSession = async (req, res) => {
           organisationId: req.user?.organisation_id ?? null,
           payableType,
           payableRef: String(payableRef),
-          description: session.metadata.description || `Sponsor ${payableType}`,
+          description: session.metadata.description || `Organisation ${payableType}`,
           amount: session.amount_total != null ? session.amount_total / 100 : 0,
           currency: (session.currency || 'GBP').toUpperCase(),
           status: 'completed',
@@ -729,7 +729,7 @@ export const downloadSponsorInvoice = async (req, res) => {
       : (paymentRecord.paymentDate || paymentRecord.created_at);
     const status = kind === 'sponsor' ? paymentRecord.status : paymentRecord.paymentStatus;
     const description = kind === 'sponsor'
-      ? (paymentRecord.description || 'Sponsor Payment')
+      ? (paymentRecord.description || 'Organisation Payment')
       : (paymentRecord.notes || (paymentRecord.Case?.caseId ? `Case fee — ${paymentRecord.Case.caseId}` : 'Case Payment'));
     const candidateName = kind === 'case'
       ? `${paymentRecord.Case?.candidate?.first_name || ''} ${paymentRecord.Case?.candidate?.last_name || ''}`.trim() || null

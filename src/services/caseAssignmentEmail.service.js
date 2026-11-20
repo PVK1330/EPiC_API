@@ -47,7 +47,7 @@ export async function sendCaseAssignmentEmail({
   }
 
   const caseNumber = flatCaseNumber || caseData.caseId || (caseData.id != null ? String(caseData.id) : 'New Case');
-  const candidateName = flatCandidateName || caseData.candidateName || 'Client';
+  const candidateName = flatCandidateName || caseData.candidateName || 'Individual';
 
   try {
     const resolvedOrgId =

@@ -164,7 +164,7 @@ export const createWorkerEvent = async (req, res) => {
       attributes: ["id", "caseId", "assignedcaseworkerId"],
     });
     if (!workerCase) {
-      return res.status(404).json({ status: "error", message: "Worker is not associated with this sponsor" });
+      return res.status(404).json({ status: "error", message: "Worker is not associated with this organisation" });
     }
 
     const deadlineDate = toISODate(addDays(eventDate, 10));
@@ -230,7 +230,7 @@ export const updateWorkerEvent = async (req, res) => {
         attributes: ["id", "caseId", "assignedcaseworkerId"],
       });
       if (!workerCase) {
-        return res.status(404).json({ status: "error", message: "Worker is not associated with this sponsor" });
+        return res.status(404).json({ status: "error", message: "Worker is not associated with this organisation" });
       }
       event.workerId = workerId;
       event.caseId = workerCase.id;

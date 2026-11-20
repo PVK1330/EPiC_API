@@ -440,7 +440,7 @@ export async function runTenantMonthlyReview({
     where: { role_id: 4 },
     attributes: ["id", "first_name", "last_name", "email"],
   }).catch((err) => {
-    logger.error({ err, organisationId }, "[monthlyComplianceReport] Could not load sponsors");
+    logger.error({ err, organisationId }, "[monthlyComplianceReport] Could not load organisations");
     return [];
   });
 
@@ -494,7 +494,7 @@ export async function runTenantMonthlyReview({
     } catch (err) {
       logger.error(
         { err, sponsorId: sponsor.id, organisationId },
-        "[monthlyComplianceReport] Failed for sponsor",
+        "[monthlyComplianceReport] Failed for organisation",
       );
       errors.push({ sponsorId: sponsor.id, error: err.message });
     }

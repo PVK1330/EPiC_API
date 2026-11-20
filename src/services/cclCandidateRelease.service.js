@@ -142,7 +142,7 @@ export async function syncCclReleaseForApprovedFees({
         nextStageId: "ccl_issued",
         performedBy,
         organisationId,
-        reason: "CCL fees approved — released to client",
+        reason: "CCL fees approved — released to individual",
         sendEmail: false,
       });
       synced = true;

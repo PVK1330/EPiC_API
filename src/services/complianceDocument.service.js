@@ -265,6 +265,6 @@ export async function notifySponsorOfReview({
       sendEmail: true,
     });
   } catch (err) {
-    logger.error({ err }, "Failed to notify sponsor of compliance review");
+    logger.error({ err }, "Failed to notify organisation of compliance review");
   }
 }

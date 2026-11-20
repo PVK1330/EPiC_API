@@ -188,7 +188,7 @@ export function credentialsBlockHtml({
     ? `<div style="padding:16px; border-bottom:1px solid ${C.border};">
          <div style="font-size:12px; color:${C.muted}; margin-bottom:4px;">Organisation Code</div>
          <div style="font-size:16px; color:${C.navy}; font-weight:800; font-family:'SFMono-Regular',Consolas,'Liberation Mono',monospace;">${esc(String(organisationCode))}</div>
-         <div style="font-size:11px; color:${C.muted}; margin-top:4px;">Use this Organisation ID or code when registering on the client portal.</div>
+         <div style="font-size:11px; color:${C.muted}; margin-top:4px;">Use this Organisation ID or code when registering on the individual portal.</div>
        </div>`
     : "";
   const selfRegRow = selfRegistrationUrl

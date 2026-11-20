@@ -897,7 +897,7 @@ export const exportDashboardPDF = catchAsync(async (req, res) => {
             body: [
               [
                 { text: 'Case', style: 'tableHeader' },
-                { text: 'Trigger / Client', style: 'tableHeader' },
+                { text: 'Trigger / Individual', style: 'tableHeader' },
                 { text: 'Severity', style: 'tableHeader' },
                 { text: 'Status', style: 'tableHeader' },
                 { text: 'Created', style: 'tableHeader' }

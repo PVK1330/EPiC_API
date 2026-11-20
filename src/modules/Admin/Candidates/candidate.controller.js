@@ -49,8 +49,8 @@ export const sendCredentialsToClient = catchAsync(async (req, res) => {
   );
 
   const message = result.emailSent
-    ? "Client account created successfully and login credentials have been sent to the client’s email address."
-    : "Client account created successfully, but credential email delivery failed.";
+    ? "Individual account created successfully and login credentials have been sent to the individual’s email address."
+    : "Individual account created successfully, but credential email delivery failed.";
 
   return ApiResponse.created(res, message, {
     candidateId: result.candidateId,
@@ -141,7 +141,7 @@ export const updateCandidateApplication = catchAsync(async (req, res) => {
   const context = { tenantDb: req.tenantDb, io: req.app.get('io'), organisationId: req.user.organisation_id };
   const candidate = await service.updateCandidateApplication(id, req.body, req.user, context);
 
-  return ApiResponse.success(res, "Client updated successfully", {
+  return ApiResponse.success(res, "Individual updated successfully", {
     candidate,
     application: candidate?.application ?? null,
   });

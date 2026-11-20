@@ -698,7 +698,7 @@ export const requestInfoForCosRequestAdmin = async (req, res) => {
       reviewerId: req.user?.userId ?? null,
       req,
     });
-    res.status(200).json({ status: "success", message: "Information requested from sponsor", data: request });
+    res.status(200).json({ status: "success", message: "Information requested from organisation", data: request });
   } catch (error) {
     const code = error?.statusCode || 500;
     if (code >= 500) logger.error({ err: error }, "Error requesting CoS information");

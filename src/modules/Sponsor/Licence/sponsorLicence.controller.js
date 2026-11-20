@@ -372,7 +372,7 @@ export const renewLicenceApplication = async (req, res) => {
             action: 'renewal_submitted',
             previousStatus: null,
             newStatus: 'Pending',
-            notes: `Renewal submitted by sponsor. Type: ${renewalType}. Original: #LIC-${existingApp.id}.`,
+            notes: `Renewal submitted by organisation. Type: ${renewalType}. Original: #LIC-${existingApp.id}.`,
             req,
         }).catch((err) => logger.error({ err }, 'Failed to record renewal audit'));
 
@@ -394,7 +394,7 @@ export const renewLicenceApplication = async (req, res) => {
             entityId: newApplication.id,
             actionType: 'licence_renewal_submitted',
             sendEmail: false,
-        }).catch((err) => logger.error({ err }, 'Failed to send sponsor renewal notification'));
+        }).catch((err) => logger.error({ err }, 'Failed to send organisation renewal notification'));
 
         // 7) Notify admins.
         notifyAdmins(req.tenantDb, {
@@ -420,7 +420,7 @@ export const renewLicenceApplication = async (req, res) => {
                 to: recipientEmail,
                 subject: `Renewal application received — ${newApplication.companyName}`,
                 html: generateNotificationEmailTemplate({
-                    recipientName: newApplication.companyName || 'Sponsor',
+                    recipientName: newApplication.companyName || 'Organisation',
                     title: 'Licence Renewal Submitted',
                     message:
                         `Your sponsor licence renewal application has been received and is pending review.\n\n` +

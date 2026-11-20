@@ -284,7 +284,7 @@ export class CandidateService {
           priority: 'medium',
           targetSubmissionDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
           nationality: application.nationality || null,
-          jobTitle: legacyFields.jobTitle || 'Client enquiry',
+          jobTitle: legacyFields.jobTitle || 'Individual enquiry',
           assignedcaseworkerId,
           organisation_id,
         }, t);
@@ -1071,7 +1071,7 @@ export class CandidateService {
         previousEmail,
         userPatch,
       ).catch((err) => {
-        logger.error({ err, candidateId: userId }, 'Platform user sync after client update');
+        logger.error({ err, candidateId: userId }, 'Platform user sync after individual update');
       });
     }
 
@@ -1175,7 +1175,7 @@ export class CandidateService {
         ],
       });
       if (!business) {
-        const err = new Error('Business (sponsor) not found');
+        const err = new Error('Business (organisation) not found');
         err.status = 404;
         throw err;
       }
@@ -1252,7 +1252,7 @@ export class CandidateService {
     // Parse name into first_name and last_name
     const trimmedName = String(name || "").trim();
     if (!trimmedName) {
-      throw badRequest("Client name is required");
+      throw badRequest("Individual name is required");
     }
     const nameParts = trimmedName.split(/\s+/);
     const first_name = nameParts[0];
@@ -1365,7 +1365,7 @@ export class CandidateService {
             caseStage: DEFAULT_CASE_STAGE,
             priority: "medium",
             targetSubmissionDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-            jobTitle: "Client enquiry",
+            jobTitle: "Individual enquiry",
             assignedcaseworkerId: null,
             organisation_id,
           },

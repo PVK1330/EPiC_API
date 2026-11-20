@@ -79,7 +79,7 @@ export const createSponsor = async (req, res) => {
     if (sponsorRoleId !== ROLES.BUSINESS) {
       return res.status(400).json({
         status: "error",
-        message: "role_id must be the sponsor (business) role",
+        message: "role_id must be the organisation (business) role",
         data: null,
       });
     }
@@ -200,7 +200,7 @@ export const createSponsor = async (req, res) => {
         firstName: first_name,
       });
     } catch (emailError) {
-      logger.error({ err: emailError }, "Failed to send sponsor welcome email");
+      logger.error({ err: emailError }, "Failed to send organisation welcome email");
     }
 
     try {
@@ -233,8 +233,8 @@ export const createSponsor = async (req, res) => {
     res.status(201).json({
       status: "success",
       message: emailResult.sent
-        ? "Sponsor created successfully. Welcome email sent."
-        : "Sponsor created successfully.",
+        ? "Organisation created successfully. Welcome email sent."
+        : "Organisation created successfully.",
       data: {
         sponsor: sponsorData,
         temporary_password: !password ? generatedPassword : null,
@@ -244,7 +244,7 @@ export const createSponsor = async (req, res) => {
     });
 
   } catch (error) {
-    logger.error({ err: error }, "Create Sponsor Error");
+    logger.error({ err: error }, "Create Organisation Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -313,7 +313,7 @@ export const getAllSponsors = async (req, res) => {
 
     res.status(200).json({
       status: "success",
-      message: "Sponsors retrieved successfully",
+      message: "Organisations retrieved successfully",
       data: {
         sponsors,
         pagination: {
@@ -326,7 +326,7 @@ export const getAllSponsors = async (req, res) => {
     });
 
   } catch (error) {
-    logger.error({ err: error }, "Get All Sponsors Error");
+    logger.error({ err: error }, "Get All Organisations Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -362,19 +362,19 @@ export const getSponsorById = async (req, res) => {
     if (!sponsor) {
       return res.status(404).json({
         status: "error",
-        message: "Sponsor not found",
+        message: "Organisation not found",
         data: null
       });
     }
 
     res.status(200).json({
       status: "success",
-      message: "Sponsor retrieved successfully",
+      message: "Organisation retrieved successfully",
       data: { sponsor }
     });
 
   } catch (error) {
-    logger.error({ err: error }, "Get Sponsor by ID Error");
+    logger.error({ err: error }, "Get Organisation by ID Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -417,7 +417,7 @@ export const downloadSponsorDocument = async (req, res) => {
     // Confirm the target user is actually a sponsor in this tenant before serving.
     const sponsor = await req.tenantDb.User.findOne({ where: { id, role_id: ROLES.BUSINESS } });
     if (!sponsor) {
-      return res.status(404).json({ status: 'error', message: 'Sponsor not found', data: null });
+      return res.status(404).json({ status: 'error', message: 'Organisation not found', data: null });
     }
 
     const profile = await req.tenantDb.SponsorProfile.findOne({ where: { userId: id } });
@@ -450,7 +450,7 @@ export const downloadSponsorDocument = async (req, res) => {
       }
     });
   } catch (error) {
-    logger.error({ err: error }, 'Download Sponsor Document Error');
+    logger.error({ err: error }, 'Download Organisation Document Error');
     if (!res.headersSent) {
       res.status(500).json({ status: 'error', message: 'Internal server error', data: null });
     }
@@ -517,7 +517,7 @@ export const updateSponsor = async (req, res) => {
     if (!sponsor) {
       return res.status(404).json({
         status: "error",
-        message: "Sponsor not found",
+        message: "Organisation not found",
         data: null
       });
     }
@@ -685,12 +685,12 @@ export const updateSponsor = async (req, res) => {
 
     res.status(200).json({
       status: "success",
-      message: "Sponsor updated successfully",
+      message: "Organisation updated successfully",
       data: { sponsor: updatedSponsor }
     });
 
   } catch (error) {
-    logger.error({ err: error }, "Update Sponsor Error");
+    logger.error({ err: error }, "Update Organisation Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -709,7 +709,7 @@ export const deleteSponsor = async (req, res) => {
     if (!sponsor) {
       return res.status(404).json({
         status: "error",
-        message: "Sponsor not found",
+        message: "Organisation not found",
         data: null
       });
     }
@@ -721,12 +721,12 @@ export const deleteSponsor = async (req, res) => {
 
     res.status(200).json({
       status: "success",
-      message: "Sponsor deleted successfully",
+      message: "Organisation deleted successfully",
       data: null
     });
 
   } catch (error) {
-    logger.error({ err: error }, "Delete Sponsor Error");
+    logger.error({ err: error }, "Delete Organisation Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -742,7 +742,7 @@ export const resendSponsorCredentials = async (req, res) => {
     const { id } = req.params;
     const sponsor = await req.tenantDb.User.findOne({ where: { id, role_id: 4 } });
     if (!sponsor) {
-      return res.status(404).json({ status: "error", message: "Sponsor not found", data: null });
+      return res.status(404).json({ status: "error", message: "Organisation not found", data: null });
     }
 
     const plainPassword = generateStrongPassword(12);
@@ -750,7 +750,7 @@ export const resendSponsorCredentials = async (req, res) => {
     await sponsor.update({ password: hashedPassword, temp_password: null });
 
     const profile = await req.tenantDb.SponsorProfile.findOne({ where: { userId: sponsor.id } }).catch(() => null);
-    const firstName = profile?.firstName || sponsor.first_name || "Sponsor";
+    const firstName = profile?.firstName || sponsor.first_name || "Organisation";
 
     // BUG-10 fix: req.organisationId is never set by any middleware.
     // The correct source is req.user.organisation_id (matches createSponsor usage).
@@ -763,11 +763,11 @@ export const resendSponsorCredentials = async (req, res) => {
 
     return res.status(200).json({
       status: "success",
-      message: "Credentials regenerated and emailed to the sponsor",
+      message: "Credentials regenerated and emailed to the organisation",
       data: null,
     });
   } catch (error) {
-    logger.error({ err: error }, "Resend Sponsor Credentials Error");
+    logger.error({ err: error }, "Resend Organisation Credentials Error");
     return res.status(500).json({ status: "error", message: "Internal server error", data: null });
   }
 };
@@ -782,7 +782,7 @@ export const resetSponsorPassword = async (req, res) => {
     if (!sponsor) {
       return res.status(404).json({
         status: "error",
-        message: "Sponsor not found",
+        message: "Organisation not found",
         data: null
       });
     }
@@ -805,7 +805,7 @@ export const resetSponsorPassword = async (req, res) => {
     });
 
   } catch (error) {
-    logger.error({ err: error }, "Reset Sponsor Password Error");
+    logger.error({ err: error }, "Reset Organisation Password Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -824,7 +824,7 @@ export const toggleSponsorStatus = async (req, res) => {
     if (!sponsor) {
       return res.status(404).json({
         status: "error",
-        message: "Sponsor not found",
+        message: "Organisation not found",
         data: null
       });
     }
@@ -834,7 +834,7 @@ export const toggleSponsorStatus = async (req, res) => {
 
     res.status(200).json({
       status: "success",
-      message: `Sponsor ${newStatus === 'active' ? 'activated' : 'deactivated'} successfully`,
+      message: `Organisation ${newStatus === 'active' ? 'activated' : 'deactivated'} successfully`,
       data: {
         sponsor_id: sponsor.id,
         status: newStatus
@@ -842,7 +842,7 @@ export const toggleSponsorStatus = async (req, res) => {
     });
 
   } catch (error) {
-    logger.error({ err: error }, "Toggle Sponsor Status Error");
+    logger.error({ err: error }, "Toggle Organisation Status Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -976,7 +976,7 @@ export const bulkImportSponsors = async (req, res) => {
           });
           welcomeEmailSent = emailRes?.sent === true;
         } catch (emailError) {
-          logger.error({ err: emailError, email: sponsor.email }, 'Failed to send sponsor email');
+          logger.error({ err: emailError, email: sponsor.email }, 'Failed to send organisation email');
         }
 
         try {
@@ -1022,7 +1022,7 @@ export const bulkImportSponsors = async (req, res) => {
     });
 
   } catch (error) {
-    logger.error({ err: error }, "Bulk Import Sponsors Error");
+    logger.error({ err: error }, "Bulk Import Organisations Error");
     res.status(500).json({
       status: "error",
       message: "Internal server error",
@@ -1104,6 +1104,6 @@ export const exportSponsors = catchAsync(async (req, res) => {
     const buffer = rowsToXlsxBuffer(rows, columns);
     sendXlsxDownload(res, buffer, 'sponsors_export.xlsx');
   } catch (err) {
-    return ApiResponse.error(res, 'Failed to export sponsors', 500, err);
+    return ApiResponse.error(res, 'Failed to export organisations', 500, err);
   }
 });

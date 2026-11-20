@@ -184,7 +184,7 @@ export const addSponsoredWorker = async (req, res) => {
 
     try {
       const sponsorProfile = await req.tenantDb.SponsorProfile.findOne({ where: { userId: sponsorId } });
-      const sponsorCompanyName = sponsorProfile?.companyName || 'Sponsor Company';
+      const sponsorCompanyName = sponsorProfile?.companyName || 'Organisation Company';
       await notifyAdmins(req.tenantDb, {
         type: NotificationTypes.INFO,
         priority: NotificationPriority.MEDIUM,
@@ -682,7 +682,7 @@ export const getSponsoredWorkerDetails = async (req, res) => {
     if (!workerCase) {
       return res.status(404).json({
         status: 'error',
-        message: 'Worker not found or not associated with this sponsor'
+        message: 'Worker not found or not associated with this organisation'
       });
     }
 

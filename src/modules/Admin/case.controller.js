@@ -83,7 +83,7 @@ export const createCase = async (req, res) => {
     // Field-wise validation
     const errors = [];
     
-    if (candidateId === undefined || candidateId === null || candidateId === '') errors.push("Client is required");
+    if (candidateId === undefined || candidateId === null || candidateId === '') errors.push("Individual is required");
     // BUG-031: sponsorId is OPTIONAL — private clients have no sponsor. Requiring
     // one forced staff to pick an unrelated sponsor just to pass validation, which
     // then showed a wrong sponsor name on the case.
@@ -116,7 +116,7 @@ export const createCase = async (req, res) => {
       if (!sponsor) {
         return res.status(404).json({
           status: "error",
-          message: "Sponsor not found",
+          message: "Organisation not found",
           data: null,
         });
       }
@@ -227,7 +227,7 @@ export const createCase = async (req, res) => {
       try {
           await notifyCaseStatusChanged(req.tenantDb, [candidateId, sponsorId], caseData, 'None', 'Assigned');
       } catch (notifError) {
-          logger.error({ err: notifError }, 'Failed to notify client of assignment');
+          logger.error({ err: notifError }, 'Failed to notify individual of assignment');
       }
       await createTasksOnCaseworkerAssignment({
         tenantDb: req.tenantDb,
@@ -1135,10 +1135,10 @@ export const exportCases = catchAsync(async (req, res) => {
 
     const columns = [
       { key: 'caseId', header: 'Case ID' },
-      { key: 'candidate', header: 'Client' },
-      { key: 'candidateEmail', header: 'Client Email' },
-      { key: 'sponsor', header: 'Sponsor' },
-      { key: 'sponsorEmail', header: 'Sponsor Email' },
+      { key: 'candidate', header: 'Individual' },
+      { key: 'candidateEmail', header: 'Individual Email' },
+      { key: 'sponsor', header: 'Organisation' },
+      { key: 'sponsorEmail', header: 'Organisation Email' },
       { key: 'visaType', header: 'Visa Type' },
       { key: 'petitionType', header: 'Application Type' },
       { key: 'priority', header: 'Priority' },

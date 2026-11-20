@@ -199,7 +199,7 @@ export async function submitDraftReviewDecision({
       tenantDb,
       caseRecord,
       assigneeId: cwId,
-      title: `Revise draft application after client feedback — ${caseLabel}`,
+      title: `Revise draft application after individual feedback — ${caseLabel}`,
       createdBy: performedBy,
       priority: "high",
       dueInDays: 2,

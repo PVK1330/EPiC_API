@@ -119,7 +119,7 @@ export const requestInfoForCosRequest = async (req, res) => {
     });
     res.status(200).json({
       status: "success",
-      message: "Information requested from sponsor",
+      message: "Information requested from organisation",
       data: request,
     });
   } catch (error) {

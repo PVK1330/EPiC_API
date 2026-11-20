@@ -28,7 +28,7 @@ export const dispatchDocumentHandler = async (req, res) => {
       req,
     });
 
-    return ApiResponse.success(res, "Document dispatched to sponsor", result);
+    return ApiResponse.success(res, "Document dispatched to organisation", result);
   } catch (err) {
     logger.error({ err }, "dispatchDocumentHandler failed");
     return ApiResponse.error(res, "Failed to dispatch document", 500, err);
